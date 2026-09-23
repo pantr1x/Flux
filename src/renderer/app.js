@@ -9,6 +9,7 @@ import { icon, fileIcon } from './icons.js';
 import { PythonLanguageClient } from './pyLsp.js';
 import { THEMES, DEFAULT_THEME, themeOf, defineMonacoTheme, themeSwatch } from './themes.js';
 import { TEMPLATES, PY_SNIPPETS } from './templates.js';
+import { createCodeMap } from './codemap.js';
 
 const flux = window.flux;
 const $ = (sel) => document.querySelector(sel);
@@ -56,7 +57,7 @@ const DEFAULTS = {
   fontSize: 14,
   lineHeight: 1.45,
   ligatures: false,
-  minimap: false,
+  minimap: true,
   wordWrap: false,
   autosave: true,
   clearOnRun: true,
@@ -188,6 +189,7 @@ function applyTheme() {
       .map(([name, c]) => `<button data-accent="${name}" style="--c:${c}" class="${name === accentName ? 'active' : ''}" title="${name}"></button>`)
       .join('') + `<button class="more" data-accent="more" title="Ďalšie farby a témy">${icon('palette', 13)}</button>`;
   if (term) term.options.theme = terminalTheme();
+  codemap?.refresh();
 }
 
 // Nastavenia editora a terminálu (písmo, veľkosť, minimapa…).
@@ -198,9 +200,10 @@ function applyEditorSettings() {
     fontSize: setting('fontSize'),
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
-    minimap: { enabled: setting('minimap') },
+    minimap: { enabled: false },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
   });
+  codemap?.setVisible(setting('minimap'));
   if (term) {
     term.options.fontFamily = font.css;
     term.options.fontSize = setting('terminalFontSize');
@@ -216,6 +219,7 @@ async function saveSettings(patch) {
 
 // ---------- editor ----------
 let editor;
+let codemap;
 function createEditor() {
   editor = monaco.editor.create($('#editor'), {
     model: null,
@@ -224,7 +228,7 @@ function createEditor() {
     fontSize: setting('fontSize'),
     lineHeight: setting('lineHeight'),
     automaticLayout: true,
-    minimap: { enabled: setting('minimap'), renderCharacters: false, scale: 2 },
+    minimap: { enabled: false },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
     smoothScrolling: true,
     cursorBlinking: 'smooth',
@@ -235,7 +239,7 @@ function createEditor() {
     scrollBeyondLastLine: false,
     bracketPairColorization: { enabled: true },
     guides: { bracketPairs: 'active', indentation: true },
-    stickyScroll: { enabled: true },
+    stickyScroll: { enabled: false },
     glyphMargin: true,
     lineDecorationsWidth: 6,
     lineNumbersMinChars: 3,
@@ -251,6 +255,8 @@ function createEditor() {
     'semanticHighlighting.enabled': true,
   });
   showSuggestDetails(setting('suggestDetails'));
+  codemap = createCodeMap(monaco, editor, $('#codemap'));
+  codemap.setVisible(setting('minimap'));
 
   editor.onDidChangeCursorPosition((e) => {
     $('#st-pos').textContent = `Riadok ${e.position.lineNumber} · Stĺpec ${e.position.column}`;
@@ -426,6 +432,20 @@ function activate(tab) {
   renderStatus();
   followPreview(tab);
   document.title = `${basename(tab.path)} — Flux`;
+}
+
+// Klik na „flux“ vľavo hore → úvodná obrazovka (otvorené súbory ostanú v taboch).
+function goHome() {
+  const tab = activeTab();
+  if (tab) tab.viewState = editor.saveViewState();
+  state.active = null;
+  editor.setModel(null);
+  renderTabs();
+  renderTree();
+  renderRunButton();
+  renderStatus();
+  renderWelcome();
+  document.title = 'Flux';
 }
 
 async function closeTab(tab, { force = false } = {}) {
@@ -1607,7 +1627,7 @@ function renderWelcome() {
   const ws = state.workspace;
   w.innerHTML = `
     <div class="welcome-inner">
-      <h1><span class="brand-mark"></span>${ws ? escapeHtml(basename(ws)) : 'flux'}</h1>
+      <h1><span class="brand-mark">${icon('code', 15)}</span>${ws ? escapeHtml(basename(ws)) : 'flux'}</h1>
       <p class="sub">${ws ? 'Vyber súbor vľavo alebo vytvor nový.' : 'Otvor priečinok s projektom a spúšťaj kód jedným klikom.'}</p>
       <div class="welcome-actions">
         ${ws
@@ -1733,7 +1753,8 @@ function layoutEvents() {
     const h = Math.min(rect.height - 120, Math.max(90, rect.bottom - 28 - e.clientY));
     showPanel(true);
     $('#panel').style.height = `${h}px`;
-  });
+  }, () => saveSettings({ panelHeight: parseInt($('#panel').style.height) }));
+  if (state.settings.panelHeight) $('#panel').style.height = `${state.settings.panelHeight}px`;
 
   // Kompaktný režim: panel sa vysunie pri nabehnutí k ľavému okraju.
   $('#peek-zone').addEventListener('mouseenter', () => document.body.classList.add('peek'));
@@ -1745,6 +1766,8 @@ function layoutEvents() {
   $('#btn-theme').onclick = toggleTheme;
   $('#btn-palette').onclick = openCommandPalette;
   $('#btn-settings').onclick = openSettings;
+  $('.brand').onclick = goHome;
+  $('.brand').title = 'Úvodná obrazovka';
   $('#btn-workspace').onclick = workspaceSwitcher;
   $('#btn-run').onclick = run;
   $('#btn-stop').onclick = stop;

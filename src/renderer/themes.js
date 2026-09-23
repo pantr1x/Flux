@@ -148,6 +148,9 @@ export function defineMonacoTheme(monaco, id, accent) {
           'editorStickyScroll.background': '#2f2f37',
           'editorStickyScrollHover.background': '#383840',
           'editorGhostText.foreground': '#ffffff55',
+          'minimap.background': '#2c2c34',
+          'minimapSlider.background': '#ffffff14',
+          'minimapSlider.hoverBackground': '#ffffff22',
         }
       : {
           'editor.background': '#00000000',
@@ -170,6 +173,7 @@ export function defineMonacoTheme(monaco, id, accent) {
           'editorOverviewRuler.border': '#00000000',
           focusBorder: '#00000000',
           'editorStickyScroll.background': '#f8f8fb',
+          'minimap.background': '#f4f4f7',
         },
   });
   return `flux-${id}`;

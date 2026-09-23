@@ -67,10 +67,7 @@ body {
   font: 13px/1.4 var(--ui-font);
   color: var(--text);
   /* Gradient vo farbe priečinka – na Windows 11 cez neho presvitá Mica. */
-  background:
-    radial-gradient(1200px 700px at -10% -20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
-    radial-gradient(900px 600px at 110% 120%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
-    var(--base-alpha);
+  background: var(--base-alpha);
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -174,6 +171,15 @@ button:disabled {
   font-weight: 650;
   font-size: 15px;
   letter-spacing: 0.2px;
+  padding: 4px 8px 4px 4px;
+  margin-left: -4px;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.brand:hover {
+  background: var(--hover);
 }
 
 .brand-mark {
@@ -182,9 +188,8 @@ button:disabled {
   display: grid;
   place-items: center;
   border-radius: 6px;
-  color: #fff;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, #fff), var(--accent));
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent);
+  background: var(--text);
+  color: var(--base);
 }
 
 .workspace {
@@ -238,7 +243,6 @@ button:disabled {
   overflow: auto;
   padding: 2px 0 8px;
   outline: none;
-  scrollbar-width: thin;
 }
 
 .row {
@@ -323,7 +327,6 @@ button:disabled {
   background: var(--accent);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .side-bottom {
@@ -562,7 +565,6 @@ body.compact #btn-expand {
   background: var(--accent);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transition: transform 0.12s var(--ease), filter 0.15s;
 }
 
@@ -727,7 +729,6 @@ body.compact #btn-expand {
 .welcome-actions button.primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .welcome-section {
@@ -882,7 +883,7 @@ body.resizing iframe {
 
 /* ---------- výstupný panel ---------- */
 #panel {
-  height: 34%;
+  height: 190px;
   min-height: 90px;
   display: flex;
   flex-direction: column;
@@ -989,7 +990,6 @@ body.resizing iframe {
 #terminal .xterm-viewport {
   background: transparent !important;
   overflow-x: hidden !important;
-  scrollbar-width: thin;
 }
 
 /* ---------- stavový riadok ---------- */
@@ -1089,7 +1089,6 @@ button.status-item:hover {
   overflow: auto;
   padding: 0 6px 6px;
   border-top: 1px solid var(--line);
-  scrollbar-width: thin;
 }
 
 #palette-list:empty {
@@ -1253,7 +1252,6 @@ button.status-item:hover {
 .chip-btn.primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .accents button.more {
@@ -1502,4 +1500,52 @@ button.status-item:hover {
 
 .switch:checked::after {
   transform: translateX(16px);
+}
+
+/* ---------- náhľad kódu (minimapa so skutočným textom) ---------- */
+body.codemap-on #editor {
+  right: 112px;
+}
+
+#codemap {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  bottom: 0;
+  width: 112px;
+  overflow: hidden;
+  cursor: default;
+  border-left: 1px solid var(--line);
+}
+
+#codemap[hidden] {
+  display: none;
+}
+
+.cm-content {
+  padding-left: 8px;
+  font: 3.5px/4.2px var(--mono);
+  white-space: pre;
+  opacity: 0.85;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cm-slider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--hover);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+#codemap:hover .cm-slider,
+#codemap.dragging .cm-slider {
+  opacity: 1;
+}
+
+#codemap.dragging .cm-slider {
+  background: var(--active);
 }

@@ -62,12 +62,11 @@ const txt = (x, y, s, fill, size = 6.2) =>
   `<text x="${x}" y="${y}" fill="${fill}" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="${size}" text-anchor="middle">${s}</text>`;
 
 const FILE_ICONS = {
-  python: svg16(
-    '<path d="M7.9 1C5 1 5.2 2.3 5.2 2.3v1.4h2.8v.4H4.1S2.2 3.9 2.2 6.8s1.6 2.8 1.6 2.8h1V8.2s-.1-1.6 1.6-1.6h2.8s1.5 0 1.5-1.5V2.6S10.9 1 7.9 1Z" fill="#3E7CB1"/>' +
-      '<circle cx="6.3" cy="2.5" r=".55" fill="#fff"/>' +
-      '<path d="M8.1 15c2.9 0 2.7-1.3 2.7-1.3v-1.4H8v-.4h3.9s1.9.2 1.9-2.7-1.6-2.8-1.6-2.8h-1v1.4s.1 1.6-1.6 1.6H6.8s-1.5 0-1.5 1.5v2.5S5.1 15 8.1 15Z" fill="#FFD845"/>' +
-      '<circle cx="9.7" cy="13.5" r=".55" fill="#fff"/>',
-  ),
+  python:
+    '<svg class="ficon" width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">' +
+    '<path d="M15.9 2.1c-7.1 0-6.7 3.1-6.7 3.1v3.2h6.8v1H6.5S2 8.8 2 16s4 6.9 4 6.9h2.3v-3.4s-.1-4 3.9-4H19s3.8.1 3.8-3.7V5.8s.6-3.7-6.9-3.7Zm-3.7 2.1a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4Z" fill="#3B77A8"/>' +
+    '<path d="M16.1 29.9c7.1 0 6.7-3.1 6.7-3.1v-3.2H16v-1h9.5S30 23.2 30 16s-4-6.9-4-6.9h-2.4v3.3s.1 4-3.9 4H13s-3.8-.1-3.8 3.7v6.1s-.6 3.7 6.9 3.7Zm3.7-2.1a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Z" fill="#FFD43B"/>' +
+    '</svg>',
   html: svg16('<path d="M2 1h12l-1.1 12.4L8 15l-4.9-1.6Z" fill="#E44D26"/><path d="M8 2.1v11.8l3.9-1.3.9-10.5Z" fill="#F16529"/><path d="M5 5h6l-.1 1.4H6.5l.1 1.4h4.2l-.3 3.3L8 11.8l-2.5-.7-.2-1.8h1.3l.1.9 1.3.4 1.3-.4.2-1.5H5.3Z" fill="#fff"/>'),
   css: svg16('<path d="M2 1h12l-1.1 12.4L8 15l-4.9-1.6Z" fill="#1572B6"/><path d="M8 2.1v11.8l3.9-1.3.9-10.5Z" fill="#33A9DC"/><path d="M5 5h6l-.1 1.4H6.5l.1 1.4h4.2l-.3 3.3L8 11.8l-2.5-.7-.2-1.8h1.3l.1.9 1.3.4 1.3-.4.2-1.5H5.3Z" fill="#fff"/>'),
   scss: svg16('<circle cx="8" cy="8" r="6.5" fill="#CD6799"/>' + txt(8, 10.3, 'S', '#fff', 7.5)),
