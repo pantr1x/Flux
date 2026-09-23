@@ -35,29 +35,31 @@ export function createOnboarding(app) {
     return `<div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}<button class="ob-primary" data-next>${nextLabel}</button></div>`;
   }
 
-  function render() {
+  function body() {
     const s = app.getSettings();
-    let body = '';
     if (step === 0) {
-      body = `<div class="ob-splash">${LOGO}<h1 class="ob-title">flux</h1>
+      return `<div class="ob-splash">${LOGO}<h1 class="ob-title">flux</h1>
         <p class="ob-tag">${t('Code. Run. Create.')}</p>
         <button class="ob-primary ob-start" data-next>${t('Get started')}</button></div>`;
-    } else if (step === 1) {
-      body = `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('More languages are downloaded from GitHub, so Flux stays small.')}</p>
+    }
+    if (step === 1) {
+      return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('More languages are downloaded from GitHub, so Flux stays small.')}</p>
         <div class="ob-list">${languages
-          .map((l) => `<button class="ob-option${(s.language || 'en') === l.code ? ' on' : ''}" data-lang="${l.code}"><b>${l.name}</b><small>${l.native || ''}</small></button>`)
+          .map((l) => `<button class="ob-option${(s.language || 'en') === l.code ? ' on' : ''}" data-lang="${l.code}"><b>${l.native || l.name}</b><small>${l.name}</small></button>`)
           .join('')}</div></div>${nav()}`;
-    } else if (step === 2) {
+    }
+    if (step === 2) {
       const chosen = s.codeLangs || [];
-      body = `<div class="ob-step"><h2>${t('What do you want to code?')}</h2><p>${t('Flux will show the right templates and buttons first. Pick as many as you like.')}</p>
+      return `<div class="ob-step"><h2>${t('What do you want to code?')}</h2><p>${t('Flux will show the right templates and buttons first. Pick as many as you like.')}</p>
         <div class="ob-grid">${CODE_LANGS.map(
           (c) =>
             `<button class="ob-card${chosen.includes(c.id) ? ' on' : ''}" data-code="${c.id}"><span class="ob-ic">${
               c.icon ? app.fileIcon(c.icon).replace(/width="16" height="16"/, 'width="34" height="34"') : app.icon('sparkle', 30)
             }</span><b>${t(c.label)}</b><i class="ob-check">${app.icon('check', 14)}</i></button>`,
         ).join('')}</div></div>${nav()}`;
-    } else if (step === 3) {
-      body = `<div class="ob-step"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
+    }
+    if (step === 3) {
+      return `<div class="ob-step"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
         <div class="ob-themes">${LOOK_THEMES.map(
           (id) =>
             `<button class="ob-theme${(s.codeTheme || 'vscode-dark') === id ? ' on' : ''}" data-theme="${id}"><span class="swatch">${themeSwatch(id)
@@ -67,13 +69,35 @@ export function createOnboarding(app) {
         <div class="ob-accents">${app.accents
           .map((a) => `<button data-accent="${a}" style="--c:${app.accentHex(a)}" class="${app.accentHex(a) === app.currentAccent() ? 'on' : ''}"></button>`)
           .join('')}</div></div>${nav()}`;
-    } else {
-      body = `<div class="ob-splash ob-done">${LOGO}<h1 class="ob-title">${t("You're all set!")}</h1>
+    }
+    return `<div class="ob-splash ob-done">${LOGO}<h1 class="ob-title">${t("You're all set!")}</h1>
         <p class="ob-tag">${t('Want a 30-second tour of the main features?')}</p>
         <div class="ob-row"><button class="ob-primary" data-tour>${t('Show me around')}</button><button class="ob-ghost" data-finish>${t('Start coding')}</button></div></div>`;
-    }
-    el.innerHTML = `<div class="ob-glow"></div><div class="ob-body" data-step="${step}">${body}</div>`;
   }
+
+  // Pozadie ostáva, mení sa len obsah kroku – žiadne blikanie pri kliknutí.
+  function shell() {
+    el.innerHTML = `<div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div><div class="ob-stage"></div>`;
+  }
+
+  let dir = 1;
+  function render(animate = true) {
+    const stage = el.querySelector('.ob-stage');
+    const old = stage.querySelector('.ob-body');
+    const next = document.createElement('div');
+    next.className = `ob-body${animate ? (dir > 0 ? ' in-fwd' : ' in-back') : ''}`;
+    next.dataset.step = step;
+    next.innerHTML = body();
+    if (old && animate) {
+      old.classList.add(dir > 0 ? 'out-fwd' : 'out-back');
+      old.addEventListener('animationend', () => old.remove(), { once: true });
+      setTimeout(() => old.remove(), 400);
+    } else if (old) old.remove();
+    stage.append(next);
+  }
+
+  // Označenie výberu bez prekreslenia celej stránky.
+  const mark = (sel, pick) => el.querySelectorAll(sel).forEach((b) => b.classList.toggle('on', pick(b)));
 
   async function finish(tour) {
     await app.saveSettings({ onboarded: true });
@@ -81,53 +105,63 @@ export function createOnboarding(app) {
     setTimeout(() => {
       el.hidden = true;
       el.classList.remove('leaving');
+      document.body.classList.remove('onboarding');
       if (langChanged) flux.reload();
       else if (tour) startTour();
-    }, 350);
+    }, 450);
   }
 
   el.onclick = async (e) => {
     const b = e.target.closest('button');
-    if (!b) return;
+    if (!b || b.disabled) return;
     if (b.dataset.next !== undefined) {
+      dir = 1;
       step = Math.min(4, step + 1);
       if (step === 1) {
         flux.i18nList().then((list) => {
-          if (Array.isArray(list) && list.length) languages = list;
-          if (step === 1) render();
+          if (Array.isArray(list) && list.length > languages.length) {
+            languages = list;
+            if (step === 1) render(false);
+          }
         });
       }
       return render();
     }
     if (b.dataset.back !== undefined) {
+      dir = -1;
       step = Math.max(0, step - 1);
       return render();
     }
     if (b.dataset.lang) {
+      const code = b.dataset.lang;
+      mark('[data-lang]', (x) => x === b);
+      b.classList.add('loading');
       try {
-        b.classList.add('loading');
-        const dict = await flux.i18nUse(b.dataset.lang);
+        const dict = await flux.i18nUse(code);
         setLocale(dict);
-        await app.saveSettings({ language: b.dataset.lang });
+        await app.saveSettings({ language: code });
         langChanged = true;
+        render(false); // texty v novom jazyku
       } catch {
+        b.classList.remove('loading');
+        mark('[data-lang]', (x) => x.dataset.lang === (app.getSettings().language || 'en'));
         app.toast(t('Could not download the language. Check your internet connection.'), 'error');
       }
-      return render();
+      return;
     }
     if (b.dataset.code) {
       const set = new Set(app.getSettings().codeLangs || []);
       set.has(b.dataset.code) ? set.delete(b.dataset.code) : set.add(b.dataset.code);
-      await app.saveSettings({ codeLangs: [...set] });
-      return render();
+      b.classList.toggle('on', set.has(b.dataset.code));
+      return app.saveSettings({ codeLangs: [...set] });
     }
     if (b.dataset.theme) {
-      await app.setCodeTheme(b.dataset.theme);
-      return render();
+      mark('[data-theme]', (x) => x === b);
+      return app.setCodeTheme(b.dataset.theme);
     }
     if (b.dataset.accent) {
-      await app.setAccent(b.dataset.accent);
-      return render();
+      mark('[data-accent]', (x) => x === b);
+      return app.setAccent(b.dataset.accent);
     }
     if (b.dataset.tour !== undefined) return finish(true);
     if (b.dataset.finish !== undefined) return finish(false);
@@ -135,8 +169,11 @@ export function createOnboarding(app) {
 
   function open() {
     step = 0;
+    dir = 1;
     langChanged = false;
+    shell();
     render();
+    document.body.classList.add('onboarding');
     el.hidden = false;
   }
 

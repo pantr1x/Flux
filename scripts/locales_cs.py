@@ -98,3 +98,5 @@ CS = {
 "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.":"„Tapeta“ zůstane průhledná i když okno není aktivní. U Acrylic/Mica Windows neaktivní okno zešedne.",
 "“{file}” has unsaved changes.":"„{file}“ má neuložené změny.",
 }
+CS.update({'Behaviour': 'Chování', 'Interpreter': 'Interpret', 'Language & intro': 'Jazyk a úvod', 'Output': 'Výstup', 'Text': 'Text', 'Window': 'Okno', 'Editor': 'Editor'})
+CS['Pick one and Flux creates a new project for it.'] = 'Vyber si a Flux pro to založí nový projekt.'

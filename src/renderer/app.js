@@ -11,7 +11,7 @@ import { THEMES, DEFAULT_THEME, themeOf, defineMonacoTheme, themeSwatch } from '
 import { TEMPLATES, PY_SNIPPETS, HTML_PAGE } from './templates.js';
 import { createCodeMap } from './codemap.js';
 import { t, setLocale, translateDom } from './i18n.js';
-import { createGame, ACHIEVEMENTS, xpOf, levelOf, streakOf, confetti } from './game.js';
+import { createActivity } from './activity.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -297,7 +297,7 @@ const fmtNum = (n) => n.toLocaleString();
 // ---------- editor ----------
 let editor;
 let codemap;
-let game;
+let activity;
 let onboarding;
 function createEditor() {
   editor = monaco.editor.create($('#editor'), {
@@ -394,12 +394,6 @@ function updateProblems() {
   }
   const list = problemsOf(tab.model);
   const errors = list.filter((m) => m.severity === monaco.MarkerSeverity.Error).length;
-  // Na odznak „Bug squasher“: súbor mal chyby a teraz ich nemá.
-  if (errors) tab.hadErrors = true;
-  else if (tab.hadErrors) {
-    tab.hadErrors = false;
-    tab.fixedPending = true;
-  }
   const warns = list.length - errors;
   const byLine = new Map();
   for (const m of list) if (!byLine.has(m.startLineNumber)) byLine.set(m.startLineNumber, m);
@@ -1135,7 +1129,7 @@ async function renderProjects() {
   for (const p of list) {
     flux.projectStats(p.dir).then((st) => {
       const sub = [...el.querySelectorAll('.pr-sub')].find((x) => x.dataset.stats === p.dir);
-      if (sub) sub.textContent = `${t('Lv {n}', { n: levelOf(xpOf(st)).level })} · ${st.files} ${st.files === 1 ? t('file') : t('files')}`;
+      if (sub) sub.textContent = `${st.files} ${st.files === 1 ? t('file') : t('files')}${st.time >= 60 ? ` · ${formatTime(st.time)}` : ''}`;
     });
   }
 }
@@ -1147,10 +1141,11 @@ const PROJECT_KINDS = [
   { id: 'empty', title: 'Empty', text: 'Start from scratch', icon: null, tpl: null },
 ];
 
-async function newProject() {
+// opts.tpl: šablóna zo štartovacej obrazovky – projekt sa založí rovno s ňou.
+async function newProject(opts = {}) {
   const el = $('#newproj');
   const prefs = setting('codeLangs') || [];
-  let kind = prefs.includes('web') && !prefs.includes('python') ? 'web' : 'python';
+  let kind = opts.kind || (prefs.includes('web') && !prefs.includes('python') ? 'web' : 'python');
   let root = await flux.projectRoot();
   let nameTouched = false;
   const defaultName = () => ({ python: 'my-program', web: 'my-website', empty: 'new-project' })[kind];
@@ -1196,12 +1191,16 @@ async function newProject() {
     el.querySelector('.np-card').classList.add('done');
     setTimeout(close, 260);
     await setWorkspace(dir);
-    game.projectCreated();
-    const tpl = TEMPLATES.find((x) => x.id === PROJECT_KINDS.find((k) => k.id === kind).tpl);
-    if (!tpl) return renderProjects();
+    const kindTpl = TEMPLATES.find((x) => x.id === PROJECT_KINDS.find((k) => k.id === kind).tpl);
+    const tpl = opts.tpl && kind === opts.kind ? opts.tpl : kindTpl;
+    if (!tpl || !tpl.files?.length) {
+      await renderProjects();
+      if (tpl) newFile(dir, tpl);
+      return;
+    }
     let first = null;
     for (const f of tpl.files) {
-      const path = join(dir, f.name.replace('{{name}}', 'main.py'));
+      const path = join(dir, f.name.replace('{{name}}', tpl.name || 'main.py'));
       await flux.create(path, false);
       await flux.write(path, f.content.replaceAll('{{title}}', name).replace('$0', kind === 'python' ? `print("Hello from ${name}!")` : ''));
       if (!first || f.open) first = path;
@@ -1492,7 +1491,7 @@ function stop() {
 
 function onRunStart({ label, pty }) {
   state.running = true;
-  if (!/^(pip install|python -m venv)/.test(label)) game.run(state.workspace);
+  if (!/^(pip install|python -m venv)/.test(label)) activity.run(state.workspace);
   updatePanelVisibility();
   state.pty = !!pty;
   state.runOutput = '';
@@ -1527,7 +1526,6 @@ function onRunExit({ code, error, ms }) {
     status.className = 'run-state';
     status.textContent = t('Stopped');
   } else if (code === 0) {
-    if (!/^(pip install|python -m venv)/.test(state.lastLabel || '')) game.okRun(state.workspace);
     term.writeln(`\r\n\x1b[2m── ${t('Done in {t}', { t: secs })} ──\x1b[0m`);
     status.className = 'run-state ok';
     status.textContent = t('Done');
@@ -1597,7 +1595,6 @@ async function startLive() {
   }
   try {
     state.live = await flux.liveStart();
-    game.live(state.workspace);
   } catch (err) {
     toast(errorText(err), 'error');
     return false;
@@ -1961,55 +1958,91 @@ function openSettings() {
     state.mica && ['mica', 'Mica (Windows)'],
     ['none', t('Off')],
   ].filter(Boolean);
+  const tabs = [
+    ['appearance', 'palette', t('Appearance')],
+    ['editor', 'code', t('Editor')],
+    ['running', 'play', t('Running')],
+    ['general', 'globe', t('Language & intro')],
+  ];
+  const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
   panel.innerHTML = `
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
-      <header><h2>${icon('settings', 18)}${t('Settings')}</h2><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
-      <div class="s-body">
-        <section>
-          <h3>${t('Appearance')}</h3>
-          <div class="s-label">${t('Code theme')}</div>
-          <div class="theme-grid">${Object.entries(THEMES)
-            .map(
-              ([id, th]) =>
-                `<button class="theme-card${id === setting('codeTheme') ? ' active' : ''}" data-theme="${id}"><span class="swatch">${themeSwatch(id)
-                  .map((c) => `<i style="background:${c}"></i>`)
-                  .join('')}</span><span>${escapeHtml(th.name)}</span><small>${th.type === 'dark' ? t('dark') : t('light')}</small></button>`,
-            )
-            .join('')}</div>
-          <div class="s-label">${t('Accent color')}${state.workspace ? ` <small>(${t('for folder {name}', { name: escapeHtml(basename(state.workspace)) })})</small>` : ''}</div>
-          <div class="accent-grid">${Object.keys(ACCENTS)
-            .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? t('black & white (like Zen)') : name}"></button>`)
-            .join('')}<label class="custom-color" title="${t('Custom color')}"><input type="color" value="${accent}" data-custom-accent></label></div>
-          ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
-        </section>
-        <section>
-          <h3>${t('Language')}</h3>
-          <label class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><select id="s-lang"><option>${escapeHtml(setting('language') || 'en')}</option></select></label>
-        </section>
-        <section>
-          <h3>${t('Editor')}</h3>
-          <label class="s-row"><span><b>${t('Font')}</b></span><select data-key="fontFamily">${FONTS.map((f) => opt(f.id, t(f.label), setting('fontFamily'))).join('')}</select></label>
-          <label class="s-row"><span><b>${t('Font size')}</b></span><input type="number" min="9" max="32" data-key="fontSize" value="${setting('fontSize')}"></label>
-          <label class="s-row"><span><b>${t('Line height')}</b></span><select data-key="lineHeight">${[1.3, 1.45, 1.6, 1.8].map((v) => opt(v, t({ 1.3: 'compact', 1.45: 'normal', 1.6: 'relaxed', 1.8: 'large' }[v]), setting('lineHeight'))).join('')}</select></label>
-          ${toggle('ligatures', 'Ligatures', 'joined characters like => and != (e.g. in Cascadia Code)')}
-          ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
-          ${toggle('wordWrap', 'Wrap long lines')}
-          ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
-          ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
-          ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
-        </section>
-        <section>
-          <h3>${t('Running')}</h3>
-          ${toggle('clearOnRun', 'Clear output before running')}
-          <label class="s-row"><span><b>${t('Output font size')}</b></span><input type="number" min="9" max="28" data-key="terminalFontSize" value="${setting('terminalFontSize')}"></label>
-          <div class="s-row"><span><b>Python</b><small>${state.python ? `${escapeHtml(state.python.version)} · ${escapeHtml(state.python.path)}` : t('not found')}</small></span><button class="s-btn" data-action="python">${t('Change…')}</button></div>
-        </section>
-        <section>
-          <h3>${t('Welcome')}</h3>
-          <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
-        </section>
+      <nav class="s-nav">
+        <div class="s-nav-title">${t('Settings')}</div>
+        ${tabs.map(([id, ic, label]) => `<button class="s-tab${id === tab ? ' on' : ''}" data-tab="${id}">${icon(ic, 16)}<span>${label}</span></button>`).join('')}
+        <div class="grow"></div>
+        <div class="s-ver">flux</div>
+      </nav>
+      <div class="s-main">
+        <button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button>
+        <div class="s-body">
+          <section data-pane="appearance">
+            <h2>${t('Appearance')}</h2>
+            <h3>${t('Code theme')}</h3>
+            <div class="theme-grid">${Object.entries(THEMES)
+              .map(
+                ([id, th]) =>
+                  `<button class="theme-card${id === setting('codeTheme') ? ' active' : ''}" data-theme="${id}"><span class="swatch">${themeSwatch(id)
+                    .map((c) => `<i style="background:${c}"></i>`)
+                    .join('')}</span><span>${escapeHtml(th.name)}</span><small>${th.type === 'dark' ? t('dark') : t('light')}</small></button>`,
+              )
+              .join('')}</div>
+            <h3>${t('Accent color')}${state.workspace ? ` <small>${t('for folder {name}', { name: escapeHtml(basename(state.workspace)) })}</small>` : ''}</h3>
+            <div class="s-group"><div class="accent-grid">${Object.keys(ACCENTS)
+              .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? t('black & white (like Zen)') : name}"></button>`)
+              .join('')}<label class="custom-color" title="${t('Custom color')}"><input type="color" value="${accent}" data-custom-accent></label></div></div>
+            ${state.platform === 'win32' ? `<h3>${t('Window')}</h3><div class="s-group"><label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label></div>` : ''}
+          </section>
+          <section data-pane="editor">
+            <h2>${t('Editor')}</h2>
+            <h3>${t('Text')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Font')}</b></span><select data-key="fontFamily">${FONTS.map((f) => opt(f.id, t(f.label), setting('fontFamily'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Font size')}</b></span><input type="number" min="9" max="32" data-key="fontSize" value="${setting('fontSize')}"></label>
+              <label class="s-row"><span><b>${t('Line height')}</b></span><select data-key="lineHeight">${[1.3, 1.45, 1.6, 1.8].map((v) => opt(v, t({ 1.3: 'compact', 1.45: 'normal', 1.6: 'relaxed', 1.8: 'large' }[v]), setting('lineHeight'))).join('')}</select></label>
+              ${toggle('ligatures', 'Ligatures', 'joined characters like => and != (e.g. in Cascadia Code)')}
+              ${toggle('wordWrap', 'Wrap long lines')}
+            </div>
+            <h3>${t('Behaviour')}</h3>
+            <div class="s-group">
+              ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
+              ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
+              ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
+              ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
+            </div>
+          </section>
+          <section data-pane="running">
+            <h2>${t('Running')}</h2>
+            <h3>Python</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('Interpreter')}</b><small>${state.python ? `${escapeHtml(state.python.version)} · ${escapeHtml(state.python.path)}` : t('not found')}</small></span><button class="s-btn" data-action="python">${t('Change…')}</button></div>
+            </div>
+            <h3>${t('Output')}</h3>
+            <div class="s-group">
+              ${toggle('clearOnRun', 'Clear output before running')}
+              <label class="s-row"><span><b>${t('Output font size')}</b></span><input type="number" min="9" max="28" data-key="terminalFontSize" value="${setting('terminalFontSize')}"></label>
+            </div>
+          </section>
+          <section data-pane="general">
+            <h2>${t('Language & intro')}</h2>
+            <h3>${t('Language')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><select id="s-lang"><option>${escapeHtml(setting('language') || 'en')}</option></select></label>
+            </div>
+            <h3>${t('Welcome')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>`;
+  const showTab = (id) => {
+    state.settingsTab = id;
+    panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+    panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
+  };
+  showTab(tab);
   // Zoznam jazykov z GitHubu.
   flux.i18nList().then((list) => {
     const sel = $('#s-lang');
@@ -2030,15 +2063,18 @@ function openSettings() {
 
   panel.onclick = async (e) => {
     if (e.target === panel || e.target.closest('[data-close]')) return closeSettings();
+    const tabBtn = e.target.closest('[data-tab]');
+    if (tabBtn) return showTab(tabBtn.dataset.tab);
+    // Výber sa len označí – bez prekreslenia (žiadne blikanie ani skok na začiatok).
     const themeBtn = e.target.closest('[data-theme]');
     if (themeBtn) {
-      await setCodeTheme(themeBtn.dataset.theme);
-      return openSettings();
+      panel.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b === themeBtn));
+      return setCodeTheme(themeBtn.dataset.theme);
     }
     const accentBtn = e.target.closest('[data-accent]');
     if (accentBtn) {
-      await setAccent(accentBtn.dataset.accent);
-      return openSettings();
+      panel.querySelectorAll('[data-accent]').forEach((b) => b.classList.toggle('active', b === accentBtn));
+      return setAccent(accentBtn.dataset.accent);
     }
     if (e.target.closest('[data-action="python"]')) {
       closeSettings();
@@ -2102,10 +2138,11 @@ function openStart() {
   const prefs = setting('codeLangs') || [];
   const choices = [...START_CHOICES].sort((a, b) => (prefs.includes(b.lang) ? 1 : 0) - (prefs.includes(a.lang) ? 1 : 0));
   el.innerHTML = `
+    <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
     <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span></div>
     <div class="st-inner">
       <h1>${t('What are you building?')}</h1>
-      <p class="st-sub">${state.workspace ? t('The new file goes into <b>{dir}</b>.', { dir: escapeHtml(basename(state.workspace)) }) : t('First you will pick a folder to save it in.')}</p>
+      <p class="st-sub">${state.workspace ? t('The new file goes into <b>{dir}</b>.', { dir: escapeHtml(basename(state.workspace)) }) : t('Pick one and Flux creates a new project for it.')}</p>
       <div class="st-grid">${choices
         .map(
           (c) =>
@@ -2119,6 +2156,7 @@ function openStart() {
       ${state.workspace ? `<button class="st-back" data-act="back">${t('Back to editor')} <kbd>Esc</kbd></button>` : ''}
     </div>`;
   el.hidden = false;
+  document.body.classList.add('start-open');
   el.onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -2134,17 +2172,19 @@ function openStart() {
     }
     const tpl = TEMPLATES.find((x) => x.id === b.dataset.tpl);
     if (!tpl) return;
-    if (!state.workspace) {
-      await openFolderDialog();
-      if (!state.workspace) return;
-    }
     closeStart();
+    // Bez otvoreného projektu: rovno nový projekt s touto šablónou (žiadne hľadanie priečinka).
+    if (!state.workspace) {
+      const lang = START_CHOICES.find((c) => c.id === tpl.id)?.lang;
+      return newProject({ kind: lang === 'python' ? 'python' : lang === 'web' ? 'web' : 'empty', tpl });
+    }
     newFile(state.workspace, tpl);
   };
 }
 
 function closeStart() {
   $('#start').hidden = true;
+  document.body.classList.remove('start-open');
   if (state.active) editor.focus();
 }
 
@@ -2180,31 +2220,18 @@ function renderWelcome() {
         </div>
       </div>`;
   } else {
-    const g = game.game();
-    const pg = g.projects[ws] || {};
-    const unlocked = g.achievements;
+    const runs = activity.runs(ws);
     w.innerHTML = `
       <div class="welcome-inner">
         <div class="wl-head">
           <span class="wl-icon">${projectIcon(state.projectKind)}</span>
           <div class="wl-title"><h1>${escapeHtml(basename(ws))}</h1><p class="sub">${escapeHtml(ws)}</p></div>
-          <div class="lvl-ring" id="wl-ring" style="--p:0"><b id="wl-level">1</b><small>${t('level')}</small></div>
-        </div>
-        <div class="xp">
-          <div class="xp-top"><span id="wl-xp-label">–</span><span id="wl-xp-next"></span></div>
-          <div class="xp-bar"><i id="wl-xp-fill"></i></div>
         </div>
         <div class="stats" id="wl-stats">
-          <div class="stat"><span class="st-ico">⏱</span><b data-k="time">–</b><span>${t('Time in project')}</span></div>
-          <div class="stat"><span class="st-ico">▶</span><b data-k="runs">${pg.runs || 0}</b><span>${t('Runs')}</span></div>
-          <div class="stat"><span class="st-ico">≡</span><b data-k="lines">–</b><span>${t('Lines of code')}</span></div>
-          <div class="stat"><span class="st-ico">🔥</span><b data-k="streak">${streakOf(g.days)}</b><span>${t('Day streak')}</span></div>
-        </div>
-        <div class="badges">
-          <div class="badges-head"><span>${t('Achievements')}</span><small>${Object.keys(unlocked).length} / ${ACHIEVEMENTS.length}</small></div>
-          <div class="badge-row">${ACHIEVEMENTS.map(
-            (a) => `<div class="ach${unlocked[a.id] ? ' got' : ''}" title="${escapeAttr(t(a.name))} – ${escapeAttr(t(a.desc))}"><span>${a.icon}</span></div>`,
-          ).join('')}</div>
+          <div class="stat"><b data-k="time">–</b><span>${t('Time in project')}</span></div>
+          <div class="stat"><b data-k="runs">${runs}</b><span>${t('Runs')}</span></div>
+          <div class="stat"><b data-k="lines">–</b><span>${t('Lines of code')}</span></div>
+          <div class="stat"><b data-k="files">–</b><span>${t('Files')}</span></div>
         </div>
         <div class="welcome-actions">
           <button class="primary" data-act="new">${icon('filePlus')}${t('New file')}</button>
@@ -2214,18 +2241,11 @@ function renderWelcome() {
       </div>`;
     flux.projectStats(ws).then((st) => {
       if (state.workspace !== ws || !$('#wl-stats')) return;
-      const lv = levelOf(xpOf(st, pg));
       const q = (k) => $(`#wl-stats [data-k="${k}"]`);
       q('time').textContent = formatTime(st.time);
       countUp(q('lines'), st.lines);
-      countUp(q('runs'), pg.runs || 0);
-      $('#wl-level').textContent = lv.level;
-      $('#wl-xp-label').textContent = t('{xp} XP', { xp: fmtNum(lv.xp) });
-      $('#wl-xp-next').textContent = t('{n} XP to level {l}', { n: fmtNum(lv.span - lv.into), l: lv.level + 1 });
-      requestAnimationFrame(() => {
-        $('#wl-xp-fill').style.width = `${lv.pct}%`;
-        $('#wl-ring').style.setProperty('--p', lv.pct);
-      });
+      countUp(q('files'), st.files);
+      countUp(q('runs'), runs);
     });
   }
   w.onclick = (e) => {
@@ -2237,21 +2257,6 @@ function renderWelcome() {
     else if (b.dataset.act === 'start') openStart();
     else if (b.dataset.act === 'newproject') newProject();
   };
-}
-
-// Oslava: odznak alebo nová úroveň.
-function celebrate({ kind, title, text, icon: ic }) {
-  const el = document.createElement('div');
-  el.className = `celebrate ${kind}`;
-  el.innerHTML = `<span class="cel-ic">${ic}</span><div><small>${kind === 'level' ? t('Level up') : t('Achievement unlocked')}</small><b></b><p></p></div>`;
-  el.querySelector('b').textContent = title;
-  el.querySelector('p').textContent = text;
-  document.body.append(el);
-  const r = el.getBoundingClientRect();
-  confetti(r.left + r.width / 2, r.top + 20);
-  setTimeout(() => el.classList.add('out'), 3800);
-  setTimeout(() => el.remove(), 4200);
-  if (!state.active) renderWelcome();
 }
 
 // ---------- klávesové skratky ----------
@@ -2319,11 +2324,6 @@ function keybindings() {
           announceProblems();
           const tb = activeTab();
           if (!tb) return;
-          game.save(state.workspace);
-          if (tb.fixedPending) {
-            tb.fixedPending = false;
-            game.fixed(state.workspace);
-          }
         });
       else if (ctrl && key === 'o') openFolderDialog();
       else if (ctrl && e.shiftKey && key === 'n') newProject();
@@ -2466,7 +2466,7 @@ async function main() {
 
   setIcons();
   setupWallpaper();
-  game = createGame({ getSettings: () => state.settings, saveSettings, projectStats: (d) => flux.projectStats(d), celebrate });
+  activity = createActivity({ getSettings: () => state.settings, saveSettings });
   onboarding = createOnboarding({
     fileIcon,
     icon,
@@ -2512,7 +2512,6 @@ async function main() {
     flux.close();
   });
 
-  game.touch();
   if (!state.settings.onboarded) onboarding.open();
   if (init.lastFolder) await setWorkspace(init.lastFolder);
   else {

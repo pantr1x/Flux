@@ -93,3 +93,5 @@ ES = {
 "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.":"«Fondo de pantalla» sigue siendo translúcido aunque la ventana no esté activa. Con Acrylic/Mica, Windows la vuelve gris.",
 "“{file}” has unsaved changes.":"«{file}» tiene cambios sin guardar.",
 }
+ES.update({'Behaviour': 'Comportamiento', 'Interpreter': 'Intérprete', 'Language & intro': 'Idioma e introducción', 'Output': 'Salida', 'Text': 'Texto', 'Window': 'Ventana', 'Editor': 'Editor'})
+ES['Pick one and Flux creates a new project for it.'] = 'Elige uno y Flux creará un proyecto nuevo para ello.'

@@ -126,3 +126,5 @@ SK = {
 "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.":"„Tapeta“ ostane priesvitná aj keď okno nie je aktívne. Pri Acrylic/Mica Windows neaktívne okno zosivie.",
 "“{file}” has unsaved changes.":"„{file}“ má neuložené zmeny.",
 }
+SK.update({'Behaviour': 'Správanie', 'Interpreter': 'Interpreter', 'Language & intro': 'Jazyk a úvod', 'Output': 'Výstup', 'Text': 'Text', 'Window': 'Okno', 'Editor': 'Editor'})
+SK['Pick one and Flux creates a new project for it.'] = 'Vyber si a Flux preň založí nový projekt.'
