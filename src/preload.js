@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('flux', {
   i18nList: () => ipcRenderer.invoke('i18n:list'),
   i18nUse: (code) => ipcRenderer.invoke('i18n:use', code),
   i18nCurrent: () => ipcRenderer.invoke('i18n:current'),
+  reload: () => ipcRenderer.invoke('app:reload'),
   setSettings: (patch) => ipcRenderer.invoke('app:set-settings', patch),
   setDirty: (count) => ipcRenderer.send('app:dirty', count),
   close: () => ipcRenderer.send('app:close'),

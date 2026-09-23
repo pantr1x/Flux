@@ -197,6 +197,7 @@ function registerIpc() {
     return data;
   });
   ipcMain.handle('i18n:current', () => i18n.loadCached(settings.language || 'en') || {});
+  ipcMain.handle('app:reload', () => win?.webContents.reload());
   ipcMain.handle('app:init', () => ({
     platform: process.platform,
     mica,

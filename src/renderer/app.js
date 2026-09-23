@@ -2019,7 +2019,7 @@ function openSettings() {
       sel.disabled = true;
       try {
         await flux.i18nUse(sel.value);
-        location.reload();
+        flux.reload();
       } catch {
         sel.disabled = false;
         toast(t('Could not download the language. Check your internet connection.'), 'error');

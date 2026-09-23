@@ -81,7 +81,7 @@ export function createOnboarding(app) {
     setTimeout(() => {
       el.hidden = true;
       el.classList.remove('leaving');
-      if (langChanged) location.reload();
+      if (langChanged) flux.reload();
       else if (tour) startTour();
     }, 350);
   }
