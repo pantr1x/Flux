@@ -15,11 +15,15 @@ a **autocomplete**. Vzhľad je inšpirovaný Zen Browserom.
 | **Chyby** | Riadky `File "…", line 12` vo výstupe sú klikateľné. Pri chybe sa ukáže tlačidlo „Chyba: main.py, riadok 12“. |
 | **Chýbajúci balík** | Pri `ModuleNotFoundError` ponúkne „Nainštalovať requests“ (vie aj `cv2 → opencv-python`, `PIL → pillow`…). |
 | **Python** | Sám nájde `.venv` / `venv` v projekte, potom `py` launcher alebo Python v PATH. Dá sa vybrať aj ručne (klik na „Python 3.x“ dole). |
-| **Autocomplete – Python** | Pyright (to isté čo Pylance vo VS Code): návrhy, dokumentácia, parametre funkcií, automatické importy, podčiarknuté chyby, Ctrl+klik = prejsť na definíciu. |
-| **Autocomplete – web** | HTML, CSS, JavaScript, JSON + **Emmet** (`ul>li*3` + Tab). |
+| **Autocomplete – Python** | basedpyright (Pyright ako vo VS Code): návrhy s popisom vedľa zoznamu, parametre funkcií, automatické importy, podčiarknuté chyby, Ctrl+klik = prejsť na definíciu. Farby funkcií, tried a parametrov ako vo VS Code. |
+| **Úryvky (snippety)** | V Pythone napíš `main`, `for`, `def`, `class`, `input`, `try`… a stlač Tab. |
+| **Autocomplete – web** | HTML, CSS, JavaScript, JSON + **Emmet**: `!` + Tab = kostra HTML stránky, `ul>li*3` + Tab = zoznam. |
+| **Šablóny (Ctrl+N)** | Python skript, program s `main()`, `input`, okno (tkinter), kreslenie (turtle), hra (pygame), HTML stránka, celý web projekt (HTML + CSS + JS). |
+| **Tlačidlá podľa súboru** | ▶ Spustiť sa ukáže pri Pythone/JS, Live Server pri HTML/CSS. |
+| **Nastavenia (Ctrl+,)** | 12 farebných tém kódu (VS Code Dark/Light, One Dark, Dracula, Tokyo Night, Catppuccin, Nord, GitHub, Monokai…), 12 farieb + vlastná, písmo (predvolene Consolas ako VS Code), veľkosť, ligatúry, minimapa, zalamovanie, priesvitnosť. |
 | **Live Server (Alt+L)** | Náhľad webu priamo vedľa kódu. Po uložení sa stránka obnoví, CSS sa vymení bez reloadu. `console.log` zo stránky sa zobrazí vo výstupe. Náhľad ako mobil / tablet / PC. |
 | **Auto-ukladanie** | Zapnuté – ukladá samo po chvíli nepísania (vypneš dole v stavovom riadku). |
-| **Vzhľad** | Zen štýl: plávajúca karta, zvislý panel, farba pre každý priečinok, svetlá/tmavá téma, kompaktný režim (Ctrl+B), efekt Mica na Windows 11. |
+| **Vzhľad** | Zen štýl: sivá priesvitná karta (Acrylic na Windows 11), zvislý panel, farba pre každý priečinok, ikony súborov ako vo VS Code, kompaktný režim (Ctrl+B). |
 
 ## Skratky
 
@@ -31,7 +35,8 @@ a **autocomplete**. Vzhľad je inšpirovaný Zen Browserom.
 | `Ctrl+P` | Nájsť súbor |
 | `Ctrl+Shift+P` | Všetky príkazy |
 | `Ctrl+S` / `Ctrl+Shift+S` | Uložiť / uložiť všetko |
-| `Ctrl+N` / `Ctrl+W` | Nový súbor / zavrieť súbor |
+| `Ctrl+N` / `Ctrl+W` | Nový súbor zo šablóny / zavrieť súbor |
+| `Ctrl+,` | Nastavenia |
 | `Ctrl+B` | Skryť bočný panel (vysunie sa pri nabehnutí myšou k ľavému okraju) |
 | `Ctrl+J` | Skryť/zobraziť výstup |
 | `Ctrl+Tab` | Ďalší otvorený súbor |
@@ -74,14 +79,17 @@ src/
     runner.js      spúšťanie programov v pseudoterminále (ConPTY)
     python.js      hľadanie Python interpretera
     liveServer.js  HTTP server + automatický reload
-    lsp.js         spustenie Pyrightu (autocomplete pre Python)
+    lsp.js         spustenie basedpyrightu (autocomplete pre Python)
   preload.js       bezpečný most medzi UI a hlavným procesom
   renderer/        rozhranie
     app.js         editor (Monaco), taby, strom, terminál (xterm.js), náhľad, paleta
-    pyLsp.js       prepojenie Pyrightu s editorom
+    pyLsp.js       prepojenie basedpyrightu s editorom
+    themes.js      farebné témy kódu
+    templates.js   šablóny súborov a úryvky kódu
+    icons.js       ikony (aj ikony typov súborov)
     styles.css     vzhľad
 scripts/build.mjs  zabalenie rozhrania cez esbuild
 ```
 
-Technológie: Electron, Monaco Editor (editor z VS Code), xterm.js, node-pty, Pyright, Emmet.
+Technológie: Electron, Monaco Editor (editor z VS Code), xterm.js, node-pty, basedpyright, Emmet.
 Prieskum a plán ďalších krokov je v [RESEARCH.md](RESEARCH.md).

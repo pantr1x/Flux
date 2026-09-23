@@ -177,11 +177,14 @@ button:disabled {
 }
 
 .brand-mark {
-  width: 14px;
-  height: 14px;
-  border-radius: 5px;
-  background: conic-gradient(from 200deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #ff8fd0), var(--accent));
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent);
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, #fff), var(--accent));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .workspace {
@@ -632,7 +635,6 @@ body.compact #btn-expand {
 
 /* ---------- hlavná karta ---------- */
 #card {
-  backdrop-filter: blur(24px);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1231,4 +1233,273 @@ button.status-item:hover {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--active);
+}
+
+/* ---------- ikony súborov ---------- */
+.ficon {
+  flex: none;
+  display: block;
+}
+
+.row .ficon {
+  margin-right: 1px;
+}
+
+/* ---------- tlačidlá podľa typu súboru ---------- */
+.actions [hidden] {
+  display: none !important;
+}
+
+.chip-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.accents button.more {
+  width: 18px;
+  height: 18px;
+  margin-top: -2px;
+  display: grid;
+  place-items: center;
+  background: none;
+  color: var(--text-2);
+}
+
+/* ---------- výber témy ---------- */
+.swatch {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+}
+
+.swatch i {
+  width: 7px;
+  height: 14px;
+  border-radius: 2px;
+}
+
+/* ---------- nastavenia ---------- */
+#settings {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.25);
+  animation: fade 0.12s;
+}
+
+#settings[hidden] {
+  display: none;
+}
+
+.s-card {
+  width: min(720px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-solid);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-strong);
+  animation: rise 0.18s var(--ease);
+  user-select: none;
+}
+
+.s-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 10px 22px;
+}
+
+.s-card h2 {
+  margin: 0;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.s-body {
+  overflow: auto;
+  padding: 0 22px 20px;
+}
+
+.s-body section {
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--line);
+}
+
+.s-body h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+
+.s-label {
+  margin: 12px 0 8px;
+  font-weight: 600;
+}
+
+.s-label small,
+.s-row small {
+  display: block;
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.s-label small {
+  display: inline;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--hover);
+  text-align: left;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.theme-card small {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.theme-card:hover {
+  background: var(--active);
+}
+
+.theme-card.active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.accent-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.accent-grid button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--c);
+  transition: transform 0.15s;
+}
+
+.accent-grid button:hover {
+  transform: scale(1.12);
+}
+
+.accent-grid button.active {
+  box-shadow: 0 0 0 2px var(--card-solid), 0 0 0 4px var(--c);
+}
+
+.custom-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  cursor: pointer;
+  position: relative;
+}
+
+.custom-color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.s-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  padding: 6px 0;
+}
+
+.s-row + .s-row {
+  border-top: 1px solid var(--line);
+}
+
+.s-row select,
+.s-row input[type='number'] {
+  font: inherit;
+  color: var(--text);
+  background: var(--hover);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 6px 8px;
+  min-width: 90px;
+}
+
+.s-row select option {
+  background: var(--card-solid);
+}
+
+.s-row input[type='number'] {
+  width: 90px;
+}
+
+.s-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.s-btn:hover {
+  background: var(--active);
+}
+
+.switch {
+  appearance: none;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--active);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s var(--ease);
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::after {
+  transform: translateX(16px);
 }

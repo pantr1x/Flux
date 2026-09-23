@@ -60,8 +60,9 @@ export class PythonLanguageClient {
     this.onStatus('starting');
     await flux.lspStart();
     const rootUri = root ? this.monaco.Uri.file(root).toString() : null;
+    let init;
     try {
-      await this.request('initialize', {
+      init = await this.request('initialize', {
         processId: null,
         clientInfo: { name: 'Flux' },
         rootUri,
@@ -88,6 +89,14 @@ export class PythonLanguageClient {
               },
             },
             definition: { linkSupport: true },
+            semanticTokens: {
+              requests: { full: { delta: false }, range: false },
+              tokenTypes: ['namespace', 'type', 'class', 'enum', 'interface', 'struct', 'typeParameter', 'parameter', 'variable', 'property', 'enumMember', 'event', 'function', 'method', 'macro', 'keyword', 'modifier', 'comment', 'string', 'number', 'regexp', 'operator', 'decorator', 'selfParameter', 'clsParameter'],
+              tokenModifiers: ['declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract', 'async', 'modification', 'documentation', 'defaultLibrary', 'builtin'],
+              formats: ['relative'],
+              multilineTokenSupport: false,
+              overlappingTokenSupport: false,
+            },
             publishDiagnostics: { tagSupport: { valueSet: [1, 2] } },
           },
           workspace: { configuration: true, workspaceFolders: true, didChangeConfiguration: { dynamicRegistration: true } },
@@ -99,6 +108,7 @@ export class PythonLanguageClient {
       return;
     }
     if (generation !== this.generation) return;
+    this.registerSemanticTokens(init?.capabilities?.semanticTokensProvider);
     this.notify('initialized', {});
     this.notify('workspace/didChangeConfiguration', { settings: {} });
     this.ready = true;
@@ -140,7 +150,9 @@ export class PythonLanguageClient {
   handleServerRequest(msg) {
     if (msg.method === 'workspace/configuration') {
       const analysis = {
+        // „basic“ = rozumné chyby pre začiatočníka (basedpyright má inak prísny režim).
         typeCheckingMode: 'basic',
+        inlayHints: { variableTypes: false, callArgumentNames: false, functionReturnTypes: false, genericTypes: false },
         diagnosticMode: 'openFilesOnly',
         autoImportCompletions: true,
         useLibraryCodeForTypes: true,
@@ -148,7 +160,8 @@ export class PythonLanguageClient {
       };
       return msg.params.items.map(({ section }) => {
         if (section === 'python') return { pythonPath: this.pythonPath || undefined, analysis };
-        if (section === 'python.analysis') return analysis;
+        if (section === 'python.analysis' || section === 'basedpyright.analysis') return analysis;
+        if (section === 'basedpyright') return { analysis, disableLanguageServices: false };
         return {};
       });
     }
@@ -156,6 +169,27 @@ export class PythonLanguageClient {
       return this.root ? [{ uri: this.monaco.Uri.file(this.root).toString(), name: this.root.split(/[\\/]/).pop() }] : [];
     }
     return null;
+  }
+
+  // Sémantické farby (funkcie, triedy, parametre…) – rovnaký princíp ako vo VS Code.
+  registerSemanticTokens(provider) {
+    if (!provider?.legend || this.semanticRegistered) return;
+    this.semanticRegistered = true;
+    const legend = provider.legend;
+    const self = this;
+    this.monaco.languages.registerDocumentSemanticTokensProvider('python', {
+      getLegend: () => legend,
+      async provideDocumentSemanticTokens(model) {
+        if (!self.ready || !self.open.has(model.uri.toString())) return null;
+        try {
+          const r = await self.request('textDocument/semanticTokens/full', { textDocument: { uri: model.uri.toString() } });
+          return r ? { data: new Uint32Array(r.data), resultId: r.resultId } : null;
+        } catch {
+          return null;
+        }
+      },
+      releaseDocumentSemanticTokens() {},
+    });
   }
 
   // ---------- synchronizácia dokumentov ----------

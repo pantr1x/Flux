@@ -3,8 +3,12 @@ import { emmetHTML, emmetCSS } from 'emmet-monaco-es';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { icon, fileBadge } from './icons.js';
+import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices.js';
+import { IStorageService } from 'monaco-editor/platform/storage/common/storage.js';
+import { icon, fileIcon } from './icons.js';
 import { PythonLanguageClient } from './pyLsp.js';
+import { THEMES, DEFAULT_THEME, themeOf, defineMonacoTheme, themeSwatch } from './themes.js';
+import { TEMPLATES, PY_SNIPPETS } from './templates.js';
 
 const flux = window.flux;
 const $ = (sel) => document.querySelector(sel);
@@ -19,12 +23,47 @@ self.MonacoEnvironment = {
 
 const ACCENTS = {
   violet: '#8b7bff',
+  indigo: '#6366f1',
   blue: '#4f9dff',
+  sky: '#38bdf8',
   teal: '#2ec4b6',
   green: '#3ecf8e',
+  lime: '#a3d635',
+  yellow: '#f5c542',
   orange: '#ff9f5a',
+  red: '#ff5f6d',
   pink: '#ff6fb1',
+  gray: '#9ca3af',
 };
+
+const FONTS = [
+  { id: 'Consolas', label: 'Consolas (ako VS Code)', css: "Consolas, 'Courier New', monospace" },
+  { id: 'Cascadia Code', label: 'Cascadia Code', css: "'Cascadia Code', Consolas, monospace" },
+  { id: 'Cascadia Mono', label: 'Cascadia Mono', css: "'Cascadia Mono', Consolas, monospace" },
+  { id: 'JetBrains Mono', label: 'JetBrains Mono (ak je nainštalované)', css: "'JetBrains Mono', Consolas, monospace" },
+  { id: 'Fira Code', label: 'Fira Code (ak je nainštalované)', css: "'Fira Code', Consolas, monospace" },
+  { id: 'Courier New', label: 'Courier New', css: "'Courier New', monospace" },
+];
+
+// Predvolené nastavenia (podobné VS Code).
+const DEFAULTS = {
+  codeTheme: DEFAULT_THEME,
+  lastDark: DEFAULT_THEME,
+  lastLight: 'vscode-light',
+  accent: 'violet',
+  translucent: true,
+  fontFamily: 'Consolas',
+  fontSize: 14,
+  lineHeight: 1.45,
+  ligatures: false,
+  minimap: false,
+  wordWrap: false,
+  autosave: true,
+  clearOnRun: true,
+  terminalFontSize: 13,
+  suggestDetails: true,
+};
+const setting = (key) => state.settings[key] ?? DEFAULTS[key];
 
 const state = {
   platform: 'win32',
@@ -110,6 +149,8 @@ function setIcons() {
   $('#btn-compact').innerHTML = icon('sidebar');
   $('#btn-expand').innerHTML = icon('sidebar');
   $('#btn-palette').innerHTML = icon('command');
+  $('#btn-settings').innerHTML = icon('settings');
+  $('#brand-mark').innerHTML = icon('code', 13);
   $('#btn-stop').innerHTML = icon('stop', 14);
   $('#btn-clear').innerHTML = icon('trash', 15);
   $('#btn-panel').innerHTML = icon('panel', 15);
@@ -123,112 +164,50 @@ function setIcons() {
 }
 
 // ---------- téma ----------
-function defineThemes(accent) {
-  const a = accent.replace('#', '');
-  monaco.editor.defineTheme('flux-dark', {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [
-      { token: 'comment', foreground: '6f6f86', fontStyle: 'italic' },
-      { token: 'keyword', foreground: 'c792ea' },
-      { token: 'string', foreground: '9ece6a' },
-      { token: 'number', foreground: 'ff9e64' },
-      { token: 'type', foreground: '7dcfff' },
-      { token: 'type.identifier', foreground: '7dcfff' },
-      { token: 'delimiter', foreground: '9aa5ce' },
-      { token: 'tag', foreground: 'f7768e' },
-      { token: 'attribute.name', foreground: 'e0af68' },
-      { token: 'attribute.value', foreground: '9ece6a' },
-      { token: 'metatag', foreground: 'f7768e' },
-    ],
-    colors: {
-      'editor.background': '#00000000',
-      'editor.foreground': '#e2e2ea',
-      'editorGutter.background': '#00000000',
-      'editor.lineHighlightBackground': '#ffffff07',
-      'editor.lineHighlightBorder': '#00000000',
-      'editorLineNumber.foreground': '#5e5e6a',
-      'editorLineNumber.activeForeground': '#a4a4b3',
-      'editorCursor.foreground': accent,
-      'editor.selectionBackground': `#${a}44`,
-      'editor.inactiveSelectionBackground': `#${a}22`,
-      'editor.wordHighlightBackground': '#ffffff10',
-      'editorIndentGuide.background1': '#ffffff0b',
-      'editorIndentGuide.activeBackground1': '#ffffff22',
-      'editorWidget.background': '#34343c',
-      'editorWidget.border': '#ffffff14',
-      'editorSuggestWidget.background': '#34343c',
-      'editorSuggestWidget.border': '#ffffff14',
-      'editorSuggestWidget.selectedBackground': `#${a}38`,
-      'editorSuggestWidget.highlightForeground': accent,
-      'editorHoverWidget.background': '#34343c',
-      'editorHoverWidget.border': '#ffffff14',
-      'scrollbarSlider.background': '#ffffff12',
-      'scrollbarSlider.hoverBackground': '#ffffff20',
-      'scrollbarSlider.activeBackground': '#ffffff2a',
-      'editorOverviewRuler.border': '#00000000',
-      'focusBorder': '#00000000',
-      'editorStickyScroll.background': '#2f2f37',
-      'editorStickyScrollHover.background': '#383840',
-    },
-  });
-  monaco.editor.defineTheme('flux-light', {
-    base: 'vs',
-    inherit: true,
-    rules: [
-      { token: 'comment', foreground: '8e8e9c', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '7c3aed' },
-      { token: 'string', foreground: '2f855a' },
-      { token: 'number', foreground: 'c2410c' },
-      { token: 'type', foreground: '0369a1' },
-      { token: 'type.identifier', foreground: '0369a1' },
-      { token: 'tag', foreground: 'be123c' },
-      { token: 'attribute.name', foreground: 'b45309' },
-      { token: 'attribute.value', foreground: '2f855a' },
-    ],
-    colors: {
-      'editor.background': '#00000000',
-      'editorGutter.background': '#00000000',
-      'editor.lineHighlightBackground': '#00000006',
-      'editor.lineHighlightBorder': '#00000000',
-      'editorLineNumber.foreground': '#c0c0cc',
-      'editorLineNumber.activeForeground': '#5c5c6b',
-      'editorCursor.foreground': accent,
-      'editor.selectionBackground': `#${a}33`,
-      'editor.inactiveSelectionBackground': `#${a}1a`,
-      'editorIndentGuide.background1': '#0000000c',
-      'editorWidget.background': '#ffffff',
-      'editorSuggestWidget.background': '#ffffff',
-      'editorSuggestWidget.selectedBackground': `#${a}26`,
-      'editorSuggestWidget.highlightForeground': accent,
-      'scrollbarSlider.background': '#00000012',
-      'scrollbarSlider.hoverBackground': '#0000001f',
-      'editorOverviewRuler.border': '#00000000',
-      'focusBorder': '#00000000',
-      'editorStickyScroll.background': '#f8f8fb',
-    },
-  });
+function currentAccent() {
+  const value = (state.workspace && state.settings.accents?.[state.workspace]) || setting('accent');
+  if (ACCENTS[value]) return ACCENTS[value];
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : ACCENTS.violet;
 }
 
-function currentAccent() {
-  const name = (state.workspace && state.settings.accents?.[state.workspace]) || state.settings.accent || 'violet';
-  return ACCENTS[name] ? name : 'violet';
-}
+const isDark = () => themeOf(setting('codeTheme')).type === 'dark';
 
 function applyTheme() {
-  const dark = state.settings.theme !== 'light';
-  const accentName = currentAccent();
-  const accent = ACCENTS[accentName];
+  const dark = isDark();
+  const accent = currentAccent();
   document.body.classList.toggle('theme-dark', dark);
   document.body.classList.toggle('theme-light', !dark);
+  document.body.classList.toggle('no-mica', !state.mica || !setting('translucent'));
   document.documentElement.style.setProperty('--accent', accent);
-  defineThemes(accent);
-  monaco.editor.setTheme(dark ? 'flux-dark' : 'flux-light');
+  monaco.editor.setTheme(defineMonacoTheme(monaco, setting('codeTheme'), accent));
   $('#btn-theme').innerHTML = icon(dark ? 'sun' : 'moon');
-  $('#accents').innerHTML = Object.entries(ACCENTS)
-    .map(([name, c]) => `<button data-accent="${name}" style="--c:${c}" class="${name === accentName ? 'active' : ''}" title="${name}"></button>`)
-    .join('');
+  const accentName = Object.keys(ACCENTS).find((k) => ACCENTS[k] === accent);
+  $('#accents').innerHTML =
+    Object.entries(ACCENTS)
+      .slice(0, 6)
+      .map(([name, c]) => `<button data-accent="${name}" style="--c:${c}" class="${name === accentName ? 'active' : ''}" title="${name}"></button>`)
+      .join('') + `<button class="more" data-accent="more" title="Ďalšie farby a témy">${icon('palette', 13)}</button>`;
   if (term) term.options.theme = terminalTheme();
+}
+
+// Nastavenia editora a terminálu (písmo, veľkosť, minimapa…).
+function applyEditorSettings() {
+  const font = FONTS.find((f) => f.id === setting('fontFamily')) || FONTS[0];
+  editor?.updateOptions({
+    fontFamily: font.css,
+    fontSize: setting('fontSize'),
+    lineHeight: setting('lineHeight'),
+    fontLigatures: setting('ligatures'),
+    minimap: { enabled: setting('minimap') },
+    wordWrap: setting('wordWrap') ? 'on' : 'off',
+  });
+  if (term) {
+    term.options.fontFamily = font.css;
+    term.options.fontSize = setting('terminalFontSize');
+    try {
+      fit.fit();
+    } catch {}
+  }
 }
 
 async function saveSettings(patch) {
@@ -240,13 +219,13 @@ let editor;
 function createEditor() {
   editor = monaco.editor.create($('#editor'), {
     model: null,
-    theme: 'flux-dark',
-    fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, 'JetBrains Mono', monospace",
-    fontLigatures: true,
-    fontSize: state.settings.fontSize || 14,
-    lineHeight: 1.6,
+    fontFamily: (FONTS.find((f) => f.id === setting('fontFamily')) || FONTS[0]).css,
+    fontLigatures: setting('ligatures'),
+    fontSize: setting('fontSize'),
+    lineHeight: setting('lineHeight'),
     automaticLayout: true,
-    minimap: { enabled: false },
+    minimap: { enabled: setting('minimap'), renderCharacters: false, scale: 2 },
+    wordWrap: setting('wordWrap') ? 'on' : 'off',
     smoothScrolling: true,
     cursorBlinking: 'smooth',
     cursorSmoothCaretAnimation: 'on',
@@ -262,7 +241,8 @@ function createEditor() {
     lineNumbersMinChars: 3,
     mouseWheelZoom: true,
     quickSuggestions: { other: true, comments: false, strings: true },
-    suggest: { preview: true, showStatusBar: false, selectionMode: 'always' },
+    suggest: { preview: true, showStatusBar: false, selectionMode: 'always', showIcons: true },
+    placeholder: '',
     inlayHints: { enabled: 'off' },
     scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
     overviewRulerLanes: 2,
@@ -270,6 +250,7 @@ function createEditor() {
     fixedOverflowWidgets: true,
     'semanticHighlighting.enabled': true,
   });
+  showSuggestDetails(setting('suggestDetails'));
 
   editor.onDidChangeCursorPosition((e) => {
     $('#st-pos').textContent = `Riadok ${e.position.lineNumber} · Stĺpec ${e.position.column}`;
@@ -302,6 +283,36 @@ function createEditor() {
     allowNonTsExtensions: true,
     target: monaco.typescript.ScriptTarget.ESNext,
     lib: ['esnext', 'dom', 'dom.iterable'],
+  });
+}
+
+// Popis vybraného návrhu vedľa zoznamu (ako vo VS Code). Monaco si to pamätá vo svojom úložisku.
+function showSuggestDetails(show) {
+  try {
+    StandaloneServices.get(IStorageService).store('expandSuggestionDocs', !!show, 0, 0);
+  } catch {}
+}
+
+// Úryvky (snippety) pre Python: „main“, „for“, „def“… + Tab.
+function registerSnippets() {
+  monaco.languages.registerCompletionItemProvider('python', {
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position);
+      if (!word.word) return { suggestions: [] };
+      const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+      return {
+        suggestions: PY_SNIPPETS.map((sn) => ({
+          label: { label: sn.label, description: 'úryvok' },
+          kind: monaco.languages.CompletionItemKind.Snippet,
+          detail: sn.detail,
+          documentation: { value: '```python\n' + sn.body.replace(/\$\{\d+:?([^}]*)\}/g, '$1').replace(/\t/g, '    ') + '\n```' },
+          insertText: sn.body,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          sortText: '~' + sn.label,
+          range,
+        })),
+      };
+    },
   });
 }
 
@@ -387,12 +398,21 @@ function openUri(uri, selection) {
   editor.focus();
 }
 
+// Nápoveda v prázdnom súbore.
+function placeholderFor(tab) {
+  const lang = tab.model.getLanguageId();
+  if (lang === 'html') return 'Napíš ! a stlač Tab – vytvorí sa kostra HTML stránky';
+  if (lang === 'python') return 'Začni písať, napr. print("Ahoj") a stlač F5.  Skratky: main, for, def, input + Tab';
+  if (lang === 'css') return 'Napr. body { background: #f4f4f8; }';
+  return '';
+}
+
 function activate(tab) {
   const prev = activeTab();
   if (prev && prev !== tab) prev.viewState = editor.saveViewState();
   state.active = tab;
   editor.setModel(tab.model);
-  editor.updateOptions({ readOnly: tab.readonly });
+  editor.updateOptions({ readOnly: tab.readonly, placeholder: placeholderFor(tab) });
   if (tab.viewState) editor.restoreViewState(tab.viewState);
   updateRunGlyphs(tab);
   $('#welcome').hidden = true;
@@ -460,7 +480,7 @@ async function saveAll() {
 }
 
 function scheduleAutosave(tab) {
-  if (!state.settings.autosave || tab.readonly) return;
+  if (!setting('autosave') || tab.readonly) return;
   clearTimeout(tab.autosaveTimer);
   tab.autosaveTimer = setTimeout(() => saveTab(tab), 700);
 }
@@ -476,7 +496,7 @@ function renderTabs() {
     const div = document.createElement('div');
     div.className = `tab${tab === state.active ? ' active' : ''}${isDirty(tab) ? ' dirty' : ''}`;
     div.title = tab.path;
-    div.innerHTML = `${fileBadge(tab.path)}<span class="name"></span>${tab.readonly ? '<span class="readonly">iba čítanie</span>' : ''}<button class="close" title="Zavrieť (Ctrl+W)">${icon('x', 13)}</button>`;
+    div.innerHTML = `${fileIcon(basename(tab.path), tab.model.getLanguageId())}<span class="name"></span>${tab.readonly ? '<span class="readonly">iba čítanie</span>' : ''}<button class="close" title="Zavrieť (Ctrl+W)">${icon('x', 13)}</button>`;
     div.querySelector('.name').textContent = basename(tab.path);
     div.addEventListener('mousedown', (e) => {
       if (e.button === 1) {
@@ -587,7 +607,7 @@ function renderTree() {
       } else {
         html.push(
           `<div class="${cls.join(' ')}" data-path="${escapeAttr(e.path)}" style="padding-left:${pad + 20}px">` +
-            `${fileBadge(e.name)}<span class="name">${name}</span>${dirtyKeys.has(k) ? '<span class="dirty-dot"></span>' : ''}</div>`,
+            `${fileIcon(e.name, findTab(e.path)?.model.getLanguageId())}<span class="name">${name}</span>${dirtyKeys.has(k) ? '<span class="dirty-dot"></span>' : ''}</div>`,
         );
       }
     }
@@ -651,20 +671,67 @@ function targetDir() {
   return state.active && inside(state.active.path) ? dirname(state.active.path) : state.workspace;
 }
 
+// Nový súbor: najprv šablóna (Python, HTML, web projekt…), potom názov.
 async function newFile(dir = targetDir()) {
   if (!dir) return openFolderDialog();
+  const where = relative(dir) || basename(dir);
+  const tpl = await new Promise((resolve) =>
+    openPalette({
+      placeholder: 'Vyber šablónu…',
+      note: `Nový súbor v: ${where}`,
+      items: TEMPLATES.map((t) => ({
+        label: t.label,
+        detail: t.detail,
+        icon: t.project ? icon('folderPlus', 16) : t.name ? fileIcon(t.name) : icon('filePlus', 16),
+        tpl: t,
+      })),
+      onPick: (it) => resolve(it.tpl),
+      onCancel: () => resolve(null),
+    }),
+  );
+  if (!tpl) return;
+  const dot = tpl.name.lastIndexOf('.');
   let name = await promptPalette({
-    placeholder: 'napr. main.py, index.html, styles/app.css',
-    note: `Nový súbor v: ${relative(dir) || basename(dir)}  ·  bez prípony sa pridá .py`,
+    value: tpl.name,
+    select: [0, dot > 0 ? dot : tpl.name.length],
+    placeholder: tpl.project ? 'Názov priečinka projektu' : 'napr. main.py, index.html, styles/app.css',
+    note: tpl.project ? `Nový projekt v: ${where}` : `Názov súboru (${tpl.label})${tpl.files ? '' : ' · bez prípony sa pridá .py'}`,
   });
   if (!name) return;
   name = name.trim();
-  if (!basename(name).includes('.')) name += '.py';
   try {
-    const path = await flux.create(join(dir, name), false);
-    await revealInTree(path);
+    if (!tpl.files) {
+      if (!basename(name).includes('.')) name += '.py';
+      const path = await flux.create(join(dir, name), false);
+      await revealInTree(path);
+      await refreshTree();
+      return openFile(path);
+    }
+    const base = tpl.project ? join(dir, name) : dir;
+    const title = tpl.project ? name : basename(name).replace(/\.[^.]+$/, '');
+    let toOpen = null;
+    let cursor = null;
+    for (const f of tpl.files) {
+      const fileName = f.name.replace('{{name}}', name);
+      const path = join(base, fileName);
+      let content = f.content.replaceAll('{{title}}', title);
+      const marker = content.indexOf('$0');
+      content = content.replace('$0', '');
+      await flux.create(path, false);
+      await flux.write(path, content);
+      if (!toOpen || f.open) {
+        toOpen = path;
+        if (marker >= 0) {
+          const before = content.slice(0, marker).split('\n');
+          cursor = { line: before.length, column: before[before.length - 1].length + 1 };
+        }
+      }
+    }
+    if (tpl.project) setExpanded(base, true);
+    await revealInTree(toOpen);
     await refreshTree();
-    openFile(path);
+    const tab = await openFile(toOpen, cursor || {});
+    if (tab && cursor) editor.setSelection(new monaco.Selection(cursor.line, cursor.column, cursor.line, cursor.column));
   } catch (err) {
     toast(errorText(err), 'error');
   }
@@ -805,8 +872,7 @@ function renderStatus() {
   $('#st-lang').textContent = state.active ? LANG_NAMES[lang] || lang : '';
   if (!state.active) $('#st-pos').textContent = '';
   const auto = $('#st-autosave');
-  auto.innerHTML = `${icon('save', 13)}${state.settings.autosave ? 'Auto-ukladanie' : 'Ukladanie: Ctrl+S'}`;
-  auto.className = `status-item${state.settings.autosave ? '' : ''}`;
+  auto.innerHTML = `${icon('save', 13)}${setting('autosave') ? 'Auto-ukladanie' : 'Ukladanie: Ctrl+S'}`;
 }
 
 // ---------- terminál / výstup ----------
@@ -814,7 +880,7 @@ let term, fit;
 let inputBuffer = '';
 
 function terminalTheme() {
-  const dark = state.settings.theme !== 'light';
+  const dark = isDark();
   const accent = ACCENTS[currentAccent()];
   return dark
     ? { background: '#00000000', foreground: '#dcdce6', cursor: accent, cursorAccent: '#2d2d34', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
@@ -984,7 +1050,7 @@ function stop() {
   flux.stop();
 }
 
-function onRunStart({ label, cwd, pty }) {
+function onRunStart({ label, pty }) {
   state.running = true;
   state.pty = !!pty;
   state.runOutput = '';
@@ -992,9 +1058,10 @@ function onRunStart({ label, cwd, pty }) {
   inputBuffer = '';
   showPanel(true);
   setHint([]);
-  term.reset();
+  if (setting('clearOnRun')) term.reset();
+  else term.writeln('');
   term.write('\x1b[?25h');
-  term.writeln(`\x1b[38;2;139;123;255m▶\x1b[0m \x1b[1m${label}\x1b[0m  \x1b[2m${cwd}\x1b[0m`);
+  term.writeln(`\x1b[2m▶ ${label}\x1b[0m`);
   $('#run-state').className = 'run-state running';
   $('#run-state').textContent = 'Beží…';
   renderRunButton();
@@ -1032,14 +1099,29 @@ function onRunExit({ code, error, ms }) {
   if (/^(pip install|python -m venv)/.test(state.lastLabel || '')) detectPython().then(() => lsp.start(state.workspace, state.python?.path));
 }
 
+// Tlačidlá sa ukazujú len keď dávajú zmysel: ▶ Spustiť pri Pythone/JS…, Live Server pri webe.
+function fileKind(tab) {
+  if (!tab) return 'none';
+  const ext = extOf(tab.path);
+  if (WEB.has(ext)) return 'web';
+  if (ext === 'js' || ext === 'mjs') return 'script-web';
+  if (RUNNABLE.has(ext) || (!ext && tab.model.getLanguageId() === 'python')) return 'script';
+  return 'none';
+}
+
 function renderRunButton() {
-  const tab = activeTab();
+  const kind = fileKind(activeTab());
   const btn = $('#btn-run');
-  const web = tab && WEB.has(extOf(tab.path));
-  btn.innerHTML = `${icon(web ? 'globe' : 'play', 14)}<span>${state.running ? 'Znova' : web ? 'Náhľad' : 'Spustiť'}</span>`;
-  btn.title = web ? 'Otvoriť živý náhľad (F5)' : 'Spustiť aktuálny súbor (F5)';
+  const runnable = kind === 'script' || kind === 'script-web';
+  btn.hidden = !runnable && !state.running;
+  btn.innerHTML = `${icon('play', 14)}<span>${state.running ? 'Znova' : 'Spustiť'}</span>`;
+  btn.title = 'Spustiť aktuálny súbor (F5)';
   btn.classList.toggle('running', state.running);
+  $('#btn-stop').hidden = !runnable && !state.running;
   $('#btn-stop').disabled = !state.running;
+  const live = $('#btn-live');
+  live.hidden = !(kind === 'web' || kind === 'script-web' || state.live);
+  live.classList.toggle('primary', kind === 'web' && !state.live);
 }
 
 // ---------- panel ----------
@@ -1112,10 +1194,13 @@ async function toggleLive() {
   }
 }
 
+const renderRunButtonSoon = () => queueMicrotask(renderRunButton);
+
 function renderLive() {
   const btn = $('#btn-live');
   btn.classList.toggle('on', !!state.live);
   btn.innerHTML = `${icon('globe', 14)}<span>${state.live ? `Live :${state.live.port}` : 'Live Server'}</span>`;
+  renderRunButtonSoon();
   btn.title = state.live ? 'Zastaviť Live Server (Alt+L)' : 'Spustiť Live Server (Alt+L)';
   const st = $('#st-live');
   st.hidden = !state.live;
@@ -1159,7 +1244,7 @@ function highlight(text, marks) {
   return [...text].map((c, i) => (set.has(i) ? `<b>${escapeHtml(c)}</b>` : escapeHtml(c))).join('');
 }
 
-function openPalette({ items = null, placeholder = '', value = '', note = '', select = null, onPick, onCancel }) {
+function openPalette({ items = null, placeholder = '', value = '', note = '', select = null, onPick, onCancel, onSelect }) {
   closePalette();
   const overlay = $('#overlay');
   const input = $('#palette-input');
@@ -1175,7 +1260,7 @@ function openPalette({ items = null, placeholder = '', value = '', note = '', se
     noteEl.textContent = note;
     $('#palette').insertBefore(noteEl, list);
   }
-  palette = { items, onPick, onCancel, sel: 0, shown: [] };
+  palette = { items, onPick, onCancel, onSelect, sel: 0, shown: [], lastSel: null };
   const render = () => {
     if (!items) {
       list.innerHTML = '';
@@ -1199,6 +1284,11 @@ function openPalette({ items = null, placeholder = '', value = '', note = '', se
           .join('')
       : '<div class="p-empty">Nič sa nenašlo</div>';
     list.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+    const current = palette.shown[palette.sel]?.it;
+    if (current && current !== palette.lastSel) {
+      palette.lastSel = current;
+      palette.onSelect?.(current);
+    }
   };
   palette.render = render;
   input.oninput = () => {
@@ -1256,7 +1346,7 @@ async function quickOpen() {
   const files = await flux.listAll();
   openPalette({
     placeholder: 'Hľadať súbor podľa názvu…',
-    items: files.map((f) => ({ label: relative(f), icon: fileBadge(f), path: f })),
+    items: files.map((f) => ({ label: relative(f), icon: fileIcon(basename(f)), path: f })),
     onPick: (it) => openFile(it.path),
   });
 }
@@ -1277,8 +1367,11 @@ function commands() {
     c('Formátovať dokument', () => editor.getAction('editor.action.formatDocument')?.run(), 'Shift+Alt+F', 'sparkle'),
     c('Prepnúť bočný panel (kompaktný režim)', toggleCompact, 'Ctrl+B', 'sidebar'),
     c('Prepnúť panel s výstupom', () => showPanel($('#panel').classList.contains('collapsed')), 'Ctrl+J', 'panel'),
-    c('Prepnúť svetlú / tmavú tému', toggleTheme, '', state.settings.theme === 'light' ? 'moon' : 'sun', 'téma theme dark light farby vzhľad'),
-    c(state.settings.autosave ? 'Vypnúť automatické ukladanie' : 'Zapnúť automatické ukladanie', toggleAutosave, '', 'save'),
+    c('Prepnúť svetlú / tmavú tému', toggleTheme, '', isDark() ? 'sun' : 'moon', 'téma theme dark light farby vzhľad'),
+    c('Farebná téma kódu…', chooseTheme, '', 'palette', 'téma theme farby vs code dracula one dark'),
+    c('Nastavenia', openSettings, 'Ctrl+,', 'settings', 'settings nastavenia písmo font'),
+    c('Nový súbor zo šablóny…', () => newFile(), 'Ctrl+N', 'template', 'šablóna template html python web projekt'),
+    c(setting('autosave') ? 'Vypnúť automatické ukladanie' : 'Zapnúť automatické ukladanie', toggleAutosave, '', 'save'),
     c('Python: vybrať interpreter…', choosePython, '', 'python'),
     c('Python: zistiť interpreter automaticky', async () => {
       await flux.resetPython();
@@ -1342,18 +1435,20 @@ async function createVenv() {
 
 // ---------- nastavenia ----------
 async function toggleTheme() {
-  await saveSettings({ theme: state.settings.theme === 'light' ? 'dark' : 'light' });
+  // Prepne medzi naposledy použitou tmavou a svetlou témou kódu.
+  const next = isDark() ? setting('lastLight') : setting('lastDark');
+  await setCodeTheme(next);
   applyTheme();
 }
 
 async function toggleAutosave() {
-  await saveSettings({ autosave: !state.settings.autosave });
+  await saveSettings({ autosave: !setting('autosave') });
   renderStatus();
-  toast(state.settings.autosave ? 'Automatické ukladanie je zapnuté.' : 'Automatické ukladanie je vypnuté – ukladaj cez Ctrl+S.');
+  toast(setting('autosave') ? 'Automatické ukladanie je zapnuté.' : 'Automatické ukladanie je vypnuté – ukladaj cez Ctrl+S.');
 }
 
 async function setFontSize(delta) {
-  const size = Math.min(28, Math.max(10, (state.settings.fontSize || 14) + delta));
+  const size = Math.min(28, Math.max(10, setting('fontSize') + delta));
   editor.updateOptions({ fontSize: size });
   await saveSettings({ fontSize: size });
 }
@@ -1363,6 +1458,139 @@ async function toggleCompact() {
   document.body.classList.toggle('compact', compact);
   document.body.classList.remove('peek');
   await saveSettings({ compact });
+}
+
+async function setCodeTheme(id) {
+  const t = themeOf(id);
+  await saveSettings({ codeTheme: id, theme: t.type, [t.type === 'dark' ? 'lastDark' : 'lastLight']: id });
+  applyTheme();
+}
+
+// Výber témy kódu – pri prechádzaní šípkami sa téma hneď ukazuje.
+function chooseTheme() {
+  const original = setting('codeTheme');
+  const items = Object.entries(THEMES).map(([id, t]) => ({
+    id,
+    label: t.name,
+    detail: t.type === 'dark' ? 'tmavá' : 'svetlá',
+    icon: `<span class="swatch">${themeSwatch(id).map((c) => `<i style="background:${c}"></i>`).join('')}</span>`,
+  }));
+  openPalette({
+    placeholder: 'Farebná téma kódu…',
+    items,
+    onSelect: (it) => monaco.editor.setTheme(defineMonacoTheme(monaco, it.id, currentAccent())),
+    onPick: (it) => setCodeTheme(it.id),
+    onCancel: () => monaco.editor.setTheme(defineMonacoTheme(monaco, original, currentAccent())),
+  });
+}
+
+// ---------- nastavenia ----------
+function openSettings() {
+  const panel = $('#settings');
+  const accent = currentAccent();
+  const opt = (value, label, current) => `<option value="${escapeAttr(String(value))}"${String(value) === String(current) ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  const toggle = (key, label, hint = '') =>
+    `<label class="s-row"><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ''}</span><input type="checkbox" class="switch" data-key="${key}"${setting(key) ? ' checked' : ''}></label>`;
+  panel.innerHTML = `
+    <div class="s-card" role="dialog" aria-label="Nastavenia">
+      <header><h2>${icon('settings', 18)}Nastavenia</h2><button class="icon-btn" data-close title="Zavrieť (Esc)">${icon('x', 16)}</button></header>
+      <div class="s-body">
+        <section>
+          <h3>Vzhľad</h3>
+          <div class="s-label">Téma kódu</div>
+          <div class="theme-grid">${Object.entries(THEMES)
+            .map(
+              ([id, t]) =>
+                `<button class="theme-card${id === setting('codeTheme') ? ' active' : ''}" data-theme="${id}"><span class="swatch">${themeSwatch(id)
+                  .map((c) => `<i style="background:${c}"></i>`)
+                  .join('')}</span><span>${escapeHtml(t.name)}</span><small>${t.type === 'dark' ? 'tmavá' : 'svetlá'}</small></button>`,
+            )
+            .join('')}</div>
+          <div class="s-label">Farba zvýraznenia${state.workspace ? ` <small>(pre priečinok ${escapeHtml(basename(state.workspace))})</small>` : ''}</div>
+          <div class="accent-grid">${Object.entries(ACCENTS)
+            .map(([name, c]) => `<button data-accent="${name}" style="--c:${c}" class="${c === accent ? 'active' : ''}" title="${name}"></button>`)
+            .join('')}<label class="custom-color" title="Vlastná farba"><input type="color" value="${accent}" data-custom-accent></label></div>
+          ${state.mica ? toggle('translucent', 'Priesvitné okno', 'cez okno presvitá rozmazaná tapeta (Windows 11)') : ''}
+        </section>
+        <section>
+          <h3>Editor</h3>
+          <label class="s-row"><span><b>Písmo</b></span><select data-key="fontFamily">${FONTS.map((f) => opt(f.id, f.label, setting('fontFamily'))).join('')}</select></label>
+          <label class="s-row"><span><b>Veľkosť písma</b></span><input type="number" min="9" max="32" data-key="fontSize" value="${setting('fontSize')}"></label>
+          <label class="s-row"><span><b>Výška riadku</b></span><select data-key="lineHeight">${[1.3, 1.45, 1.6, 1.8].map((v) => opt(v, { 1.3: 'kompaktná', 1.45: 'normálna', 1.6: 'voľnejšia', 1.8: 'veľká' }[v], setting('lineHeight'))).join('')}</select></label>
+          ${toggle('ligatures', 'Ligatúry', 'spojené znaky ako => a != (napr. v Cascadia Code)')}
+          ${toggle('minimap', 'Minimapa', 'zmenšený náhľad kódu vpravo')}
+          ${toggle('wordWrap', 'Zalamovať dlhé riadky')}
+          ${toggle('suggestDetails', 'Popis návrhov vedľa zoznamu', 'dokumentácia vybranej funkcie ako vo VS Code')}
+          ${toggle('autosave', 'Automatické ukladanie', 'uloží súbor chvíľu po písaní')}
+        </section>
+        <section>
+          <h3>Spúšťanie</h3>
+          ${toggle('clearOnRun', 'Vyčistiť výstup pred spustením')}
+          <label class="s-row"><span><b>Veľkosť písma výstupu</b></span><input type="number" min="9" max="28" data-key="terminalFontSize" value="${setting('terminalFontSize')}"></label>
+          <div class="s-row"><span><b>Python</b><small>${state.python ? `${escapeHtml(state.python.version)} · ${escapeHtml(state.python.path)}` : 'nenašiel sa'}</small></span><button class="s-btn" data-action="python">Zmeniť…</button></div>
+        </section>
+        <section>
+          <h3>Skratky</h3>
+          <div class="shortcuts">
+            <span>Spustiť</span><span><kbd>F5</kbd></span>
+            <span>Live Server</span><span><kbd>Alt</kbd> <kbd>L</kbd></span>
+            <span>Nový súbor zo šablóny</span><span><kbd>Ctrl</kbd> <kbd>N</kbd></span>
+            <span>Všetky príkazy</span><span><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd></span>
+            <span>HTML kostra</span><span><kbd>!</kbd> + <kbd>Tab</kbd></span>
+            <span>Nastavenia</span><span><kbd>Ctrl</kbd> <kbd>,</kbd></span>
+          </div>
+        </section>
+      </div>
+    </div>`;
+  panel.hidden = false;
+
+  panel.onclick = async (e) => {
+    if (e.target === panel || e.target.closest('[data-close]')) return closeSettings();
+    const themeBtn = e.target.closest('[data-theme]');
+    if (themeBtn) {
+      await setCodeTheme(themeBtn.dataset.theme);
+      return openSettings();
+    }
+    const accentBtn = e.target.closest('[data-accent]');
+    if (accentBtn) {
+      await setAccent(accentBtn.dataset.accent);
+      return openSettings();
+    }
+    if (e.target.closest('[data-action="python"]')) {
+      closeSettings();
+      pythonMenu();
+    }
+  };
+  panel.onchange = async (e) => {
+    const el = e.target;
+    if (el.dataset.customAccent !== undefined) {
+      await setAccent(el.value);
+      return;
+    }
+    const key = el.dataset.key;
+    if (!key) return;
+    let value = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type === 'number' || key === 'lineHeight') value = Number(value);
+    await saveSettings({ [key]: value });
+    if (key === 'suggestDetails') showSuggestDetails(value);
+    if (key === 'translucent') applyTheme();
+    applyEditorSettings();
+    renderStatus();
+  };
+}
+
+function closeSettings() {
+  $('#settings').hidden = true;
+  if (state.active) editor.focus();
+}
+
+async function setAccent(value) {
+  if (state.workspace) {
+    await saveSettings({ accents: { ...(state.settings.accents || {}), [state.workspace]: value } });
+  } else {
+    await saveSettings({ accent: value });
+  }
+  applyTheme();
 }
 
 // ---------- uvítanie ----------
@@ -1429,10 +1657,18 @@ function keybindings() {
         }
         return;
       }
+      if (!$('#settings').hidden) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeSettings();
+        }
+        return;
+      }
       const ctrl = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       let handled = true;
-      if (e.key === 'F5' && e.shiftKey) stop();
+      if (ctrl && e.key === ',') openSettings();
+      else if (e.key === 'F5' && e.shiftKey) stop();
       else if (e.key === 'F5' || (ctrl && e.key === 'Enter')) run();
       else if (ctrl && e.shiftKey && key === 'p') openCommandPalette();
       else if (ctrl && !e.shiftKey && key === 'p') quickOpen();
@@ -1508,6 +1744,7 @@ function layoutEvents() {
   $('#btn-expand').onclick = toggleCompact;
   $('#btn-theme').onclick = toggleTheme;
   $('#btn-palette').onclick = openCommandPalette;
+  $('#btn-settings').onclick = openSettings;
   $('#btn-workspace').onclick = workspaceSwitcher;
   $('#btn-run').onclick = run;
   $('#btn-stop').onclick = stop;
@@ -1536,13 +1773,11 @@ function layoutEvents() {
     $('#preview-frame').style.flex = 'none';
     document.querySelector('.preview-stage').classList.toggle('framed', !!w);
   };
-  $('#accents').onclick = async (e) => {
+  $('#accents').onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    const accents = { ...(state.settings.accents || {}) };
-    if (state.workspace) accents[state.workspace] = b.dataset.accent;
-    await saveSettings(state.workspace ? { accents } : { accent: b.dataset.accent });
-    applyTheme();
+    if (b.dataset.accent === 'more') openSettings();
+    else setAccent(b.dataset.accent);
   };
   $('#essentials').onclick = (e) => {
     const cmd = e.target.closest('button')?.dataset.cmd;
@@ -1560,13 +1795,13 @@ function layoutEvents() {
 async function main() {
   const init = await flux.init();
   state.platform = init.platform;
-  state.settings = { autosave: true, ...init.settings };
-  if (init.settings.autosave === undefined) await saveSettings({ autosave: true });
+  state.mica = !!init.mica;
+  state.settings = init.settings;
   document.body.classList.add(`platform-${state.platform}`);
-  if (!init.mica) document.body.classList.add('no-mica');
 
   setIcons();
   createEditor();
+  registerSnippets();
   createLanguageClient();
   applyTheme();
   createTerminal();

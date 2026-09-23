@@ -15,7 +15,7 @@
       <div id="peek-zone"></div>
       <aside id="sidebar">
         <div class="side-top drag">
-          <div class="brand"><span class="brand-mark"></span>flux</div>
+          <div class="brand"><span class="brand-mark" id="brand-mark"></span>flux</div>
           <button class="icon-btn no-drag" id="btn-compact" title="Skryť bočný panel (Ctrl+B)"></button>
         </div>
 
@@ -26,7 +26,7 @@
         </button>
 
         <div class="essentials" id="essentials">
-          <button class="icon-btn" data-cmd="new-file" title="Nový súbor (Ctrl+N)"></button>
+          <button class="icon-btn" data-cmd="new-file" title="Nový súbor zo šablóny (Ctrl+N)"></button>
           <button class="icon-btn" data-cmd="new-folder" title="Nový priečinok"></button>
           <button class="icon-btn" data-cmd="refresh" title="Obnoviť"></button>
           <button class="icon-btn" data-cmd="collapse" title="Zbaliť všetko"></button>
@@ -38,6 +38,7 @@
           <div class="accents" id="accents" title="Farba priečinka"></div>
           <button class="icon-btn" id="btn-theme" title="Svetlá / tmavá téma"></button>
           <button class="icon-btn" id="btn-palette" title="Príkazy (Ctrl+Shift+P)"></button>
+          <button class="icon-btn" id="btn-settings" title="Nastavenia (Ctrl+,)"></button>
         </div>
       </aside>
       <div class="resizer rz-col" id="side-resizer"></div>
@@ -112,6 +113,7 @@
         <div id="palette-list" role="listbox"></div>
       </div>
     </div>
+    <div id="settings" hidden></div>
     <div id="toasts"></div>
 
     <script type="module" src="app.js"></script>

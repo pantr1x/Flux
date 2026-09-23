@@ -24,7 +24,7 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/pyright/**/*",
+      "node_modules/basedpyright/**/*",
       "node_modules/@lydell/**/*"
     ],
     "npmRebuild": false,
@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "@lydell/node-pty": "^1.2.0-beta.15",
-    "pyright": "^1.1.414"
+    "basedpyright": "^1.40.1"
   },
   "devDependencies": {
     "@xterm/addon-fit": "^0.11.0",

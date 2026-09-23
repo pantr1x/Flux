@@ -1,10 +1,10 @@
-// Spustí Pyright (jazykový server pre Python) a posiela JSON-RPC správy medzi ním a oknom.
+// Spustí basedpyright (Pyright s farbami ako vo VS Code – jazykový server pre Python) a posiela JSON-RPC správy medzi ním a oknom.
 // Pyright beží cez Node, ktorý je súčasťou Electronu – netreba mať nainštalovaný Node.js.
 const { spawn } = require('node:child_process');
 
 function pyrightPath() {
-  // V zabalenej aplikácii je pyright rozbalený mimo app.asar (kvôli spúšťaniu).
-  return require.resolve('pyright/langserver.index.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+  // V zabalenej aplikácii je basedpyright rozbalený mimo app.asar (kvôli spúšťaniu).
+  return require.resolve('basedpyright/langserver.index.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
 }
 
 class LanguageServer {

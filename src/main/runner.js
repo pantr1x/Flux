@@ -112,6 +112,17 @@ class Runner {
         // Chvíľu počkať, nech dorazí zvyšok výstupu.
         setTimeout(() => finish(exitCode), 60);
       });
+      if (isWin) {
+        // node-pty na Windows ohlási koniec až ~1 s po skončení programu (čaká na výstup).
+        // Kód skončenia však pozná hneď – sledujeme ho sami, aby „Hotovo“ bolo okamžite.
+        const poll = setInterval(() => {
+          const code = handle.pty?._agent?.exitCode;
+          if (handle.done) return clearInterval(poll);
+          if (code === undefined) return;
+          clearInterval(poll);
+          setTimeout(() => finish(code), 50);
+        }, 20);
+      }
       return true;
     }
 
