@@ -30,6 +30,27 @@ function commandFor(file, python, lang) {
     case '.mjs':
     case '.cjs':
       return { cmd: 'node', args: [file] };
+    case '.java':
+      // Java 11+ spustí jeden .java súbor priamo (bez javac).
+      return { cmd: 'java', args: [path.basename(file)] };
+    case '.go':
+      return { cmd: 'go', args: ['run', path.basename(file)] };
+    case '.cs':
+      // .NET 10: „dotnet run program.cs“ bez projektu.
+      return { cmd: 'dotnet', args: ['run', path.basename(file)] };
+    case '.rs':
+      return compileAndRun(file, 'rustc');
+    case '.rb':
+      return { cmd: 'ruby', args: [path.basename(file)] };
+    case '.php':
+      return { cmd: 'php', args: [path.basename(file)] };
+    case '.lua':
+      return { cmd: 'lua', args: [path.basename(file)] };
+    case '.c':
+    case '.cpp':
+    case '.cc':
+    case '.cxx':
+      return compileAndRun(file, ext === '.c' ? 'gcc' : 'g++');
     case '.bat':
     case '.cmd':
       return isWin ? { cmd: 'cmd.exe', args: ['/d', '/c', file] } : null;
@@ -40,6 +61,27 @@ function commandFor(file, python, lang) {
     default:
       return null;
   }
+}
+
+// C/C++: najprv preložiť, potom spustiť (ako Code Runner vo VS Code).
+function compileAndRun(file, compiler) {
+  const src = path.basename(file);
+  const out = src.replace(/\.[^.]+$/, '') + (isWin ? '.exe' : '');
+  if (isWin) {
+    const q = (s) => `'${s.replace(/'/g, "''")}'`;
+    return {
+      cmd: 'powershell.exe',
+      args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `& ${compiler} ${q(src)} -o ${q(out)}; if ($?) { & ${q('.\\' + out)} }`],
+      tool: compiler,
+    };
+  }
+  return { cmd: 'bash', args: ['-c', `${compiler} "$1" -o "$2" && "./$2"`, 'flux', src, out], tool: compiler };
+}
+
+// Ktorý jazyk (na stiahnutie) treba pre súbor.
+function toolchainFor(file) {
+  const ext = path.extname(file).toLowerCase();
+  return { '.py': 'python', '.pyw': 'python', '.js': 'node', '.mjs': 'node', '.cjs': 'node', '.java': 'java', '.go': 'go', '.cs': 'csharp', '.c': 'cpp', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.rs': 'rust', '.rb': 'ruby', '.php': 'php', '.lua': 'lua' }[ext] || null;
 }
 
 // Nájde napr. „node“ → C:\Program Files\nodejs\node.exe (pseudoterminál na Windows potrebuje celú cestu).
@@ -192,4 +234,4 @@ class Runner {
   }
 }
 
-module.exports = { Runner, commandFor };
+module.exports = { Runner, commandFor, toolchainFor };

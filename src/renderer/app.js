@@ -12,6 +12,7 @@ import { TEMPLATES, PY_SNIPPETS, HTML_PAGE } from './templates.js';
 import { createCodeMap } from './codemap.js';
 import { t, setLocale, translateDom } from './i18n.js';
 import { createActivity } from './activity.js';
+import { createTools, TOOL_FILE } from './tools.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -130,7 +131,7 @@ function guessLang(text) {
 }
 const langOf = (path, text) => (extOf(path) ? langFor(path) : guessLang(text));
 
-const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh']);
+const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua']);
 const WEB = new Set(['html', 'htm', 'css']);
 
 // ---------- drobnosti UI ----------
@@ -208,12 +209,6 @@ function applyTheme() {
   document.documentElement.style.setProperty('--accent-fg', readableOn(accent));
   monaco.editor.setTheme(defineMonacoTheme(monaco, setting('codeTheme'), accent));
   $('#btn-theme').innerHTML = icon(dark ? 'sun' : 'moon');
-  const accentName = Object.keys(ACCENTS).find((k) => accentHex(k) === accent);
-  $('#accents').innerHTML =
-    Object.keys(ACCENTS)
-      .slice(0, 6)
-      .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${name === accentName ? 'active' : ''}" title="${name}"></button>`)
-      .join('') + `<button class="more" data-accent="more" title="${t('More colors and themes')}">${icon('palette', 13)}</button>`;
   if (term) term.options.theme = terminalTheme();
   codemap?.refresh();
 }
@@ -298,6 +293,7 @@ const fmtNum = (n) => n.toLocaleString();
 let editor;
 let codemap;
 let activity;
+let tools;
 let onboarding;
 function createEditor() {
   editor = monaco.editor.create($('#editor'), {
@@ -675,6 +671,19 @@ function activate(tab) {
   renderStatus();
   followPreview(tab);
   document.title = `${basename(tab.path)} — Flux`;
+}
+
+// Stránka projektu: súbory ostanú otvorené v kartách, len sa žiadna nezobrazí.
+function showProjectPage() {
+  const prev = activeTab();
+  if (prev) prev.viewState = editor.saveViewState();
+  state.active = null;
+  editor.setModel(null);
+  renderTabs();
+  renderRunButton();
+  renderStatus();
+  renderWelcome();
+  document.title = 'Flux';
 }
 
 async function closeTab(tab, { force = false } = {}) {
@@ -1104,21 +1113,28 @@ async function setWorkspace(dir) {
 
 // ---------- projekty (ako „workspaces“ v Zene) ----------
 // Zoznam nedávnych priečinkov s ikonou podľa obsahu – prepnutie jedným klikom.
+// Ikona typu projektu (Python, web, Java…).
+const KIND_FILE = { python: 'a.py', web: 'a.html', node: 'a.js', java: 'a.java', cpp: 'a.cpp', c: 'a.c', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua' };
+function kindIcon(kind, size = 16) {
+  const svg = KIND_FILE[kind] ? fileIcon(KIND_FILE[kind]) : icon('folder', 16);
+  return size === 16 ? svg : svg.replace(/width="16" height="16"/, `width="${size}" height="${size}"`);
+}
+
 async function renderProjects() {
   const el = $('#projects');
   let list = [];
   try {
     list = await flux.projects();
   } catch {}
-  const kindIcon = (k) => (k === 'python' ? fileIcon('a.py') : k === 'web' ? fileIcon('a.html') : icon('folder', 16));
+  state.projectList = list;
+  const row = (p) =>
+    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}\n${t('Right-click to rename or remove')}">${kindIcon(p.kind)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
+  const pinned = list.filter((p) => p.pinned);
+  const rest = list.filter((p) => !p.pinned);
   el.innerHTML =
+    (pinned.length ? `<div class="pr-head pr-head-pin"><span>${icon('pin', 11)}${t('Pinned')}</span></div><div class="pr-pinned">${pinned.map(row).join('')}</div>` : '') +
     `<div class="pr-head"><span>${t('Projects')}</span><button class="icon-btn" data-act="open" title="${t('Open an existing folder (Ctrl+O)')}">${icon('folderOpen', 15)}</button></div>` +
-    list
-      .map(
-        (p) =>
-          `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}\n${t('Right-click to rename or remove')}">${kindIcon(p.kind)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`,
-      )
-      .join('') +
+    rest.map(row).join('') +
     `<button class="pr-row pr-new" data-act="new">${icon('plus', 16)}<span>${t('New project')}</span></button>`;
   const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
   if (current && state.projectKind !== current.kind) {
@@ -1136,10 +1152,29 @@ async function renderProjects() {
 
 // Nový projekt: pekné okno – typ, názov, umiestnenie, „Create“.
 const PROJECT_KINDS = [
-  { id: 'python', title: 'Python', text: 'Scripts, games and apps', icon: 'a.py', tpl: 'py-main' },
+  { id: 'python', title: 'Python', text: 'Scripts, games and apps', icon: 'a.py', tpl: 'py-main', tool: 'python' },
   { id: 'web', title: 'Website', text: 'HTML, CSS and JavaScript', icon: 'a.html', tpl: 'web' },
+  { id: 'node', title: 'JavaScript', text: 'Scripts with Node.js', icon: 'a.js', tpl: 'js', tool: 'node' },
   { id: 'empty', title: 'Empty', text: 'Start from scratch', icon: null, tpl: null },
+  // Ďalšie jazyky – stiahnu sa, až keď ich chceš.
+  { id: 'java', title: 'Java', icon: 'a.java', tpl: 'java-main', tool: 'java', more: true },
+  { id: 'cpp', title: 'C++', icon: 'a.cpp', tpl: 'cpp-main', tool: 'cpp', more: true },
+  { id: 'c', title: 'C', icon: 'a.c', tpl: 'c-main', tool: 'cpp', more: true },
+  { id: 'go', title: 'Go', icon: 'a.go', tpl: 'go-main', tool: 'go', more: true },
+  { id: 'csharp', title: 'C#', icon: 'a.cs', tpl: 'cs-main', tool: 'csharp', more: true },
+  { id: 'rust', title: 'Rust', icon: 'a.rs', tpl: 'rs-main', tool: 'rust', more: true },
+  { id: 'ruby', title: 'Ruby', icon: 'a.rb', tpl: 'rb-main', tool: 'ruby', more: true },
+  { id: 'php', title: 'PHP', icon: 'a.php', tpl: 'php-main', tool: 'php', more: true },
+  { id: 'lua', title: 'Lua', icon: 'a.lua', tpl: 'lua-main', tool: 'lua', more: true },
 ];
+
+// Popis a zoznam úloh projektu (ukladá sa v nastaveniach podľa priečinka).
+const projectMeta = (dir) => state.settings.projectMeta?.[dir] || {};
+async function saveProjectMeta(dir, patch) {
+  const all = { ...(state.settings.projectMeta || {}) };
+  all[dir] = { ...all[dir], ...patch };
+  await saveSettings({ projectMeta: all });
+}
 
 // opts.tpl: šablóna zo štartovacej obrazovky – projekt sa založí rovno s ňou.
 async function newProject(opts = {}) {
@@ -1148,21 +1183,36 @@ async function newProject(opts = {}) {
   let kind = opts.kind || (prefs.includes('web') && !prefs.includes('python') ? 'web' : 'python');
   let root = await flux.projectRoot();
   let nameTouched = false;
-  const defaultName = () => ({ python: 'my-program', web: 'my-website', empty: 'new-project' })[kind];
+  const kindOf = (id) => PROJECT_KINDS.find((k) => k.id === id);
+  const defaultName = () => ({ python: 'my-program', web: 'my-website', node: 'my-script', empty: 'new-project' })[kind] || `my-${kind}-app`;
+  const big = (k, n) => (k.icon ? fileIcon(k.icon).replace(/width="16" height="16"/, `width="${n}" height="${n}"`) : icon('folder', n - 2));
   el.innerHTML = `
     <div class="np-card" role="dialog">
       <header><h2>${t('Create a project')}</h2><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
-      <div class="np-kinds">${PROJECT_KINDS.map(
-        (k) =>
-          `<button class="np-kind" data-kind="${k.id}"><span class="np-ic">${
-            k.icon ? fileIcon(k.icon).replace(/width="16" height="16"/, 'width="30" height="30"') : icon('folder', 28)
-          }</span><b>${t(k.title)}</b><small>${t(k.text)}</small></button>`,
-      ).join('')}</div>
+      <div class="np-kinds">${PROJECT_KINDS.filter((k) => !k.more)
+        .map((k) => `<button class="np-kind" data-kind="${k.id}"><span class="np-ic">${big(k, 30)}</span><b>${t(k.title)}</b><small>${t(k.text)}</small></button>`)
+        .join('')}</div>
+      <div class="np-more"><span>${t('More languages')}</span>${PROJECT_KINDS.filter((k) => k.more)
+        .map((k) => `<button class="np-chip" data-kind="${k.id}">${big(k, 15)}${k.title}</button>`)
+        .join('')}</div>
+      <div id="np-tool"></div>
       <label class="np-field"><span>${t('Name')}</span><input id="np-name" spellcheck="false" autocomplete="off"></label>
+      <label class="np-field"><span>${t('Short description')} <small>${t('optional')}</small></span><input id="np-desc" spellcheck="false" autocomplete="off" maxlength="160" placeholder="${t('e.g. A game where you catch falling stars')}"></label>
       <div class="np-field"><span>${t('Location')}</span><div class="np-loc"><code id="np-root"></code><button class="s-btn" data-root>${t('Change…')}</button></div></div>
       <footer><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
     </div>`;
   const input = $('#np-name');
+  tools.bind($('#np-tool'));
+  // Pri jazyku, ktorý ešte nemáš, ukáže veľkosť a tlačidlo Inštalovať.
+  const showTool = async () => {
+    const box = $('#np-tool');
+    const id = kindOf(kind)?.tool;
+    if (!id) return (box.innerHTML = '');
+    await tools.status();
+    if (kindOf(kind)?.tool !== id) return;
+    const tc = tools.info(id);
+    box.innerHTML = tc && !tc.installed ? `<p class="np-note">${t('You will need {name} to run this project:', { name: escapeHtml(tc.name) })}</p>${tools.row(tc)}` : '';
+  };
   const sync = () => {
     for (const b of el.querySelectorAll('[data-kind]')) b.classList.toggle('on', b.dataset.kind === kind);
     if (!nameTouched) input.value = defaultName();
@@ -1173,6 +1223,7 @@ async function newProject(opts = {}) {
     sync();
   };
   sync();
+  showTool();
   el.hidden = false;
   requestAnimationFrame(() => {
     input.focus();
@@ -1182,6 +1233,7 @@ async function newProject(opts = {}) {
   const create = async () => {
     const name = input.value.trim();
     if (!name) return input.focus();
+    const description = $('#np-desc').value.trim();
     let dir;
     try {
       dir = await flux.createProject(name, root);
@@ -1190,8 +1242,9 @@ async function newProject(opts = {}) {
     }
     el.querySelector('.np-card').classList.add('done');
     setTimeout(close, 260);
+    await saveProjectMeta(dir, { description, kind, todos: [] });
     await setWorkspace(dir);
-    const kindTpl = TEMPLATES.find((x) => x.id === PROJECT_KINDS.find((k) => k.id === kind).tpl);
+    const kindTpl = TEMPLATES.find((x) => x.id === kindOf(kind).tpl);
     const tpl = opts.tpl && kind === opts.kind ? opts.tpl : kindTpl;
     if (!tpl || !tpl.files?.length) {
       await renderProjects();
@@ -1214,7 +1267,8 @@ async function newProject(opts = {}) {
     const k = e.target.closest('[data-kind]');
     if (k) {
       kind = k.dataset.kind;
-      return sync();
+      sync();
+      return showTool();
     }
     if (e.target.closest('[data-root]')) {
       const picked = await flux.chooseProjectRoot();
@@ -1224,7 +1278,7 @@ async function newProject(opts = {}) {
     if (e.target.closest('[data-create]')) create();
   };
   el.onkeydown = (e) => {
-    if (e.key === 'Enter') create();
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') create();
     if (e.key === 'Escape') close();
   };
 }
@@ -1240,6 +1294,12 @@ async function renameProject(dir) {
     res = await flux.renameProject(dir, name.trim());
   } catch (err) {
     return toast(errorText(err), 'error');
+  }
+  // Popis a úlohy idú s projektom.
+  if (state.settings.projectMeta?.[dir]) {
+    const all = { ...state.settings.projectMeta, [res.dir]: state.settings.projectMeta[dir] };
+    delete all[dir];
+    await saveSettings({ projectMeta: all });
   }
   if (wasOpen) {
     for (const tab of [...state.tabs]) await closeTab(tab, { force: true });
@@ -1263,7 +1323,9 @@ function projectEvents() {
     if (!b) return;
     if (b.dataset.act === 'open') return openFolderDialog();
     if (b.dataset.act === 'new') return newProject();
-    if (b.dataset.dir && keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
+    if (!b.dataset.dir) return;
+    if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
+    else showProjectPage(); // už otvorený projekt → jeho stránka (popis, úlohy, štatistiky)
   };
   el.oncontextmenu = async (e) => {
     const b = e.target.closest('[data-dir]');
@@ -1475,6 +1537,11 @@ async function run() {
   }
   await saveAll();
   const res = await flux.runFile(tab.path, state.python?.path, lang).catch((err) => ({ ok: false, error: errorText(err) }));
+  // Jazyk nie je nainštalovaný → okno s veľkosťou a tlačidlom Inštalovať; po inštalácii hneď spustí.
+  if (res.missing) {
+    if (await tools.ask(res.missing, res.canInstall)) run();
+    return;
+  }
   if (!res.ok) toast(res.error || t('Could not run the file.'), 'error');
 }
 
@@ -1962,6 +2029,8 @@ function openSettings() {
     ['appearance', 'palette', t('Appearance')],
     ['editor', 'code', t('Editor')],
     ['running', 'play', t('Running')],
+    ['tools', 'download', t('Languages')],
+    ['keys', 'command', t('Shortcuts')],
     ['general', 'globe', t('Language & intro')],
   ];
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
@@ -2023,6 +2092,16 @@ function openSettings() {
               <label class="s-row"><span><b>${t('Output font size')}</b></span><input type="number" min="9" max="28" data-key="terminalFontSize" value="${setting('terminalFontSize')}"></label>
             </div>
           </section>
+          <section data-pane="tools">
+            <h2>${t('Languages')}</h2>
+            <p class="s-lead">${t('Flux keeps its installer small. Programming languages are downloaded from their official sources only when you need them.')}</p>
+            <div class="tc-list" id="s-tools"><div class="s-loading">${t('Checking what is installed…')}</div></div>
+          </section>
+          <section data-pane="keys">
+            <h2>${t('Shortcuts')}</h2>
+            <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
+            <div class="s-group" id="s-keys">${shortcutRows()}</div>
+          </section>
           <section data-pane="general">
             <h2>${t('Language & intro')}</h2>
             <h3>${t('Language')}</h3>
@@ -2037,6 +2116,15 @@ function openSettings() {
         </div>
       </div>
     </div>`;
+  tools.bind($('#s-tools'));
+  tools.status(true).then((st) => {
+    const box = $('#s-tools');
+    if (box) box.innerHTML = st.list.map((tc) => tools.row(tc)).join('');
+  });
+  $('#s-keys-q').oninput = (e) => {
+    const q = e.target.value.toLowerCase();
+    for (const r of panel.querySelectorAll('#s-keys .s-key')) r.hidden = q && !r.textContent.toLowerCase().includes(q);
+  };
   const showTab = (id) => {
     state.settingsTab = id;
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
@@ -2107,6 +2195,36 @@ function openSettings() {
   };
 }
 
+// Zoznam skratiek: príkazy Fluxu + najužitočnejšie skratky editora.
+function shortcutRows() {
+  const editorKeys = [
+    [t('Comment / uncomment line'), 'Ctrl+/'],
+    [t('Add a comment above the line'), 'Ctrl+Alt+/'],
+    [t('Rename symbol everywhere'), 'F2'],
+    [t('Find'), 'Ctrl+F'],
+    [t('Find and replace'), 'Ctrl+H'],
+    [t('Select next match'), 'Ctrl+D'],
+    [t('Move line up / down'), 'Alt+↑ / Alt+↓'],
+    [t('Copy line up / down'), 'Shift+Alt+↑ / ↓'],
+    [t('Delete line'), 'Ctrl+Shift+K'],
+    [t('Add cursor above / below'), 'Ctrl+Alt+↑ / ↓'],
+    [t('Go to line'), 'Ctrl+G'],
+    [t('Show suggestions'), 'Ctrl+Space'],
+    [t('Go to definition'), 'F12'],
+    [t('Fold / unfold block'), 'Ctrl+Shift+[ / ]'],
+  ];
+  const seen = new Set();
+  const own = commands()
+    .filter((c) => c.kbd && !seen.has(c.kbd) && seen.add(c.kbd))
+    .map((c) => [c.label, c.kbd]);
+  const row = ([label, kbd]) =>
+    `<div class="s-row s-key"><span><b>${escapeHtml(label)}</b></span><span class="kbds">${kbd
+      .split(' / ')
+      .map((k) => k.split('+').map((x) => `<kbd>${escapeHtml(x)}</kbd>`).join('<i>+</i>'))
+      .join('<i>/</i>')}</span></div>`;
+  return own.map(row).join('') + `<div class="s-key-head">${t('Editor')}</div>` + editorKeys.map(row).join('');
+}
+
 function closeSettings() {
   $('#settings').hidden = true;
   if (state.active) editor.focus();
@@ -2132,35 +2250,72 @@ const START_CHOICES = [
   { id: 'empty', lang: '', title: 'Empty file', sub: 'your own name and extension', icon: 'file.txt' },
 ];
 
-function openStart() {
+// Domov Fluxu (klik na logo): pripnuté a nedávne projekty, nový/otvoriť a rýchly štart zo šablóny.
+async function openStart() {
   const el = $('#start');
-  // Najprv to, čo si pri prvom spustení vybral, že programuješ.
   const prefs = setting('codeLangs') || [];
   const choices = [...START_CHOICES].sort((a, b) => (prefs.includes(b.lang) ? 1 : 0) - (prefs.includes(a.lang) ? 1 : 0));
+  let list = state.projectList || [];
+  try {
+    list = await flux.projects();
+  } catch {}
+  const pinned = list.filter((p) => p.pinned);
+  const recent = list
+    .filter((p) => !p.pinned)
+    .sort((a, b) => (a.recent < 0 ? 999 : a.recent) - (b.recent < 0 ? 999 : b.recent))
+    .slice(0, 6);
+  const h = new Date().getHours();
+  const greet = h < 5 ? t('Good night') : h < 12 ? t('Good morning') : h < 18 ? t('Good afternoon') : t('Good evening');
+  const desc = (p) => projectMeta(p.dir).description;
+  const card = (p) =>
+    `<button class="hm-card${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}"><span class="hm-ic">${kindIcon(p.kind, 26)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
+  const line = (p) =>
+    `<button class="hm-line${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}">${kindIcon(p.kind, 18)}<b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
     <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span></div>
-    <div class="st-inner">
-      <h1>${t('What are you building?')}</h1>
-      <p class="st-sub">${state.workspace ? t('The new file goes into <b>{dir}</b>.', { dir: escapeHtml(basename(state.workspace)) }) : t('Pick one and Flux creates a new project for it.')}</p>
-      <div class="st-grid">${choices
+    <div class="st-inner hm">
+      <h1>${greet}</h1>
+      <p class="st-sub">${t('What do you want to work on?')}</p>
+      <div class="hm-actions">
+        <button class="hm-act primary" data-act="newproject">${icon('plus', 18)}<span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
+        <button class="hm-act" data-act="open">${icon('folderOpen', 18)}<span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
+        ${state.workspace ? `<button class="hm-act" data-act="newfile">${icon('filePlus', 18)}<span><b>${t('New file')}</b><small>${escapeHtml(basename(state.workspace))}</small></span></button>` : ''}
+      </div>
+      ${pinned.length ? `<h3 class="hm-h">${icon('pin', 12)}${t('Pinned')}</h3><div class="hm-cards">${pinned.map(card).join('')}</div>` : ''}
+      ${recent.length ? `<h3 class="hm-h">${t('Recent')}</h3><div class="hm-lines">${recent.map(line).join('')}</div>` : ''}
+      <h3 class="hm-h">${t('Quick start')} <small>${state.workspace ? t('new file in {dir}', { dir: escapeHtml(basename(state.workspace)) }) : t('creates a new project')}</small></h3>
+      <div class="st-grid hm-quick">${choices
         .map(
           (c) =>
-            `<button class="st-card" data-tpl="${c.id}"><span class="st-ic">${fileIcon(c.icon).replace(/width="16" height="16"/, 'width="30" height="30"')}</span><b>${t(c.title)}</b><small>${t(c.sub)}</small></button>`,
+            `<button class="st-card" data-tpl="${c.id}"><span class="st-ic">${fileIcon(c.icon).replace(/width="16" height="16"/, 'width="24" height="24"')}</span><b>${t(c.title)}</b><small>${t(c.sub)}</small></button>`,
         )
         .join('')}</div>
-      <div class="st-row">
-        <button class="st-link" data-act="newproject">${icon('plus', 16)}${t('New project')}</button>
-        <button class="st-link" data-act="open">${icon('folderOpen', 16)}${t('Open folder…')}</button>
-      </div>
       ${state.workspace ? `<button class="st-back" data-act="back">${t('Back to editor')} <kbd>Esc</kbd></button>` : ''}
     </div>`;
+  for (const p of [...pinned, ...recent]) {
+    flux.projectStats(p.dir).then((st) => {
+      for (const x of el.querySelectorAll('.hm-stat')) {
+        if (x.dataset.stats === p.dir) x.textContent = `${st.files} ${st.files === 1 ? t('file') : t('files')}${st.time >= 60 ? ` · ${formatTime(st.time)}` : ''}`;
+      }
+    });
+  }
   el.hidden = false;
   document.body.classList.add('start-open');
   el.onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.act === 'back') return closeStart();
+    if (b.dataset.dir) {
+      closeStart();
+      if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
+      else showProjectPage();
+      return;
+    }
+    if (b.dataset.act === 'newfile') {
+      closeStart();
+      return newFile();
+    }
     if (b.dataset.act === 'newproject') {
       closeStart();
       return newProject();
@@ -2220,25 +2375,53 @@ function renderWelcome() {
         </div>
       </div>`;
   } else {
+    const meta = projectMeta(ws);
+    const kind = state.projectKind || meta.kind || 'folder';
     const runs = activity.runs(ws);
+    // Čo sa dá v projekte robiť – podľa typu (web má náhľad, Python spúšťanie…).
+    const acts =
+      kind === 'web'
+        ? [['open-main', 'globe', t('Open page')], ['live', 'monitor', t('Live preview')]]
+        : kind === 'folder'
+          ? []
+          : [['open-main', 'code', t('Open main file')], ['run-main', 'play', t('Run it')]];
     w.innerHTML = `
-      <div class="welcome-inner">
+      <div class="welcome-inner pj">
         <div class="wl-head">
-          <span class="wl-icon">${projectIcon(state.projectKind)}</span>
-          <div class="wl-title"><h1>${escapeHtml(basename(ws))}</h1><p class="sub">${escapeHtml(ws)}</p></div>
+          <span class="wl-icon">${kindIcon(kind, 40)}</span>
+          <div class="wl-title">
+            <h1>${escapeHtml(basename(ws))}</h1>
+            <p class="pj-desc${meta.description ? '' : ' empty'}" data-edit-desc title="${t('Click to edit')}">${escapeHtml(meta.description || t('Add a short description…'))}</p>
+          </div>
         </div>
-        <div class="stats" id="wl-stats">
-          <div class="stat"><b data-k="time">–</b><span>${t('Time in project')}</span></div>
-          <div class="stat"><b data-k="runs">${runs}</b><span>${t('Runs')}</span></div>
-          <div class="stat"><b data-k="lines">–</b><span>${t('Lines of code')}</span></div>
-          <div class="stat"><b data-k="files">–</b><span>${t('Files')}</span></div>
+        <div class="pj-stats" id="wl-stats">
+          <span>${icon('clock', 13)}<b data-k="time">–</b></span>
+          <span>${icon('play', 12)}<b data-k="runs">${runs}</b> ${t('runs')}</span>
+          <span>${icon('code', 13)}<b data-k="lines">–</b> ${t('lines')}</span>
+          <span>${icon('file', 13)}<b data-k="files">–</b> ${t('files')}</span>
         </div>
         <div class="welcome-actions">
-          <button class="primary" data-act="new">${icon('filePlus')}${t('New file')}</button>
+          ${acts.map(([act, ic, label], i) => `<button class="${i ? '' : 'primary'}" data-act="${act}">${icon(ic)}${label}</button>`).join('')}
+          <button class="${acts.length ? '' : 'primary'}" data-act="new">${icon('filePlus')}${t('New file')}</button>
           <button data-act="quick">${icon('command')}${t('Find file')}</button>
-          <button data-act="start">${icon('template')}${t('Templates')}</button>
+        </div>
+        <div class="pj-files" id="pj-files"></div>
+        <div class="pj-todo">
+          <div class="pj-h"><span>${t('To-do')}</span><small id="pj-count"></small></div>
+          <form class="pj-add" id="pj-add"><span class="pj-plus">${icon('plus', 14)}</span><input id="pj-new" placeholder="${t('Add a task and press Enter…')}" autocomplete="off" spellcheck="false" maxlength="200"></form>
+          <ul class="pj-list" id="pj-list"></ul>
         </div>
       </div>`;
+    renderTodos(ws);
+    $('#pj-add').onsubmit = async (e) => {
+      e.preventDefault();
+      const input = $('#pj-new');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      await saveProjectMeta(ws, { todos: [...(projectMeta(ws).todos || []), { id: Date.now(), text, done: false }] });
+      renderTodos(ws, true);
+    };
     flux.projectStats(ws).then((st) => {
       if (state.workspace !== ws || !$('#wl-stats')) return;
       const q = (k) => $(`#wl-stats [data-k="${k}"]`);
@@ -2247,16 +2430,113 @@ function renderWelcome() {
       countUp(q('files'), st.files);
       countUp(q('runs'), runs);
     });
+    // Hlavné súbory projektu (pri webe stránky .html) na jeden klik.
+    flux.listAll().then((files) => {
+      if (state.workspace !== ws || !$('#pj-files')) return;
+      state.projectFiles = files;
+      const main = mainFileOf(files, kind);
+      const want = kind === 'web' ? /\.html?$/i : new RegExp(`\\.(${(MAIN_EXT[kind] || ['py', 'html', 'js']).join('|')})$`, 'i');
+      const picks = files.filter((f) => want.test(f)).slice(0, 8);
+      if (!picks.length) return;
+      $('#pj-files').innerHTML = `<div class="pj-h"><span>${kind === 'web' ? t('Pages') : t('Files')}</span></div><div class="pj-chips">${picks
+        .map((f) => `<button class="pj-file${f === main ? ' main' : ''}" data-open="${escapeAttr(f)}">${fileIcon(basename(f))}<span>${escapeHtml(relPath(f))}</span></button>`)
+        .join('')}</div>`;
+    });
   }
-  w.onclick = (e) => {
+  w.onclick = async (e) => {
+    const desc = e.target.closest('[data-edit-desc]');
+    if (desc) return editDescription(desc);
+    const todo = e.target.closest('[data-todo]');
+    if (todo) return toggleTodo(state.workspace, Number(todo.dataset.todo), e.target.closest('[data-del]'));
     const b = e.target.closest('button');
     if (!b) return;
+    if (b.dataset.open) return openFile(b.dataset.open);
+    if (b.dataset.act === 'open-main' || b.dataset.act === 'run-main' || b.dataset.act === 'live') {
+      const files = state.projectFiles || (await flux.listAll());
+      const main = mainFileOf(files, state.projectKind);
+      if (!main) return newFile();
+      await openFile(main);
+      if (b.dataset.act === 'run-main') run();
+      if (b.dataset.act === 'live' && !state.live) toggleLive();
+      return;
+    }
     if (b.dataset.act === 'open') openFolderDialog();
     else if (b.dataset.act === 'new') newFile();
     else if (b.dataset.act === 'quick') quickOpen();
     else if (b.dataset.act === 'start') openStart();
     else if (b.dataset.act === 'newproject') newProject();
   };
+}
+
+// Hlavný súbor projektu: index.html, main.py, Main.java…
+const MAIN_EXT = { python: ['py'], web: ['html', 'htm'], node: ['js', 'mjs'], java: ['java'], cpp: ['cpp', 'c'], go: ['go'], csharp: ['cs'], rust: ['rs'], ruby: ['rb'], php: ['php'], lua: ['lua'] };
+function mainFileOf(files, kind) {
+  const exts = MAIN_EXT[kind];
+  if (!exts) return null;
+  const mine = files.filter((f) => exts.includes(extOf(f)));
+  const pref = /^(index|main|program|app)\./i;
+  return mine.find((f) => pref.test(basename(f)) && !relPath(f).includes('/') && !relPath(f).includes('\\')) || mine.find((f) => pref.test(basename(f))) || mine[0] || null;
+}
+
+function relPath(f) {
+  return state.workspace && f.startsWith(state.workspace) ? f.slice(state.workspace.length + 1) : basename(f);
+}
+
+// Zoznam úloh projektu – odškrtnuté idú dole.
+function renderTodos(ws, animateFirst = false) {
+  const list = $('#pj-list');
+  if (!list) return;
+  const todos = projectMeta(ws).todos || [];
+  const done = todos.filter((x) => x.done).length;
+  $('#pj-count').textContent = todos.length ? `${done} / ${todos.length}` : '';
+  const sorted = [...todos.filter((x) => !x.done), ...todos.filter((x) => x.done)];
+  list.innerHTML = sorted.length
+    ? sorted
+        .map(
+          (x, i) =>
+            `<li class="pj-item${x.done ? ' done' : ''}${animateFirst && i === todos.filter((y) => !y.done).length - 1 && !x.done ? ' new' : ''}" data-todo="${x.id}"><span class="pj-check">${icon('check', 12)}</span><span class="pj-text">${escapeHtml(x.text)}</span><button class="pj-del" data-del title="${t('Remove')}">${icon('x', 13)}</button></li>`,
+        )
+        .join('')
+    : `<li class="pj-empty">${t('Nothing here yet. Plan your next steps!')}</li>`;
+}
+
+async function toggleTodo(ws, id, del) {
+  let todos = projectMeta(ws).todos || [];
+  if (del) {
+    const li = document.querySelector(`[data-todo="${id}"]`);
+    li?.classList.add('leaving');
+    await new Promise((r) => setTimeout(r, 180));
+    todos = todos.filter((x) => x.id !== id);
+  } else {
+    todos = todos.map((x) => (x.id === id ? { ...x, done: !x.done } : x));
+  }
+  await saveProjectMeta(ws, { todos });
+  renderTodos(ws);
+}
+
+// Popis projektu – klik a píš, Enter uloží.
+function editDescription(el) {
+  const ws = state.workspace;
+  const input = document.createElement('input');
+  input.className = 'pj-desc-input';
+  input.value = projectMeta(ws).description || '';
+  input.maxLength = 160;
+  input.placeholder = t('Add a short description…');
+  el.replaceWith(input);
+  input.focus();
+  let done = false;
+  const save = async (keep) => {
+    if (done) return;
+    done = true;
+    if (keep) await saveProjectMeta(ws, { description: input.value.trim() });
+    renderWelcome();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') save(true);
+    if (e.key === 'Escape') save(false);
+    e.stopPropagation();
+  };
+  input.onblur = () => save(true);
 }
 
 // ---------- klávesové skratky ----------
@@ -2408,6 +2688,11 @@ function layoutEvents() {
     term.reset();
     term.write(state.running ? '' : '\x1b[?25l');
     setHint([]);
+    // Po vymazaní už nesvieti „Error“ ani „Done“.
+    if (!state.running) {
+      $('#run-state').className = 'run-state';
+      $('#run-state').textContent = '';
+    }
   };
   $('#btn-panel').onclick = () => showPanel($('#panel').classList.contains('collapsed'));
   $('#st-python').onclick = pythonMenu;
@@ -2428,12 +2713,6 @@ function layoutEvents() {
     $('#preview-frame').style.width = w ? `${w}px` : '100%';
     $('#preview-frame').style.flex = 'none';
     document.querySelector('.preview-stage').classList.toggle('framed', !!w);
-  };
-  $('#accents').onclick = (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    if (b.dataset.accent === 'more') openSettings();
-    else setAccent(b.dataset.accent);
   };
   $('#essentials').onclick = (e) => {
     const cmd = e.target.closest('button')?.dataset.cmd;
@@ -2467,6 +2746,7 @@ async function main() {
   setIcons();
   setupWallpaper();
   activity = createActivity({ getSettings: () => state.settings, saveSettings });
+  tools = createTools({ toast });
   onboarding = createOnboarding({
     fileIcon,
     icon,
@@ -2478,6 +2758,7 @@ async function main() {
     getSettings: () => state.settings,
     saveSettings,
     toast,
+    tools,
   });
   createEditor();
   registerSnippets();

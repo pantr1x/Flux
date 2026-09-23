@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { findPython, probe } = require('./python');
-const { Runner, commandFor } = require('./runner');
+const { Runner, commandFor, toolchainFor } = require('./runner');
+const toolchains = require('./toolchains');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
 const i18n = require('./i18n');
@@ -83,6 +84,7 @@ const send = (channel, payload) => {
 };
 
 const runner = new Runner(send);
+const knownTools = new Set(); // jazyky, o ktorých už vieme, že sú nainštalované
 const live = new LiveServer((entry) => send('live:log', entry));
 const lsp = new LanguageServer(
   (msg) => send('lsp:message', msg),
@@ -232,7 +234,9 @@ function registerIpc() {
     ensureProjects();
     const list = settings.projects.filter((p) => fs.existsSync(p.dir));
     const ordered = [...list.filter((p) => p.pinned), ...list.filter((p) => !p.pinned)];
-    return Promise.all(ordered.map(async (p) => ({ dir: p.dir, pinned: !!p.pinned, name: path.basename(p.dir), kind: await projectKind(p.dir) })));
+    return Promise.all(
+      ordered.map(async (p) => ({ dir: p.dir, pinned: !!p.pinned, name: path.basename(p.dir), kind: await projectKind(p.dir), recent: settings.recent.indexOf(p.dir) })),
+    );
   });
   ipcMain.handle('workspace:forget', (_e, dir) => {
     ensureProjects();
@@ -439,6 +443,14 @@ function registerIpc() {
     });
   });
 
+  // Jazyky na stiahnutie (Java, C++, Go…)
+  ipcMain.handle('toolchains:status', () => toolchains.status());
+  ipcMain.handle('toolchains:install', async (_e, id) => {
+    const res = await toolchains.install(id, (p) => send('toolchains:progress', p));
+    knownTools.add(id);
+    return res;
+  });
+
   // Python
   ipcMain.handle('python:find', async () => {
     const override = workspace ? settings.pythonOverrides[workspace] : null;
@@ -465,9 +477,17 @@ function registerIpc() {
   });
 
   // Spúšťanie
-  ipcMain.handle('run:file', (_e, file, python, lang) => {
+  ipcMain.handle('run:file', async (_e, file, python, lang) => {
     const target = guard(file);
     const command = commandFor(target, python, lang);
+    // Chýba jazyk (napr. Java)? Okno ponúkne stiahnutie aj s veľkosťou.
+    const need = toolchainFor(target);
+    if (need && need !== 'python' && !knownTools.has(need)) {
+      const st = await toolchains.status();
+      const info = st.list.find((x) => x.id === need);
+      if (info && !info.installed) return { ok: false, missing: info, canInstall: st.canInstall };
+      knownTools.add(need);
+    }
     if (!command) return { ok: false, error: t("Can't run this type of file yet.") };
     const ok = runner.start({ ...command, cwd: path.dirname(target), label: path.basename(target) });
     return { ok };
@@ -518,9 +538,25 @@ function ensureProjects() {
 }
 
 // Druh projektu podľa súborov v priečinku – na ikonu v zozname projektov.
+// Typ projektu podľa najčastejších súborov (alebo podľa toho, čo si vybral pri vytvorení).
+const KIND_EXT = {
+  python: /\.pyw?$/i,
+  web: /\.(html?|css)$/i,
+  node: /\.(m?js|cjs)$/i,
+  java: /\.java$/i,
+  cpp: /\.(c|cpp|cc|cxx|h|hpp)$/i,
+  go: /\.go$/i,
+  csharp: /\.cs$/i,
+  rust: /\.rs$/i,
+  ruby: /\.rb$/i,
+  php: /\.php$/i,
+  lua: /\.lua$/i,
+};
+
 async function projectKind(dir) {
-  let py = 0;
-  let web = 0;
+  const chosen = settings.projectMeta?.[dir]?.kind;
+  if (chosen && chosen !== 'empty') return chosen === 'c' ? 'cpp' : chosen;
+  const count = {};
   const scan = async (d, depth) => {
     let entries = [];
     try {
@@ -532,13 +568,19 @@ async function projectKind(dir) {
       if (IGNORED_DIRS.has(e.name) || e.name.startsWith('.') || e.name === 'venv') continue;
       if (e.isDirectory()) {
         if (depth < 1) await scan(path.join(d, e.name), depth + 1);
-      } else if (/\.pyw?$/i.test(e.name)) py++;
-      else if (/\.(html?|css)$/i.test(e.name)) web++;
+        continue;
+      }
+      for (const [kind, re] of Object.entries(KIND_EXT)) if (re.test(e.name)) count[kind] = (count[kind] || 0) + 1;
     }
   };
   await scan(dir, 0);
-  if (!py && !web) return 'folder';
-  return py >= web ? 'python' : 'web';
+  // JavaScript pri HTML patrí k webu.
+  if (count.web && count.node) {
+    count.web += count.node;
+    delete count.node;
+  }
+  const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+  return best ? best[0] : 'folder';
 }
 
 // Štatistiky projektu: súbory, riadky, znaky, čas.

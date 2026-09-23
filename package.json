@@ -2,7 +2,7 @@
   "name": "flux",
   "productName": "Flux",
   "version": "0.1.0",
-  "description": "Moderný mini-IDE: jedno tlačidlo na spustenie Pythonu, Live Server a autocomplete.",
+  "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,
   "scripts": {
@@ -44,7 +44,12 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "Flux",
-      "artifactName": "Flux-Setup-${version}.exe"
+      "artifactName": "Flux-Setup-${version}.exe",
+      "multiLanguageInstaller": false,
+      "installerLanguages": [
+        "en_US"
+      ],
+      "language": "1033"
     },
     "linux": {
       "target": "dir"

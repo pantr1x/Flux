@@ -675,8 +675,7 @@ body.compact #btn-expand {
 #welcome {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
   background: transparent;
   overflow: auto;
 }
@@ -688,6 +687,11 @@ body.compact #btn-expand {
 .welcome-inner {
   width: min(560px, 90%);
   padding: 40px 0;
+  margin: auto; /* na stred, ale pri dlhom obsahu sa dá scrollovať */
+}
+
+.welcome-inner.pj {
+  width: min(620px, 90%);
 }
 
 .welcome-inner h1 {
@@ -2060,6 +2064,29 @@ body.theme-light .wall-img {
   min-height: 32px;
 }
 
+/* Pripnuté projekty – vlastná sekcia v jemnom rámčeku, špendlík stále viditeľný. */
+.pr-head-pin span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pr-pinned {
+  margin: 0 0 10px;
+  padding: 3px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--hover));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
+.pr-row.pinned .pr-pin {
+  color: var(--accent);
+}
+
+.pr-row.pinned .pr-pin svg {
+  fill: currentColor;
+}
+
 /* ---------- úvod projektu so štatistikami ---------- */
 .wl-head {
   display: flex;
@@ -2318,9 +2345,191 @@ body.theme-light .wall-img {
 
 .np-kinds {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+}
+
+.np-card {
+  width: min(620px, 94vw) !important;
+  max-height: 92vh;
+  overflow: auto;
+}
+
+/* Ďalšie jazyky ako malé čipy */
+.np-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.np-more > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-right: 4px;
+}
+
+.np-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.np-chip:hover {
+  background: var(--active);
+}
+
+.np-chip.on {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--hover));
+}
+
+#np-tool:not(:empty) {
+  margin-bottom: 16px;
+  animation: rise 0.2s var(--ease);
+}
+
+.np-note {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.np-field > span small {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+/* Riadok jazyka na stiahnutie */
+.tc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.tc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tc-ic {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--card-2);
+}
+
+.tc-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tc-text b {
+  font-weight: 600;
+}
+
+.tc-text em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.tc-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tc-meta small {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tc-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok, #3ecf8e) !important;
+}
+
+.tc-bar {
+  display: block;
+  height: 5px;
+  border-radius: 5px;
+  background: var(--active);
+  overflow: hidden;
+}
+
+.tc-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--accent);
+  transition: width 0.4s var(--ease);
+  animation: tc-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes tc-pulse {
+  to {
+    opacity: 0.6;
+  }
+}
+
+.tc-act .s-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#tcask {
+  position: fixed;
+  inset: 0;
+  z-index: 115;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade 0.15s;
+}
+
+#tcask[hidden] {
+  display: none;
+}
+
+.tc-card {
+  width: min(480px, 92vw) !important;
+}
+
+.tc-why {
+  margin: -6px 0 14px;
+  color: var(--text-2);
+  font-size: 13px;
 }
 
 .np-kind {
@@ -2490,6 +2699,15 @@ body:not(.no-mica):not(.wallpaper) #onboard {
   opacity: 0;
   transform: scale(1.04);
   filter: blur(8px);
+}
+
+/* Za horný pás sa dá okno presúvať (ako za titulok). */
+.ob-drag {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 44px;
+  z-index: 2;
+  -webkit-app-region: drag;
 }
 
 /* Pomaly plávajúce svetlé „aurora“ škvrny – jemné, čiernobiele s nádychom akcentu. */
@@ -2971,4 +3189,512 @@ body.theme-light .ob-aurora i:nth-child(2) {
 .tour-nav .ob-ghost {
   height: 32px;
   padding: 0 14px;
+}
+
+/* ---------- nastavenia: jazyky a skratky ---------- */
+.s-lead {
+  margin: -8px 0 16px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.s-loading {
+  padding: 18px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.s-search {
+  width: 100%;
+  height: 36px;
+  margin-bottom: 12px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--hover);
+  border: none;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  outline: none;
+}
+
+.s-search:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.s-key {
+  min-height: 42px;
+}
+
+.s-key-head {
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.kbds {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.kbds i {
+  font-style: normal;
+  color: var(--text-3);
+  font-size: 11px;
+  margin: 0 1px;
+}
+
+.kbds kbd {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  font: 600 11.5px var(--ui-font);
+  color: var(--text);
+  background: var(--card-2);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--line-strong), 0 1px 0 var(--line-strong);
+}
+
+/* úvod: stav jazyka na karte a krok s nástrojmi */
+.ob-st {
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-top: -4px;
+}
+
+.ob-st.ok {
+  color: var(--ok);
+}
+
+.ob-tools .tc-row {
+  background: color-mix(in srgb, var(--card-solid) 55%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.ob-all {
+  margin-top: 12px;
+}
+
+/* ======================================================================
+   Domov (klik na logo)
+   ====================================================================== */
+.hm-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.hm-act {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card-solid) 55%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  text-align: left;
+  transition: transform 0.15s var(--ease), background 0.15s;
+  animation: card-in 0.35s var(--ease) backwards;
+}
+
+.hm-act:hover {
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--card-solid) 80%, transparent);
+}
+
+.hm-act span {
+  display: flex;
+  flex-direction: column;
+}
+
+.hm-act small {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.hm-act.primary {
+  background: var(--text);
+  color: var(--base);
+  box-shadow: none;
+}
+
+.hm-act.primary small {
+  color: color-mix(in srgb, var(--base) 60%, transparent);
+}
+
+.hm-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+
+.hm-h small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.hm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.hm-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 16px;
+  text-align: left;
+  background: color-mix(in srgb, var(--card-solid) 55%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: transform 0.15s var(--ease), background 0.15s;
+  animation: card-in 0.35s var(--ease) backwards;
+}
+
+.hm-card:hover {
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--card-solid) 80%, transparent);
+}
+
+.hm-card.current,
+.hm-line.current {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.hm-ic {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--card-2);
+}
+
+.hm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+}
+
+.hm-text b {
+  font-size: 15px;
+}
+
+.hm-text small,
+.hm-line small {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hm-card .hm-stat {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.hm-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 28px;
+  padding: 4px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card-solid) 45%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.hm-line {
+  display: grid;
+  grid-template-columns: 18px auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.hm-line:hover {
+  background: var(--hover);
+}
+
+.hm-line .hm-stat {
+  justify-self: end;
+}
+
+.hm-quick {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.hm-quick .st-card {
+  padding: 12px !important;
+}
+
+/* ======================================================================
+   Stránka projektu: popis, štatistiky v riadku, súbory, úlohy
+   ====================================================================== */
+.pj .wl-head {
+  margin-bottom: 14px;
+}
+
+.pj-desc {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 14px;
+  cursor: text;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  transition: background 0.15s;
+}
+
+.pj-desc:hover {
+  background: var(--hover);
+}
+
+.pj-desc.empty {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.pj-desc-input {
+  width: 100%;
+  margin: 4px 0 0 -6px;
+  padding: 3px 6px;
+  font: 14px var(--ui-font);
+  color: var(--text);
+  background: var(--hover);
+  border: none;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  outline: none;
+}
+
+.pj-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-bottom: 20px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.pj-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pj-stats b {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.pj .welcome-actions {
+  margin-bottom: 26px;
+}
+
+.pj-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+
+.pj-files:not(:empty) {
+  margin-bottom: 24px;
+  animation: card-in 0.3s var(--ease) backwards;
+}
+
+.pj-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pj-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 11px 0 9px;
+  border-radius: 9px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font: 12.5px var(--mono);
+  color: var(--text-2);
+}
+
+.pj-file:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+.pj-file.main {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.pj-todo {
+  animation: card-in 0.35s var(--ease) 0.05s backwards;
+}
+
+.pj-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow 0.15s;
+}
+
+.pj-add:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.pj-plus {
+  display: grid;
+  color: var(--text-3);
+}
+
+.pj-add input {
+  flex: 1;
+  font: 13.5px var(--ui-font);
+  color: var(--text);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.pj-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.pj-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 8px 4px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.18s, transform 0.18s var(--ease);
+}
+
+.pj-item:hover {
+  background: var(--hover);
+}
+
+.pj-item.new {
+  animation: card-in 0.3s var(--ease);
+}
+
+.pj-item.leaving {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.pj-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+  color: transparent;
+  transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+}
+
+.pj-item.done .pj-check {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--accent-fg);
+  animation: pop 0.3s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+@keyframes pop {
+  50% {
+    transform: scale(1.25);
+  }
+}
+
+.pj-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  transition: color 0.2s;
+}
+
+.pj-item.done .pj-text {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.pj-del {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pj-item:hover .pj-del {
+  opacity: 1;
+}
+
+.pj-del:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+.pj-empty {
+  padding: 12px;
+  color: var(--text-3);
+  font-size: 13px;
 }

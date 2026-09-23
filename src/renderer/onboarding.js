@@ -12,17 +12,29 @@ const LOGO = `<svg class="ob-logo" viewBox="0 0 120 120" aria-hidden="true">
 </svg>`;
 
 const CODE_LANGS = [
-  { id: 'python', label: 'Python', icon: 'a.py' },
+  { id: 'python', label: 'Python', icon: 'a.py', tool: 'python' },
   { id: 'web', label: 'HTML & CSS', icon: 'a.html' },
-  { id: 'js', label: 'JavaScript', icon: 'a.js' },
+  { id: 'js', label: 'JavaScript', icon: 'a.js', tool: 'node' },
+  { id: 'java', label: 'Java', icon: 'a.java', tool: 'java' },
+  { id: 'cpp', label: 'C / C++', icon: 'a.cpp', tool: 'cpp' },
+  { id: 'csharp', label: 'C#', icon: 'a.cs', tool: 'csharp' },
+  { id: 'go', label: 'Go', icon: 'a.go', tool: 'go' },
   { id: 'explore', label: 'Just exploring', icon: null },
 ];
+
+// Ktoré vybrané jazyky ešte treba stiahnuť.
+function missingTools(app) {
+  const chosen = app.getSettings().codeLangs || [];
+  const ids = [...new Set(CODE_LANGS.filter((c) => chosen.includes(c.id) && c.tool).map((c) => c.tool))];
+  return ids.map((id) => app.tools.info(id)).filter((tc) => tc && !tc.installed);
+}
 
 const LOOK_THEMES = ['vscode-dark', 'flux', 'tokyo-night', 'catppuccin', 'vscode-light', 'github-light'];
 
 export function createOnboarding(app) {
   // app: { fileIcon, icon, setCodeTheme, setAccent, accents, accentHex, currentAccent, getSettings, saveSettings, toast }
   const el = document.getElementById('onboard');
+  app.tools.bind(el);
   let step = 0;
   let languages = [{ code: 'en', name: 'English' }];
   let langChanged = false;
@@ -35,6 +47,21 @@ export function createOnboarding(app) {
     return `<div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}<button class="ob-primary" data-next>${nextLabel}</button></div>`;
   }
 
+  function cardStatus(c) {
+    const tc = c.tool && app.tools.info(c.tool);
+    if (!tc) return c.tool ? '<small class="ob-st">&nbsp;</small>' : '<small class="ob-st">&nbsp;</small>';
+    return tc.installed
+      ? `<small class="ob-st ok">${t('Installed')}</small>`
+      : `<small class="ob-st">${t('{size} download', { size: app.tools.mb(tc.download) })}</small>`;
+  }
+
+  function langList() {
+    const cur = app.getSettings().language || 'en';
+    return `<div class="ob-list">${languages
+      .map((l) => `<button class="ob-option${cur === l.code ? ' on' : ''}" data-lang="${l.code}"><b>${l.native || l.name}</b><small>${l.name}</small></button>`)
+      .join('')}</div>`;
+  }
+
   function body() {
     const s = app.getSettings();
     if (step === 0) {
@@ -44,9 +71,7 @@ export function createOnboarding(app) {
     }
     if (step === 1) {
       return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('More languages are downloaded from GitHub, so Flux stays small.')}</p>
-        <div class="ob-list">${languages
-          .map((l) => `<button class="ob-option${(s.language || 'en') === l.code ? ' on' : ''}" data-lang="${l.code}"><b>${l.native || l.name}</b><small>${l.name}</small></button>`)
-          .join('')}</div></div>${nav()}`;
+        ${langList()}</div>${nav()}`;
     }
     if (step === 2) {
       const chosen = s.codeLangs || [];
@@ -55,10 +80,17 @@ export function createOnboarding(app) {
           (c) =>
             `<button class="ob-card${chosen.includes(c.id) ? ' on' : ''}" data-code="${c.id}"><span class="ob-ic">${
               c.icon ? app.fileIcon(c.icon).replace(/width="16" height="16"/, 'width="34" height="34"') : app.icon('sparkle', 30)
-            }</span><b>${t(c.label)}</b><i class="ob-check">${app.icon('check', 14)}</i></button>`,
+            }</span><b>${t(c.label)}</b>${cardStatus(c)}<i class="ob-check">${app.icon('check', 14)}</i></button>`,
         ).join('')}</div></div>${nav()}`;
     }
     if (step === 3) {
+      const miss = missingTools(app);
+      const total = miss.reduce((a, tc) => a + tc.download, 0);
+      return `<div class="ob-step"><h2>${t('Get your tools')}</h2><p>${t('These languages are not on your computer yet. Flux downloads them from their official sources – about {size} in total. You can also do this later.', { size: app.tools.mb(total) })}</p>
+        <div class="tc-list ob-tools">${miss.map((tc) => app.tools.row(tc)).join('')}</div>
+        ${miss.length > 1 && app.tools.canInstall() ? `<button class="ob-ghost ob-all" data-install-all>${app.icon('download', 14)}${t('Install all')}</button>` : ''}</div>${nav()}`;
+    }
+    if (step === 4) {
       return `<div class="ob-step"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
         <div class="ob-themes">${LOOK_THEMES.map(
           (id) =>
@@ -77,23 +109,28 @@ export function createOnboarding(app) {
 
   // Pozadie ostáva, mení sa len obsah kroku – žiadne blikanie pri kliknutí.
   function shell() {
-    el.innerHTML = `<div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div><div class="ob-stage"></div>`;
+    el.innerHTML = `<div class="ob-drag"></div><div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div><div class="ob-stage"></div>`;
   }
 
   let dir = 1;
+  let busyUntil = 0;
   function render(animate = true) {
     const stage = el.querySelector('.ob-stage');
-    const old = stage.querySelector('.ob-body');
+    // Všetky staré verzie kroku preč – aj tie, ktoré ešte len odchádzajú (inak by sa dve prekrývali).
+    for (const old of stage.querySelectorAll('.ob-body')) {
+      if (!animate || old.classList.contains('leaving')) {
+        old.remove();
+        continue;
+      }
+      old.classList.add('leaving', dir > 0 ? 'out-fwd' : 'out-back');
+      setTimeout(() => old.remove(), 320);
+    }
     const next = document.createElement('div');
     next.className = `ob-body${animate ? (dir > 0 ? ' in-fwd' : ' in-back') : ''}`;
     next.dataset.step = step;
     next.innerHTML = body();
-    if (old && animate) {
-      old.classList.add(dir > 0 ? 'out-fwd' : 'out-back');
-      old.addEventListener('animationend', () => old.remove(), { once: true });
-      setTimeout(() => old.remove(), 400);
-    } else if (old) old.remove();
     stage.append(next);
+    if (animate) busyUntil = performance.now() + 420;
   }
 
   // Označenie výberu bez prekreslenia celej stránky.
@@ -113,15 +150,24 @@ export function createOnboarding(app) {
 
   el.onclick = async (e) => {
     const b = e.target.closest('button');
-    if (!b || b.disabled) return;
+    if (!b || b.disabled || b.closest('.leaving')) return;
+    const nav = b.dataset.next !== undefined || b.dataset.back !== undefined;
+    if (nav && performance.now() < busyUntil) return; // dvojklik počas prechodu
     if (b.dataset.next !== undefined) {
       dir = 1;
-      step = Math.min(4, step + 1);
+      step = Math.min(5, step + 1);
+      // Krok „nástroje“ len ak niečo z vybraných jazykov chýba.
+      if (step === 3) {
+        await app.tools.status();
+        if (!missingTools(app).length) step = 4;
+      }
       if (step === 1) {
         flux.i18nList().then((list) => {
           if (Array.isArray(list) && list.length > languages.length) {
             languages = list;
-            if (step === 1) render(false);
+            // Obnoviť len zoznam – celý krok by sa prekreslil počas animácie.
+            const list2 = el.querySelector('.ob-body:not(.leaving) .ob-list');
+            if (step === 1 && list2) list2.outerHTML = langList();
           }
         });
       }
@@ -130,6 +176,7 @@ export function createOnboarding(app) {
     if (b.dataset.back !== undefined) {
       dir = -1;
       step = Math.max(0, step - 1);
+      if (step === 3 && !missingTools(app).length) step = 2;
       return render();
     }
     if (b.dataset.lang) {
@@ -155,6 +202,11 @@ export function createOnboarding(app) {
       b.classList.toggle('on', set.has(b.dataset.code));
       return app.saveSettings({ codeLangs: [...set] });
     }
+    if (b.dataset.installAll !== undefined) {
+      b.disabled = true;
+      for (const tc of missingTools(app)) await app.tools.install(tc.id);
+      return;
+    }
     if (b.dataset.theme) {
       mark('[data-theme]', (x) => x === b);
       return app.setCodeTheme(b.dataset.theme);
@@ -171,6 +223,13 @@ export function createOnboarding(app) {
     step = 0;
     dir = 1;
     langChanged = false;
+    app.tools.status().then(() => {
+      // Stav (nainštalované / veľkosť) na kartách jazykov, ak je krok práve otvorený.
+      for (const c of CODE_LANGS) {
+        const card = el.querySelector(`.ob-body:not(.leaving) [data-code="${c.id}"] .ob-st`);
+        if (card) card.outerHTML = cardStatus(c);
+      }
+    });
     shell();
     render();
     document.body.classList.add('onboarding');
