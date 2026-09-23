@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, net, nativeTheme, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, net, nativeTheme, screen, nativeImage } = require('electron');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
@@ -280,13 +280,26 @@ function registerIpc() {
     saveSettings();
     return { dir: target, wasOpen };
   });
+  // Tapeta je aj tak rozmazaná – stačí malá kópia (rýchlejšie a menej pamäte). Mení sa len keď sa zmení súbor.
+  let wallCache = { key: '', url: null };
   ipcMain.handle('wallpaper:get', async () => {
     const p = wallpaperPath();
     if (!p) return null;
     try {
-      const buf = await fsp.readFile(p);
-      const mime = buf[0] === 0x89 ? 'image/png' : 'image/jpeg';
-      return `data:${mime};base64,${buf.toString('base64')}`;
+      const st = await fsp.stat(p);
+      const key = `${p}:${st.mtimeMs}:${st.size}`;
+      if (wallCache.key === key) return wallCache.url;
+      const img = nativeImage.createFromPath(p);
+      let url;
+      if (img.isEmpty()) {
+        const buf = await fsp.readFile(p);
+        url = `data:${buf[0] === 0x89 ? 'image/png' : 'image/jpeg'};base64,${buf.toString('base64')}`;
+      } else {
+        const small = img.getSize().width > 640 ? img.resize({ width: 640, quality: 'good' }) : img;
+        url = `data:image/jpeg;base64,${small.toJPEG(82).toString('base64')}`;
+      }
+      wallCache = { key, url };
+      return url;
     } catch {
       return null;
     }

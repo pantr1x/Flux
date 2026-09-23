@@ -13,6 +13,7 @@ import { createCodeMap } from './codemap.js';
 import { t, setLocale, translateDom } from './i18n.js';
 import { createActivity } from './activity.js';
 import { createTools, TOOL_FILE } from './tools.js';
+import { setupEditorExtras } from './editorExtras.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -135,21 +136,36 @@ const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 
 const WEB = new Set(['html', 'htm', 'css']);
 
 // ---------- drobnosti UI ----------
+// Upozornenie vpravo dole: ikona, text, voliteľné tlačidlo a ✕. Pod myšou nezmizne.
 function toast(message, kind = 'info', ms = 4200, action = null) {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
-  el.textContent = message;
+  const ic = { error: 'x', ok: 'check', info: 'sparkle' }[kind] || 'sparkle';
+  el.innerHTML = `<span class="toast-ic">${icon(ic, 13)}</span><span class="toast-msg"></span>${
+    action ? `<button class="toast-act"></button>` : ''
+  }<button class="toast-x" title="${t('Close')}">${icon('x', 13)}</button>`;
+  el.querySelector('.toast-msg').textContent = message;
+  // Rovnaké upozornenie znova → nahradí staré, nehromadia sa.
+  for (const old of $('#toasts').children) if (old.dataset.msg === message) old.remove();
+  el.dataset.msg = message;
+  const close = () => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 220);
+  };
   if (action) {
-    el.classList.add('clickable');
-    el.title = action.label;
-    el.onclick = () => {
+    const b = el.querySelector('.toast-act');
+    b.textContent = action.label;
+    b.onclick = () => {
       el.remove();
       action.run();
     };
   }
+  el.querySelector('.toast-x').onclick = close;
+  let timer = setTimeout(close, ms);
+  el.onmouseenter = () => clearTimeout(timer);
+  el.onmouseleave = () => (timer = setTimeout(close, 1800));
   $('#toasts').append(el);
-  setTimeout(() => el.classList.add('out'), ms - 250);
-  setTimeout(() => el.remove(), ms);
+  while ($('#toasts').children.length > 4) $('#toasts').firstElementChild.remove();
 }
 
 function errorText(err) {
@@ -265,7 +281,10 @@ async function setupWallpaper() {
     applyTheme();
     load();
   });
-  window.addEventListener('focus', load); // tapeta sa mohla zmeniť
+  window.addEventListener('focus', load); // tapeta sa mohla zmeniť (hlavný proces vráti kópiu z cache)
+  // Animácie pozadia stoja, keď okno nie je aktívne.
+  window.addEventListener('blur', () => document.body.classList.add('idle'));
+  window.addEventListener('focus', () => document.body.classList.remove('idle'));
   await load();
   flux.requestBounds();
 }
@@ -359,6 +378,15 @@ function createEditor() {
     },
   });
 
+  setupEditorExtras({
+    monaco,
+    editor,
+    flux,
+    getWorkspace: () => state.workspace,
+    getFilePath: (model) => state.tabs.find((x) => x.model === model)?.path || null,
+    onFsChanged: flux.onFsChanged,
+  });
+
   // HTML / CSS: Emmet (napr. „div.card>p*3“ + Tab).
   emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
   emmetCSS(monaco, ['css', 'scss', 'less'], { tokenizer: 'standard' });
@@ -396,8 +424,9 @@ function updateProblems() {
   const decos = [...byLine.values()].map((m) => ({
     range: new monaco.Range(m.startLineNumber, 1, m.startLineNumber, 1),
     options: {
-      glyphMarginClassName: m.severity === monaco.MarkerSeverity.Error ? 'glyph-error' : 'glyph-warn',
-      glyphMarginHoverMessage: { value: m.message },
+      // Jemne ako vo VS Code: tenká čiarka pri riadku a farebné číslo riadku (žiadna bodka).
+      linesDecorationsClassName: m.severity === monaco.MarkerSeverity.Error ? 'line-err' : 'line-warn',
+      lineNumberClassName: m.severity === monaco.MarkerSeverity.Error ? 'ln-err' : 'ln-warn',
       overviewRuler: { color: m.severity === monaco.MarkerSeverity.Error ? '#ff6b7a' : '#f5b94a', position: monaco.editor.OverviewRulerLane.Left },
     },
   }));
@@ -2117,7 +2146,7 @@ function openSettings() {
       </div>
     </div>`;
   tools.bind($('#s-tools'));
-  tools.status(true).then((st) => {
+  tools.status().then((st) => {
     const box = $('#s-tools');
     if (box) box.innerHTML = st.list.map((tc) => tools.row(tc)).join('');
   });
