@@ -64,7 +64,7 @@ const DEFAULTS = {
   clearOnRun: true,
   terminalFontSize: 13,
   suggestDetails: true,
-  material: 'acrylic',
+  inertia: true,
 };
 const setting = (key) => state.settings[key] ?? DEFAULTS[key];
 
@@ -131,11 +131,20 @@ const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 
 const WEB = new Set(['html', 'htm', 'css']);
 
 // ---------- drobnosti UI ----------
-function toast(message, kind = 'info', ms = 4200) {
+function toast(message, kind = 'info', ms = 4200, action = null) {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
   el.textContent = message;
+  if (action) {
+    el.classList.add('clickable');
+    el.title = action.label;
+    el.onclick = () => {
+      el.remove();
+      action.run();
+    };
+  }
   $('#toasts').append(el);
+  setTimeout(() => el.classList.add('out'), ms - 250);
   setTimeout(() => el.remove(), ms);
 }
 
@@ -190,7 +199,8 @@ function applyTheme() {
   const accent = currentAccent();
   document.body.classList.toggle('theme-dark', dark);
   document.body.classList.toggle('theme-light', !dark);
-  document.body.classList.toggle('no-mica', !state.mica || !setting('translucent'));
+  document.body.classList.toggle('no-mica', state.material === 'none');
+  document.body.classList.toggle('wallpaper', state.material === 'wallpaper');
   document.documentElement.style.setProperty('--accent', accent);
   document.documentElement.style.setProperty('--accent-fg', readableOn(accent));
   monaco.editor.setTheme(defineMonacoTheme(monaco, setting('codeTheme'), accent));
@@ -230,6 +240,57 @@ async function saveSettings(patch) {
   state.settings = await flux.setSettings(patch);
 }
 
+// ---------- tapeta za oknom ----------
+// Rozmazaná tapeta Windows nakreslená priamo vo Fluxe, posúva sa spolu s oknom.
+let wallpaperUrl = null;
+async function setupWallpaper() {
+  const layer = document.createElement('div');
+  layer.id = 'wall';
+  layer.innerHTML = '<div class="wall-img"></div>';
+  document.body.prepend(layer);
+  const img = layer.firstChild;
+  const load = async () => {
+    if (state.material !== 'wallpaper') return;
+    const url = await flux.wallpaper();
+    if (url && url !== wallpaperUrl) {
+      wallpaperUrl = url;
+      img.style.backgroundImage = `url("${url}")`;
+    }
+  };
+  flux.onBounds(({ x, y, dw, dh }) => {
+    img.style.width = `${dw}px`;
+    img.style.height = `${dh}px`;
+    img.style.transform = `translate(${-x}px, ${-y}px)`;
+  });
+  flux.onMaterial((m) => {
+    state.material = m;
+    applyTheme();
+    load();
+  });
+  window.addEventListener('focus', load); // tapeta sa mohla zmeniť
+  await load();
+  flux.requestBounds();
+}
+
+// Čas v projekte: každých 30 s, ak je okno aktívne a za posledné 2 minúty si niečo robil.
+let lastActivity = Date.now();
+function trackTime() {
+  for (const ev of ['keydown', 'mousedown', 'mousemove', 'wheel']) window.addEventListener(ev, () => (lastActivity = Date.now()), { passive: true, capture: true });
+  setInterval(() => {
+    if (state.workspace && document.hasFocus() && Date.now() - lastActivity < 120000) flux.addProjectTime(state.workspace, 30);
+  }, 30000);
+}
+
+function formatTime(secs) {
+  const m = Math.round(secs / 60);
+  if (m < 1) return 'menej ako minúta';
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h} h ${m % 60 ? `${m % 60} min` : ''}`.trim();
+}
+
+const fmtNum = (n) => n.toLocaleString('sk-SK');
+
 // ---------- editor ----------
 let editor;
 let codemap;
@@ -243,7 +304,7 @@ function createEditor() {
     automaticLayout: true,
     minimap: { enabled: false },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
-    smoothScrolling: true,
+    smoothScrolling: false,
     cursorBlinking: 'smooth',
     cursorSmoothCaretAnimation: 'on',
     renderLineHighlight: 'all',
@@ -270,6 +331,12 @@ function createEditor() {
   showSuggestDetails(setting('suggestDetails'));
   codemap = createCodeMap(monaco, editor, $('#codemap'));
   codemap.setVisible(setting('minimap'));
+
+  inertiaScroll();
+  monaco.editor.onDidChangeMarkers((uris) => {
+    const m = editor.getModel();
+    if (m && uris.some((u) => u.toString() === m.uri.toString())) updateProblems();
+  });
 
   editor.onDidChangeCursorPosition((e) => {
     $('#st-pos').textContent = `Riadok ${e.position.lineNumber} · Stĺpec ${e.position.column}`;
@@ -303,6 +370,121 @@ function createEditor() {
     target: monaco.typescript.ScriptTarget.ESNext,
     lib: ['esnext', 'dom', 'dom.iterable'],
   });
+}
+
+// ---------- chyby v kóde ----------
+const problemsOf = (model) =>
+  monaco.editor
+    .getModelMarkers({ resource: model.uri })
+    .filter((m) => m.severity >= monaco.MarkerSeverity.Warning)
+    .sort((a, b) => b.severity - a.severity || a.startLineNumber - b.startLineNumber);
+
+// Červená / žltá značka pri riadku s chybou + počet chýb dole v stavovom riadku.
+function updateProblems() {
+  const tab = activeTab();
+  const el = $('#st-problems');
+  if (!tab) {
+    el.hidden = true;
+    return;
+  }
+  const list = problemsOf(tab.model);
+  const errors = list.filter((m) => m.severity === monaco.MarkerSeverity.Error).length;
+  const warns = list.length - errors;
+  const byLine = new Map();
+  for (const m of list) if (!byLine.has(m.startLineNumber)) byLine.set(m.startLineNumber, m);
+  const decos = [...byLine.values()].map((m) => ({
+    range: new monaco.Range(m.startLineNumber, 1, m.startLineNumber, 1),
+    options: {
+      glyphMarginClassName: m.severity === monaco.MarkerSeverity.Error ? 'glyph-error' : 'glyph-warn',
+      glyphMarginHoverMessage: { value: m.message },
+      overviewRuler: { color: m.severity === monaco.MarkerSeverity.Error ? '#ff6b7a' : '#f5b94a', position: monaco.editor.OverviewRulerLane.Left },
+    },
+  }));
+  if (tab.problemDecos) tab.problemDecos.clear();
+  tab.problemDecos = editor.createDecorationsCollection(decos);
+  el.hidden = false;
+  el.className = `status-item${errors ? ' err' : warns ? ' warn' : ' ok'}`;
+  el.innerHTML = errors || warns
+    ? `${errors ? `<span class="pb pb-e">●</span>${errors}` : ''} ${warns ? `<span class="pb pb-w">▲</span>${warns}` : ''}`.trim()
+    : `${icon('check', 13)}Bez chýb`;
+  el.title = errors || warns ? 'Klikni pre zoznam chýb' : 'V tomto súbore nie sú chyby';
+}
+
+function showProblems() {
+  const tab = activeTab();
+  if (!tab) return;
+  const list = problemsOf(tab.model);
+  if (!list.length) return toast('V tomto súbore nie sú žiadne chyby. 👍');
+  openPalette({
+    placeholder: `Chyby v ${basename(tab.path)}`,
+    items: list.map((m) => ({
+      label: `Riadok ${m.startLineNumber}: ${m.message.split('\n')[0]}`,
+      icon: `<span class="pb ${m.severity === monaco.MarkerSeverity.Error ? 'pb-e' : 'pb-w'}">${m.severity === monaco.MarkerSeverity.Error ? '●' : '▲'}</span>`,
+      m,
+    })),
+    onPick: ({ m }) => {
+      editor.setSelection(new monaco.Selection(m.startLineNumber, m.startColumn, m.endLineNumber, m.endColumn));
+      editor.revealRangeInCenter(new monaco.Range(m.startLineNumber, m.startColumn, m.endLineNumber, m.endColumn));
+      editor.focus();
+    },
+  });
+}
+
+// Po uložení (Ctrl+S) upozorní na chybu – klik na upozornenie ťa na ňu prenesie.
+function announceProblems() {
+  const tab = activeTab();
+  if (!tab) return;
+  setTimeout(() => {
+    const errors = problemsOf(tab.model).filter((m) => m.severity === monaco.MarkerSeverity.Error);
+    if (!errors.length) return;
+    const m = errors[0];
+    toast(`Chyba na riadku ${m.startLineNumber}: ${m.message.split('\n')[0]}${errors.length > 1 ? `  (+${errors.length - 1} ďalšie)` : ''}`, 'error', 6000, {
+      label: 'Prejsť na chybu',
+      run: () => {
+        editor.setPosition({ lineNumber: m.startLineNumber, column: m.startColumn });
+        editor.revealLineInCenter(m.startLineNumber);
+        editor.focus();
+      },
+    });
+  }, 700);
+}
+
+// ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
+function inertiaScroll() {
+  const node = $('#editor');
+  let velocity = 0;
+  let frame = 0;
+  let last = 0;
+  const step = (t) => {
+    const dt = Math.min(34, t - last) / 16.67;
+    last = t;
+    editor.setScrollTop(editor.getScrollTop() + velocity * dt);
+    velocity *= Math.pow(0.9, dt);
+    if (Math.abs(velocity) < 0.25) {
+      velocity = 0;
+      frame = 0;
+      return;
+    }
+    frame = requestAnimationFrame(step);
+  };
+  node.addEventListener(
+    'wheel',
+    (e) => {
+      if (!setting('inertia') || e.ctrlKey || e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (e.target.closest('.suggest-widget, .monaco-hover, .parameter-hints-widget, .find-widget')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const dy = e.deltaMode === 1 ? e.deltaY * editor.getOption(monaco.editor.EditorOption.lineHeight) : e.deltaY;
+      // Zmena smeru zastaví pohyb hneď.
+      if (Math.sign(dy) !== Math.sign(velocity)) velocity = 0;
+      velocity += dy * 0.14;
+      if (!frame) {
+        last = performance.now();
+        frame = requestAnimationFrame(step);
+      }
+    },
+    { capture: true, passive: false },
+  );
 }
 
 // Popis vybraného návrhu vedľa zoznamu (ako vo VS Code). Monaco si to pamätá vo svojom úložisku.
@@ -354,7 +536,7 @@ const isDirty = (t) => !t.readonly && t.model.getAlternativeVersionId() !== t.sa
 function createTab(path, model, readonly) {
   const lang = model.getLanguageId();
   model.updateOptions({ tabSize: ['python', 'java', 'csharp', 'rust', 'go', 'c', 'cpp'].includes(lang) ? 4 : 2, insertSpaces: true });
-  const tab = { path, model, readonly, viewState: null, savedVersion: model.getAlternativeVersionId(), runLines: [], decorations: null };
+  const tab = { isNew: true, path, model, readonly, viewState: null, savedVersion: model.getAlternativeVersionId(), runLines: [], decorations: null };
   model.onDidChangeContent(() => {
     if (!extOf(path) && model.getLanguageId() === 'plaintext') {
       const lang = guessLang(model.getValue());
@@ -476,6 +658,7 @@ function activate(tab) {
     tab.initialCursor = null;
   }
   updateRunGlyphs(tab);
+  updateProblems();
   $('#welcome').hidden = true;
   if (inside(tab.path)) {
     state.selected = tab.path;
@@ -555,7 +738,8 @@ function renderTabs() {
   el.innerHTML = '';
   for (const tab of state.tabs) {
     const div = document.createElement('div');
-    div.className = `tab${tab === state.active ? ' active' : ''}${isDirty(tab) ? ' dirty' : ''}`;
+    div.className = `tab${tab === state.active ? ' active' : ''}${isDirty(tab) ? ' dirty' : ''}${tab.isNew ? ' enter' : ''}`;
+    tab.isNew = false;
     div.title = tab.path;
     div.innerHTML = `${fileIcon(basename(tab.path), tab.model.getLanguageId())}<span class="name"></span>${tab.readonly ? '<span class="readonly">iba čítanie</span>' : ''}<button class="close" title="Zavrieť (Ctrl+W)">${icon('x', 13)}</button>`;
     div.querySelector('.name').textContent = basename(tab.path);
@@ -905,7 +1089,9 @@ async function setWorkspace(dir) {
   renderLive();
   renderProjects();
   applyTheme();
+  $('#tree').classList.add('switching');
   await refreshTree();
+  setTimeout(() => $('#tree').classList.remove('switching'), 600);
   renderWelcome();
   await detectPython();
   lsp.start(opened, state.python?.path);
@@ -925,10 +1111,22 @@ async function renderProjects() {
     list
       .map(
         (p) =>
-          `<button class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}\nPravý klik = pripnúť, premenovať…">${kindIcon(p.kind)}<span>${escapeHtml(p.name)}</span>${p.pinned ? `<i class="pin">${icon('pin', 12)}</i>` : ''}</button>`,
+          `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}\nPravý klik = premenovať, odstrániť">${kindIcon(p.kind)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? 'Odopnúť' : 'Pripnúť hore'}">${icon('pin', 13)}</button></div>`,
       )
       .join('') +
     `<button class="pr-row pr-new" data-act="new">${icon('plus', 16)}<span>Nový projekt</span></button>`;
+  const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
+  if (current && state.projectKind !== current.kind) {
+    state.projectKind = current.kind;
+    if (!state.active) renderWelcome();
+  }
+  // Pod každým projektom: čas a počet súborov.
+  for (const p of list) {
+    flux.projectStats(p.dir).then((st) => {
+      const sub = [...el.querySelectorAll('.pr-sub')].find((x) => x.dataset.stats === p.dir);
+      if (sub) sub.textContent = `${st.time >= 60 ? formatTime(st.time) + ' · ' : ''}${st.files} ${st.files === 1 ? 'súbor' : st.files >= 2 && st.files <= 4 ? 'súbory' : 'súborov'}`;
+    });
+  }
 }
 
 // Nový projekt: typ → názov → vytvorí priečinok (Dokumenty\Flux projekty) so základným súborom.
@@ -1000,7 +1198,14 @@ async function renameProject(dir) {
 function projectEvents() {
   const el = $('#projects');
   el.onclick = async (e) => {
-    const b = e.target.closest('button');
+    const pin = e.target.closest('[data-pin]');
+    if (pin) {
+      const row = pin.closest('[data-dir]');
+      await flux.pinProject(row.dataset.dir, !row.dataset.pinned);
+      state.settings = await flux.setSettings({});
+      return renderProjects();
+    }
+    const b = e.target.closest('button, .pr-row');
     if (!b) return;
     if (b.dataset.act === 'open') return openFolderDialog();
     if (b.dataset.act === 'new') return newProject();
@@ -1582,6 +1787,7 @@ function commands() {
       if (pkg) pipInstall(pkg);
     }, '', 'download'),
     c('Python: reštartovať autocomplete', () => lsp.start(state.workspace, state.python?.path), '', 'refresh'),
+    c('Zobraziť chyby v súbore', showProblems, '', 'x', 'problémy errors chyby'),
     c('Zväčšiť písmo', () => setFontSize(1), 'Ctrl+=', ''),
     c('Zmenšiť písmo', () => setFontSize(-1), 'Ctrl+-', ''),
   ];
@@ -1708,8 +1914,7 @@ function openSettings() {
           <div class="accent-grid">${Object.keys(ACCENTS)
             .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? 'čiernobiela (ako Zen)' : name}"></button>`)
             .join('')}<label class="custom-color" title="Vlastná farba"><input type="color" value="${accent}" data-custom-accent></label></div>
-          ${state.mica ? toggle('translucent', 'Priesvitné okno', 'cez okno presvitá tapeta (Windows 11)') : ''}
-          ${state.mica ? `<label class="s-row"><span><b>Druh priesvitnosti</b><small>Acrylic = rozmazaná tapeta, Mica = jemný nádych farby tapety. Keď okno nie je aktívne, Windows ho vždy zosivie.</small></span><select data-key="material">${opt('acrylic', 'Acrylic', setting('material'))}${opt('mica', 'Mica', setting('material'))}</select></label>` : ''}
+          ${state.platform === 'win32' ? `<label class="s-row"><span><b>Priesvitnosť okna</b><small>„Tapeta“ ostane priesvitná aj keď okno nie je aktívne. Acrylic/Mica robí Windows a vtedy okno zosivie.</small></span><select data-key="material">${[state.hasWallpaper && ['wallpaper', 'Tapeta (odporúčané)'], state.mica && ['acrylic', 'Acrylic (Windows)'], state.mica && ['mica', 'Mica (Windows)'], ['none', 'Vypnutá']].filter(Boolean).map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
         </section>
         <section>
           <h3>Editor</h3>
@@ -1719,6 +1924,7 @@ function openSettings() {
           ${toggle('ligatures', 'Ligatúry', 'spojené znaky ako => a != (napr. v Cascadia Code)')}
           ${toggle('minimap', 'Minimapa', 'zmenšený náhľad kódu vpravo')}
           ${toggle('wordWrap', 'Zalamovať dlhé riadky')}
+          ${toggle('inertia', 'Plynulé posúvanie so zotrvačnosťou', 'po pustení kolieska text ešte chvíľu dokĺže')}
           ${toggle('suggestDetails', 'Popis návrhov vedľa zoznamu', 'dokumentácia vybranej funkcie ako vo VS Code')}
           ${toggle('autosave', 'Automatické ukladanie', 'uloží súbor chvíľu po písaní')}
         </section>
@@ -1772,7 +1978,7 @@ function openSettings() {
     if (el.type === 'number' || key === 'lineHeight') value = Number(value);
     await saveSettings({ [key]: value });
     if (key === 'suggestDetails') showSuggestDetails(value);
-    if (key === 'translucent') applyTheme();
+    if (key === 'material') await saveSettings({ translucent: true });
     applyEditorSettings();
     renderStatus();
   };
@@ -1852,43 +2058,50 @@ function closeStart() {
 // ---------- uvítanie ----------
 function renderWelcome() {
   if (state.active) return;
+  updateProblems();
   const w = $('#welcome');
   w.hidden = false;
-  const recent = (state.settings.recent || []).filter((d) => d !== state.workspace).slice(0, 5);
-  const recentHtml = recent.length
-    ? `<p class="welcome-section">Nedávne</p><div class="recent">${recent
-        .map((d) => `<button data-dir="${escapeAttr(d)}"><span>${escapeHtml(basename(d))}</span><span class="path">${escapeHtml(d)}</span></button>`)
-        .join('')}</div>`
-    : '';
   const ws = state.workspace;
+  const projectIcon = (kind) =>
+    (kind === 'python' ? fileIcon('a.py') : kind === 'web' ? fileIcon('a.html') : icon('folder', 16)).replace(/width="16" height="16"/, 'width="40" height="40"');
   w.innerHTML = `
     <div class="welcome-inner">
-      <h1><span class="brand-mark">${icon('code', 15)}</span>${ws ? escapeHtml(basename(ws)) : 'flux'}</h1>
-      <p class="sub">${ws ? 'Vyber súbor vľavo alebo vytvor nový.' : 'Otvor priečinok s projektom a spúšťaj kód jedným klikom.'}</p>
+      <div class="wl-head">
+        <span class="wl-icon">${ws ? projectIcon(state.projectKind) : `<span class="brand-mark big">${icon('code', 22)}</span>`}</span>
+        <div><h1>${ws ? escapeHtml(basename(ws)) : 'flux'}</h1>
+        <p class="sub">${ws ? escapeHtml(ws) : 'Otvor priečinok s projektom a spúšťaj kód jedným klikom.'}</p></div>
+      </div>
+      ${ws ? `<div class="stats" id="wl-stats">${['Čas v projekte', 'Súbory', 'Riadky', 'Znaky'].map((l) => `<div class="stat"><b>–</b><span>${l}</span></div>`).join('')}</div>` : ''}
       <div class="welcome-actions">
         ${ws
-          ? `<button class="primary" data-act="new">${icon('filePlus')}Nový súbor</button><button data-act="quick">${icon('command')}Nájsť súbor</button>`
-          : `<button class="primary" data-act="open">${icon('folderOpen')}Otvoriť priečinok</button>`}
+          ? `<button class="primary" data-act="new">${icon('filePlus')}Nový súbor</button><button data-act="quick">${icon('command')}Nájsť súbor</button><button data-act="start">${icon('template')}Šablóny</button>`
+          : `<button class="primary" data-act="open">${icon('folderOpen')}Otvoriť priečinok</button><button data-act="newproject">${icon('plus')}Nový projekt</button>`}
       </div>
-      ${recentHtml}
       <p class="welcome-section">Skratky</p>
       <div class="shortcuts">
         <span>Spustiť súbor / živý náhľad webu</span><span><kbd>F5</kbd></span>
-        <span>Zastaviť program</span><span><kbd>Shift</kbd> <kbd>F5</kbd></span>
-        <span>Live Server</span><span><kbd>Alt</kbd> <kbd>L</kbd></span>
+        <span>Nový súbor zo šablóny</span><span><kbd>Ctrl</kbd> <kbd>N</kbd></span>
         <span>Nájsť súbor</span><span><kbd>Ctrl</kbd> <kbd>P</kbd></span>
         <span>Všetky príkazy</span><span><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd></span>
-        <span>Skryť bočný panel</span><span><kbd>Ctrl</kbd> <kbd>B</kbd></span>
       </div>
     </div>`;
   w.onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.dir) setWorkspace(b.dataset.dir);
-    else if (b.dataset.act === 'open') openFolderDialog();
+    if (b.dataset.act === 'open') openFolderDialog();
     else if (b.dataset.act === 'new') newFile();
     else if (b.dataset.act === 'quick') quickOpen();
+    else if (b.dataset.act === 'start') openStart();
+    else if (b.dataset.act === 'newproject') newProject();
   };
+  if (ws) {
+    flux.projectStats(ws).then((st) => {
+      const el = $('#wl-stats');
+      if (!el || state.workspace !== ws) return;
+      const vals = [formatTime(st.time), fmtNum(st.files), fmtNum(st.lines), fmtNum(st.chars)];
+      el.querySelectorAll('.stat b').forEach((b, i) => (b.textContent = vals[i]));
+    });
+  }
 }
 
 // ---------- klávesové skratky ----------
@@ -1947,7 +2160,7 @@ function keybindings() {
       else if (e.key === 'F5' || (ctrl && e.key === 'Enter')) run();
       else if (ctrl && e.shiftKey && key === 'p') openCommandPalette();
       else if (ctrl && !e.shiftKey && key === 'p') quickOpen();
-      else if (ctrl && key === 's') e.shiftKey ? saveAll() : saveTab(activeTab());
+      else if (ctrl && key === 's') e.shiftKey ? saveAll() : saveTab(activeTab()).then(() => announceProblems());
       else if (ctrl && key === 'o') openFolderDialog();
       else if (ctrl && e.shiftKey && key === 'n') newProject();
       else if (ctrl && key === 'n') newFile();
@@ -2035,6 +2248,7 @@ function layoutEvents() {
   $('#btn-panel').onclick = () => showPanel($('#panel').classList.contains('collapsed'));
   $('#st-python').onclick = pythonMenu;
   $('#st-autosave').onclick = toggleAutosave;
+  $('#st-problems').onclick = showProblems;
   $('#st-live').onclick = () => state.live && flux.openExternal($('#preview-frame').src || state.live.url);
   $('#btn-preview-reload').onclick = () => {
     const f = $('#preview-frame');
@@ -2074,12 +2288,15 @@ async function main() {
   const init = await flux.init();
   state.platform = init.platform;
   state.mica = !!init.mica;
+  state.material = init.material;
+  state.hasWallpaper = !!init.hasWallpaper;
   state.settings = init.settings;
   // Jednorazovo: staré verzie ukladali fialovú ako predvolenú – nová predvolená je čiernobiela (ako Zen).
   if (!state.settings.monoMigrated) await saveSettings({ monoMigrated: true, accent: 'mono', accents: {} });
   document.body.classList.add(`platform-${state.platform}`);
 
   setIcons();
+  setupWallpaper();
   createEditor();
   registerSnippets();
   createLanguageClient();
@@ -2088,6 +2305,7 @@ async function main() {
   treeEvents();
   projectEvents();
   renderProjects();
+  trackTime();
   keybindings();
   layoutEvents();
   renderRunButton();

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, net, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, net, nativeTheme, screen } = require('electron');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
@@ -35,6 +35,40 @@ function saveSettings() {
   } catch {}
 }
 
+// ---------- priesvitnosť ----------
+// „wallpaper“: Flux si sám nakreslí rozmazanú tapetu – vyzerá priesvitne aj keď okno nie je aktívne
+// (Acrylic/Mica od Windows vtedy okno vždy zosivia).
+function wallpaperPath() {
+  if (process.env.FLUX_WALLPAPER) return process.env.FLUX_WALLPAPER;
+  if (!isWin || !process.env.APPDATA) return null;
+  const p = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
+  return fs.existsSync(p) ? p : null;
+}
+
+function materialMode() {
+  let m = settings.material || 'wallpaper';
+  if (settings.translucent === false) m = 'none';
+  if (m === 'wallpaper' && !wallpaperPath()) m = mica ? 'acrylic' : 'none';
+  if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
+  return m;
+}
+
+function applyMaterial() {
+  if (!win) return;
+  const m = materialMode();
+  const dark = settings.theme !== 'light';
+  if (mica) win.setBackgroundMaterial(m === 'acrylic' || m === 'mica' ? m : 'none');
+  win.setBackgroundColor(m === 'acrylic' || m === 'mica' ? '#00000000' : dark ? '#26262c' : '#ececf1');
+  send('app:material', m);
+}
+
+function sendBounds() {
+  if (!win) return;
+  const b = win.getContentBounds();
+  const d = screen.getDisplayMatching(b).bounds;
+  send('win:bounds', { x: b.x - d.x, y: b.y - d.y, dw: d.width, dh: d.height });
+}
+
 // ---------- okno ----------
 let win = null;
 let workspace = null;
@@ -62,11 +96,11 @@ function createWindow() {
     minHeight: 480,
     show: false,
     title: 'Flux',
-    backgroundColor: mica ? '#00000000' : dark ? '#26262c' : '#ececf1',
+    backgroundColor: ['acrylic', 'mica'].includes(materialMode()) ? '#00000000' : dark ? '#26262c' : '#ececf1',
     // Windows 11: vlastná horná lišta s natívnymi tlačidlami a efekt Mica (priesvitné pozadie).
     titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
     titleBarOverlay: isWin ? { color: '#00000000', symbolColor: dark ? '#e8e8ef' : '#1d1d24', height: 44 } : false,
-    backgroundMaterial: mica && settings.translucent !== false ? (settings.material === 'mica' ? 'mica' : 'acrylic') : undefined,
+    backgroundMaterial: ['acrylic', 'mica'].includes(materialMode()) ? materialMode() : undefined,
     icon: fs.existsSync(ICON) ? ICON : undefined,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
@@ -107,6 +141,8 @@ function createWindow() {
   win.on('closed', () => {
     win = null;
   });
+  for (const ev of ['move', 'resize', 'maximize', 'unmaximize', 'restore']) win.on(ev, sendBounds);
+  win.webContents.on('did-finish-load', sendBounds);
 }
 
 // ---------- pracovný priečinok ----------
@@ -151,6 +187,8 @@ function registerIpc() {
   ipcMain.handle('app:init', () => ({
     platform: process.platform,
     mica,
+    material: materialMode(),
+    hasWallpaper: !!wallpaperPath(),
     settings,
     version: app.getVersion(),
     lastFolder: settings.lastFolder && fs.existsSync(settings.lastFolder) ? settings.lastFolder : null,
@@ -162,9 +200,7 @@ function registerIpc() {
       win.setTitleBarOverlay({ color: '#00000000', symbolColor: patch.theme === 'light' ? '#1d1d24' : '#e8e8ef', height: 44 });
     }
     if (patch.theme) nativeTheme.themeSource = patch.theme;
-    if (win && mica && ('material' in patch || 'translucent' in patch)) {
-      win.setBackgroundMaterial(settings.translucent === false ? 'none' : settings.material === 'mica' ? 'mica' : 'acrylic');
-    }
+    if ('material' in patch || 'translucent' in patch || 'theme' in patch) applyMaterial();
     return settings;
   });
   ipcMain.on('app:dirty', (_e, count) => {
@@ -226,6 +262,27 @@ function registerIpc() {
     saveSettings();
     return { dir: target, wasOpen };
   });
+  ipcMain.handle('wallpaper:get', async () => {
+    const p = wallpaperPath();
+    if (!p) return null;
+    try {
+      const buf = await fsp.readFile(p);
+      const mime = buf[0] === 0x89 ? 'image/png' : 'image/jpeg';
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  });
+  ipcMain.on('win:bounds?', sendBounds);
+
+  // Čas strávený v projekte (počíta sa len keď je okno aktívne a niečo robíš).
+  ipcMain.on('project:add-time', (_e, dir, secs) => {
+    if (!dir || !(secs > 0)) return;
+    settings.projectTime = settings.projectTime || {};
+    settings.projectTime[dir] = (settings.projectTime[dir] || 0) + Math.min(secs, 120);
+    saveSettings();
+  });
+  ipcMain.handle('project:stats', (_e, dir) => projectStats(dir));
   ipcMain.handle('project:root', () => path.join(app.getPath('documents'), 'Flux projekty'));
   ipcMain.handle('project:create', async (_e, name, root) => {
     if (!/^[^\\/:*?"<>|]+$/.test(name) || name.trim() !== name) throw new Error('Neplatný názov projektu.');
@@ -459,6 +516,52 @@ async function projectKind(dir) {
   await scan(dir, 0);
   if (!py && !web) return 'folder';
   return py >= web ? 'python' : 'web';
+}
+
+// Štatistiky projektu: súbory, riadky, znaky, čas.
+const statsCache = new Map();
+const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql)$/i;
+async function projectStats(dir) {
+  const cached = statsCache.get(dir);
+  if (cached && Date.now() - cached.at < 20000) return { ...cached.data, time: settings.projectTime?.[dir] || 0 };
+  let files = 0;
+  let lines = 0;
+  let chars = 0;
+  let lastModified = 0;
+  const kinds = {};
+  const walk = async (d, depth) => {
+    if (depth > 8 || files > 5000) return;
+    let entries = [];
+    try {
+      entries = await fsp.readdir(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (IGNORED_DIRS.has(e.name) || e.name.startsWith('.') || e.name === 'venv') continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) {
+        await walk(p, depth + 1);
+        continue;
+      }
+      files++;
+      const ext = path.extname(e.name).slice(1).toLowerCase() || '—';
+      kinds[ext] = (kinds[ext] || 0) + 1;
+      try {
+        const st = await fsp.stat(p);
+        lastModified = Math.max(lastModified, st.mtimeMs);
+        if (TEXT_EXT.test(e.name) && st.size < 2 * 1024 * 1024) {
+          const text = await fsp.readFile(p, 'utf8');
+          chars += text.length;
+          lines += text ? text.split('\n').length : 0;
+        }
+      } catch {}
+    }
+  };
+  await walk(dir, 0);
+  const data = { files, lines, chars, lastModified, kinds };
+  statsCache.set(dir, { at: Date.now(), data });
+  return { ...data, time: settings.projectTime?.[dir] || 0 };
 }
 
 // ---------- štart ----------

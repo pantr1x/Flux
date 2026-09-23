@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('flux', {
   createProject: (name, root) => ipcRenderer.invoke('project:create', name, root),
   chooseProjectRoot: () => ipcRenderer.invoke('project:choose-root'),
   readImage: (file) => ipcRenderer.invoke('fs:read-image', file),
+  projectStats: (dir) => ipcRenderer.invoke('project:stats', dir),
+  addProjectTime: (dir, secs) => ipcRenderer.send('project:add-time', dir, secs),
+  wallpaper: () => ipcRenderer.invoke('wallpaper:get'),
+  requestBounds: () => ipcRenderer.send('win:bounds?'),
+  onBounds: on('win:bounds'),
+  onMaterial: on('app:material'),
 
   list: (dir) => ipcRenderer.invoke('fs:list', dir),
   listAll: () => ipcRenderer.invoke('fs:list-all'),
