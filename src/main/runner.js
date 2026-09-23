@@ -17,8 +17,10 @@ try {
 } catch {}
 
 // Čím spustiť ktorý typ súboru (ako rozšírenie „Code Runner“ vo VS Code).
-function commandFor(file, python) {
+function commandFor(file, python, lang) {
   const ext = path.extname(file).toLowerCase();
+  // Súbor bez prípony, ktorý editor rozpoznal ako Python.
+  if (!ext && lang === 'python') return python ? { cmd: python, args: ['-u', file] } : null;
   switch (ext) {
     case '.py':
     case '.pyw':

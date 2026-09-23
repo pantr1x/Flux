@@ -11,19 +11,21 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Tmavá téma: neutrálna sivá ako Zen, nie čierna. Na Windows 11 cez ňu presvitá Acrylic. */
 body.theme-dark {
-  --base: #121218;
-  --base-alpha: rgba(18, 18, 24, 0.72);
-  --card: #1a1a22;
-  --card-2: #20202a;
+  --base: #26262c;
+  --base-alpha: rgba(38, 38, 45, 0.38);
+  --card: rgba(46, 46, 54, 0.74);
+  --card-solid: #2d2d34;
+  --card-2: rgba(255, 255, 255, 0.045);
   --line: rgba(255, 255, 255, 0.07);
   --line-strong: rgba(255, 255, 255, 0.12);
   --text: #e8e8ef;
   --text-2: #a4a4b3;
-  --text-3: #6f6f80;
-  --hover: rgba(255, 255, 255, 0.06);
-  --active: rgba(255, 255, 255, 0.1);
-  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --text-3: #85858f;
+  --hover: rgba(255, 255, 255, 0.07);
+  --active: rgba(255, 255, 255, 0.11);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.07);
   --ok: #3ecf8e;
   --err: #ff6b7a;
   --warn: #f5b94a;
@@ -31,10 +33,11 @@ body.theme-dark {
 }
 
 body.theme-light {
-  --base: #e9e9f0;
-  --base-alpha: rgba(233, 233, 240, 0.7);
-  --card: #fbfbfd;
-  --card-2: #f2f2f6;
+  --base: #ececf1;
+  --base-alpha: rgba(240, 240, 246, 0.45);
+  --card: rgba(255, 255, 255, 0.74);
+  --card-solid: #f8f8fb;
+  --card-2: rgba(0, 0, 0, 0.035);
   --line: rgba(0, 0, 0, 0.07);
   --line-strong: rgba(0, 0, 0, 0.12);
   --text: #1d1d24;
@@ -65,15 +68,24 @@ body {
   color: var(--text);
   /* Gradient vo farbe priečinka – na Windows 11 cez neho presvitá Mica. */
   background:
-    radial-gradient(1200px 700px at -10% -20%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 60%),
-    radial-gradient(900px 600px at 110% 120%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+    radial-gradient(1200px 700px at -10% -20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(900px 600px at 110% 120%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%),
     var(--base-alpha);
   user-select: none;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Bez priesvitnosti (Windows 10, Linux): plné farby. */
 body.no-mica {
   background-color: var(--base);
+}
+
+body.theme-dark.no-mica {
+  --card: #2f2f37;
+}
+
+body.theme-light.no-mica {
+  --card: #fbfbfd;
 }
 
 button {
@@ -391,7 +403,7 @@ body.compact #sidebar {
   bottom: 0;
   left: 0;
   padding-bottom: var(--gap);
-  background: var(--card);
+  background: var(--card-solid);
   border-radius: 0 var(--radius) var(--radius) 0;
   box-shadow: var(--shadow);
   transform: translateX(-105%);
@@ -620,6 +632,7 @@ body.compact #btn-expand {
 
 /* ---------- hlavná karta ---------- */
 #card {
+  backdrop-filter: blur(24px);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -653,7 +666,7 @@ body.compact #btn-expand {
   inset: 0;
   display: grid;
   place-items: center;
-  background: var(--card);
+  background: transparent;
   overflow: auto;
 }
 
@@ -1045,7 +1058,7 @@ button.status-item:hover {
 
 #palette {
   width: min(620px, 92vw);
-  background: var(--card);
+  background: var(--card-solid);
   border-radius: 16px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-strong);
   overflow: hidden;
@@ -1152,7 +1165,7 @@ button.status-item:hover {
   max-width: 380px;
   padding: 10px 14px;
   border-radius: 12px;
-  background: var(--card);
+  background: var(--card-solid);
   box-shadow: var(--shadow);
   border-left: 3px solid var(--accent);
   animation: rise 0.2s var(--ease);
@@ -1195,4 +1208,27 @@ button.status-item:hover {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Tenké posuvníky bez šípok (terminál, strom, paleta). */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hover);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--active);
 }

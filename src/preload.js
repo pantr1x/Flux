@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('flux', {
   choosePython: () => ipcRenderer.invoke('python:choose'),
   resetPython: () => ipcRenderer.invoke('python:reset'),
 
-  runFile: (file, python) => ipcRenderer.invoke('run:file', file, python),
+  runFile: (file, python, lang) => ipcRenderer.invoke('run:file', file, python, lang),
   pipInstall: (python, pkg) => ipcRenderer.invoke('run:pip', python, pkg),
   createVenv: (python) => ipcRenderer.invoke('run:create-venv', python),
   input: (text) => ipcRenderer.send('run:input', text),

@@ -74,6 +74,17 @@ const LANGS = {
 const LANG_NAMES = { python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', html: 'HTML', css: 'CSS', json: 'JSON', markdown: 'Markdown', plaintext: 'Text' };
 const langFor = (p) => LANGS[extOf(p)] || 'plaintext';
 
+// Súbor bez prípony (napr. „test“) – jazyk odhadneme podľa obsahu, aby mal farby.
+function guessLang(text) {
+  const head = text.slice(0, 4000);
+  if (/^#!.*python/.test(head)) return 'python';
+  if (/^#!.*\b(ba|z)?sh\b/.test(head)) return 'shell';
+  if (/^\s*<(!doctype|html|head|body|div)\b/i.test(head)) return 'html';
+  if (/^\s*(import \w|from [\w.]+ import |def \w+\(|class \w+[:(]|print\(|if __name__|for \w+ in |while .+:\s*$)/m.test(head)) return 'python';
+  return 'plaintext';
+}
+const langOf = (path, text) => (extOf(path) ? langFor(path) : guessLang(text));
+
 const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh']);
 const WEB = new Set(['html', 'htm', 'css']);
 
@@ -131,12 +142,12 @@ function defineThemes(accent) {
       { token: 'metatag', foreground: 'f7768e' },
     ],
     colors: {
-      'editor.background': '#1a1a22',
+      'editor.background': '#00000000',
       'editor.foreground': '#e2e2ea',
-      'editorGutter.background': '#1a1a22',
+      'editorGutter.background': '#00000000',
       'editor.lineHighlightBackground': '#ffffff07',
       'editor.lineHighlightBorder': '#00000000',
-      'editorLineNumber.foreground': '#44445a',
+      'editorLineNumber.foreground': '#5e5e6a',
       'editorLineNumber.activeForeground': '#a4a4b3',
       'editorCursor.foreground': accent,
       'editor.selectionBackground': `#${a}44`,
@@ -144,21 +155,21 @@ function defineThemes(accent) {
       'editor.wordHighlightBackground': '#ffffff10',
       'editorIndentGuide.background1': '#ffffff0b',
       'editorIndentGuide.activeBackground1': '#ffffff22',
-      'editorWidget.background': '#22222c',
+      'editorWidget.background': '#34343c',
       'editorWidget.border': '#ffffff14',
-      'editorSuggestWidget.background': '#22222c',
+      'editorSuggestWidget.background': '#34343c',
       'editorSuggestWidget.border': '#ffffff14',
       'editorSuggestWidget.selectedBackground': `#${a}38`,
       'editorSuggestWidget.highlightForeground': accent,
-      'editorHoverWidget.background': '#22222c',
+      'editorHoverWidget.background': '#34343c',
       'editorHoverWidget.border': '#ffffff14',
       'scrollbarSlider.background': '#ffffff12',
       'scrollbarSlider.hoverBackground': '#ffffff20',
       'scrollbarSlider.activeBackground': '#ffffff2a',
       'editorOverviewRuler.border': '#00000000',
       'focusBorder': '#00000000',
-      'editorStickyScroll.background': '#1a1a22',
-      'editorStickyScrollHover.background': '#22222c',
+      'editorStickyScroll.background': '#2f2f37',
+      'editorStickyScrollHover.background': '#383840',
     },
   });
   monaco.editor.defineTheme('flux-light', {
@@ -176,8 +187,8 @@ function defineThemes(accent) {
       { token: 'attribute.value', foreground: '2f855a' },
     ],
     colors: {
-      'editor.background': '#fbfbfd',
-      'editorGutter.background': '#fbfbfd',
+      'editor.background': '#00000000',
+      'editorGutter.background': '#00000000',
       'editor.lineHighlightBackground': '#00000006',
       'editor.lineHighlightBorder': '#00000000',
       'editorLineNumber.foreground': '#c0c0cc',
@@ -194,7 +205,7 @@ function defineThemes(accent) {
       'scrollbarSlider.hoverBackground': '#0000001f',
       'editorOverviewRuler.border': '#00000000',
       'focusBorder': '#00000000',
-      'editorStickyScroll.background': '#fbfbfd',
+      'editorStickyScroll.background': '#f8f8fb',
     },
   });
 }
@@ -315,6 +326,13 @@ function createTab(path, model, readonly) {
   model.updateOptions({ tabSize: ['python', 'java', 'csharp', 'rust', 'go', 'c', 'cpp'].includes(lang) ? 4 : 2, insertSpaces: true });
   const tab = { path, model, readonly, viewState: null, savedVersion: model.getAlternativeVersionId(), runLines: [], decorations: null };
   model.onDidChangeContent(() => {
+    if (!extOf(path) && model.getLanguageId() === 'plaintext') {
+      const lang = guessLang(model.getValue());
+      if (lang !== 'plaintext') {
+        monaco.editor.setModelLanguage(model, lang);
+        renderStatus();
+      }
+    }
     renderTabs();
     reportDirty();
     updateRunGlyphs(tab);
@@ -337,7 +355,7 @@ async function openFile(path, { line, column, focus = true } = {}) {
         return null;
       }
       // Pri súbežnom otvorení mohol model medzitým vzniknúť.
-      model = monaco.editor.getModel(monaco.Uri.file(path)) || monaco.editor.createModel(text, langFor(path), monaco.Uri.file(path));
+      model = monaco.editor.getModel(monaco.Uri.file(path)) || monaco.editor.createModel(text, langOf(path, text), monaco.Uri.file(path));
     }
     tab = findTab(path) || createTab(path, model, false);
   }
@@ -635,13 +653,15 @@ function targetDir() {
 
 async function newFile(dir = targetDir()) {
   if (!dir) return openFolderDialog();
-  const name = await promptPalette({
+  let name = await promptPalette({
     placeholder: 'napr. main.py, index.html, styles/app.css',
-    note: `Nový súbor v: ${relative(dir) || basename(dir)}`,
+    note: `Nový súbor v: ${relative(dir) || basename(dir)}  ·  bez prípony sa pridá .py`,
   });
   if (!name) return;
+  name = name.trim();
+  if (!basename(name).includes('.')) name += '.py';
   try {
-    const path = await flux.create(join(dir, name.trim()), false);
+    const path = await flux.create(join(dir, name), false);
     await revealInTree(path);
     await refreshTree();
     openFile(path);
@@ -797,8 +817,8 @@ function terminalTheme() {
   const dark = state.settings.theme !== 'light';
   const accent = ACCENTS[currentAccent()];
   return dark
-    ? { background: '#1a1a22', foreground: '#dcdce6', cursor: accent, cursorAccent: '#1a1a22', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
-    : { background: '#fbfbfd', foreground: '#1d1d24', cursor: accent, cursorAccent: '#fbfbfd', selectionBackground: accent + '44', black: '#1d1d24', brightBlack: '#8e8e9c', red: '#e0364a', green: '#17a86b', yellow: '#b7791f', blue: '#2563eb', magenta: '#7c3aed', cyan: '#0e7490', white: '#5c5c6b' };
+    ? { background: '#00000000', foreground: '#dcdce6', cursor: accent, cursorAccent: '#2d2d34', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
+    : { background: '#00000000', foreground: '#1d1d24', cursor: accent, cursorAccent: '#f8f8fb', selectionBackground: accent + '44', black: '#1d1d24', brightBlack: '#8e8e9c', red: '#e0364a', green: '#17a86b', yellow: '#b7791f', blue: '#2563eb', magenta: '#7c3aed', cyan: '#0e7490', white: '#5c5c6b' };
 }
 
 function createTerminal() {
@@ -811,6 +831,7 @@ function createTerminal() {
     cursorStyle: 'bar',
     scrollback: 5000,
     allowProposedApi: true,
+    allowTransparency: true,
     theme: terminalTheme(),
   });
   fit = new FitAddon();
@@ -932,10 +953,13 @@ async function run() {
   const tab = activeTab();
   if (!tab) return toast('Otvor súbor, ktorý chceš spustiť.');
   const ext = extOf(tab.path);
+  const lang = tab.model.getLanguageId();
   if (WEB.has(ext)) return openPreview(tab.path);
-  if (!RUNNABLE.has(ext)) return toast(`Súbory .${ext || '?'} zatiaľ neviem spustiť. Skús .py, .js alebo .html.`);
+  if (!RUNNABLE.has(ext) && !(!ext && lang === 'python')) {
+    return toast(ext ? `Súbory .${ext} zatiaľ neviem spustiť. Skús .py, .js alebo .html.` : 'Súbor nemá príponu – premenuj ho napr. na test.py.');
+  }
   if (!inside(tab.path)) return toast('Tento súbor je iba na čítanie.');
-  if (['py', 'pyw'].includes(ext) && !state.python) {
+  if (lang === 'python' && !state.python) {
     showPanel(true);
     setHint([
       { label: 'Stiahnuť Python', icon: 'download', run: () => flux.openExternal('https://www.python.org/downloads/') },
@@ -945,7 +969,7 @@ async function run() {
     return toast('Python sa nenašiel. Nainštaluj ho z python.org (zaškrtni „Add python.exe to PATH“).', 'error', 7000);
   }
   await saveAll();
-  const res = await flux.runFile(tab.path, state.python?.path).catch((err) => ({ ok: false, error: errorText(err) }));
+  const res = await flux.runFile(tab.path, state.python?.path, lang).catch((err) => ({ ok: false, error: errorText(err) }));
   if (!res.ok) toast(res.error || 'Nepodarilo sa spustiť.', 'error');
 }
 

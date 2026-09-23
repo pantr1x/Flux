@@ -10,7 +10,7 @@ const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
 
 const isWin = process.platform === 'win32';
-// Efekt Mica je len vo Windows 11 (22H2, build 22621 a novší).
+// Priesvitné pozadie (Acrylic – rozmazaná tapeta ako v Zen Browseri) je len vo Windows 11 22H2+.
 const mica = isWin && Number(os.release().split('.')[2]) >= 22621;
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'dist', 'renderer');
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
@@ -62,11 +62,11 @@ function createWindow() {
     minHeight: 480,
     show: false,
     title: 'Flux',
-    backgroundColor: mica ? '#00000000' : dark ? '#121218' : '#e9e9f0',
+    backgroundColor: mica ? '#00000000' : dark ? '#26262c' : '#ececf1',
     // Windows 11: vlastná horná lišta s natívnymi tlačidlami a efekt Mica (priesvitné pozadie).
     titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
     titleBarOverlay: isWin ? { color: '#00000000', symbolColor: dark ? '#e8e8ef' : '#1d1d24', height: 44 } : false,
-    backgroundMaterial: mica ? 'mica' : undefined,
+    backgroundMaterial: mica ? 'acrylic' : undefined,
     icon: fs.existsSync(ICON) ? ICON : undefined,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
@@ -309,9 +309,9 @@ function registerIpc() {
   });
 
   // Spúšťanie
-  ipcMain.handle('run:file', (_e, file, python) => {
+  ipcMain.handle('run:file', (_e, file, python, lang) => {
     const target = guard(file);
-    const command = commandFor(target, python);
+    const command = commandFor(target, python, lang);
     if (!command) return { ok: false, error: 'Tento typ súboru zatiaľ neviem spustiť.' };
     const ok = runner.start({ ...command, cwd: path.dirname(target), label: path.basename(target) });
     return { ok };
