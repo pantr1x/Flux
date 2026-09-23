@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="sk">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -16,38 +16,38 @@
       <aside id="sidebar">
         <div class="side-top drag">
           <div class="brand"><span class="brand-mark" id="brand-mark"></span>flux</div>
-          <button class="icon-btn no-drag" id="btn-compact" title="Skryť bočný panel (Ctrl+B)"></button>
+          <button class="icon-btn no-drag" id="btn-compact" title="Hide sidebar (Ctrl+B)"></button>
         </div>
 
         <div class="projects" id="projects"></div>
 
         <div class="essentials" id="essentials">
-          <button class="icon-btn" data-cmd="new-file" title="Nový súbor zo šablóny (Ctrl+N)"></button>
-          <button class="icon-btn" data-cmd="new-folder" title="Nový priečinok"></button>
-          <button class="icon-btn" data-cmd="refresh" title="Obnoviť"></button>
-          <button class="icon-btn" data-cmd="collapse" title="Zbaliť všetko"></button>
+          <button class="icon-btn" data-cmd="new-file" title="New file from template (Ctrl+N)"></button>
+          <button class="icon-btn" data-cmd="new-folder" title="New folder"></button>
+          <button class="icon-btn" data-cmd="refresh" title="Refresh"></button>
+          <button class="icon-btn" data-cmd="collapse" title="Collapse all"></button>
         </div>
 
         <div id="tree" tabindex="0"></div>
 
         <div class="side-bottom">
-          <div class="accents" id="accents" title="Farba priečinka"></div>
-          <button class="icon-btn" id="btn-theme" title="Svetlá / tmavá téma"></button>
-          <button class="icon-btn" id="btn-palette" title="Príkazy (Ctrl+Shift+P)"></button>
-          <button class="icon-btn" id="btn-settings" title="Nastavenia (Ctrl+,)"></button>
+          <div class="accents" id="accents" title="Folder color"></div>
+          <button class="icon-btn" id="btn-theme" title="Light / dark theme"></button>
+          <button class="icon-btn" id="btn-palette" title="Commands (Ctrl+Shift+P)"></button>
+          <button class="icon-btn" id="btn-settings" title="Settings (Ctrl+,)"></button>
         </div>
       </aside>
       <div class="resizer rz-col" id="side-resizer"></div>
 
       <main id="main">
         <header id="topbar" class="drag">
-          <button class="icon-btn no-drag" id="btn-expand" title="Zobraziť bočný panel (Ctrl+B)"></button>
+          <button class="icon-btn no-drag" id="btn-expand" title="Show sidebar (Ctrl+B)"></button>
           <div id="tabs" class="no-drag"></div>
           <div class="grow"></div>
           <div class="actions no-drag">
             <button class="chip-btn" id="btn-live" title="Live Server (Alt+L)"></button>
-            <button class="run-btn" id="btn-run" title="Spustiť (F5)"></button>
-            <button class="stop-btn" id="btn-stop" title="Zastaviť (Shift+F5)" disabled></button>
+            <button class="run-btn" id="btn-run" title="Run (F5)"></button>
+            <button class="stop-btn" id="btn-stop" title="Stop (Shift+F5)" disabled></button>
           </div>
           <div class="caption-space"></div>
         </header>
@@ -66,27 +66,27 @@
                 <span class="preview-url" id="preview-url"></span>
                 <div class="grow"></div>
                 <div class="seg" id="devices">
-                  <button data-w="" class="active" title="Plná šírka"></button>
+                  <button data-w="" class="active" title="Full width"></button>
                   <button data-w="820" title="Tablet (820 px)"></button>
-                  <button data-w="390" title="Mobil (390 px)"></button>
+                  <button data-w="390" title="Phone (390 px)"></button>
                 </div>
-                <button class="icon-btn" id="btn-preview-reload" title="Obnoviť"></button>
-                <button class="icon-btn" id="btn-preview-external" title="Otvoriť v prehliadači"></button>
-                <button class="icon-btn" id="btn-preview-close" title="Zavrieť náhľad"></button>
+                <button class="icon-btn" id="btn-preview-reload" title="Refresh"></button>
+                <button class="icon-btn" id="btn-preview-external" title="Open in browser"></button>
+                <button class="icon-btn" id="btn-preview-close" title="Close preview"></button>
               </div>
-              <div class="preview-stage"><iframe id="preview-frame" title="Náhľad"></iframe></div>
+              <div class="preview-stage"><iframe id="preview-frame" title="Preview"></iframe></div>
             </div>
           </div>
 
           <div class="resizer rz-row" id="panel-resizer"></div>
           <div id="panel">
             <div class="panel-bar">
-              <span class="panel-title" id="panel-title">Výstup</span>
+              <span class="panel-title" id="panel-title" data-t>Output</span>
               <span class="run-state" id="run-state"></span>
               <div id="hint"></div>
               <div class="grow"></div>
-              <button class="icon-btn" id="btn-clear" title="Vymazať výstup"></button>
-              <button class="icon-btn" id="btn-panel" title="Skryť panel (Ctrl+J)"></button>
+              <button class="icon-btn" id="btn-clear" title="Clear output"></button>
+              <button class="icon-btn" id="btn-panel" title="Hide panel (Ctrl+J)"></button>
             </div>
             <div id="terminal"></div>
           </div>
@@ -97,7 +97,7 @@
             <span class="status-item" id="st-lsp"></span>
             <div class="grow"></div>
             <button class="status-item" id="st-live" hidden></button>
-            <button class="status-item" id="st-autosave" title="Automatické ukladanie"></button>
+            <button class="status-item" id="st-autosave" title="Auto save"></button>
             <span class="status-item" id="st-lang"></span>
             <span class="status-item" id="st-pos"></span>
           </footer>
@@ -114,6 +114,9 @@
     <div id="settings" hidden></div>
     <div id="start" hidden></div>
     <div id="glance" hidden></div>
+    <div id="newproj" hidden></div>
+    <div id="tour" hidden></div>
+    <div id="onboard" hidden></div>
     <div id="toasts"></div>
 
     <script type="module" src="app.js"></script>

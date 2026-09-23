@@ -1,0 +1,27 @@
+[
+ {
+  "code": "en",
+  "name": "English",
+  "native": "English"
+ },
+ {
+  "code": "sk",
+  "name": "Slovak",
+  "native": "Slovenčina"
+ },
+ {
+  "code": "cs",
+  "name": "Czech",
+  "native": "Čeština"
+ },
+ {
+  "code": "de",
+  "name": "German",
+  "native": "Deutsch"
+ },
+ {
+  "code": "es",
+  "name": "Spanish",
+  "native": "Español"
+ }
+]

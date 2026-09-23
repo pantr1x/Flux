@@ -8,6 +8,8 @@ const { findPython, probe } = require('./python');
 const { Runner, commandFor } = require('./runner');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
+const i18n = require('./i18n');
+const { t } = i18n;
 
 const isWin = process.platform === 'win32';
 // Priesvitné pozadie (Acrylic – rozmazaná tapeta ako v Zen Browseri) je len vo Windows 11 22H2+.
@@ -126,12 +128,12 @@ function createWindow() {
     e.preventDefault();
     const choice = dialog.showMessageBoxSync(win, {
       type: 'warning',
-      buttons: ['Uložiť všetko', 'Neukladať', 'Zrušiť'],
+      buttons: [t('Save all'), t("Don't save"), t('Cancel')],
       defaultId: 0,
       cancelId: 2,
-      title: 'Neuložené zmeny',
-      message: `Máš ${dirtyCount} neuložen${dirtyCount === 1 ? 'ý súbor' : 'é súbory'}.`,
-      detail: 'Chceš ich pred zatvorením uložiť?',
+      title: t('Unsaved changes'),
+      message: dirtyCount === 1 ? t('You have 1 unsaved file.') : t('You have {n} unsaved files.', { n: dirtyCount }),
+      detail: t('Do you want to save before closing?'),
     });
     if (choice === 2) return;
     allowClose = true;
@@ -178,12 +180,23 @@ function insideWorkspace(p) {
 }
 
 function guard(p) {
-  if (!insideWorkspace(path.resolve(p))) throw new Error('Cesta je mimo otvoreného priečinka.');
+  if (!insideWorkspace(path.resolve(p))) throw new Error(t('The path is outside the open folder.'));
   return path.resolve(p);
 }
 
 // ---------- IPC ----------
 function registerIpc() {
+  ipcMain.handle('i18n:list', () => i18n.listLanguages());
+  ipcMain.handle('i18n:use', async (_e, code) => {
+    // Použije jazyk; ak ešte nie je stiahnutý, stiahne ho z GitHubu.
+    let data = code === 'en' ? {} : i18n.loadCached(code);
+    if (!data) data = await i18n.downloadLanguage(code);
+    settings.language = code;
+    saveSettings();
+    i18n.setLanguage(code);
+    return data;
+  });
+  ipcMain.handle('i18n:current', () => i18n.loadCached(settings.language || 'en') || {});
   ipcMain.handle('app:init', () => ({
     platform: process.platform,
     mica,
@@ -209,7 +222,7 @@ function registerIpc() {
   ipcMain.on('app:close', () => win && win.close());
 
   ipcMain.handle('workspace:open-dialog', async () => {
-    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], title: 'Otvoriť priečinok' });
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], title: t('Open folder') });
     if (r.canceled || !r.filePaths[0]) return null;
     setWorkspace(r.filePaths[0]);
     return r.filePaths[0];
@@ -236,9 +249,9 @@ function registerIpc() {
   });
   // Premenovanie projektu = premenovanie priečinka na disku.
   ipcMain.handle('project:rename', async (_e, dir, newName) => {
-    if (!/^[^\\/:*?"<>|]+$/.test(newName) || newName.trim() !== newName) throw new Error('Neplatný názov priečinka.');
+    if (!/^[^\\/:*?"<>|]+$/.test(newName) || newName.trim() !== newName) throw new Error(t('Invalid folder name.'));
     const target = path.join(path.dirname(dir), newName);
-    if (fs.existsSync(target)) throw new Error('Priečinok s týmto názvom už existuje.');
+    if (fs.existsSync(target)) throw new Error(t('A folder with this name already exists.'));
     const wasOpen = workspace === dir;
     if (wasOpen) {
       if (workspaceWatcher) workspaceWatcher.close();
@@ -283,24 +296,29 @@ function registerIpc() {
     saveSettings();
   });
   ipcMain.handle('project:stats', (_e, dir) => projectStats(dir));
-  ipcMain.handle('project:root', () => path.join(app.getPath('documents'), 'Flux projekty'));
+  // Staršie verzie používali „Flux projekty“ – ak priečinok existuje, ostaneme pri ňom.
+  const defaultRoot = () => {
+    const legacy = path.join(app.getPath('documents'), 'Flux projekty');
+    return fs.existsSync(legacy) ? legacy : path.join(app.getPath('documents'), 'Flux Projects');
+  };
+  ipcMain.handle('project:root', () => defaultRoot());
   ipcMain.handle('project:create', async (_e, name, root) => {
-    if (!/^[^\\/:*?"<>|]+$/.test(name) || name.trim() !== name) throw new Error('Neplatný názov projektu.');
-    const base = root || path.join(app.getPath('documents'), 'Flux projekty');
+    if (!/^[^\\/:*?"<>|]+$/.test(name) || name.trim() !== name) throw new Error(t('Invalid project name.'));
+    const base = root || defaultRoot();
     const dir = path.join(base, name);
-    if (fs.existsSync(dir)) throw new Error('Taký projekt už existuje.');
+    if (fs.existsSync(dir)) throw new Error(t('This project already exists.'));
     await fsp.mkdir(dir, { recursive: true });
     return dir;
   });
   ipcMain.handle('project:choose-root', async () => {
-    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], title: 'Kam uložiť nový projekt' });
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], title: t('Where to save the new project') });
     return r.canceled ? null : r.filePaths[0];
   });
   // Obrázok ako data: URL pre náhľad (Glance).
   ipcMain.handle('fs:read-image', async (_e, file) => {
     const p = guard(file);
     const stat = await fsp.stat(p);
-    if (stat.size > 25 * 1024 * 1024) throw new Error('Obrázok je príliš veľký.');
+    if (stat.size > 25 * 1024 * 1024) throw new Error(t('The image is too large.'));
     const ext = path.extname(p).slice(1).toLowerCase();
     const mime = { svg: 'image/svg+xml', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon' }[ext] || `image/${ext}`;
     return { url: `data:${mime};base64,${(await fsp.readFile(p)).toString('base64')}`, size: stat.size };
@@ -346,9 +364,9 @@ function registerIpc() {
   ipcMain.handle('fs:read', async (_e, file) => {
     const p = guard(file);
     const stat = await fsp.stat(p);
-    if (stat.size > 5 * 1024 * 1024) throw new Error('Súbor je príliš veľký (viac ako 5 MB).');
+    if (stat.size > 5 * 1024 * 1024) throw new Error(t('The file is too large (over 5 MB).'));
     const buf = await fsp.readFile(p);
-    if (buf.subarray(0, 8000).includes(0)) throw new Error('Toto je binárny súbor – editor ho nevie zobraziť.');
+    if (buf.subarray(0, 8000).includes(0)) throw new Error(t('This is a binary file – the editor cannot show it.'));
     return buf.toString('utf8');
   });
   ipcMain.handle('fs:read-any', async (_e, file) => {
@@ -357,12 +375,14 @@ function registerIpc() {
     return buf.toString('utf8');
   });
   ipcMain.handle('fs:write', async (_e, file, content) => {
+    staleStats(file);
     await fsp.writeFile(guard(file), content, 'utf8');
     return true;
   });
   ipcMain.handle('fs:create', async (_e, target, isDir) => {
+    staleStats(target);
     const p = guard(target);
-    if (fs.existsSync(p)) throw new Error('Taký súbor alebo priečinok už existuje.');
+    if (fs.existsSync(p)) throw new Error(t('A file or folder with this name already exists.'));
     if (isDir) await fsp.mkdir(p, { recursive: true });
     else {
       await fsp.mkdir(path.dirname(p), { recursive: true });
@@ -371,21 +391,23 @@ function registerIpc() {
     return p;
   });
   ipcMain.handle('fs:rename', async (_e, from, to) => {
+    staleStats(from);
     const a = guard(from);
     const b = guard(to);
-    if (fs.existsSync(b)) throw new Error('Taký názov už existuje.');
+    if (fs.existsSync(b)) throw new Error(t('This name already exists.'));
     await fsp.rename(a, b);
     return b;
   });
   ipcMain.handle('fs:trash', async (_e, target) => {
+    staleStats(target);
     const p = guard(target);
     const { response } = await dialog.showMessageBox(win, {
       type: 'question',
-      buttons: ['Presunúť do koša', 'Zrušiť'],
+      buttons: [t('Move to Recycle Bin'), t('Cancel')],
       defaultId: 0,
       cancelId: 1,
-      message: `Zmazať „${path.basename(p)}“?`,
-      detail: 'Položka sa presunie do koša, odkiaľ ju môžeš obnoviť.',
+      message: t('Delete “{name}”?', { name: path.basename(p) }),
+      detail: t('It will be moved to the Recycle Bin, where you can restore it.'),
     });
     if (response !== 0) return false;
     await shell.trashItem(p);
@@ -398,19 +420,19 @@ function registerIpc() {
       let picked = null;
       const pick = (id) => () => (picked = id);
       const template = [
-        { label: 'Nový súbor…', click: pick('new-file') },
-        { label: 'Nový priečinok…', click: pick('new-folder') },
+        { label: t('New file…'), click: pick('new-file') },
+        { label: t('New folder…'), click: pick('new-folder') },
         { type: 'separator' },
       ];
       if (item && !item.dir) {
-        template.unshift({ label: 'Spustiť', click: pick('run') }, { type: 'separator' });
+        template.unshift({ label: t('Run'), click: pick('run') }, { type: 'separator' });
       }
       if (item && item.path !== workspace) {
-        template.push({ label: 'Premenovať…', click: pick('rename') }, { label: 'Zmazať', click: pick('delete') }, { type: 'separator' });
+        template.push({ label: t('Rename…'), click: pick('rename') }, { label: t('Delete'), click: pick('delete') }, { type: 'separator' });
       }
       template.push(
-        { label: 'Kopírovať cestu', click: pick('copy-path') },
-        { label: isWin ? 'Zobraziť v Prieskumníkovi' : 'Zobraziť v priečinku', click: pick('reveal') },
+        { label: t('Copy path'), click: pick('copy-path') },
+        { label: isWin ? t('Show in File Explorer') : t('Show in folder'), click: pick('reveal') },
       );
       Menu.buildFromTemplate(template).popup({ window: win, callback: () => resolve(picked) });
     });
@@ -423,18 +445,18 @@ function registerIpc() {
   });
   ipcMain.handle('python:choose', async () => {
     const r = await dialog.showOpenDialog(win, {
-      title: 'Vybrať Python interpreter',
+      title: t('Select Python interpreter'),
       properties: ['openFile'],
       filters: isWin ? [{ name: 'Python', extensions: ['exe'] }] : [],
     });
     if (r.canceled || !r.filePaths[0]) return null;
     const info = await probe(r.filePaths[0]);
-    if (!info) throw new Error('Vybraný súbor nie je funkčný Python.');
+    if (!info) throw new Error(t('The selected file is not a working Python.'));
     if (workspace) {
       settings.pythonOverrides[workspace] = r.filePaths[0];
       saveSettings();
     }
-    return { ...info, source: 'vybraný ručne' };
+    return { ...info, source: t('chosen manually') };
   });
   ipcMain.handle('python:reset', () => {
     if (workspace) delete settings.pythonOverrides[workspace];
@@ -445,12 +467,12 @@ function registerIpc() {
   ipcMain.handle('run:file', (_e, file, python, lang) => {
     const target = guard(file);
     const command = commandFor(target, python, lang);
-    if (!command) return { ok: false, error: 'Tento typ súboru zatiaľ neviem spustiť.' };
+    if (!command) return { ok: false, error: t("Can't run this type of file yet.") };
     const ok = runner.start({ ...command, cwd: path.dirname(target), label: path.basename(target) });
     return { ok };
   });
   ipcMain.handle('run:pip', (_e, python, pkg) => {
-    if (!/^[A-Za-z0-9._\-\[\]]+$/.test(pkg)) return { ok: false, error: 'Neplatný názov balíka.' };
+    if (!/^[A-Za-z0-9._\-\[\]]+$/.test(pkg)) return { ok: false, error: t('Invalid package name.') };
     const ok = runner.start({ cmd: python, args: ['-m', 'pip', 'install', pkg], cwd: workspace || undefined, label: `pip install ${pkg}` });
     return { ok };
   });
@@ -465,7 +487,7 @@ function registerIpc() {
 
   // Live Server
   ipcMain.handle('live:start', async () => {
-    if (!workspace) throw new Error('Najprv otvor priečinok.');
+    if (!workspace) throw new Error(t('Open a folder first.'));
     return live.start(workspace);
   });
   ipcMain.handle('live:stop', async () => {
@@ -520,6 +542,10 @@ async function projectKind(dir) {
 
 // Štatistiky projektu: súbory, riadky, znaky, čas.
 const statsCache = new Map();
+// Po zmene súboru zahodíme štatistiky projektov, ktoré ho obsahujú.
+function staleStats(file) {
+  for (const dir of statsCache.keys()) if (String(file).startsWith(dir)) statsCache.delete(dir);
+}
 const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql)$/i;
 async function projectStats(dir) {
   const cached = statsCache.get(dir);
@@ -575,6 +601,7 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   loadSettings();
+  i18n.setLanguage(settings.language || 'en');
   nativeTheme.themeSource = settings.theme === 'light' ? 'light' : 'dark';
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url);

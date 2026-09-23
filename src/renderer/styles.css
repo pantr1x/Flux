@@ -2132,3 +2132,783 @@ body.theme-light .wall-img {
 #preview:not([hidden]) {
   animation: card-in 0.25s var(--ease);
 }
+
+/* ======================================================================
+   Úvod projektu: úroveň, XP, odznaky
+   ====================================================================== */
+.wl-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.lvl-ring {
+  --p: 0;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background:
+    radial-gradient(closest-side, var(--card-solid) 80%, transparent 81%),
+    conic-gradient(var(--accent) calc(var(--p) * 1%), var(--active) 0);
+  transition: --p 0.9s var(--ease);
+  animation: card-in 0.4s var(--ease) backwards;
+}
+
+@property --p {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+.lvl-ring b {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.lvl-ring small {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.xp {
+  margin-bottom: 14px;
+}
+
+.xp-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+
+.xp-top span:first-child {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.xp-bar {
+  height: 8px;
+  border-radius: 8px;
+  background: var(--active);
+  overflow: hidden;
+}
+
+.xp-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #fff));
+  transition: width 1s var(--ease);
+  position: relative;
+}
+
+.xp-bar i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  animation: shimmer 2.2s ease-in-out 1s infinite;
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.stat {
+  position: relative;
+}
+
+.st-ico {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.badges {
+  margin-bottom: 24px;
+}
+
+.badges-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ach {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 18px;
+  filter: grayscale(1);
+  opacity: 0.35;
+  transition: transform 0.15s var(--ease);
+  animation: card-in 0.35s var(--ease) backwards;
+}
+
+.ach.got {
+  filter: none;
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 14%, var(--hover));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.ach:hover {
+  transform: translateY(-2px) scale(1.06);
+}
+
+/* Oslava (odznak / úroveň) */
+.celebrate {
+  position: fixed;
+  z-index: 300;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 320px;
+  padding: 14px 20px 14px 16px;
+  border-radius: 18px;
+  background: var(--card-solid);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45), 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: pop-in 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.celebrate.out {
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition: opacity 0.35s, transform 0.35s;
+}
+
+.cel-ic {
+  font-size: 30px;
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: wiggle 0.8s ease 0.3s;
+}
+
+.celebrate small {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.celebrate b {
+  display: block;
+  font-size: 16px;
+}
+
+.celebrate p {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px) scale(0.85);
+  }
+}
+
+@keyframes wiggle {
+  25% {
+    transform: rotate(-12deg) scale(1.1);
+  }
+  50% {
+    transform: rotate(10deg) scale(1.1);
+  }
+  75% {
+    transform: rotate(-5deg);
+  }
+}
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 299;
+}
+
+/* ======================================================================
+   Nový projekt
+   ====================================================================== */
+#newproj {
+  position: fixed;
+  inset: 0;
+  z-index: 112;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade 0.15s;
+}
+
+#newproj[hidden] {
+  display: none;
+}
+
+.np-card {
+  width: min(560px, 92vw);
+  padding: 22px;
+  border-radius: 22px;
+  background: var(--card-solid);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line-strong);
+  animation: rise 0.22s var(--ease);
+  transition: transform 0.25s var(--ease), opacity 0.25s;
+}
+
+.np-card.done {
+  transform: scale(0.96);
+  opacity: 0;
+}
+
+.np-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.np-card h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.3px;
+}
+
+.np-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.np-kind {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 10px 14px;
+  border-radius: 16px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.15s var(--ease);
+}
+
+.np-kind:hover {
+  background: var(--active);
+  transform: translateY(-2px);
+}
+
+.np-kind.on {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--hover));
+}
+
+.np-ic {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--card-2);
+  margin-bottom: 4px;
+}
+
+.np-kind small {
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.np-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.np-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.np-field input {
+  font: 15px var(--ui-font);
+  color: var(--text);
+  background: var(--hover);
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.np-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.np-loc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.np-loc code {
+  flex: 1;
+  min-width: 0;
+  font: 12px var(--mono);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.np-card footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Spoločné tlačidlá (sprievodca, dialógy) */
+.ob-primary,
+.ob-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: transform 0.12s var(--ease), filter 0.15s, background 0.15s;
+}
+
+.ob-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.ob-primary:hover {
+  filter: brightness(1.08);
+}
+
+.ob-primary:active,
+.ob-ghost:active {
+  transform: scale(0.96);
+}
+
+.ob-ghost {
+  color: var(--text-2);
+}
+
+.ob-ghost:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.s-btns {
+  display: flex;
+  gap: 6px;
+}
+
+/* ======================================================================
+   Prvé spustenie (sprievodca)
+   ====================================================================== */
+#onboard {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--base);
+  transition: opacity 0.35s, transform 0.35s var(--ease);
+}
+
+body.wallpaper #onboard {
+  background: color-mix(in srgb, var(--base) 82%, transparent);
+  backdrop-filter: blur(40px);
+}
+
+#onboard[hidden] {
+  display: none;
+}
+
+#onboard.leaving {
+  opacity: 0;
+  transform: scale(1.03);
+}
+
+.ob-glow {
+  position: absolute;
+  width: 900px;
+  height: 900px;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+  animation: glow 6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes glow {
+  to {
+    transform: scale(1.15);
+    opacity: 0.7;
+  }
+}
+
+.ob-body {
+  position: relative;
+  width: min(680px, 92vw);
+  animation: slide-in 0.45s var(--ease);
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+.ob-splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.ob-logo {
+  width: 120px;
+  height: 120px;
+  margin-bottom: 18px;
+}
+
+.ob-logo-bg {
+  fill: #111114;
+  stroke: rgba(255, 255, 255, 0.14);
+  animation: logo-pop 0.7s cubic-bezier(0.2, 1.3, 0.4, 1);
+  transform-origin: center;
+}
+
+.ob-draw {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: draw 0.9s var(--ease) 0.35s forwards;
+}
+
+.ob-slash {
+  animation-delay: 0.8s;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes logo-pop {
+  from {
+    transform: scale(0.4) rotate(-12deg);
+    opacity: 0;
+  }
+}
+
+.ob-title {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -1.2px;
+  animation: slide-in 0.6s var(--ease) 1s backwards;
+}
+
+.ob-tag {
+  margin: 8px 0 28px;
+  color: var(--text-2);
+  font-size: 16px;
+  animation: slide-in 0.6s var(--ease) 1.2s backwards;
+}
+
+.ob-start,
+.ob-row {
+  animation: slide-in 0.6s var(--ease) 1.45s backwards;
+}
+
+.ob-row {
+  display: flex;
+  gap: 10px;
+}
+
+.ob-done .ob-title {
+  font-size: 34px;
+}
+
+.ob-step h2 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  letter-spacing: -0.5px;
+}
+
+.ob-step > p {
+  margin: 0 0 22px;
+  color: var(--text-2);
+}
+
+.ob-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.ob-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  text-align: left;
+}
+
+.ob-option small {
+  color: var(--text-3);
+}
+
+.ob-option.on,
+.ob-card.on,
+.ob-theme.on {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--hover));
+}
+
+.ob-option.loading {
+  opacity: 0.5;
+}
+
+.ob-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.ob-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 10px 18px;
+  border-radius: 16px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: transform 0.15s var(--ease), background 0.15s;
+}
+
+.ob-card:hover,
+.ob-option:hover,
+.ob-theme:hover {
+  background: var(--active);
+}
+
+.ob-card:hover {
+  transform: translateY(-3px);
+}
+
+.ob-ic {
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--card-2);
+}
+
+.ob-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.15s, transform 0.2s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.ob-card.on .ob-check {
+  opacity: 1;
+  transform: none;
+}
+
+.ob-themes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ob-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.ob-accents {
+  display: flex;
+  gap: 10px;
+}
+
+.ob-accents button {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--c);
+  transition: transform 0.15s;
+}
+
+.ob-accents button:hover {
+  transform: scale(1.12);
+}
+
+.ob-accents button.on {
+  box-shadow: 0 0 0 2px var(--base), 0 0 0 4px var(--c);
+}
+
+.ob-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28px;
+}
+
+.ob-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.ob-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--active);
+  transition: width 0.3s var(--ease), background 0.3s;
+}
+
+.ob-dots i.on {
+  width: 20px;
+  background: var(--accent);
+}
+
+/* ======================================================================
+   Prehliadka funkcií
+   ====================================================================== */
+#tour {
+  position: fixed;
+  inset: 0;
+  z-index: 390;
+}
+
+#tour[hidden] {
+  display: none;
+}
+
+.tour-spot {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 0 2px var(--accent);
+  transition: all 0.35s var(--ease);
+  pointer-events: none;
+}
+
+.tour-tip {
+  position: fixed;
+  width: 300px;
+  padding: 16px 18px 14px;
+  border-radius: 16px;
+  background: var(--card-solid);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--line-strong);
+  animation: rise 0.25s var(--ease);
+}
+
+.tour-tip small {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.tour-tip h3 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+}
+
+.tour-tip p {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.tour-nav {
+  display: flex;
+  justify-content: space-between;
+}
+
+.tour-nav .ob-primary,
+.tour-nav .ob-ghost {
+  height: 32px;
+  padding: 0 14px;
+}

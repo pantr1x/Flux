@@ -46,7 +46,7 @@ function commonWindowsInstalls() {
 
 async function findPython(workspace, override) {
   const candidates = [];
-  if (override) candidates.push({ cmd: override, source: 'vybraný ručne' });
+  if (override) candidates.push({ cmd: override, source: 'chosen manually' });
   if (workspace) {
     for (const name of ['.venv', 'venv', 'env']) {
       const exe = venvPython(path.join(workspace, name));
@@ -59,7 +59,7 @@ async function findPython(workspace, override) {
   if (isWin) {
     candidates.push({ cmd: 'py', args: ['-3'], source: 'py launcher' });
     candidates.push({ cmd: 'python', source: 'PATH' });
-    for (const exe of commonWindowsInstalls()) candidates.push({ cmd: exe, source: 'inštalácia' });
+    for (const exe of commonWindowsInstalls()) candidates.push({ cmd: exe, source: 'installed' });
   } else {
     candidates.push({ cmd: 'python3', source: 'PATH' }, { cmd: 'python', source: 'PATH' });
   }

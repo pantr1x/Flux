@@ -9,6 +9,9 @@ const on = (channel) => (callback) => {
 
 contextBridge.exposeInMainWorld('flux', {
   init: () => ipcRenderer.invoke('app:init'),
+  i18nList: () => ipcRenderer.invoke('i18n:list'),
+  i18nUse: (code) => ipcRenderer.invoke('i18n:use', code),
+  i18nCurrent: () => ipcRenderer.invoke('i18n:current'),
   setSettings: (patch) => ipcRenderer.invoke('app:set-settings', patch),
   setDirty: (count) => ipcRenderer.send('app:dirty', count),
   close: () => ipcRenderer.send('app:close'),

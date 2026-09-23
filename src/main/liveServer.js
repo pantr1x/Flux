@@ -211,7 +211,7 @@ class LiveServer {
       injectClient(
         `<!doctype html><meta charset="utf-8"><title>${escapeHtml(urlPath)}</title>` +
           `<style>body{font:15px system-ui;margin:40px;color:#333}a{color:#6b5cff;text-decoration:none}li{margin:6px 0}</style>` +
-          `<h2>${escapeHtml(urlPath)}</h2><ul>${items || '<li>(prázdne)</li>'}</ul>`,
+          `<h2>${escapeHtml(urlPath)}</h2><ul>${items || '<li>(empty)</li>'}</ul>`,
       ),
     );
   }
@@ -221,7 +221,7 @@ class LiveServer {
     res.end(
       injectClient(
         `<!doctype html><meta charset="utf-8"><style>body{font:15px system-ui;margin:40px;color:#333}</style>` +
-          `<h2>404</h2><p>Súbor <code>${escapeHtml(urlPath)}</code> neexistuje.</p>`,
+          `<h2>404</h2><p>File <code>${escapeHtml(urlPath)}</code> does not exist.</p>`,
       ),
     );
   }

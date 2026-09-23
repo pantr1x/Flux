@@ -8,6 +8,7 @@
 const { spawn, execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { t } = require('./i18n');
 
 const isWin = process.platform === 'win32';
 
@@ -98,7 +99,7 @@ class Runner {
         handle.pty = pty.spawn(cmd, args, { name: 'xterm-256color', cols: this.cols, rows: this.rows, cwd, env, useConpty: true });
       } catch (err) {
         const msg = /ENOENT|not found|cannot find|File not found/i.test(String(err.message))
-          ? `Príkaz „${cmd}“ sa nenašiel. Je nainštalovaný?`
+          ? t('Command “{cmd}” was not found. Is it installed?', { cmd })
           : String(err.message || err);
         this.send('run:start', { label, cwd, pid: 0 });
         finish(-1, msg);
@@ -142,7 +143,7 @@ class Runner {
     const forward = (chunk) => this.send('run:data', chunk.toString('utf8'));
     child.stdout.on('data', forward);
     child.stderr.on('data', forward);
-    child.on('error', (err) => finish(-1, err.code === 'ENOENT' ? `Príkaz „${cmd}“ sa nenašiel. Je nainštalovaný?` : err.message));
+    child.on('error', (err) => finish(-1, err.code === 'ENOENT' ? t('Command “{cmd}” was not found. Is it installed?', { cmd }) : err.message));
     child.on('close', (code) => finish(code));
     return true;
   }
