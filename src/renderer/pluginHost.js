@@ -4,7 +4,7 @@ import { parseKey } from './userShortcuts.js';
 
 const bridge = window.flux;
 
-export function createPluginHost({ monaco, editor, toast, getActiveFile, getSettings, saveSettings, runCommand, isOverridden = () => false }) {
+export function createPluginHost({ monaco, editor, toast, getActiveFile, getSettings, saveSettings, runCommand, isOverridden = () => false, getWorkspace = () => null }) {
   const loaded = new Map(); // id → { module, disposables, commands, name }
   const saveListeners = new Set();
   const openListeners = new Set();
@@ -36,6 +36,8 @@ export function createPluginHost({ monaco, editor, toast, getActiveFile, getSett
       monaco,
       editor,
       toast: (msg, kind = 'info', ms) => toast(String(msg), kind, ms),
+      // Čokoľvek, čo treba pri vypnutí pluginu upratať (Monaco disposable alebo funkcia).
+      own: (d) => (own(typeof d === 'function' ? d : () => d?.dispose?.()), d),
       activeFile: () => getActiveFile(),
       insertText(text) {
         if (!editor.getModel()) return false;
@@ -142,6 +144,22 @@ export function createPluginHost({ monaco, editor, toast, getActiveFile, getSett
         const timer = setInterval(cb, Math.max(200, ms));
         own(() => clearInterval(timer));
         return timer;
+      },
+      // Súbory otvoreného projektu (len na čítanie).
+      project: {
+        folder: () => getWorkspace(),
+        async files() {
+          const root = getWorkspace();
+          if (!root) return [];
+          const all = await bridge.listAll();
+          return all.map((p) => p.slice(root.length + 1).replace(/\\/g, '/'));
+        },
+        async read(rel) {
+          const root = getWorkspace();
+          if (!root) throw new Error('No folder is open');
+          const sep = root.includes('\\') ? '\\' : '/';
+          return bridge.read(/^([a-z]:|\/)/i.test(rel) ? rel : `${root}${sep}${String(rel).replace(/[\\/]/g, sep)}`);
+        },
       },
       storage: {
         get: (key, fallback) => (key in data() ? data()[key] : fallback),

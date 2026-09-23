@@ -84,6 +84,9 @@ const DEFAULTS = {
   caretAccent: false,
   pointer: 'text',
   pointerColor: '',
+  pointerImage: '',
+  pointerHotspot: 'tip',
+  pointerEverywhere: false,
   fontCustom: '',
   uiFont: '',
   uiZoom: 100,
@@ -307,6 +310,11 @@ function pointerCss(kind, color) {
     'flux-dot': `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='5' fill='${c}' fill-opacity='.85' stroke='black' stroke-opacity='.4'/></svg>`,
     'flux-ring': `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='7' fill='none' stroke='${c}' stroke-width='2'/><circle cx='12' cy='12' r='1.5' fill='${c}'/></svg>`,
   }[kind];
+  if (kind === 'custom' && setting('pointerImage')) {
+    const [w, h] = setting('pointerImageSize') || [32, 32];
+    const [x, y] = setting('pointerHotspot') === 'center' ? [Math.round(w / 2), Math.round(h / 2)] : [0, 0];
+    return `url("${setting('pointerImage')}") ${x} ${y}, auto`;
+  }
   return svg ? `url("data:image/svg+xml,${svg}") 12 12, crosshair` : 'text';
 }
 
@@ -316,6 +324,7 @@ function applyCustomization() {
   root.style.setProperty('--caret', caret || 'var(--accent)');
   document.body.classList.toggle('custom-caret', !!caret || setting('caretAccent'));
   root.style.setProperty('--editor-pointer', pointerCss(setting('pointer'), setting('pointerColor') || currentAccent()));
+  document.body.classList.toggle('pointer-everywhere', !!setting('pointerEverywhere') && setting('pointer') !== 'text');
   root.style.setProperty('--radius', `${Number(setting('cornerRadius'))}px`);
   const uiFont = String(setting('uiFont') || '').trim();
   if (uiFont) root.style.setProperty('--ui-font', `'${uiFont.replace(/'/g, '')}', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif`);
@@ -2314,8 +2323,11 @@ function openSettings() {
             <div class="s-group">
               <div class="s-row"><span><b>${t('Pointer')}</b><small>${t('Crosshair and dot use your pointer color.')}</small></span><span class="ptr-pick">${[['text', 'I'], ['default', '↖'], ['crosshair', '+'], ['flux-cross', '⌖'], ['flux-dot', '●'], ['flux-ring', '◎']]
                 .map(([v, l]) => `<button class="ptr${setting('pointer') === v ? ' on' : ''}" data-pointer="${v}" title="${v}">${l}</button>`)
-                .join('')}</span></div>
+                .join('')}${setting('pointerImage') ? `<button class="ptr ptr-img${setting('pointer') === 'custom' ? ' on' : ''}" data-pointer="custom" title="${t('Your own cursor')}"><img src="${escapeAttr(setting('pointerImage'))}" alt=""></button>` : ''}</span></div>
+              <div class="s-row"><span><b>${t('Your own cursor')}</b><small>${t('PNG, SVG, CUR or ICO – bigger pictures are made smaller (max 64 px).')}</small></span><span class="s-inline"><button class="s-btn" data-action="cursor-pick">${icon('download', 13)}${t('Upload…')}</button>${setting('pointerImage') ? `<select data-key="pointerHotspot" title="${t('Where the click happens')}">${opt('tip', t('click at top-left'), setting('pointerHotspot'))}${opt('center', t('click in the middle'), setting('pointerHotspot'))}</select>` : ''}</span></div>
               <label class="s-row"><span><b>${t('Pointer color')}</b></span><input type="color" data-key="pointerColor" value="${setting('pointerColor') || '#ffffff'}"></label>
+              ${toggle('pointerEverywhere', 'Use it in the whole app', 'not only over the code')}
+              <div class="s-row"><span><b>${t('Back to the normal cursor')}</b></span><button class="s-btn" data-action="pointer-reset">${icon('refresh', 13)}${t('Reset')}</button></div>
             </div>
             <h3>${t('Text & fonts')}</h3>
             <div class="s-group">
@@ -2339,6 +2351,7 @@ function openSettings() {
             <div class="s-group">
               <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
             </div>
+            <div class="s-group s-reset-all"><div class="s-row"><span><b>${t('Reset the look')}</b><small>${t('cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay')}</small></span><button class="s-btn" data-action="look-reset">${icon('refresh', 13)}${t('Reset all')}</button></div></div>
           </section>
           <section data-pane="editor">
             <h3>${t('Text')}</h3>
@@ -2601,6 +2614,31 @@ function openSettings() {
       await saveSettings({ caretColor: '' });
       return applyCustomization();
     }
+    if (e.target.closest('[data-action="cursor-pick"]')) {
+      try {
+        const img = await flux.chooseCursor();
+        if (!img) return;
+        await saveSettings({ pointerImage: img.url, pointerImageSize: [img.width, img.height], pointer: 'custom' });
+        applyCustomization();
+        toast(t('Your cursor is set.'), 'ok');
+        return rerenderSettings();
+      } catch (err) {
+        return toast(errorText(err), 'error', 6000);
+      }
+    }
+    if (e.target.closest('[data-action="pointer-reset"]')) {
+      await saveSettings({ pointer: 'text', pointerColor: '', pointerEverywhere: false });
+      applyCustomization();
+      toast(t('The normal cursor is back.'), 'ok');
+      return rerenderSettings();
+    }
+    if (e.target.closest('[data-action="look-reset"]')) {
+      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity'];
+      await saveSettings(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])));
+      applyEditorSettings();
+      toast(t('Everything looks like new again.'), 'ok');
+      return rerenderSettings();
+    }
     if (e.target.closest('[data-action="bg-pick"]')) {
       const ok = await flux.chooseBackground();
       if (ok) {
@@ -2778,6 +2816,14 @@ function shortcutRows() {
       )
       .join('')}</div></div>`;
   }).join('');
+}
+
+// Nastavenia nakresliť znova (napr. po nahratí kurzora) – bez skoku na začiatok.
+function rerenderSettings() {
+  const top = $('#settings .s-body')?.scrollTop || 0;
+  openSettings();
+  const body = $('#settings .s-body');
+  if (body) body.scrollTop = top;
 }
 
 function closeSettings() {
@@ -3411,6 +3457,7 @@ async function main() {
     saveSettings,
     runCommand: (id) => userKeysCommands[id]?.(),
     isOverridden: (full) => !!keymap?.overridden(`plugin:${full}`),
+    getWorkspace: () => state.workspace,
   });
   pluginsUI = createPluginsUI({ host: pluginHost, toast, openProject: (dir) => (closeSettings(), setWorkspace(dir)) });
 

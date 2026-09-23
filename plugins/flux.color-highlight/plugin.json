@@ -1,0 +1,26 @@
+{
+  "id": "flux.color-highlight",
+  "name": "Color Highlight",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Shows a color square next to #hex and rgb() colors in any file, with a color picker.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "colors",
+    "design",
+    "web"
+  ],
+  "license": "MIT",
+  "issue": 9
+}

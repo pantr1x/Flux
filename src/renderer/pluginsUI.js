@@ -84,12 +84,13 @@ export function createPluginsUI({ host, toast, openProject }) {
     }
     // Lokálne (z priečinka) pluginy, ktoré nie sú v katalógu.
     const inst = await flux.pluginsInstalled();
-    const local = inst.filter((m) => m.local && !list.some((p) => p.id === m.id));
+    // Lokálne pluginy a tie, ktoré už v obchode nie sú – dajú sa odstrániť.
+    const local = inst.filter((m) => !list.some((p) => p.id === m.id));
     box.querySelector('#pl-local').innerHTML = local.length
-      ? `<h3>${t('Loaded from folders')}</h3><div class="s-group">${local
+      ? `<h3>${t('Other installed plugins')}</h3><div class="s-group">${local
           .map(
             (m) =>
-              `<div class="s-row"><span><b>${esc(m.name)}</b><small>${esc(m.id)} · ${esc(m.source || '')}</small></span><span class="s-inline"><button class="s-btn" data-pl-reload="${m.id}">${icon('refresh', 13)}${t('Reload')}</button><button class="icon-btn" data-pl-remove="${m.id}" title="${t('Remove')}">${icon('trash', 14)}</button></span></div>`,
+              `<div class="s-row"><span><b>${esc(m.name)}</b><small>${esc(m.id)} · ${esc(m.source || t('no longer in the store'))}</small></span><span class="s-inline">${m.local ? `<button class="s-btn" data-pl-reload="${m.id}">${icon('refresh', 13)}${t('Reload')}</button>` : ''}<button class="icon-btn" data-pl-remove="${m.id}" title="${t('Remove')}">${icon('trash', 14)}</button></span></div>`,
           )
           .join('')}</div>`
       : '';

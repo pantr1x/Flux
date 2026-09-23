@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('flux', {
   setZoom: (f) => ipcRenderer.send('app:zoom', f),
   chooseBackground: () => ipcRenderer.invoke('app:choose-background'),
   resetBackground: () => ipcRenderer.invoke('app:reset-background'),
+  chooseCursor: () => ipcRenderer.invoke('app:choose-cursor'),
   ghInfo: () => ipcRenderer.invoke('gh:info'),
   ghConnect: (token) => ipcRenderer.invoke('gh:connect', token),
   ghDisconnect: () => ipcRenderer.invoke('gh:disconnect'),

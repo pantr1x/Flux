@@ -1,0 +1,27 @@
+{
+  "id": "flux.css-class-complete",
+  "name": "CSS Class Completion",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Inside class=\"\" Flux suggests the classes from all CSS files in your project.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "html",
+    "css",
+    "web",
+    "autocomplete"
+  ],
+  "license": "MIT",
+  "issue": 7
+}

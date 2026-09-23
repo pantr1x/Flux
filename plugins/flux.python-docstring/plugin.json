@@ -1,0 +1,25 @@
+{
+  "id": "flux.python-docstring",
+  "name": "Python Docstring",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Type \"\"\" under a def and get a ready docstring with every parameter and the return value.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "python",
+    "documentation"
+  ],
+  "license": "MIT",
+  "issue": 6
+}

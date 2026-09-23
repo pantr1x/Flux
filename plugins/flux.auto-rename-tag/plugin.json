@@ -1,0 +1,26 @@
+{
+  "id": "flux.auto-rename-tag",
+  "name": "Auto Rename Tag",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Rename an HTML tag and its closing tag changes too – <div> ↔ </div>.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "html",
+    "web",
+    "xml"
+  ],
+  "license": "MIT",
+  "issue": 2
+}

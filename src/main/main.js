@@ -707,6 +707,25 @@ function registerIpc() {
     applyMaterial();
     return true;
   });
+  // Vlastný kurzor myši: obrázok sa zmenší na max. 64 px a uloží ako data URL do nastavení.
+  ipcMain.handle('app:choose-cursor', async () => {
+    const r = await dialog.showOpenDialog(win, { title: t('Choose a cursor image'), properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'svg', 'cur', 'ico', 'gif', 'webp'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const file = r.filePaths[0];
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const buf = await fsp.readFile(file);
+    if (buf.length > 2 * 1024 * 1024) throw new Error(t('The image is too large.'));
+    if (ext === 'svg' || ext === 'cur' || ext === 'gif') {
+      if (buf.length > 256 * 1024) throw new Error(t('The image is too large.'));
+      const mime = { svg: 'image/svg+xml', cur: 'image/x-icon', gif: 'image/gif' }[ext];
+      return { url: `data:${mime};base64,${buf.toString('base64')}`, width: 32, height: 32 };
+    }
+    let img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) throw new Error(t('This file is not an image Flux can use.'));
+    const { width, height } = img.getSize();
+    if (Math.max(width, height) > 64) img = img.resize(width >= height ? { width: 64 } : { height: 64 });
+    return { url: img.toDataURL(), ...img.getSize() };
+  });
   ipcMain.handle('app:reset-background', () => {
     delete settings.bgImage;
     saveSettings();

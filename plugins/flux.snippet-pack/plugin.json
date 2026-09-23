@@ -1,0 +1,28 @@
+{
+  "id": "flux.snippet-pack",
+  "name": "Snippet Pack",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Ready-made code for Rust, Go, Java, C++, C# and JavaScript – type a short word and press Tab.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "snippets",
+    "rust",
+    "java",
+    "cpp",
+    "go"
+  ],
+  "license": "MIT",
+  "issue": 10
+}

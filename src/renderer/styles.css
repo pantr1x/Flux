@@ -5286,3 +5286,17 @@ body.custom-caret .monaco-editor .cursor {
   height: 22px;
   border-radius: 50%;
 }
+
+/* Vlastný kurzor myši */
+body.pointer-everywhere,
+body.pointer-everywhere * {
+  cursor: var(--editor-pointer) !important;
+}
+.ptr-img img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+.s-reset-all {
+  margin-top: 18px;
+}

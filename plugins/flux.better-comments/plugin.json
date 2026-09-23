@@ -1,0 +1,26 @@
+{
+  "id": "flux.better-comments",
+  "name": "Better Comments",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Colorful comments: ! important, ? question, TODO, * highlight and // crossed out.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "comments",
+    "readability",
+    "todo"
+  ],
+  "license": "MIT",
+  "issue": 3
+}

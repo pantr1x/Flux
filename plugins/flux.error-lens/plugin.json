@@ -1,0 +1,27 @@
+{
+  "id": "flux.error-lens",
+  "name": "Error Lens",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Errors and warnings right on the line where they happen – no hovering, no searching.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "errors",
+    "python",
+    "javascript",
+    "productivity"
+  ],
+  "license": "MIT",
+  "issue": 1
+}

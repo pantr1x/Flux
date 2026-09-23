@@ -79,7 +79,9 @@ Everything a plugin adds through `flux` is removed automatically when the plugin
 | `flux.onSave(cb)`, `flux.onOpen(cb)` | Called with the file (`{ path, name, language, text }`). |
 | `flux.onChange(cb)`, `flux.onSelection(cb)` | Called when the text or the cursor changes. |
 | `flux.every(ms, cb)` | Like `setInterval`, stopped automatically. |
+| `flux.project.folder()`, `await flux.project.files()`, `await flux.project.read(path)` | The open project: its folder, all file paths (relative, with `/`) and the text of a file. Read-only. |
 | `flux.storage.get(key, fallback)`, `await flux.storage.set(key, value)` | Small saved settings for your plugin (JSON values). |
+| `flux.own(disposable)` | Cleans up anything you create with Monaco directly (providers, listeners) when the plugin is turned off. Returns it. |
 | `flux.editor`, `flux.monaco` | The Monaco editor and API for anything advanced. |
 
 Look at the plugins in [`plugins/`](../plugins) for complete examples – they are short.

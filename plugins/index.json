@@ -1,76 +1,148 @@
 {
   "plugins": [
     {
-      "id": "flux.pomodoro",
-      "name": "Pomodoro Timer",
+      "id": "flux.error-lens",
+      "name": "Error Lens",
       "publisher": "Flux",
       "verified": true,
       "version": "1.0.0",
-      "description": "Stay focused: 25 minutes of coding, 5 minutes of break – with a timer in the status bar.",
+      "description": "Errors and warnings right on the line where they happen – no hovering, no searching.",
       "icon": "icon.svg",
       "screenshots": [
         "screenshot.png"
       ],
       "tags": [
-        "productivity",
-        "timer",
-        "focus"
+        "errors",
+        "python",
+        "javascript",
+        "productivity"
       ],
       "issue": 1
     },
     {
-      "id": "flux.lorem",
-      "name": "Lorem Ipsum",
+      "id": "flux.auto-rename-tag",
+      "name": "Auto Rename Tag",
       "publisher": "Flux",
       "verified": true,
       "version": "1.0.0",
-      "description": "Placeholder text for your web pages – type lorem and press Tab.",
+      "description": "Rename an HTML tag and its closing tag changes too – <div> ↔ </div>.",
       "icon": "icon.svg",
       "screenshots": [
         "screenshot.png"
       ],
       "tags": [
         "html",
-        "text",
-        "snippets"
+        "web",
+        "xml"
       ],
       "issue": 2
     },
     {
-      "id": "flux.todo-highlight",
-      "name": "TODO Highlight",
+      "id": "flux.python-docstring",
+      "name": "Python Docstring",
       "publisher": "Flux",
       "verified": true,
       "version": "1.0.0",
-      "description": "Highlights TODO, FIXME, HACK and NOTE in your code and counts them in the status bar.",
+      "description": "Type \"\"\" under a def and get a ready docstring with every parameter and the return value.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "python",
+        "documentation"
+      ],
+      "issue": 6
+    },
+    {
+      "id": "flux.indent-rainbow",
+      "name": "Indent Rainbow",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Each indentation level gets a soft color, so you always see which block a line belongs to.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "python",
+        "readability",
+        "indentation"
+      ],
+      "issue": 4
+    },
+    {
+      "id": "flux.better-comments",
+      "name": "Better Comments",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Colorful comments: ! important, ? question, TODO, * highlight and // crossed out.",
       "icon": "icon.svg",
       "screenshots": [
         "screenshot.png"
       ],
       "tags": [
         "comments",
-        "productivity",
-        "highlight"
+        "readability",
+        "todo"
       ],
       "issue": 3
     },
     {
-      "id": "flux.zen-mode",
-      "name": "Zen Mode",
+      "id": "flux.css-class-complete",
+      "name": "CSS Class Completion",
       "publisher": "Flux",
       "verified": true,
       "version": "1.0.0",
-      "description": "Hide everything except your code – distraction-free writing with one shortcut.",
+      "description": "Inside class=\"\" Flux suggests the classes from all CSS files in your project.",
       "icon": "icon.svg",
       "screenshots": [
         "screenshot.png"
       ],
       "tags": [
-        "focus",
-        "layout",
-        "view"
+        "html",
+        "css",
+        "web",
+        "autocomplete"
       ],
-      "issue": 4
+      "issue": 7
+    },
+    {
+      "id": "flux.bookmarks",
+      "name": "Bookmarks",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Mark important lines and jump between them – even across files.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "navigation",
+        "productivity"
+      ],
+      "issue": 8
+    },
+    {
+      "id": "flux.color-highlight",
+      "name": "Color Highlight",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Shows a color square next to #hex and rgb() colors in any file, with a color picker.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "colors",
+        "design",
+        "web"
+      ],
+      "issue": 9
     },
     {
       "id": "flux.word-count",
@@ -91,22 +163,24 @@
       "issue": 5
     },
     {
-      "id": "pantr1x.save-confetti",
-      "name": "Save Confetti",
-      "publisher": "pantr1x",
-      "verified": false,
+      "id": "flux.snippet-pack",
+      "name": "Snippet Pack",
+      "publisher": "Flux",
+      "verified": true,
       "version": "1.0.0",
-      "description": "A tiny celebration with confetti every time you save a file. 🎉",
+      "description": "Ready-made code for Rust, Go, Java, C++, C# and JavaScript – type a short word and press Tab.",
       "icon": "icon.svg",
       "screenshots": [
         "screenshot.png"
       ],
       "tags": [
-        "fun",
-        "save",
-        "example"
+        "snippets",
+        "rust",
+        "java",
+        "cpp",
+        "go"
       ],
-      "issue": 6
+      "issue": 10
     }
   ]
 }

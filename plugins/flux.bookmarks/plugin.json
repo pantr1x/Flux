@@ -1,0 +1,25 @@
+{
+  "id": "flux.bookmarks",
+  "name": "Bookmarks",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Mark important lines and jump between them – even across files.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "navigation",
+    "productivity"
+  ],
+  "license": "MIT",
+  "issue": 8
+}

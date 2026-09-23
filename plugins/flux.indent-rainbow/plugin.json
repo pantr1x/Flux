@@ -1,0 +1,26 @@
+{
+  "id": "flux.indent-rainbow",
+  "name": "Indent Rainbow",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Each indentation level gets a soft color, so you always see which block a line belongs to.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "python",
+    "readability",
+    "indentation"
+  ],
+  "license": "MIT",
+  "issue": 4
+}
