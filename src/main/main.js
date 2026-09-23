@@ -22,7 +22,7 @@ protocol.registerSchemesAsPrivileged([
 
 // ---------- nastavenia ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { recent: [], theme: 'dark', accent: 'violet', pythonOverrides: {} };
+let settings = { recent: [], theme: 'dark', pythonOverrides: {} };
 function loadSettings() {
   try {
     settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };

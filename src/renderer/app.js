@@ -23,6 +23,7 @@ self.MonacoEnvironment = {
 };
 
 const ACCENTS = {
+  mono: 'mono', // čiernobiela ako Zen – biela v tmavej téme, čierna vo svetlej
   violet: '#8b7bff',
   indigo: '#6366f1',
   blue: '#4f9dff',
@@ -51,7 +52,7 @@ const DEFAULTS = {
   codeTheme: DEFAULT_THEME,
   lastDark: DEFAULT_THEME,
   lastLight: 'vscode-light',
-  accent: 'violet',
+  accent: 'mono',
   translucent: true,
   fontFamily: 'Consolas',
   fontSize: 14,
@@ -167,11 +168,21 @@ function setIcons() {
 // ---------- téma ----------
 function currentAccent() {
   const value = (state.workspace && state.settings.accents?.[state.workspace]) || setting('accent');
+  if (value === 'mono') return monoColor();
   if (ACCENTS[value]) return ACCENTS[value];
-  return /^#[0-9a-f]{6}$/i.test(value) ? value : ACCENTS.violet;
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : monoColor();
 }
 
 const isDark = () => themeOf(setting('codeTheme')).type === 'dark';
+const monoColor = () => (isDark() ? '#e6e6ea' : '#26262c');
+const accentHex = (name) => (name === 'mono' ? monoColor() : ACCENTS[name]);
+
+// Farba textu na farebnom tlačidle: čierna na svetlej farbe, biela na tmavej.
+function readableOn(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#16161a' : '#ffffff';
+}
 
 function applyTheme() {
   const dark = isDark();
@@ -180,13 +191,14 @@ function applyTheme() {
   document.body.classList.toggle('theme-light', !dark);
   document.body.classList.toggle('no-mica', !state.mica || !setting('translucent'));
   document.documentElement.style.setProperty('--accent', accent);
+  document.documentElement.style.setProperty('--accent-fg', readableOn(accent));
   monaco.editor.setTheme(defineMonacoTheme(monaco, setting('codeTheme'), accent));
   $('#btn-theme').innerHTML = icon(dark ? 'sun' : 'moon');
-  const accentName = Object.keys(ACCENTS).find((k) => ACCENTS[k] === accent);
+  const accentName = Object.keys(ACCENTS).find((k) => accentHex(k) === accent);
   $('#accents').innerHTML =
-    Object.entries(ACCENTS)
+    Object.keys(ACCENTS)
       .slice(0, 6)
-      .map(([name, c]) => `<button data-accent="${name}" style="--c:${c}" class="${name === accentName ? 'active' : ''}" title="${name}"></button>`)
+      .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${name === accentName ? 'active' : ''}" title="${name}"></button>`)
       .join('') + `<button class="more" data-accent="more" title="Ďalšie farby a témy">${icon('palette', 13)}</button>`;
   if (term) term.options.theme = terminalTheme();
   codemap?.refresh();
@@ -434,20 +446,6 @@ function activate(tab) {
   document.title = `${basename(tab.path)} — Flux`;
 }
 
-// Klik na „flux“ vľavo hore → úvodná obrazovka (otvorené súbory ostanú v taboch).
-function goHome() {
-  const tab = activeTab();
-  if (tab) tab.viewState = editor.saveViewState();
-  state.active = null;
-  editor.setModel(null);
-  renderTabs();
-  renderTree();
-  renderRunButton();
-  renderStatus();
-  renderWelcome();
-  document.title = 'Flux';
-}
-
 async function closeTab(tab, { force = false } = {}) {
   if (!force && isDirty(tab)) {
     const ok = await confirmPalette(`„${basename(tab.path)}“ má neuložené zmeny.`, [
@@ -692,10 +690,10 @@ function targetDir() {
 }
 
 // Nový súbor: najprv šablóna (Python, HTML, web projekt…), potom názov.
-async function newFile(dir = targetDir()) {
+async function newFile(dir = targetDir(), preset = null) {
   if (!dir) return openFolderDialog();
   const where = relative(dir) || basename(dir);
-  const tpl = await new Promise((resolve) =>
+  const tpl = preset || await new Promise((resolve) =>
     openPalette({
       placeholder: 'Vyber šablónu…',
       note: `Nový súbor v: ${where}`,
@@ -1527,8 +1525,8 @@ function openSettings() {
             )
             .join('')}</div>
           <div class="s-label">Farba zvýraznenia${state.workspace ? ` <small>(pre priečinok ${escapeHtml(basename(state.workspace))})</small>` : ''}</div>
-          <div class="accent-grid">${Object.entries(ACCENTS)
-            .map(([name, c]) => `<button data-accent="${name}" style="--c:${c}" class="${c === accent ? 'active' : ''}" title="${name}"></button>`)
+          <div class="accent-grid">${Object.keys(ACCENTS)
+            .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? 'čiernobiela (ako Zen)' : name}"></button>`)
             .join('')}<label class="custom-color" title="Vlastná farba"><input type="color" value="${accent}" data-custom-accent></label></div>
           ${state.mica ? toggle('translucent', 'Priesvitné okno', 'cez okno presvitá rozmazaná tapeta (Windows 11)') : ''}
         </section>
@@ -1613,6 +1611,63 @@ async function setAccent(value) {
   applyTheme();
 }
 
+// ---------- úvodná obrazovka na celé okno (klik na logo) ----------
+const START_CHOICES = [
+  { id: 'py', title: 'Python', sub: 'skript – print, input, výpočty', icon: 'main.py' },
+  { id: 'py-tkinter', title: 'Python okno', sub: 'aplikácia s tlačidlami (tkinter)', icon: 'okno.py' },
+  { id: 'py-pygame', title: 'Python hra', sub: 'pohyb šípkami (pygame)', icon: 'hra.py' },
+  { id: 'html', title: 'HTML stránka', sub: 'jedna stránka s kostrou', icon: 'index.html' },
+  { id: 'web', title: 'Web projekt', sub: 'HTML + CSS + JavaScript', icon: 'style.css' },
+  { id: 'empty', title: 'Prázdny súbor', sub: 'vlastný názov a prípona', icon: 'subor.txt' },
+];
+
+function openStart() {
+  const el = $('#start');
+  const recent = (state.settings.recent || []).filter((d) => d !== state.workspace).slice(0, 4);
+  el.innerHTML = `
+    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span></div>
+    <div class="st-inner">
+      <h1>Čo ideš robiť?</h1>
+      <p class="st-sub">${state.workspace ? `Nový súbor sa vytvorí v priečinku <b>${escapeHtml(basename(state.workspace))}</b>.` : 'Najprv si vyberieš priečinok, kam sa súbor uloží.'}</p>
+      <div class="st-grid">${START_CHOICES.map(
+        (c) => `<button class="st-card" data-tpl="${c.id}"><span class="st-ic">${fileIcon(c.icon).replace(/width="16" height="16"/, 'width="30" height="30"')}</span><b>${c.title}</b><small>${c.sub}</small></button>`,
+      ).join('')}</div>
+      <div class="st-row">
+        <button class="st-link" data-act="open">${icon('folderOpen', 16)}Otvoriť priečinok…</button>
+        ${recent.map((d) => `<button class="st-link" data-dir="${escapeAttr(d)}" title="${escapeAttr(d)}">${icon('folder', 16)}${escapeHtml(basename(d))}</button>`).join('')}
+      </div>
+      ${state.workspace ? `<button class="st-back" data-act="back">Späť do editora <kbd>Esc</kbd></button>` : ''}
+    </div>`;
+  el.hidden = false;
+  el.onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.act === 'back') return closeStart();
+    if (b.dataset.act === 'open') {
+      await openFolderDialog();
+      if (state.workspace) openStart();
+      return;
+    }
+    if (b.dataset.dir) {
+      await setWorkspace(b.dataset.dir);
+      return closeStart();
+    }
+    const tpl = TEMPLATES.find((t) => t.id === b.dataset.tpl);
+    if (!tpl) return;
+    if (!state.workspace) {
+      await openFolderDialog();
+      if (!state.workspace) return;
+    }
+    closeStart();
+    newFile(state.workspace, tpl);
+  };
+}
+
+function closeStart() {
+  $('#start').hidden = true;
+  if (state.active) editor.focus();
+}
+
 // ---------- uvítanie ----------
 function renderWelcome() {
   if (state.active) return;
@@ -1674,6 +1729,13 @@ function keybindings() {
         } else if (e.key === 'Enter') {
           e.preventDefault();
           pick(palette.sel);
+        }
+        return;
+      }
+      if (!$('#start').hidden) {
+        if (e.key === 'Escape' && state.workspace) {
+          e.preventDefault();
+          closeStart();
         }
         return;
       }
@@ -1766,7 +1828,7 @@ function layoutEvents() {
   $('#btn-theme').onclick = toggleTheme;
   $('#btn-palette').onclick = openCommandPalette;
   $('#btn-settings').onclick = openSettings;
-  $('.brand').onclick = goHome;
+  $('.brand').onclick = openStart;
   $('.brand').title = 'Úvodná obrazovka';
   $('#btn-workspace').onclick = workspaceSwitcher;
   $('#btn-run').onclick = run;
@@ -1820,6 +1882,8 @@ async function main() {
   state.platform = init.platform;
   state.mica = !!init.mica;
   state.settings = init.settings;
+  // Jednorazovo: staré verzie ukladali fialovú ako predvolenú – nová predvolená je čiernobiela (ako Zen).
+  if (!state.settings.monoMigrated) await saveSettings({ monoMigrated: true, accent: 'mono', accents: {} });
   document.body.classList.add(`platform-${state.platform}`);
 
   setIcons();
@@ -1854,7 +1918,10 @@ async function main() {
   });
 
   if (init.lastFolder) await setWorkspace(init.lastFolder);
-  else detectPython();
+  else {
+    detectPython();
+    openStart();
+  }
 }
 
 main();

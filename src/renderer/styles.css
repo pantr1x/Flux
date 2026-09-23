@@ -188,8 +188,9 @@ button:disabled {
   display: grid;
   place-items: center;
   border-radius: 6px;
-  background: var(--text);
-  color: var(--base);
+  background: #111114;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .workspace {
@@ -325,16 +326,22 @@ button:disabled {
   padding: 8px 14px;
   border-radius: 10px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font-weight: 600;
 }
 
 .side-bottom {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 2px 2px;
+  gap: 2px;
+  height: 28px;
+  padding: 0 2px;
   border-top: 1px solid var(--line);
+}
+
+.side-bottom .icon-btn {
+  width: 24px;
+  height: 24px;
 }
 
 .accents {
@@ -563,7 +570,7 @@ body.compact #btn-expand {
   padding: 0 14px 0 11px;
   border-radius: 10px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   font-weight: 600;
   transition: transform 0.12s var(--ease), filter 0.15s;
 }
@@ -728,7 +735,7 @@ body.compact #btn-expand {
 
 .welcome-actions button.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .welcome-section {
@@ -1251,7 +1258,7 @@ button.status-item:hover {
 
 .chip-btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .accents button.more {
@@ -1509,7 +1516,7 @@ body.codemap-on #editor {
 
 #codemap {
   position: absolute;
-  top: 6px;
+  top: 0;
   right: 0;
   bottom: 0;
   width: 112px;
@@ -1548,4 +1555,143 @@ body.codemap-on #editor {
 
 #codemap.dragging .cm-slider {
   background: var(--active);
+}
+
+/* Posuvník editora – tenký a zaoblený. */
+.monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: 6px;
+}
+
+/* ---------- úvodná obrazovka na celé okno ---------- */
+#start {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: var(--base);
+  animation: fade 0.15s;
+}
+
+body:not(.no-mica) #start {
+  background: color-mix(in srgb, var(--base) 88%, transparent);
+  backdrop-filter: blur(30px);
+}
+
+#start[hidden] {
+  display: none;
+}
+
+.st-top {
+  height: var(--topbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 16px;
+  font-weight: 650;
+  font-size: 15px;
+}
+
+.st-inner {
+  flex: 1;
+  overflow: auto;
+  width: min(820px, 92vw);
+  margin: 0 auto;
+  padding: 7vh 0 40px;
+}
+
+.st-inner h1 {
+  margin: 0 0 6px;
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+}
+
+.st-sub {
+  margin: 0 0 28px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.st-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.st-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  align-items: center;
+  padding: 18px;
+  border-radius: 14px;
+  text-align: left;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: background 0.15s, box-shadow 0.15s, transform 0.12s var(--ease);
+}
+
+.st-card:hover {
+  background: var(--active);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.st-card:active {
+  transform: scale(0.98);
+}
+
+.st-ic {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--card-2);
+}
+
+.st-card b {
+  font-size: 15px;
+}
+
+.st-card small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.st-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 26px;
+}
+
+.st-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--text-2);
+  background: var(--hover);
+}
+
+.st-link:hover {
+  color: var(--text);
+  background: var(--active);
+}
+
+.st-back {
+  margin-top: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+}
+
+.st-back:hover {
+  color: var(--text);
 }

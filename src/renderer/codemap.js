@@ -13,6 +13,14 @@ export function createCodeMap(monaco, editor, host) {
   let colorTimer = null;
   let colorRun = 0;
   let listeners = [];
+  let wanted = false;
+
+  // Viditeľný len keď je zapnutý a je otvorený súbor.
+  function updateVisibility() {
+    const show = wanted && !!editor.getModel();
+    host.hidden = !show;
+    document.body.classList.toggle('codemap-on', show);
+  }
 
   const editorLine = () => editor.getOption(monaco.editor.EditorOption.lineHeight);
 
@@ -57,6 +65,7 @@ export function createCodeMap(monaco, editor, host) {
     listeners = [];
     const model = editor.getModel();
     if (model) listeners.push(model.onDidChangeContent(scheduleColorize));
+    updateVisibility();
     colorize();
   }
 
@@ -96,8 +105,8 @@ export function createCodeMap(monaco, editor, host) {
   return {
     refresh: colorize,
     setVisible(show) {
-      host.hidden = !show;
-      document.body.classList.toggle('codemap-on', show);
+      wanted = show;
+      updateVisibility();
       if (show) colorize();
     },
   };
