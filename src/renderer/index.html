@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src http://127.0.0.1:* http://localhost:*; connect-src 'self'"
+    />
+    <title>Flux</title>
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="theme-dark">
+    <div id="app">
+      <div id="peek-zone"></div>
+      <aside id="sidebar">
+        <div class="side-top drag">
+          <div class="brand"><span class="brand-mark"></span>flux</div>
+          <button class="icon-btn no-drag" id="btn-compact" title="Skryť bočný panel (Ctrl+B)"></button>
+        </div>
+
+        <button class="workspace no-drag" id="btn-workspace" title="Prepnúť priečinok">
+          <span class="ws-dot"></span>
+          <span class="ws-name" id="ws-name">Žiadny priečinok</span>
+          <span class="ws-caret"></span>
+        </button>
+
+        <div class="essentials" id="essentials">
+          <button class="icon-btn" data-cmd="new-file" title="Nový súbor (Ctrl+N)"></button>
+          <button class="icon-btn" data-cmd="new-folder" title="Nový priečinok"></button>
+          <button class="icon-btn" data-cmd="refresh" title="Obnoviť"></button>
+          <button class="icon-btn" data-cmd="collapse" title="Zbaliť všetko"></button>
+        </div>
+
+        <div id="tree" tabindex="0"></div>
+
+        <div class="side-bottom">
+          <div class="accents" id="accents" title="Farba priečinka"></div>
+          <button class="icon-btn" id="btn-theme" title="Svetlá / tmavá téma"></button>
+          <button class="icon-btn" id="btn-palette" title="Príkazy (Ctrl+Shift+P)"></button>
+        </div>
+      </aside>
+      <div class="resizer rz-col" id="side-resizer"></div>
+
+      <main id="main">
+        <header id="topbar" class="drag">
+          <button class="icon-btn no-drag" id="btn-expand" title="Zobraziť bočný panel (Ctrl+B)"></button>
+          <div id="tabs" class="no-drag"></div>
+          <div class="grow"></div>
+          <div class="actions no-drag">
+            <button class="chip-btn" id="btn-live" title="Live Server (Alt+L)"></button>
+            <button class="run-btn" id="btn-run" title="Spustiť (F5)"></button>
+            <button class="stop-btn" id="btn-stop" title="Zastaviť (Shift+F5)" disabled></button>
+          </div>
+          <div class="caption-space"></div>
+        </header>
+
+        <section id="card">
+          <div id="workarea">
+            <div id="editor-wrap">
+              <div id="editor"></div>
+              <div id="welcome"></div>
+            </div>
+            <div class="resizer rz-col" id="preview-resizer" hidden></div>
+            <div id="preview" hidden>
+              <div class="preview-bar">
+                <span class="live-dot"></span>
+                <span class="preview-url" id="preview-url"></span>
+                <div class="grow"></div>
+                <div class="seg" id="devices">
+                  <button data-w="" class="active" title="Plná šírka"></button>
+                  <button data-w="820" title="Tablet (820 px)"></button>
+                  <button data-w="390" title="Mobil (390 px)"></button>
+                </div>
+                <button class="icon-btn" id="btn-preview-reload" title="Obnoviť"></button>
+                <button class="icon-btn" id="btn-preview-external" title="Otvoriť v prehliadači"></button>
+                <button class="icon-btn" id="btn-preview-close" title="Zavrieť náhľad"></button>
+              </div>
+              <div class="preview-stage"><iframe id="preview-frame" title="Náhľad"></iframe></div>
+            </div>
+          </div>
+
+          <div class="resizer rz-row" id="panel-resizer"></div>
+          <div id="panel">
+            <div class="panel-bar">
+              <span class="panel-title" id="panel-title">Výstup</span>
+              <span class="run-state" id="run-state"></span>
+              <div id="hint"></div>
+              <div class="grow"></div>
+              <button class="icon-btn" id="btn-clear" title="Vymazať výstup"></button>
+              <button class="icon-btn" id="btn-panel" title="Skryť panel (Ctrl+J)"></button>
+            </div>
+            <div id="terminal"></div>
+          </div>
+
+          <footer id="statusbar">
+            <button class="status-item" id="st-python" title="Python interpreter"></button>
+            <span class="status-item" id="st-lsp"></span>
+            <div class="grow"></div>
+            <button class="status-item" id="st-live" hidden></button>
+            <button class="status-item" id="st-autosave" title="Automatické ukladanie"></button>
+            <span class="status-item" id="st-lang"></span>
+            <span class="status-item" id="st-pos"></span>
+          </footer>
+        </section>
+      </main>
+    </div>
+
+    <div id="overlay" hidden>
+      <div id="palette" role="dialog">
+        <input id="palette-input" spellcheck="false" autocomplete="off" />
+        <div id="palette-list" role="listbox"></div>
+      </div>
+    </div>
+    <div id="toasts"></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

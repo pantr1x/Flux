@@ -4,6 +4,10 @@
 > pre web mám **Live Server** s automatickým reloadom, editor má **suggestions** (autocomplete, chyby, návrhy)
 > a celé to vyzerá čisto a moderne ako **Zen Browser**.
 
+> **Rozhodnutie (v0.1):** Electron + Monaco + xterm.js + node-pty (ConPTY) + Pyright, cieľ Windows 11,
+> iba klasický autocomplete (bez AI). Dôvod: najviac hotových a overených knižníc (rovnaké ako VS Code),
+> bez potreby Rustu. Implementácia je v `src/`, návod v `README.md`.
+
 ---
 
 ## 1. Ako to robia ostatní
