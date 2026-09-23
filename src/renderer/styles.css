@@ -1491,17 +1491,34 @@ button.status-item:hover {
   flex-direction: column;
 }
 
+.s-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 64px;
+  padding: 0 16px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.s-head h2 {
+  margin: 0 !important;
+  font-size: 20px;
+  letter-spacing: -0.3px;
+}
+
 .s-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
+  flex: none;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 9px !important;
 }
 
 .s-body {
   flex: 1;
   overflow: auto;
-  padding: 22px 28px 28px;
+  padding: 20px 28px 28px;
 }
 
 .s-body section {
@@ -3857,4 +3874,711 @@ body.theme-light .ob-aurora i:nth-child(2) {
   padding: 12px;
   color: var(--text-3);
   font-size: 13px;
+}
+
+.s-body section > :first-child {
+  margin-top: 0 !important;
+}
+
+.s-mb {
+  margin-bottom: 14px;
+}
+
+.tc-upd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent) !important;
+}
+
+#st-install {
+  gap: 7px;
+}
+
+.spin {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--text) 25%, transparent);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ob-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -14px 0 22px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* vlastné témy */
+.theme-card {
+  position: relative;
+}
+
+.tc-edit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-3);
+}
+
+.tc-edit:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+.theme-new {
+  justify-content: center;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong) !important;
+  background: transparent !important;
+  border: 1.5px dashed transparent;
+  color: var(--text-2);
+}
+
+.theme-new:hover {
+  background: var(--hover) !important;
+  color: var(--text);
+}
+
+/* ======================================================================
+   AI panel
+   ====================================================================== */
+#ai {
+  width: 380px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card-solid) 40%, transparent);
+  animation: card-in 0.25s var(--ease);
+}
+
+#ai[hidden],
+#ai-resizer[hidden] {
+  display: none;
+}
+
+.ai-btn span {
+  font-weight: 600;
+}
+
+.ai-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+}
+
+.ai-head small {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.ai-log {
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  user-select: text;
+}
+
+.ai-empty {
+  margin: auto;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.ai-empty > svg {
+  color: var(--accent);
+}
+
+.ai-empty b {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.ai-empty p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ai-ideas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.ai-ideas button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.ai-ideas button:hover {
+  background: var(--active);
+}
+
+.ai-msg.user {
+  align-self: flex-end;
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.ai-bubble {
+  padding: 8px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--active);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ai-att {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.ai-msg.bot {
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.ai-body p {
+  margin: 0 0 8px;
+}
+
+.ai-body ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.ai-body h4 {
+  margin: 10px 0 4px;
+  font-size: 13.5px;
+}
+
+.ai-body code {
+  font: 12.5px var(--mono);
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--hover);
+}
+
+.ai-body a {
+  color: var(--accent);
+}
+
+.ai-code {
+  margin: 6px 0 10px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  background: color-mix(in srgb, var(--base) 70%, transparent);
+}
+
+.ai-code-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.ai-code-bar span {
+  flex: 1;
+}
+
+.ai-code-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.ai-code-bar button:hover {
+  background: var(--active);
+  color: var(--text);
+}
+
+.ai-code pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  max-height: 360px;
+}
+
+.ai-code pre code {
+  padding: 0;
+  background: none;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.ai-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-2);
+  font: 11.5px var(--mono);
+}
+
+.ai-err {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+  color: var(--err);
+  font-size: 12.5px;
+}
+
+.ai-note {
+  color: var(--text-3);
+}
+
+.ai-dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.ai-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: ai-dot 1s ease-in-out infinite;
+}
+
+.ai-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ai-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ai-dot {
+  50% {
+    transform: translateY(-4px);
+    opacity: 0.5;
+  }
+}
+
+.ai-input {
+  flex: none;
+  margin: 0 10px 10px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--card-solid);
+  box-shadow: 0 0 0 1px var(--line-strong);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.ai-input:focus-within {
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+.ai-ctx {
+  grid-column: 1 / -1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+  text-decoration: line-through;
+}
+
+.ai-ctx.on {
+  color: var(--text-2);
+  text-decoration: none;
+  background: var(--hover);
+}
+
+.ai-input textarea {
+  resize: none;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: 13px/1.45 var(--ui-font);
+  padding: 4px;
+  max-height: 160px;
+}
+
+.ai-send {
+  align-self: end;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--base);
+}
+
+.ai-send[data-stop] {
+  background: var(--err);
+  color: #fff;
+}
+
+/* nastavenia AI a GitHub */
+.s-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.s-inline input[type='password'] {
+  width: 200px;
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--card-2, var(--active));
+  border: none;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  outline: none;
+}
+
+.s-inline input:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.s-mcp-add {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 1fr auto;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.s-mcp-add input {
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--hover);
+  border: none;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--line);
+  outline: none;
+}
+
+.s-mcp-add .s-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.s-row small a {
+  color: var(--accent);
+}
+
+.gh-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gh-user img {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.gh-user span {
+  display: flex;
+  flex-direction: column;
+}
+
+/* výber repozitára */
+#ghpick {
+  position: fixed;
+  inset: 0;
+  z-index: 114;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade 0.15s;
+}
+
+#ghpick[hidden] {
+  display: none;
+}
+
+.gh-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gh-list {
+  max-height: 50vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gh-repo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.gh-repo:hover {
+  background: var(--hover);
+}
+
+.gh-ic {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--card-2);
+  color: var(--text-2);
+}
+
+.gh-ic.big {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+
+.gh-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gh-txt small {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gh-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-3);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.gh-foot {
+  margin: 12px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.np-card footer .grow {
+  flex: 1;
+}
+
+.np-gh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* karta GitHub na stránke projektu */
+.pj-git:not(:empty) {
+  margin-bottom: 24px;
+  animation: card-in 0.3s var(--ease) backwards;
+}
+
+.gh-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.gh-box.col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.gh-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gh-priv {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.gh-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 96px;
+  overflow: auto;
+}
+
+.gh-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 4px;
+  border-radius: 7px;
+  background: var(--card-2);
+  font: 11.5px var(--mono);
+  color: var(--text-2);
+}
+
+.gh-file i {
+  font-style: normal;
+  font-weight: 700;
+  min-width: 14px;
+  text-align: center;
+  color: var(--warn);
+}
+
+.gh-file i.st-A,
+.gh-file i.st-\? {
+  color: var(--ok);
+}
+
+.gh-file i.st-D {
+  color: var(--err);
+}
+
+.gh-commit {
+  display: flex;
+  gap: 6px;
+}
+
+.gh-commit input {
+  flex: 1;
+  height: 32px;
+  padding: 0 10px;
+  font: 13px var(--ui-font);
+  color: var(--text);
+  background: var(--card-2);
+  border: none;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  outline: none;
+}
+
+.gh-commit input:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.gh-commit .s-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.s-btn.primary {
+  background: var(--text);
+  color: var(--base);
+  box-shadow: none;
+}
+
+.s-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#st-git {
+  gap: 6px;
+}
+
+.git-n {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.git-s {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.s-mcp-add input {
+  min-width: 0;
 }

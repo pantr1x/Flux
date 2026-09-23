@@ -171,7 +171,8 @@ class Runner {
 
     let child;
     try {
-      child = spawn(cmd, args, { cwd, env, windowsHide: true });
+      // args ako reťazec = hotový príkazový riadok (vlastné príkazy zo skratiek).
+      child = typeof args === 'string' ? spawn(`${cmd} ${args}`, { cwd, env, windowsHide: true, shell: true }) : spawn(cmd, args, { cwd, env, windowsHide: true });
     } catch (err) {
       this.send('run:start', { label, cwd, pid: 0 });
       finish(-1, String(err.message || err));

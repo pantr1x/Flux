@@ -23,11 +23,16 @@ const CODE_LANGS = [
 ];
 
 // Ktoré vybrané jazyky ešte treba stiahnuť.
-function missingTools(app) {
+function chosenTools(app) {
   const chosen = app.getSettings().codeLangs || [];
-  const ids = [...new Set(CODE_LANGS.filter((c) => chosen.includes(c.id) && c.tool).map((c) => c.tool))];
-  return ids.map((id) => app.tools.info(id)).filter((tc) => tc && !tc.installed);
+  return [...new Set(CODE_LANGS.filter((c) => chosen.includes(c.id) && c.tool).map((c) => c.tool))];
 }
+function missingTools(app, includeFinished = false) {
+  const list = chosenTools(app).map((id) => app.tools.info(id)).filter(Boolean);
+  // Počas inštalácie ostanú v zozname aj tie, ktoré sa medzitým dokončili (s fajkou).
+  return includeFinished ? list.filter((tc) => !tc.installed || installedHere.has(tc.id)) : list.filter((tc) => !tc.installed);
+}
+const installedHere = new Set();
 
 const LOOK_THEMES = ['vscode-dark', 'flux', 'tokyo-night', 'catppuccin', 'vscode-light', 'github-light'];
 
@@ -84,13 +89,6 @@ export function createOnboarding(app) {
         ).join('')}</div></div>${nav()}`;
     }
     if (step === 3) {
-      const miss = missingTools(app);
-      const total = miss.reduce((a, tc) => a + tc.download, 0);
-      return `<div class="ob-step"><h2>${t('Get your tools')}</h2><p>${t('These languages are not on your computer yet. Flux downloads them from their official sources – about {size} in total. You can also do this later.', { size: app.tools.mb(total) })}</p>
-        <div class="tc-list ob-tools">${miss.map((tc) => app.tools.row(tc)).join('')}</div>
-        ${miss.length > 1 && app.tools.canInstall() ? `<button class="ob-ghost ob-all" data-install-all>${app.icon('download', 14)}${t('Install all')}</button>` : ''}</div>${nav()}`;
-    }
-    if (step === 4) {
       return `<div class="ob-step"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
         <div class="ob-themes">${LOOK_THEMES.map(
           (id) =>
@@ -102,8 +100,22 @@ export function createOnboarding(app) {
           .map((a) => `<button data-accent="${a}" style="--c:${app.accentHex(a)}" class="${app.accentHex(a) === app.currentAccent() ? 'on' : ''}"></button>`)
           .join('')}</div></div>${nav()}`;
     }
+    if (step === 4) {
+      // Inštalácia vybraných jazykov – beží na pozadí, dá sa preskočiť.
+      const miss = missingTools(app, true);
+      const total = miss.reduce((a, tc) => a + tc.download, 0);
+      const can = app.tools.canInstall();
+      return `<div class="ob-step"><h2>${can ? t('Installing your tools') : t('Get your tools')}</h2><p>${
+        can
+          ? t('Flux is downloading your languages from their official sources (about {size}). You can skip this – it keeps installing in the background and you can already code in everything else.', { size: app.tools.mb(total) })
+          : t('These languages are not on your computer yet. Flux downloads them from their official sources – about {size} in total. You can also do this later.', { size: app.tools.mb(total) })
+      }</p>
+        <div class="tc-list ob-tools">${miss.map((tc) => app.tools.row(tc)).join('')}</div></div>
+        <div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}<button class="ob-primary" data-next>${can ? t('Skip') : t('Continue')}</button></div>`;
+    }
     return `<div class="ob-splash ob-done">${LOGO}<h1 class="ob-title">${t("You're all set!")}</h1>
         <p class="ob-tag">${t('Want a 30-second tour of the main features?')}</p>
+        ${app.tools.busy() ? `<p class="ob-note"><span class="spin"></span>${t('Your languages keep installing in the background.')}</p>` : ''}
         <div class="ob-row"><button class="ob-primary" data-tour>${t('Show me around')}</button><button class="ob-ghost" data-finish>${t('Start coding')}</button></div></div>`;
   }
 
@@ -156,10 +168,27 @@ export function createOnboarding(app) {
     if (b.dataset.next !== undefined) {
       dir = 1;
       step = Math.min(5, step + 1);
-      // Krok „nástroje“ len ak niečo z vybraných jazykov chýba.
-      if (step === 3) {
+      // Krok „inštalácia“ len ak niečo z vybraných jazykov chýba.
+      if (step === 4) {
         await app.tools.status();
-        if (!missingTools(app).length) step = 4;
+        const miss = missingTools(app);
+        if (!miss.length && !app.tools.busy()) step = 5;
+        else if (app.tools.canInstall()) {
+          miss.forEach((tc) => installedHere.add(tc.id));
+          app.tools.installAll(miss.map((tc) => tc.id));
+          // Keď je všetko hotové, úvod sám pokračuje.
+          const off = app.tools.onChange(() => {
+            if (step === 4 && !app.tools.busy()) {
+              off();
+              setTimeout(() => {
+                if (step !== 4) return;
+                dir = 1;
+                step = 5;
+                render();
+              }, 900);
+            }
+          });
+        }
       }
       if (step === 1) {
         flux.i18nList().then((list) => {
@@ -176,7 +205,7 @@ export function createOnboarding(app) {
     if (b.dataset.back !== undefined) {
       dir = -1;
       step = Math.max(0, step - 1);
-      if (step === 3 && !missingTools(app).length) step = 2;
+      if (step === 4 && !missingTools(app, true).length) step = 3;
       return render();
     }
     if (b.dataset.lang) {

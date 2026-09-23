@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src http://127.0.0.1:* http://localhost:*; connect-src 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; worker-src 'self' blob:; frame-src http://127.0.0.1:* http://localhost:*; connect-src 'self'"
     />
     <title>Flux</title>
     <link rel="stylesheet" href="app.css" />
@@ -45,6 +45,7 @@
           <div id="tabs" class="no-drag"></div>
           <div class="grow"></div>
           <div class="actions no-drag">
+            <button class="chip-btn ai-btn" id="btn-ai" title="AI assistant (Ctrl+I)"></button>
             <button class="chip-btn" id="btn-live" title="Live Server (Alt+L)"></button>
             <button class="run-btn" id="btn-run" title="Run (F5)"></button>
             <button class="stop-btn" id="btn-stop" title="Stop (Shift+F5)" disabled></button>
@@ -76,6 +77,8 @@
               </div>
               <div class="preview-stage"><iframe id="preview-frame" title="Preview"></iframe></div>
             </div>
+            <div class="resizer rz-col" id="ai-resizer" hidden></div>
+            <aside id="ai" hidden></aside>
           </div>
 
           <div class="resizer rz-row" id="panel-resizer"></div>
@@ -93,9 +96,11 @@
 
           <footer id="statusbar">
             <button class="status-item" id="st-python" title="Python interpreter"></button>
+            <button class="status-item" id="st-git" hidden></button>
             <button class="status-item" id="st-problems" hidden></button>
             <span class="status-item" id="st-lsp"></span>
             <div class="grow"></div>
+            <button class="status-item" id="st-install" hidden></button>
             <button class="status-item" id="st-live" hidden></button>
             <button class="status-item" id="st-autosave" title="Auto save"></button>
             <span class="status-item" id="st-lang"></span>
@@ -116,6 +121,7 @@
     <div id="glance" hidden></div>
     <div id="newproj" hidden></div>
     <div id="tcask" hidden></div>
+    <div id="ghpick" hidden></div>
     <div id="tour" hidden></div>
     <div id="onboard" hidden></div>
     <div id="toasts"></div>

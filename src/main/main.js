@@ -7,6 +7,8 @@ const { pathToFileURL } = require('node:url');
 const { findPython, probe } = require('./python');
 const { Runner, commandFor, toolchainFor } = require('./runner');
 const toolchains = require('./toolchains');
+const { createAI } = require('./ai');
+const { createGitHub } = require('./github');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
 const i18n = require('./i18n');
@@ -85,11 +87,41 @@ const send = (channel, payload) => {
 
 const runner = new Runner(send);
 const knownTools = new Set(); // jazyky, o ktorých už vieme, že sú nainštalované
+const ai = createAI({
+  getSettings: () => settings,
+  saveSettings: (patch) => {
+    Object.assign(settings, patch);
+    saveSettings();
+  },
+  send: (ch, p) => send(ch, p),
+});
+const github = createGitHub({
+  getSettings: () => settings,
+  saveSettings: (patch) => {
+    Object.assign(settings, patch);
+    saveSettings();
+  },
+});
 const live = new LiveServer((entry) => send('live:log', entry));
 const lsp = new LanguageServer(
   (msg) => send('lsp:message', msg),
   (code) => send('lsp:exit', code),
 );
+
+// Automatické aktualizácie jazykov (raz za deň, na pozadí, len ak sú zapnuté).
+async function autoUpdateToolchains() {
+  if (!isWin || settings.autoUpdateLangs === false) return;
+  if (Date.now() - (settings.lastLangUpdate || 0) < 24 * 3600 * 1000) return;
+  settings.lastLangUpdate = Date.now();
+  saveSettings();
+  const updates = await toolchains.checkUpdates();
+  for (const id of Object.keys(updates)) {
+    try {
+      const res = await toolchains.upgrade(id, (p) => send('toolchains:progress', p));
+      send('toolchains:updated', { ...res, from: updates[id].current });
+    } catch {}
+  }
+}
 
 function createWindow() {
   const dark = settings.theme !== 'light';
@@ -181,10 +213,49 @@ function insideWorkspace(p) {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
-function guard(p) {
-  if (!insideWorkspace(path.resolve(p))) throw new Error(t('The path is outside the open folder.'));
-  return path.resolve(p);
+// Priečinok s tvojimi nastaveniami, ktoré sa upravujú ako súbory (skratky, vlastné témy).
+const configDir = () => path.join(app.getPath('userData'), 'config');
+function insideConfig(p) {
+  const rel = path.relative(configDir(), p);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
+
+function guard(p) {
+  const abs = path.resolve(p);
+  if (insideConfig(abs)) return abs;
+  if (!insideWorkspace(abs)) throw new Error(t('The path is outside the open folder.'));
+  return abs;
+}
+
+const SHORTCUTS_TEMPLATE = `{
+  "//": [
+    "Your own shortcuts. Save this file (Ctrl+S) and they work right away.",
+    "key:      e.g. Ctrl+Alt+R, Ctrl+Shift+1, Alt+F5, F6",
+    "What it does (pick one):",
+    "  run:      any command or script, runs in the Output panel (python, node, git, .bat, .ps1…)",
+    "  insert:   text to type into the editor, $0 = where the cursor ends up",
+    "  command:  a Flux command (run, stop, save, saveAll, live, newFile, newProject, openFolder,",
+    "            quickOpen, palette, settings, home, format, sidebar, panel, theme)",
+    "            or any editor action, e.g. editor.action.commentLine",
+    "  url:      open a web page",
+    "  sequence: a list of the steps above, done one after another",
+    "Variables: \${file} \${fileName} \${dir} \${workspace} \${selection} \${word} \${line}"
+  ],
+  "shortcuts": [
+    { "key": "Ctrl+Alt+P", "insert": "print(f\\"{$0=}\\")", "label": "Debug print" },
+    { "key": "Ctrl+Alt+G", "url": "https://www.google.com/search?q=\${selection}", "label": "Google the selection" },
+    { "key": "Ctrl+Alt+S", "sequence": [{ "command": "saveAll" }, { "command": "run" }], "label": "Save all and run" }
+  ]
+}
+`;
+
+const THEME_TEMPLATE = (name, type, colors) => `{
+  "//": "Your own color theme. Change the colors (hex), save with Ctrl+S and pick it in Settings → Appearance.",
+  "name": ${JSON.stringify(name)},
+  "type": ${JSON.stringify(type)},
+  "colors": ${JSON.stringify(colors, null, 4).replace(/\n/g, '\n  ')}
+}
+`;
 
 // ---------- IPC ----------
 function registerIpc() {
@@ -457,7 +528,65 @@ function registerIpc() {
   });
 
   // Jazyky na stiahnutie (Java, C++, Go…)
+  // GitHub / Git – operácie len nad otvoreným projektom
+  ipcMain.handle('gh:info', () => github.info());
+  ipcMain.handle('gh:connect', (_e, token) => github.connect(String(token || '')));
+  ipcMain.handle('gh:disconnect', () => github.disconnect());
+  ipcMain.handle('gh:repos', () => github.repos());
+  ipcMain.handle('gh:clone', (_e, full, root) => {
+    if (!/^[\w.-]+\/[\w.-]+$/.test(full)) throw new Error('Invalid repository');
+    return github.clone(full, root || defaultRoot());
+  });
+  ipcMain.handle('git:status', () => github.status(workspace));
+  ipcMain.handle('git:commit-push', (_e, message) => github.commitPush(workspace, String(message || '')));
+  ipcMain.handle('git:pull', () => github.pull(workspace));
+  ipcMain.handle('gh:publish', (_e, opts) => {
+    if (!workspace) throw new Error(t('Open a folder first.'));
+    return github.publish(workspace, { name: opts?.name || path.basename(workspace), isPrivate: opts?.private !== false, description: opts?.description || '' });
+  });
+
+  // AI asistent
+  ipcMain.handle('ai:config', () => ai.publicConfig());
+  ipcMain.handle('ai:update', (_e, patch) => ai.update(patch || {}));
+  ipcMain.handle('ai:chat', (_e, id, messages) => ai.chat(id, messages));
+  ipcMain.on('ai:stop', (_e, id) => ai.stop(id));
+
+  // Nastavenia ako súbory (vlastné skratky, témy)
+  ipcMain.handle('config:shortcuts', async () => {
+    const file = path.join(configDir(), 'shortcuts.json');
+    await fsp.mkdir(configDir(), { recursive: true });
+    if (!fs.existsSync(file)) await fsp.writeFile(file, SHORTCUTS_TEMPLATE);
+    return { path: file, text: await fsp.readFile(file, 'utf8') };
+  });
+  ipcMain.handle('config:themes', async () => {
+    const dir = path.join(configDir(), 'themes');
+    let names = [];
+    try {
+      names = (await fsp.readdir(dir)).filter((n) => n.endsWith('.json'));
+    } catch {}
+    return Promise.all(names.map(async (n) => ({ id: n.replace(/\.json$/, ''), path: path.join(dir, n), text: await fsp.readFile(path.join(dir, n), 'utf8') })));
+  });
+  ipcMain.handle('config:new-theme', async (_e, name, type, colors) => {
+    const dir = path.join(configDir(), 'themes');
+    await fsp.mkdir(dir, { recursive: true });
+    const base = (name || 'my-theme').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-theme';
+    let file = path.join(dir, `${base}.json`);
+    for (let i = 2; fs.existsSync(file); i++) file = path.join(dir, `${base}-${i}.json`);
+    await fsp.writeFile(file, THEME_TEMPLATE(name, type, colors));
+    return file;
+  });
+  ipcMain.handle('config:dir', () => configDir());
+  // Vlastný príkaz zo skratky – beží vo výstupe ako program.
+  ipcMain.handle('run:shell', (_e, command, cwd) => {
+    const dir = cwd && fs.existsSync(cwd) ? cwd : workspace || os.homedir();
+    const ok = isWin
+      ? runner.start({ cmd: 'cmd.exe', args: `/d /s /c "${command}"`, cwd: dir, label: command })
+      : runner.start({ cmd: 'bash', args: ['-lc', command], cwd: dir, label: command });
+    return { ok };
+  });
   ipcMain.handle('toolchains:status', () => toolchains.status());
+  ipcMain.handle('toolchains:updates', () => toolchains.checkUpdates());
+  ipcMain.handle('toolchains:upgrade', (_e, id) => toolchains.upgrade(id, (p) => send('toolchains:progress', p)));
   ipcMain.handle('toolchains:install', async (_e, id) => {
     const res = await toolchains.install(id, (p) => send('toolchains:progress', p));
     knownTools.add(id);
@@ -667,6 +796,7 @@ app.whenReady().then(() => {
   });
   registerIpc();
   createWindow();
+  setTimeout(() => autoUpdateToolchains().catch(() => {}), 20000);
 });
 
 app.on('window-all-closed', () => {

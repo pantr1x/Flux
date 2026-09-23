@@ -6,12 +6,13 @@ from locales_cs import CS
 from locales_de import DE
 from locales_es import ES
 from locales_v3 import V3
+from locales_v4 import V4
 keys = json.load(open('locales/en.keys.json'))
 langs = {'sk': ('Slovak', 'Slovenčina', SK), 'cs': ('Czech', 'Čeština', CS), 'de': ('German', 'Deutsch', DE), 'es': ('Spanish', 'Español', ES)}
 ph = lambda s: sorted(re.findall(r'\{\w+\}', s))
 index = [{'code': 'en', 'name': 'English', 'native': 'English'}]
 for code, (name, native, d) in langs.items():
-    d = {**d, **V3[code]}
+    d = {**d, **V3[code], **V4[code]}
     out = {}
     for k, v in d.items():
         if ph(k) != ph(v):

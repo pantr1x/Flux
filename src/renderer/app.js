@@ -14,6 +14,9 @@ import { t, setLocale, translateDom } from './i18n.js';
 import { createActivity } from './activity.js';
 import { createTools, TOOL_FILE } from './tools.js';
 import { setupEditorExtras } from './editorExtras.js';
+import { createUserShortcuts } from './userShortcuts.js';
+import { createAIPanel } from './aiPanel.js';
+import { createGitHub } from './github.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -66,6 +69,7 @@ const DEFAULTS = {
   minimap: true,
   wordWrap: false,
   autosave: true,
+  autoUpdateLangs: true,
   clearOnRun: true,
   terminalFontSize: 13,
   suggestDetails: true,
@@ -184,6 +188,7 @@ function setIcons() {
   $('#btn-settings').innerHTML = icon('settings');
   $('#brand-mark').innerHTML = icon('code', 13);
   $('#btn-stop').innerHTML = icon('stop', 14);
+  $('#btn-ai').innerHTML = `${icon('sparkle', 14)}<span>AI</span>`;
   $('#btn-clear').innerHTML = icon('trash', 15);
   $('#btn-panel').innerHTML = icon('panel', 15);
   $('#btn-preview-reload').innerHTML = icon('refresh', 15);
@@ -313,6 +318,9 @@ let editor;
 let codemap;
 let activity;
 let tools;
+let userKeys;
+let aiPanel;
+let gh;
 let onboarding;
 function createEditor() {
   editor = monaco.editor.create($('#editor'), {
@@ -758,6 +766,9 @@ async function saveTab(tab) {
   }
   tab.savedVersion = version;
   lsp.didSave(tab.model);
+  // Uložil si vlastné skratky alebo tému → hneď sa použijú.
+  if (/[\\/]config[\\/]shortcuts\.json$/i.test(tab.path)) userKeys?.load(true);
+  if (/[\\/]config[\\/]themes[\\/][^\\/]+\.json$/i.test(tab.path)) loadCustomThemes(true);
   renderTabs();
   reportDirty();
   return true;
@@ -1137,6 +1148,7 @@ async function setWorkspace(dir) {
   await refreshTree();
   setTimeout(() => $('#tree').classList.remove('switching'), 600);
   renderWelcome();
+  gh?.refreshStatus();
   await detectPython();
   lsp.start(opened, state.python?.path);
 }
@@ -1229,7 +1241,7 @@ async function newProject(opts = {}) {
       <label class="np-field"><span>${t('Name')}</span><input id="np-name" spellcheck="false" autocomplete="off"></label>
       <label class="np-field"><span>${t('Short description')} <small>${t('optional')}</small></span><input id="np-desc" spellcheck="false" autocomplete="off" maxlength="160" placeholder="${t('e.g. A game where you catch falling stars')}"></label>
       <div class="np-field"><span>${t('Location')}</span><div class="np-loc"><code id="np-root"></code><button class="s-btn" data-root>${t('Change…')}</button></div></div>
-      <footer><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
+      <footer><button class="ob-ghost np-gh" data-gh>${icon('git', 15)}${t('Open from GitHub…')}</button><div class="grow"></div><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
     </div>`;
   const input = $('#np-name');
   tools.bind($('#np-tool'));
@@ -1306,6 +1318,10 @@ async function newProject(opts = {}) {
       return sync();
     }
     if (e.target.closest('[data-create]')) create();
+    if (e.target.closest('[data-gh]')) {
+      close();
+      gh.pickRepo();
+    }
   };
   el.onkeydown = (e) => {
     if (e.key === 'Enter' && e.target.tagName === 'INPUT') create();
@@ -1925,6 +1941,10 @@ function commands() {
     c(t('Toggle light / dark theme'), toggleTheme, '', isDark() ? 'sun' : 'moon', 'theme dark light colors appearance'),
     c(t('Color theme…'), chooseTheme, '', 'palette', 'theme colors vs code dracula one dark'),
     c(t('Settings'), openSettings, 'Ctrl+,', 'settings', 'settings preferences font'),
+    c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'git', 'github clone repo'),
+    c(t('AI: open assistant'), () => aiPanel.show(), 'Ctrl+I', 'sparkle', 'ai claude chat assistant'),
+    c(t('AI: explain this file'), () => aiPanel.ask(t('Explain this file.')), '', 'sparkle', 'ai claude explain'),
+    c(t('AI: fix the errors in this file'), () => aiPanel.ask(t('Find and fix the errors in this file. Show the corrected code.')), '', 'sparkle', 'ai claude fix bug error'),
     c(t('New file from template…'), () => newFile(), 'Ctrl+N', 'template', 'template html python web project'),
     c(setting('autosave') ? t('Turn off auto save') : t('Turn on auto save'), toggleAutosave, '', 'save'),
     c(t('Python: select interpreter…'), choosePython, '', 'python'),
@@ -2018,6 +2038,51 @@ async function toggleCompact() {
   await saveSettings({ compact });
 }
 
+// ---------- vlastné farebné témy (config/themes/*.json) ----------
+const THEME_KEYS = ['fg', 'comment', 'keyword', 'storage', 'string', 'number', 'type', 'function', 'variable', 'parameter', 'property', 'constant', 'tag', 'attr', 'delimiter', 'regexp'];
+let customThemeFiles = {};
+
+async function loadCustomThemes(announce = false) {
+  let files = [];
+  try {
+    files = await flux.customThemes();
+  } catch {}
+  for (const id of Object.keys(THEMES)) if (id.startsWith('custom-')) delete THEMES[id];
+  customThemeFiles = {};
+  for (const f of files) {
+    try {
+      const data = JSON.parse(f.text);
+      const type = data.type === 'light' ? 'light' : 'dark';
+      const base = THEMES[data.basedOn] || THEMES[type === 'light' ? 'vscode-light' : 'vscode-dark'];
+      const colors = {};
+      for (const [k, v] of Object.entries(data.colors || {})) if (typeof v === 'string' && /^#?[0-9a-f]{3,8}$/i.test(v)) colors[k] = v.replace('#', '').toUpperCase();
+      const id = `custom-${f.id}`;
+      THEMES[id] = { name: data.name || f.id, type, custom: true, t: { ...base.t, ...colors, italicComments: data.italicComments ?? base.t.italicComments } };
+      customThemeFiles[id] = f.path;
+    } catch (err) {
+      if (announce) toast(t('Theme {file} has an error: {msg}', { file: `${f.id}.json`, msg: err.message }), 'error', 8000);
+    }
+  }
+  if (announce) {
+    if (setting('codeTheme')?.startsWith('custom-')) applyTheme();
+    toast(t('Themes reloaded.'), 'ok');
+  }
+}
+
+// Nová téma = kópia aktuálnej; otvorí sa v editore, po uložení sa hneď použije.
+async function createCustomTheme() {
+  const cur = themeOf(setting('codeTheme'));
+  const colors = {};
+  for (const k of THEME_KEYS) if (cur.t[k]) colors[k] = `#${cur.t[k]}`;
+  const name = t('My theme');
+  const file = await flux.newTheme(name, cur.type, colors);
+  await loadCustomThemes();
+  const id = Object.keys(customThemeFiles).find((k) => customThemeFiles[k] === file);
+  if (id) await setCodeTheme(id);
+  await openFile(file);
+  toast(t('Change the colors and press Ctrl+S – the editor updates right away.'), 'info', 7000);
+}
+
 async function setCodeTheme(id) {
   const t = themeOf(id);
   await saveSettings({ codeTheme: id, theme: t.type, [t.type === 'dark' ? 'lastDark' : 'lastLight']: id });
@@ -2061,6 +2126,8 @@ function openSettings() {
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
     ['keys', 'command', t('Shortcuts')],
+    ['ai', 'sparkle', t('AI')],
+    ['github', 'git', 'GitHub'],
     ['general', 'globe', t('Language & intro')],
   ];
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
@@ -2073,19 +2140,18 @@ function openSettings() {
         <div class="s-ver">flux</div>
       </nav>
       <div class="s-main">
-        <button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button>
+        <header class="s-head"><h2 id="s-title"></h2><button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
         <div class="s-body">
           <section data-pane="appearance">
-            <h2>${t('Appearance')}</h2>
             <h3>${t('Code theme')}</h3>
             <div class="theme-grid">${Object.entries(THEMES)
               .map(
                 ([id, th]) =>
                   `<button class="theme-card${id === setting('codeTheme') ? ' active' : ''}" data-theme="${id}"><span class="swatch">${themeSwatch(id)
                     .map((c) => `<i style="background:${c}"></i>`)
-                    .join('')}</span><span>${escapeHtml(th.name)}</span><small>${th.type === 'dark' ? t('dark') : t('light')}</small></button>`,
+                    .join('')}</span><span>${escapeHtml(th.name)}</span><small>${th.custom ? t('your theme') : th.type === 'dark' ? t('dark') : t('light')}</small>${th.custom ? `<span class="tc-edit" data-edit-theme="${id}" title="${t('Edit')}">${icon('edit', 12)}</span>` : ''}</button>`,
               )
-              .join('')}</div>
+              .join('')}<button class="theme-card theme-new" data-action="new-theme">${icon('plus', 16)}<span>${t('Create your own')}</span><small>${t('from the current theme')}</small></button></div>
             <h3>${t('Accent color')}${state.workspace ? ` <small>${t('for folder {name}', { name: escapeHtml(basename(state.workspace)) })}</small>` : ''}</h3>
             <div class="s-group"><div class="accent-grid">${Object.keys(ACCENTS)
               .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? t('black & white (like Zen)') : name}"></button>`)
@@ -2093,7 +2159,6 @@ function openSettings() {
             ${state.platform === 'win32' ? `<h3>${t('Window')}</h3><div class="s-group"><label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label></div>` : ''}
           </section>
           <section data-pane="editor">
-            <h2>${t('Editor')}</h2>
             <h3>${t('Text')}</h3>
             <div class="s-group">
               <label class="s-row"><span><b>${t('Font')}</b></span><select data-key="fontFamily">${FONTS.map((f) => opt(f.id, t(f.label), setting('fontFamily'))).join('')}</select></label>
@@ -2111,7 +2176,6 @@ function openSettings() {
             </div>
           </section>
           <section data-pane="running">
-            <h2>${t('Running')}</h2>
             <h3>Python</h3>
             <div class="s-group">
               <div class="s-row"><span><b>${t('Interpreter')}</b><small>${state.python ? `${escapeHtml(state.python.version)} · ${escapeHtml(state.python.path)}` : t('not found')}</small></span><button class="s-btn" data-action="python">${t('Change…')}</button></div>
@@ -2123,17 +2187,40 @@ function openSettings() {
             </div>
           </section>
           <section data-pane="tools">
-            <h2>${t('Languages')}</h2>
             <p class="s-lead">${t('Flux keeps its installer small. Programming languages are downloaded from their official sources only when you need them.')}</p>
+            <div class="s-group s-mb">
+              ${toggle('autoUpdateLangs', 'Update languages automatically', 'once a day in the background, from the official sources')}
+              <div class="s-row"><span><b>${t('Updates')}</b><small id="s-upd-note">${t('See which languages have a newer version.')}</small></span><button class="s-btn" data-action="check-updates">${t('Check now')}</button></div>
+            </div>
             <div class="tc-list" id="s-tools"><div class="s-loading">${t('Checking what is installed…')}</div></div>
           </section>
           <section data-pane="keys">
-            <h2>${t('Shortcuts')}</h2>
+            <div class="s-group s-mb">
+              <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
+              ${(userKeys?.list() || []).map((k) => `<div class="s-row s-key"><span><b>${escapeHtml(k.label || k.run || k.insert || k.command || k.url || t('Custom'))}</b></span><span class="kbds">${String(k.key).split('+').map((x) => `<kbd>${escapeHtml(x)}</kbd>`).join('<i>+</i>')}</span></div>`).join('')}
+            </div>
             <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
             <div class="s-group" id="s-keys">${shortcutRows()}</div>
           </section>
+          <section data-pane="ai">
+            <p class="s-lead">${t('Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.')}</p>
+            <h3>${t('API key')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>Anthropic API key</b><small id="s-ai-keyhint">${t('Get one at console.anthropic.com')}</small></span><span class="s-inline"><input type="password" id="s-ai-key" placeholder="sk-ant-…" autocomplete="off" spellcheck="false"><button class="s-btn" data-action="ai-key">${t('Save')}</button></span></div>
+              <label class="s-row"><span><b>${t('Model')}</b><small>${t('Opus is the smartest, Haiku the fastest and cheapest.')}</small></span><select id="s-ai-model"></select></label>
+            </div>
+            <h3>${t('MCP connectors')}</h3>
+            <p class="s-lead">${t('Connect remote MCP servers (for example GitHub, Linear or your own) – Claude can then use their tools while answering.')}</p>
+            <div class="s-group" id="s-mcp"></div>
+            <form class="s-mcp-add" id="s-mcp-add">
+              <input id="s-mcp-name" placeholder="${t('Name, e.g. github')}" autocomplete="off" spellcheck="false" required>
+              <input id="s-mcp-url" placeholder="https://…/mcp" autocomplete="off" spellcheck="false" required>
+              <input id="s-mcp-token" type="password" placeholder="${t('Token (optional)')}" autocomplete="off">
+              <button class="s-btn">${icon('plus', 13)}${t('Add')}</button>
+            </form>
+          </section>
+          <section data-pane="github" id="s-github"></section>
           <section data-pane="general">
-            <h2>${t('Language & intro')}</h2>
             <h3>${t('Language')}</h3>
             <div class="s-group">
               <label class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><select id="s-lang"><option>${escapeHtml(setting('language') || 'en')}</option></select></label>
@@ -2155,8 +2242,48 @@ function openSettings() {
     const q = e.target.value.toLowerCase();
     for (const r of panel.querySelectorAll('#s-keys .s-key')) r.hidden = q && !r.textContent.toLowerCase().includes(q);
   };
+  // AI: kľúč, model, MCP servery
+  let aiCfg = null;
+  const renderAI = () => {
+    if (!aiCfg || !$('#s-mcp')) return;
+    $('#s-ai-keyhint').textContent = aiCfg.hasKey ? t('Saved ({hint}). Paste a new one to replace it.', { hint: aiCfg.keyHint }) : t('Get one at console.anthropic.com');
+    $('#s-ai-model').innerHTML = aiCfg.models.map((m) => opt(m.id, m.name, aiCfg.model)).join('');
+    $('#s-mcp').innerHTML = aiCfg.mcp.length
+      ? aiCfg.mcp
+          .map(
+            (m, i) =>
+              `<div class="s-row"><span><b>${escapeHtml(m.name)}</b><small>${escapeHtml(m.url)}${m.hasToken ? ` · ${t('token saved')}` : ''}</small></span><span class="s-inline"><input type="checkbox" class="switch" data-mcp-on="${i}"${m.enabled ? ' checked' : ''}><button class="icon-btn" data-mcp-del="${i}" title="${t('Remove')}">${icon('trash', 14)}</button></span></div>`,
+          )
+          .join('')
+      : `<div class="s-row"><span><small>${t('No connectors yet.')}</small></span></div>`;
+  };
+  flux.aiConfig().then((c) => {
+    aiCfg = c;
+    renderAI();
+  });
+  const saveMcp = async (list) => {
+    aiCfg = await flux.aiUpdate({ mcp: list });
+    renderAI();
+    aiPanel?.refreshConfig();
+  };
+  $('#s-mcp-add').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $('#s-mcp-name').value.trim().replace(/\s+/g, '-');
+    const url = $('#s-mcp-url').value.trim();
+    if (!/^https:\/\//.test(url)) return toast(t('The MCP server address must start with https://'), 'error');
+    if (aiCfg.mcp.some((m) => m.name === name)) return toast(t('A connector with this name already exists.'), 'error');
+    await saveMcp([...aiCfg.mcp, { name, url, enabled: true, token: $('#s-mcp-token').value.trim() }]);
+    $('#s-mcp-add').reset();
+  };
+  $('#s-ai-model').onchange = async (e) => {
+    e.stopPropagation();
+    aiCfg = await flux.aiUpdate({ model: e.target.value });
+    aiPanel?.refreshConfig();
+  };
+  renderGitHubSettings();
   const showTab = (id) => {
     state.settingsTab = id;
+    $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
@@ -2181,6 +2308,11 @@ function openSettings() {
 
   panel.onclick = async (e) => {
     if (e.target === panel || e.target.closest('[data-close]')) return closeSettings();
+    const editTheme = e.target.closest('[data-edit-theme]');
+    if (editTheme) {
+      closeSettings();
+      return openFile(customThemeFiles[editTheme.dataset.editTheme]);
+    }
     const tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) return showTab(tabBtn.dataset.tab);
     // Výber sa len označí – bez prekreslenia (žiadne blikanie ani skok na začiatok).
@@ -2197,6 +2329,38 @@ function openSettings() {
     if (e.target.closest('[data-action="python"]')) {
       closeSettings();
       pythonMenu();
+    }
+    if (e.target.closest('[data-action="ai-key"]')) {
+      const key = $('#s-ai-key').value.trim();
+      if (!key) return;
+      aiCfg = await flux.aiUpdate({ key });
+      $('#s-ai-key').value = '';
+      renderAI();
+      aiPanel?.refreshConfig();
+      return toast(t('API key saved.'), 'ok');
+    }
+    const mdel = e.target.closest('[data-mcp-del]');
+    if (mdel) return saveMcp(aiCfg.mcp.filter((_, i) => i !== Number(mdel.dataset.mcpDel)));
+    const mon = e.target.closest('[data-mcp-on]');
+    if (mon) return saveMcp(aiCfg.mcp.map((m, i) => (i === Number(mon.dataset.mcpOn) ? { ...m, enabled: mon.checked } : m)));
+    if (e.target.closest('[data-action="edit-keys"]')) {
+      closeSettings();
+      const f = await flux.shortcutsFile();
+      return openFile(f.path);
+    }
+    if (e.target.closest('[data-action="new-theme"]')) {
+      closeSettings();
+      return createCustomTheme();
+    }
+    const upd = e.target.closest('[data-action="check-updates"]');
+    if (upd) {
+      upd.disabled = true;
+      $('#s-upd-note').textContent = t('Checking…');
+      const found = await tools.checkUpdates();
+      const n = Object.keys(found).length;
+      if ($('#s-upd-note')) $('#s-upd-note').textContent = n ? t('{n} update(s) available.', { n }) : t('Everything is up to date.');
+      upd.disabled = false;
+      return;
     }
     if (e.target.closest('[data-action="intro"]')) {
       closeSettings();
@@ -2310,6 +2474,7 @@ async function openStart() {
       <div class="hm-actions">
         <button class="hm-act primary" data-act="newproject">${icon('plus', 18)}<span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
         <button class="hm-act" data-act="open">${icon('folderOpen', 18)}<span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
+        <button class="hm-act" data-act="github">${icon('git', 18)}<span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>
         ${state.workspace ? `<button class="hm-act" data-act="newfile">${icon('filePlus', 18)}<span><b>${t('New file')}</b><small>${escapeHtml(basename(state.workspace))}</small></span></button>` : ''}
       </div>
       ${pinned.length ? `<h3 class="hm-h">${icon('pin', 12)}${t('Pinned')}</h3><div class="hm-cards">${pinned.map(card).join('')}</div>` : ''}
@@ -2345,6 +2510,10 @@ async function openStart() {
     if (b.dataset.act === 'newfile') {
       closeStart();
       return newFile();
+    }
+    if (b.dataset.act === 'github') {
+      closeStart();
+      return gh.pickRepo();
     }
     if (b.dataset.act === 'newproject') {
       closeStart();
@@ -2436,6 +2605,7 @@ function renderWelcome() {
           <button data-act="quick">${icon('command')}${t('Find file')}</button>
         </div>
         <div class="pj-files" id="pj-files"></div>
+        <div class="pj-git" id="pj-git"></div>
         <div class="pj-todo">
           <div class="pj-h"><span>${t('To-do')}</span><small id="pj-count"></small></div>
           <form class="pj-add" id="pj-add"><span class="pj-plus">${icon('plus', 14)}</span><input id="pj-new" placeholder="${t('Add a task and press Enter…')}" autocomplete="off" spellcheck="false" maxlength="200"></form>
@@ -2443,6 +2613,7 @@ function renderWelcome() {
         </div>
       </div>`;
     renderTodos(ws);
+    gh?.renderCard($('#pj-git'));
     $('#pj-add').onsubmit = async (e) => {
       e.preventDefault();
       const input = $('#pj-new');
@@ -2569,6 +2740,20 @@ function editDescription(el) {
   input.onblur = () => save(true);
 }
 
+// Vetva a počet zmien v stavovom riadku (klik → stránka projektu s kartou GitHub).
+function renderGitStatus(st) {
+  const el = $('#st-git');
+  if (!el) return;
+  el.hidden = !st?.repo;
+  if (!st?.repo) return;
+  el.innerHTML = `${icon('git', 13)}<span>${escapeHtml(st.branch || 'main')}</span>${st.changes ? `<span class="git-n">${st.changes}</span>` : ''}${st.ahead ? `<span class="git-s">↑${st.ahead}</span>` : ''}`;
+  el.title = st.changes ? t('{n} changed file(s) – click to save them to GitHub', { n: st.changes }) : t('Git: everything is saved');
+}
+
+function renderGitHubSettings() {
+  gh?.renderSettings($('#s-github'));
+}
+
 // ---------- klávesové skratky ----------
 function keybindings() {
   window.addEventListener(
@@ -2640,6 +2825,7 @@ function keybindings() {
       else if (ctrl && key === 'n') newFile();
       else if (ctrl && key === 'w') state.active && closeTab(state.active);
       else if (ctrl && key === 'b') toggleCompact();
+      else if (ctrl && !e.shiftKey && key === 'i') aiPanel.toggle();
       else if (ctrl && (key === 'j' || e.key === '`' || e.key === ';')) showPanel($('#panel').classList.contains('collapsed'));
       else if (ctrl && e.key === 'Tab' && state.tabs.length > 1) {
         const i = state.tabs.indexOf(state.active);
@@ -2691,6 +2877,12 @@ function layoutEvents() {
     const w = Math.min(rect.width - 200, Math.max(240, rect.right - e.clientX));
     $('#preview').style.width = `${w}px`;
   });
+  resizer($('#ai-resizer'), (e) => {
+    const rect = $('#workarea').getBoundingClientRect();
+    const w = Math.min(rect.width - 240, Math.max(300, rect.right - e.clientX));
+    $('#ai').style.width = `${w}px`;
+  }, () => saveSettings({ aiWidth: parseInt($('#ai').style.width) }));
+  if (state.settings.aiWidth) $('#ai').style.width = `${state.settings.aiWidth}px`;
   resizer($('#panel-resizer'), (e) => {
     const rect = $('#card').getBoundingClientRect();
     const h = Math.min(rect.height - 120, Math.max(90, rect.bottom - 28 - e.clientY));
@@ -2714,6 +2906,7 @@ function layoutEvents() {
   $('#btn-run').onclick = run;
   $('#btn-stop').onclick = stop;
   $('#btn-live').onclick = toggleLive;
+  $('#btn-ai').onclick = () => aiPanel.toggle();
   $('#btn-clear').onclick = () => {
     term.reset();
     term.write(state.running ? '' : '\x1b[?25l');
@@ -2728,6 +2921,11 @@ function layoutEvents() {
   $('#st-python').onclick = pythonMenu;
   $('#st-autosave').onclick = toggleAutosave;
   $('#st-problems').onclick = showProblems;
+  $('#st-git').onclick = () => showProjectPage();
+  $('#st-install').onclick = () => {
+    state.settingsTab = 'tools';
+    openSettings();
+  };
   $('#st-live').onclick = () => state.live && flux.openExternal($('#preview-frame').src || state.live.url);
   $('#btn-preview-reload').onclick = () => {
     const f = $('#preview-frame');
@@ -2790,7 +2988,82 @@ async function main() {
     toast,
     tools,
   });
+  await loadCustomThemes();
   createEditor();
+  userKeys = createUserShortcuts({
+    editor,
+    toast,
+    saveAll,
+    // Príkazy Fluxu, ktoré sa dajú dať na vlastnú skratku ("command": "run").
+    commands: {
+      run,
+      stop,
+      save: () => saveTab(activeTab()),
+      saveAll,
+      live: toggleLive,
+      newFile: () => newFile(),
+      newProject: () => newProject(),
+      openFolder: openFolderDialog,
+      quickOpen,
+      palette: openCommandPalette,
+      settings: openSettings,
+      home: openStart,
+      format: () => editor.getAction('editor.action.formatDocument')?.run(),
+      sidebar: toggleCompact,
+      panel: () => showPanel($('#panel').classList.contains('collapsed')),
+      theme: toggleTheme,
+      projectPage: showProjectPage,
+    },
+    getContext: () => {
+      const tab = activeTab();
+      const file = tab?.path || '';
+      const pos = editor.getPosition();
+      const sel = editor.getModel() && editor.getSelection() ? editor.getModel().getValueInRange(editor.getSelection()) : '';
+      const word = editor.getModel() && pos ? editor.getModel().getWordAtPosition(pos)?.word || '' : '';
+      return { file, fileName: basename(file), dir: file ? file.slice(0, file.length - basename(file).length - 1) : state.workspace || '', workspace: state.workspace || '', selection: sel, word, line: pos?.lineNumber ?? '' };
+    },
+  });
+  gh = createGitHub({
+    toast,
+    tools,
+    getWorkspace: () => state.workspace,
+    openProject: (dir) => setWorkspace(dir),
+    openSettingsTab: (id) => {
+      state.settingsTab = id;
+      openSettings();
+    },
+    onStatus: renderGitStatus,
+  });
+  aiPanel = createAIPanel({
+    toast,
+    getContext: () => {
+      const tab = activeTab();
+      const model = editor.getModel();
+      const sel = model && editor.getSelection() ? model.getValueInRange(editor.getSelection()) : '';
+      return { file: tab?.path || '', fileName: tab ? basename(tab.path) : '', text: model?.getValue() || '', selection: sel, language: model?.getLanguageId() || '' };
+    },
+    // Kód z odpovede: nahradí výber, inak sa vloží na kurzor.
+    insertCode: (code) => {
+      if (!editor.getModel() || activeTab()?.readonly) return toast(t('Open a file first.'));
+      const sel = editor.getSelection();
+      editor.pushUndoStop();
+      editor.executeEdits('flux-ai', [{ range: sel, text: code, forceMoveMarkers: true }]);
+      editor.pushUndoStop();
+      editor.focus();
+    },
+    openSettingsAI: () => {
+      state.settingsTab = 'ai';
+      openSettings();
+    },
+  });
+  editor.onDidChangeCursorSelection(() => aiPanel.updateContext());
+  editor.addAction({
+    id: 'flux.askAI',
+    label: t('Ask AI about this'),
+    contextMenuGroupId: '1_modification',
+    contextMenuOrder: 1,
+    run: () => aiPanel.ask(editor.getModel()?.getValueInRange(editor.getSelection()) ? t('Explain this code.') : t('Explain this file.')),
+  });
   registerSnippets();
   createLanguageClient();
   applyTheme();
@@ -2814,9 +3087,13 @@ async function main() {
   flux.onRunData(onRunData);
   flux.onRunExit(onRunExit);
   flux.onLiveLog(onLiveLog);
+  let gitTimer = 0;
   flux.onFsChanged(async () => {
     await refreshTree();
     syncOpenTabs();
+    // Počet zmien pre Git – nie pri každom uložení hneď, stačí raz za chvíľu.
+    clearTimeout(gitTimer);
+    gitTimer = setTimeout(() => gh?.refreshStatus(), 1500);
   });
   flux.onSaveAllAndClose(async () => {
     await saveAll();

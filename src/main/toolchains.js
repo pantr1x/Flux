@@ -65,6 +65,16 @@ const TOOLCHAINS = [
     url: 'https://dotnet.microsoft.com/download',
   },
   {
+    id: 'git',
+    name: 'Git',
+    detail: 'GitHub & version control',
+    probe: [['git', ['--version']]],
+    winget: 'Git.Git',
+    download: 65,
+    disk: 350,
+    url: 'https://git-scm.com/downloads',
+  },
+  {
     id: 'rust',
     name: 'Rust',
     detail: 'GNU toolchain',
@@ -147,13 +157,13 @@ function publicInfo(tc) {
 const installing = new Map();
 
 // Inštalácia cez winget; priebeh (percentá a posledný riadok) ide do okna.
-function install(id, onProgress) {
+function install(id, onProgress, verb = 'install') {
   const tc = TOOLCHAINS.find((x) => x.id === id);
   if (!tc) return Promise.reject(new Error('Unknown language'));
   if (!isWin) return Promise.reject(new Error(t('Automatic install works on Windows. Download it from {url}', { url: tc.url })));
   if (installing.has(id)) return installing.get(id);
   const job = new Promise((resolve, reject) => {
-    const args = ['install', '--id', tc.winget, '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity'];
+    const args = [verb, '--id', tc.winget, '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity'];
     const child = spawn('winget', args, { windowsHide: true });
     let last = '';
     const onData = (buf) => {
@@ -182,4 +192,22 @@ function install(id, onProgress) {
   return job;
 }
 
-module.exports = { TOOLCHAINS, status, install, refreshPath };
+// Ktoré nainštalované jazyky majú novšiu verziu (winget upgrade vypíše tabuľku).
+async function checkUpdates() {
+  if (!isWin) return {};
+  const out = await run('winget', ['upgrade', '--accept-source-agreements', '--disable-interactivity'], 60000);
+  if (!out) return {};
+  const found = {};
+  for (const line of out.split(/\r?\n/)) {
+    const cols = line.trim().split(/\s{1,}/);
+    for (const tc of TOOLCHAINS) {
+      const i = cols.findIndex((c) => c.toLowerCase() === tc.winget.toLowerCase());
+      if (i >= 0 && cols[i + 2]) found[tc.id] = { current: cols[i + 1], available: cols[i + 2] };
+    }
+  }
+  return found;
+}
+
+const upgrade = (id, onProgress) => install(id, onProgress, 'upgrade');
+
+module.exports = { TOOLCHAINS, status, install, upgrade, checkUpdates, refreshPath };
