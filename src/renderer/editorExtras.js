@@ -39,8 +39,27 @@ function autoCloseTags(monaco, editor) {
     const model = editor.getModel();
     if (!model || e.isUndoing || e.isRedoing || e.isFlush) return;
     if (!['html', 'php', 'xml'].includes(model.getLanguageId())) return;
-    if (e.changes.length !== 1 || e.changes[0].text !== '>') return;
+    if (e.changes.length !== 1) return;
     const ch = e.changes[0];
+    // Návrh tagu prijatý Tabom/Enterom (napr. „<h“ → „h1“) → doplní „>“ aj „</h1>“.
+    if (/^[a-zA-Z][\w:.-]*$/.test(ch.text) && ch.text.length > 1) {
+      const ln = ch.range.startLineNumber;
+      const lineText = model.getLineContent(ln);
+      const startCol = ch.range.startColumn;
+      const endCol = startCol + ch.text.length;
+      if (lineText[startCol - 2] !== '<') return;
+      const rest = lineText.slice(endCol - 1);
+      if (/^[\w>/]/.test(rest)) return; // už je tam „>“ alebo slovo pokračuje
+      const tag = ch.text;
+      const isVoid = VOID_TAGS.has(tag.toLowerCase());
+      queueMicrotask(() => {
+        if (editor.getModel() !== model) return;
+        const col = endCol + 1;
+        editor.executeEdits('flux-close-tag', [{ range: new monaco.Range(ln, endCol, ln, endCol), text: isVoid ? '>' : `></${tag}>` }], [new monaco.Selection(ln, col, ln, col)]);
+      });
+      return;
+    }
+    if (ch.text !== '>') return;
     const line = ch.range.startLineNumber;
     const col = ch.range.startColumn + 1; // za „>“
     const before = model.getLineContent(line).slice(0, col - 1);

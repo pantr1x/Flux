@@ -342,6 +342,7 @@ function createEditor() {
     suggest: { preview: true, showStatusBar: false, selectionMode: 'always', showIcons: true },
     placeholder: '',
     inlayHints: { enabled: 'off' },
+    inlineSuggest: { showToolbar: 'never' },
     scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
     overviewRulerLanes: 2,
     tabSize: 4,
