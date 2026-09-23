@@ -2632,7 +2632,9 @@ function settingsIndex() {
 
 async function searchEverything() {
   const cmds = [...commands(), ...pluginCommands()].map((c) => ({ ...c, group: t('Command') }));
-  const sets = settingsIndex().map((x) => ({
+  const cmdLabels = new Set(cmds.map((c) => c.label));
+  // Riadky zo Skratiek sú už medzi príkazmi.
+  const sets = settingsIndex().filter((x) => x.tab !== 'keys' || !cmdLabels.has(x.label)).map((x) => ({
     label: x.label,
     icon: icon('settings', 15),
     detail: t('Setting'),

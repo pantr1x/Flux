@@ -4998,6 +4998,8 @@ body.custom-caret .monaco-editor .cursor {
   flex: none;
 }
 .lang-cur {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
   min-width: 170px;
   justify-content: flex-start;
@@ -5005,6 +5007,10 @@ body.custom-caret .monaco-editor .cursor {
 .lang-cur > span {
   flex: 1;
   text-align: left;
+}
+.lang-cur > svg:last-child {
+  transform: rotate(90deg);
+  opacity: 0.6;
 }
 .lang-menu {
   position: absolute;
