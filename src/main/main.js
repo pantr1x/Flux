@@ -66,7 +66,7 @@ function createWindow() {
     // Windows 11: vlastná horná lišta s natívnymi tlačidlami a efekt Mica (priesvitné pozadie).
     titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
     titleBarOverlay: isWin ? { color: '#00000000', symbolColor: dark ? '#e8e8ef' : '#1d1d24', height: 44 } : false,
-    backgroundMaterial: mica ? 'acrylic' : undefined,
+    backgroundMaterial: mica && settings.translucent !== false ? (settings.material === 'mica' ? 'mica' : 'acrylic') : undefined,
     icon: fs.existsSync(ICON) ? ICON : undefined,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
@@ -115,6 +115,9 @@ const IGNORED_DIRS = new Set(['node_modules', '.git', '__pycache__', '.mypy_cach
 function setWorkspace(dir) {
   workspace = dir;
   settings.recent = [dir, ...settings.recent.filter((d) => d !== dir)].slice(0, 8);
+  // Zoznam projektov má stále poradie – nový sa pridá na koniec, otvorenie ho nepresúva.
+  ensureProjects();
+  if (!settings.projects.some((p) => p.dir === dir)) settings.projects.push({ dir, pinned: false });
   settings.lastFolder = dir;
   saveSettings();
   if (workspaceWatcher) workspaceWatcher.close();
@@ -159,6 +162,9 @@ function registerIpc() {
       win.setTitleBarOverlay({ color: '#00000000', symbolColor: patch.theme === 'light' ? '#1d1d24' : '#e8e8ef', height: 44 });
     }
     if (patch.theme) nativeTheme.themeSource = patch.theme;
+    if (win && mica && ('material' in patch || 'translucent' in patch)) {
+      win.setBackgroundMaterial(settings.translucent === false ? 'none' : settings.material === 'mica' ? 'mica' : 'acrylic');
+    }
     return settings;
   });
   ipcMain.on('app:dirty', (_e, count) => {
@@ -173,13 +179,74 @@ function registerIpc() {
     return r.filePaths[0];
   });
   ipcMain.handle('workspace:projects', async () => {
-    const list = settings.recent.filter((d) => fs.existsSync(d)).slice(0, 8);
-    return Promise.all(list.map(async (dir) => ({ dir, name: path.basename(dir), kind: await projectKind(dir) })));
+    ensureProjects();
+    const list = settings.projects.filter((p) => fs.existsSync(p.dir));
+    const ordered = [...list.filter((p) => p.pinned), ...list.filter((p) => !p.pinned)];
+    return Promise.all(ordered.map(async (p) => ({ dir: p.dir, pinned: !!p.pinned, name: path.basename(p.dir), kind: await projectKind(p.dir) })));
   });
   ipcMain.handle('workspace:forget', (_e, dir) => {
+    ensureProjects();
     settings.recent = settings.recent.filter((d) => d !== dir);
+    settings.projects = settings.projects.filter((p) => p.dir !== dir);
     saveSettings();
     return true;
+  });
+  ipcMain.handle('project:pin', (_e, dir, pinned) => {
+    ensureProjects();
+    const p = settings.projects.find((x) => x.dir === dir);
+    if (p) p.pinned = !!pinned;
+    saveSettings();
+    return true;
+  });
+  // Premenovanie projektu = premenovanie priečinka na disku.
+  ipcMain.handle('project:rename', async (_e, dir, newName) => {
+    if (!/^[^\\/:*?"<>|]+$/.test(newName) || newName.trim() !== newName) throw new Error('Neplatný názov priečinka.');
+    const target = path.join(path.dirname(dir), newName);
+    if (fs.existsSync(target)) throw new Error('Priečinok s týmto názvom už existuje.');
+    const wasOpen = workspace === dir;
+    if (wasOpen) {
+      if (workspaceWatcher) workspaceWatcher.close();
+      workspaceWatcher = null;
+      lsp.stop();
+      await live.stop();
+      runner.stop();
+    }
+    await fsp.rename(dir, target);
+    const swap = (d) => (d === dir ? target : d);
+    ensureProjects();
+    settings.projects = settings.projects.map((p) => ({ ...p, dir: swap(p.dir) }));
+    settings.recent = settings.recent.map(swap);
+    if (settings.lastFolder === dir) settings.lastFolder = target;
+    for (const key of ['accents', 'pythonOverrides']) {
+      if (settings[key]?.[dir] !== undefined) {
+        settings[key][target] = settings[key][dir];
+        delete settings[key][dir];
+      }
+    }
+    saveSettings();
+    return { dir: target, wasOpen };
+  });
+  ipcMain.handle('project:root', () => path.join(app.getPath('documents'), 'Flux projekty'));
+  ipcMain.handle('project:create', async (_e, name, root) => {
+    if (!/^[^\\/:*?"<>|]+$/.test(name) || name.trim() !== name) throw new Error('Neplatný názov projektu.');
+    const base = root || path.join(app.getPath('documents'), 'Flux projekty');
+    const dir = path.join(base, name);
+    if (fs.existsSync(dir)) throw new Error('Taký projekt už existuje.');
+    await fsp.mkdir(dir, { recursive: true });
+    return dir;
+  });
+  ipcMain.handle('project:choose-root', async () => {
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], title: 'Kam uložiť nový projekt' });
+    return r.canceled ? null : r.filePaths[0];
+  });
+  // Obrázok ako data: URL pre náhľad (Glance).
+  ipcMain.handle('fs:read-image', async (_e, file) => {
+    const p = guard(file);
+    const stat = await fsp.stat(p);
+    if (stat.size > 25 * 1024 * 1024) throw new Error('Obrázok je príliš veľký.');
+    const ext = path.extname(p).slice(1).toLowerCase();
+    const mime = { svg: 'image/svg+xml', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon' }[ext] || `image/${ext}`;
+    return { url: `data:${mime};base64,${(await fsp.readFile(p)).toString('base64')}`, size: stat.size };
   });
   ipcMain.handle('workspace:open', (_e, dir) => {
     if (!fs.existsSync(dir)) {
@@ -364,6 +431,12 @@ function registerIpc() {
 process.on('uncaughtException', (err) => console.error('[flux]', err));
 
 // ---------- projekty (nedávne priečinky) ----------
+function ensureProjects() {
+  if (!Array.isArray(settings.projects)) {
+    settings.projects = [...settings.recent].reverse().map((dir) => ({ dir, pinned: false }));
+  }
+}
+
 // Druh projektu podľa súborov v priečinku – na ikonu v zozname projektov.
 async function projectKind(dir) {
   let py = 0;

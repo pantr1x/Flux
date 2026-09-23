@@ -64,6 +64,7 @@ const DEFAULTS = {
   clearOnRun: true,
   terminalFontSize: 13,
   suggestDetails: true,
+  material: 'acrylic',
 };
 const setting = (key) => state.settings[key] ?? DEFAULTS[key];
 
@@ -384,7 +385,31 @@ function fillEmptyHtml(tab) {
   tab.initialCursor = { lineNumber: before.length, column: before[before.length - 1].length + 1 };
 }
 
+const IMAGES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif']);
+
+// Náhľad obrázka v plávajúcom okne (ako „Glance“ v Zene) – Esc alebo klik mimo ho zavrie.
+async function glanceImage(path) {
+  let img;
+  try {
+    img = await flux.readImage(path);
+  } catch (err) {
+    return toast(errorText(err), 'error');
+  }
+  const el = $('#glance');
+  const kb = img.size < 1024 * 1024 ? `${Math.max(1, Math.round(img.size / 1024))} kB` : `${(img.size / 1024 / 1024).toFixed(1)} MB`;
+  el.innerHTML = `<div class="gl-card"><div class="gl-bar"><span class="gl-name"></span><span class="gl-meta"></span><div class="grow"></div><button class="icon-btn" data-close title="Zavrieť (Esc)">${icon('x', 15)}</button></div><div class="gl-stage"><img alt=""></div></div>`;
+  el.querySelector('.gl-name').textContent = basename(path);
+  const image = el.querySelector('img');
+  image.onload = () => (el.querySelector('.gl-meta').textContent = `${image.naturalWidth} × ${image.naturalHeight} px · ${kb}`);
+  image.src = img.url;
+  el.hidden = false;
+  el.onclick = (e) => {
+    if (e.target === el || e.target.closest('[data-close]')) el.hidden = true;
+  };
+}
+
 async function openFile(path, { line, column, focus = true } = {}) {
+  if (IMAGES.has(extOf(path))) return glanceImage(path);
   let tab = findTab(path);
   if (!tab) {
     let model = monaco.editor.getModel(monaco.Uri.file(path));
@@ -544,6 +569,10 @@ function renderTabs() {
       if (e.target.closest('.close')) closeTab(tab);
       else activate(tab);
     });
+    div.addEventListener('dblclick', (e) => {
+      if (!e.target.closest('.close') && !tab.readonly) renameItem({ path: tab.path, dir: false });
+    });
+    div.title = `${tab.path}\nDvojklik = premenovať`;
     el.append(div);
     if (tab === state.active) requestAnimationFrame(() => div.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
   }
@@ -892,15 +921,80 @@ async function renderProjects() {
   } catch {}
   const kindIcon = (k) => (k === 'python' ? fileIcon('a.py') : k === 'web' ? fileIcon('a.html') : icon('folder', 16));
   el.innerHTML =
-    `<div class="pr-head"><span>Projekty</span><button class="icon-btn" data-act="add" title="Otvoriť priečinok (Ctrl+O)">${icon('folderPlus', 15)}</button></div>` +
-    (list.length
-      ? list
-          .map(
-            (p) =>
-              `<button class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}" data-dir="${escapeAttr(p.dir)}" title="${escapeAttr(p.dir)}">${kindIcon(p.kind)}<span>${escapeHtml(p.name)}</span></button>`,
-          )
-          .join('')
-      : `<button class="pr-row" data-act="add">${icon('folderOpen', 16)}<span>Otvoriť priečinok…</span></button>`);
+    `<div class="pr-head"><span>Projekty</span><button class="icon-btn" data-act="open" title="Otvoriť existujúci priečinok (Ctrl+O)">${icon('folderOpen', 15)}</button></div>` +
+    list
+      .map(
+        (p) =>
+          `<button class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}\nPravý klik = pripnúť, premenovať…">${kindIcon(p.kind)}<span>${escapeHtml(p.name)}</span>${p.pinned ? `<i class="pin">${icon('pin', 12)}</i>` : ''}</button>`,
+      )
+      .join('') +
+    `<button class="pr-row pr-new" data-act="new">${icon('plus', 16)}<span>Nový projekt</span></button>`;
+}
+
+// Nový projekt: typ → názov → vytvorí priečinok (Dokumenty\Flux projekty) so základným súborom.
+async function newProject() {
+  const kind = await new Promise((resolve) =>
+    openPalette({
+      placeholder: 'Aký projekt?',
+      items: [
+        { label: 'Python projekt', detail: 'priečinok + main.py', icon: fileIcon('a.py'), v: 'python' },
+        { label: 'Web projekt', detail: 'priečinok + index.html, style.css, script.js', icon: fileIcon('a.html'), v: 'web' },
+        { label: 'Prázdny projekt', detail: 'len priečinok', icon: icon('folder', 16), v: 'empty' },
+        { label: 'Otvoriť existujúci priečinok…', icon: icon('folderOpen', 16), v: 'open' },
+      ],
+      onPick: (it) => resolve(it.v),
+      onCancel: () => resolve(null),
+    }),
+  );
+  if (!kind) return;
+  if (kind === 'open') return openFolderDialog();
+  const root = await flux.projectRoot();
+  const name = await promptPalette({
+    value: kind === 'web' ? 'moj-web' : kind === 'python' ? 'moj-program' : 'novy-projekt',
+    placeholder: 'Názov projektu',
+    note: `Vytvorí sa v: ${root}`,
+  });
+  if (!name) return;
+  let dir;
+  try {
+    dir = await flux.createProject(name.trim());
+  } catch (err) {
+    return toast(errorText(err), 'error');
+  }
+  await setWorkspace(dir);
+  const tplId = kind === 'python' ? 'py-main' : kind === 'web' ? 'web' : null;
+  const tpl = TEMPLATES.find((t) => t.id === tplId);
+  if (!tpl) return renderProjects();
+  let first = null;
+  for (const f of tpl.files) {
+    const path = join(dir, f.name.replace('{{name}}', 'main.py'));
+    await flux.create(path, false);
+    await flux.write(path, f.content.replaceAll('{{title}}', name.trim()).replace('$0', ''));
+    if (!first || f.open) first = path;
+  }
+  await refreshTree();
+  await renderProjects();
+  openFile(first);
+}
+
+async function renameProject(dir) {
+  const old = basename(dir);
+  const name = await promptPalette({ value: old, note: 'Nový názov projektu (premenuje aj priečinok na disku)' });
+  if (!name || name.trim() === old) return;
+  const wasOpen = keyOf(dir) === keyOf(state.workspace || '');
+  if (wasOpen) await saveAll();
+  let res;
+  try {
+    res = await flux.renameProject(dir, name.trim());
+  } catch (err) {
+    return toast(errorText(err), 'error');
+  }
+  if (wasOpen) {
+    for (const tab of [...state.tabs]) await closeTab(tab, { force: true });
+    state.workspace = null;
+    await setWorkspace(res.dir);
+  }
+  renderProjects();
 }
 
 function projectEvents() {
@@ -908,24 +1002,26 @@ function projectEvents() {
   el.onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.act === 'add') return openFolderDialog();
+    if (b.dataset.act === 'open') return openFolderDialog();
+    if (b.dataset.act === 'new') return newProject();
     if (b.dataset.dir && keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
   };
   el.oncontextmenu = async (e) => {
     const b = e.target.closest('[data-dir]');
     if (!b) return;
     e.preventDefault();
-    const choice = await confirmPalette(basename(b.dataset.dir), [
-      { label: 'Otvoriť', value: 'open' },
-      { label: 'Odstrániť zo zoznamu (súbory ostanú)', value: 'forget' },
-      { label: 'Zrušiť', value: null },
+    const dir = b.dataset.dir;
+    const pinned = !!b.dataset.pinned;
+    const choice = await confirmPalette(basename(dir), [
+      { label: pinned ? 'Odopnúť' : 'Pripnúť hore', value: 'pin', icon: icon('pin', 15) },
+      { label: 'Premenovať…', value: 'rename', icon: icon('edit', 15) },
+      { label: 'Odstrániť zo zoznamu (súbory ostanú na disku)', value: 'forget', icon: icon('x', 15) },
     ]);
-    if (choice === 'open') setWorkspace(b.dataset.dir);
-    if (choice === 'forget') {
-      await flux.forgetProject(b.dataset.dir);
-      state.settings = await flux.setSettings({});
-      renderProjects();
-    }
+    if (choice === 'pin') await flux.pinProject(dir, !pinned);
+    if (choice === 'rename') return renameProject(dir);
+    if (choice === 'forget') await flux.forgetProject(dir);
+    state.settings = await flux.setSettings({});
+    renderProjects();
   };
 }
 
@@ -1275,12 +1371,20 @@ function closePreview() {
   $('#preview-frame').removeAttribute('src');
 }
 
+async function stopLive() {
+  if (state.live) await flux.liveStop();
+  state.live = null;
+  closePreview();
+  renderLive();
+}
+
+// Live Server: ak beží a náhľad je zatvorený, len ho znova ukáže; inak zapne/vypne.
 async function toggleLive() {
-  if (state.live) {
-    await flux.liveStop();
-    state.live = null;
-    closePreview();
-    renderLive();
+  if (state.live && $('#preview').hidden) {
+    const tab = activeTab();
+    await openPreview(tab && inside(tab.path) ? tab.path : null);
+  } else if (state.live) {
+    await stopLive();
   } else {
     const tab = activeTab();
     await openPreview(tab && inside(tab.path) ? tab.path : null);
@@ -1451,6 +1555,7 @@ function commands() {
     c('Zastaviť program', stop, 'Shift+F5', 'stop'),
     c(state.live ? 'Live Server: zastaviť' : 'Live Server: spustiť', toggleLive, 'Alt+L', 'globe', 'web náhľad preview html prehliadač'),
     c('Otvoriť priečinok…', openFolderDialog, 'Ctrl+O', 'folderOpen'),
+    c('Nový projekt…', newProject, 'Ctrl+Shift+N', 'plus', 'projekt priečinok folder'),
     c('Rýchlo otvoriť súbor…', quickOpen, 'Ctrl+P', 'filePlus'),
     c('Nový súbor…', () => newFile(), 'Ctrl+N', 'filePlus'),
     c('Nový priečinok…', () => newFolder(), '', 'folderPlus'),
@@ -1603,7 +1708,8 @@ function openSettings() {
           <div class="accent-grid">${Object.keys(ACCENTS)
             .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? 'čiernobiela (ako Zen)' : name}"></button>`)
             .join('')}<label class="custom-color" title="Vlastná farba"><input type="color" value="${accent}" data-custom-accent></label></div>
-          ${state.mica ? toggle('translucent', 'Priesvitné okno', 'cez okno presvitá rozmazaná tapeta (Windows 11)') : ''}
+          ${state.mica ? toggle('translucent', 'Priesvitné okno', 'cez okno presvitá tapeta (Windows 11)') : ''}
+          ${state.mica ? `<label class="s-row"><span><b>Druh priesvitnosti</b><small>Acrylic = rozmazaná tapeta, Mica = jemný nádych farby tapety. Keď okno nie je aktívne, Windows ho vždy zosivie.</small></span><select data-key="material">${opt('acrylic', 'Acrylic', setting('material'))}${opt('mica', 'Mica', setting('material'))}</select></label>` : ''}
         </section>
         <section>
           <h3>Editor</h3>
@@ -1807,6 +1913,13 @@ function keybindings() {
         }
         return;
       }
+      if (!$('#glance').hidden) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          $('#glance').hidden = true;
+        }
+        return;
+      }
       if (!$('#start').hidden) {
         if (e.key === 'Escape' && state.workspace) {
           e.preventDefault();
@@ -1825,12 +1938,18 @@ function keybindings() {
       const key = e.key.toLowerCase();
       let handled = true;
       if (ctrl && e.key === ',') openSettings();
+      else if (e.key === 'F2' && !e.target.closest?.('.monaco-editor')) {
+        const p = state.selected || state.active?.path;
+        const entry = p && [...state.dirCache.values()].flat().find((x) => keyOf(x.path) === keyOf(p));
+        if (entry) renameItem(entry);
+      }
       else if (e.key === 'F5' && e.shiftKey) stop();
       else if (e.key === 'F5' || (ctrl && e.key === 'Enter')) run();
       else if (ctrl && e.shiftKey && key === 'p') openCommandPalette();
       else if (ctrl && !e.shiftKey && key === 'p') quickOpen();
       else if (ctrl && key === 's') e.shiftKey ? saveAll() : saveTab(activeTab());
       else if (ctrl && key === 'o') openFolderDialog();
+      else if (ctrl && e.shiftKey && key === 'n') newProject();
       else if (ctrl && key === 'n') newFile();
       else if (ctrl && key === 'w') state.active && closeTab(state.active);
       else if (ctrl && key === 'b') toggleCompact();
@@ -1922,7 +2041,7 @@ function layoutEvents() {
     if (f.src) f.src = f.src;
   };
   $('#btn-preview-external').onclick = () => flux.openExternal($('#preview-frame').src || state.live?.url);
-  $('#btn-preview-close').onclick = closePreview;
+  $('#btn-preview-close').onclick = stopLive;
   $('#devices').onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;

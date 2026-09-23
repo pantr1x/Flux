@@ -808,26 +808,28 @@ kbd {
 }
 
 .preview-bar {
-  height: 40px;
+  height: 44px;
   flex: none;
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 0 8px 0 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 0 8px;
 }
 
 .live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 8px var(--ok);
-  margin-right: 4px;
+  display: none;
 }
 
 .preview-url {
-  font: 12px var(--mono);
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--hover);
+  font: 12px var(--ui-font);
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -863,7 +865,7 @@ kbd {
   min-height: 0;
   display: flex;
   justify-content: center;
-  background: var(--card-2);
+  padding: 0 8px 8px;
   overflow: auto;
 }
 
@@ -871,7 +873,9 @@ kbd {
   width: 100%;
   height: 100%;
   border: 0;
+  border-radius: 10px;
   background: #fff;
+  box-shadow: 0 0 0 1px var(--line-strong);
   transition: width 0.2s var(--ease);
 }
 
@@ -1755,5 +1759,80 @@ body:not(.no-mica) #start {
 
 #panel[hidden],
 #panel-resizer[hidden] {
+  display: none;
+}
+
+/* ---------- projekty: pripnutie, nový projekt ---------- */
+.pr-row .pin {
+  margin-left: auto;
+  color: var(--text-3);
+  display: grid;
+}
+
+.pr-new {
+  color: var(--text-3);
+}
+
+/* ---------- náhľad obrázka (Glance) ---------- */
+#glance {
+  position: fixed;
+  inset: 0;
+  z-index: 115;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade 0.12s;
+}
+
+#glance[hidden] {
+  display: none;
+}
+
+.gl-card {
+  max-width: 86vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-solid);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line-strong);
+  overflow: hidden;
+  animation: rise 0.18s var(--ease);
+}
+
+.gl-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 16px;
+  min-width: 320px;
+}
+
+.gl-name {
+  font-weight: 600;
+}
+
+.gl-meta {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.gl-stage {
+  display: grid;
+  place-items: center;
+  padding: 0 16px 16px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gl-stage img {
+  max-width: calc(86vw - 32px);
+  max-height: calc(86vh - 70px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+}
+
+.preview-bar .grow {
   display: none;
 }

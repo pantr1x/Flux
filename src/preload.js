@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('flux', {
   openFolder: (dir) => ipcRenderer.invoke('workspace:open', dir),
   projects: () => ipcRenderer.invoke('workspace:projects'),
   forgetProject: (dir) => ipcRenderer.invoke('workspace:forget', dir),
+  pinProject: (dir, pinned) => ipcRenderer.invoke('project:pin', dir, pinned),
+  renameProject: (dir, name) => ipcRenderer.invoke('project:rename', dir, name),
+  projectRoot: () => ipcRenderer.invoke('project:root'),
+  createProject: (name, root) => ipcRenderer.invoke('project:create', name, root),
+  chooseProjectRoot: () => ipcRenderer.invoke('project:choose-root'),
+  readImage: (file) => ipcRenderer.invoke('fs:read-image', file),
 
   list: (dir) => ipcRenderer.invoke('fs:list', dir),
   listAll: () => ipcRenderer.invoke('fs:list-all'),
