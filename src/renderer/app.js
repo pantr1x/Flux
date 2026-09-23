@@ -8,7 +8,7 @@ import { IStorageService } from 'monaco-editor/platform/storage/common/storage.j
 import { icon, fileIcon } from './icons.js';
 import { PythonLanguageClient } from './pyLsp.js';
 import { THEMES, DEFAULT_THEME, themeOf, defineMonacoTheme, themeSwatch } from './themes.js';
-import { TEMPLATES, PY_SNIPPETS } from './templates.js';
+import { TEMPLATES, PY_SNIPPETS, HTML_PAGE } from './templates.js';
 import { createCodeMap } from './codemap.js';
 
 const flux = window.flux;
@@ -371,6 +371,19 @@ function createTab(path, model, readonly) {
   return tab;
 }
 
+// Prázdny .html súbor dostane sám základnú kostru stránky (ako „!“ + Tab).
+function fillEmptyHtml(tab) {
+  if (tab.readonly || tab.model.getLanguageId() !== 'html' || tab.model.getValue().trim()) return;
+  const title = basename(tab.path).replace(/\.[^.]+$/, '');
+  const text = HTML_PAGE.replaceAll('{{title}}', title);
+  const marker = text.indexOf('$0');
+  const clean = text.replace('$0', '');
+  tab.model.setValue(clean);
+  const before = clean.slice(0, marker).split('\n');
+  tab.viewState = null;
+  tab.initialCursor = { lineNumber: before.length, column: before[before.length - 1].length + 1 };
+}
+
 async function openFile(path, { line, column, focus = true } = {}) {
   let tab = findTab(path);
   if (!tab) {
@@ -387,6 +400,7 @@ async function openFile(path, { line, column, focus = true } = {}) {
       model = monaco.editor.getModel(monaco.Uri.file(path)) || monaco.editor.createModel(text, langOf(path, text), monaco.Uri.file(path));
     }
     tab = findTab(path) || createTab(path, model, false);
+    fillEmptyHtml(tab);
   }
   activate(tab);
   if (line) {
@@ -432,6 +446,10 @@ function activate(tab) {
   editor.setModel(tab.model);
   editor.updateOptions({ readOnly: tab.readonly, placeholder: placeholderFor(tab) });
   if (tab.viewState) editor.restoreViewState(tab.viewState);
+  else if (tab.initialCursor) {
+    editor.setPosition(tab.initialCursor);
+    tab.initialCursor = null;
+  }
   updateRunGlyphs(tab);
   $('#welcome').hidden = true;
   if (inside(tab.path)) {
@@ -746,6 +764,7 @@ async function newFile(dir = targetDir(), preset = null) {
       }
     }
     if (tpl.project) setExpanded(base, true);
+    renderProjects();
     await revealInTree(toOpen);
     await refreshTree();
     const tab = await openFile(toOpen, cursor || {});
@@ -855,12 +874,59 @@ async function setWorkspace(dir) {
   closePreview();
   state.live = null;
   renderLive();
-  $('#ws-name').textContent = basename(opened);
+  renderProjects();
   applyTheme();
   await refreshTree();
   renderWelcome();
   await detectPython();
   lsp.start(opened, state.python?.path);
+}
+
+// ---------- projekty (ako „workspaces“ v Zene) ----------
+// Zoznam nedávnych priečinkov s ikonou podľa obsahu – prepnutie jedným klikom.
+async function renderProjects() {
+  const el = $('#projects');
+  let list = [];
+  try {
+    list = await flux.projects();
+  } catch {}
+  const kindIcon = (k) => (k === 'python' ? fileIcon('a.py') : k === 'web' ? fileIcon('a.html') : icon('folder', 16));
+  el.innerHTML =
+    `<div class="pr-head"><span>Projekty</span><button class="icon-btn" data-act="add" title="Otvoriť priečinok (Ctrl+O)">${icon('folderPlus', 15)}</button></div>` +
+    (list.length
+      ? list
+          .map(
+            (p) =>
+              `<button class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}" data-dir="${escapeAttr(p.dir)}" title="${escapeAttr(p.dir)}">${kindIcon(p.kind)}<span>${escapeHtml(p.name)}</span></button>`,
+          )
+          .join('')
+      : `<button class="pr-row" data-act="add">${icon('folderOpen', 16)}<span>Otvoriť priečinok…</span></button>`);
+}
+
+function projectEvents() {
+  const el = $('#projects');
+  el.onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.act === 'add') return openFolderDialog();
+    if (b.dataset.dir && keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
+  };
+  el.oncontextmenu = async (e) => {
+    const b = e.target.closest('[data-dir]');
+    if (!b) return;
+    e.preventDefault();
+    const choice = await confirmPalette(basename(b.dataset.dir), [
+      { label: 'Otvoriť', value: 'open' },
+      { label: 'Odstrániť zo zoznamu (súbory ostanú)', value: 'forget' },
+      { label: 'Zrušiť', value: null },
+    ]);
+    if (choice === 'open') setWorkspace(b.dataset.dir);
+    if (choice === 'forget') {
+      await flux.forgetProject(b.dataset.dir);
+      state.settings = await flux.setSettings({});
+      renderProjects();
+    }
+  };
 }
 
 // ---------- Python ----------
@@ -1070,6 +1136,7 @@ function stop() {
 
 function onRunStart({ label, pty }) {
   state.running = true;
+  updatePanelVisibility();
   state.pty = !!pty;
   state.runOutput = '';
   state.stoppedByUser = false;
@@ -1127,7 +1194,15 @@ function fileKind(tab) {
   return 'none';
 }
 
+// Výstup sa ukazuje len keď je otvorený súbor (alebo niečo beží) – na úvodnej obrazovke nie.
+function updatePanelVisibility() {
+  const show = !!state.active || state.running;
+  $('#panel').hidden = !show;
+  $('#panel-resizer').hidden = !show;
+}
+
 function renderRunButton() {
+  updatePanelVisibility();
   const kind = fileKind(activeTab());
   const btn = $('#btn-run');
   const runnable = kind === 'script' || kind === 'script-web';
@@ -1830,7 +1905,6 @@ function layoutEvents() {
   $('#btn-settings').onclick = openSettings;
   $('.brand').onclick = openStart;
   $('.brand').title = 'Úvodná obrazovka';
-  $('#btn-workspace').onclick = workspaceSwitcher;
   $('#btn-run').onclick = run;
   $('#btn-stop').onclick = stop;
   $('#btn-live').onclick = toggleLive;
@@ -1893,6 +1967,8 @@ async function main() {
   applyTheme();
   createTerminal();
   treeEvents();
+  projectEvents();
+  renderProjects();
   keybindings();
   layoutEvents();
   renderRunButton();

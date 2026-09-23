@@ -134,6 +134,7 @@ class Runner {
       finish(-1, String(err.message || err));
       return true;
     }
+    child.stdin.on('error', () => {});
     handle.child = child;
     handle.pid = child.pid;
     this.proc = handle;

@@ -172,6 +172,15 @@ function registerIpc() {
     setWorkspace(r.filePaths[0]);
     return r.filePaths[0];
   });
+  ipcMain.handle('workspace:projects', async () => {
+    const list = settings.recent.filter((d) => fs.existsSync(d)).slice(0, 8);
+    return Promise.all(list.map(async (dir) => ({ dir, name: path.basename(dir), kind: await projectKind(dir) })));
+  });
+  ipcMain.handle('workspace:forget', (_e, dir) => {
+    settings.recent = settings.recent.filter((d) => d !== dir);
+    saveSettings();
+    return true;
+  });
   ipcMain.handle('workspace:open', (_e, dir) => {
     if (!fs.existsSync(dir)) {
       settings.recent = settings.recent.filter((d) => d !== dir);
@@ -349,6 +358,34 @@ function registerIpc() {
     return true;
   });
   ipcMain.on('lsp:send', (_e, msg) => lsp.send(msg));
+}
+
+// Neočakávaná chyba v pozadí (napr. ukončený podproces) nesmie ukázať chybové okno – len sa zapíše.
+process.on('uncaughtException', (err) => console.error('[flux]', err));
+
+// ---------- projekty (nedávne priečinky) ----------
+// Druh projektu podľa súborov v priečinku – na ikonu v zozname projektov.
+async function projectKind(dir) {
+  let py = 0;
+  let web = 0;
+  const scan = async (d, depth) => {
+    let entries = [];
+    try {
+      entries = await fsp.readdir(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (IGNORED_DIRS.has(e.name) || e.name.startsWith('.') || e.name === 'venv') continue;
+      if (e.isDirectory()) {
+        if (depth < 1) await scan(path.join(d, e.name), depth + 1);
+      } else if (/\.pyw?$/i.test(e.name)) py++;
+      else if (/\.(html?|css)$/i.test(e.name)) web++;
+    }
+  };
+  await scan(dir, 0);
+  if (!py && !web) return 'folder';
+  return py >= web ? 'python' : 'web';
 }
 
 // ---------- štart ----------

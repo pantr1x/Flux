@@ -1695,3 +1695,65 @@ body:not(.no-mica) #start {
 .st-back:hover {
   color: var(--text);
 }
+
+/* ---------- projekty (prepínanie priečinkov) ---------- */
+.projects {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  max-height: 40%;
+  overflow: auto;
+}
+
+.pr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-3);
+}
+
+.pr-head .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.pr-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  color: var(--text-2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pr-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pr-row:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.pr-row.active {
+  background: var(--active);
+  color: var(--text);
+  font-weight: 600;
+}
+
+#panel[hidden],
+#panel-resizer[hidden] {
+  display: none;
+}

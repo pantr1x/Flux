@@ -25,6 +25,8 @@ class LanguageServer {
     });
     this.proc = proc;
     proc.stdout.on('data', (chunk) => this.receive(chunk));
+    // Ak server skončí, zápis do neho nesmie zhodiť celú aplikáciu (EPIPE).
+    proc.stdin.on('error', () => {});
     proc.stderr.on('data', () => {});
     proc.on('error', () => {});
     proc.on('exit', (code) => {
@@ -35,7 +37,7 @@ class LanguageServer {
   }
 
   send(message) {
-    if (!this.proc) return;
+    if (!this.proc || !this.proc.stdin.writable) return;
     const body = Buffer.from(JSON.stringify(message), 'utf8');
     this.proc.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
     this.proc.stdin.write(body);

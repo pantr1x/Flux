@@ -1,7 +1,7 @@
 // Šablóny nových súborov a projektov + krátke úryvky kódu (snippety) pre Python.
 // V šablóne „$0“ označuje, kde bude kurzor po otvorení.
 
-const HTML_PAGE = `<!DOCTYPE html>
+export const HTML_PAGE = `<!DOCTYPE html>
 <html lang="sk">
 <head>
   <meta charset="UTF-8">

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('flux', {
 
   openFolderDialog: () => ipcRenderer.invoke('workspace:open-dialog'),
   openFolder: (dir) => ipcRenderer.invoke('workspace:open', dir),
+  projects: () => ipcRenderer.invoke('workspace:projects'),
+  forgetProject: (dir) => ipcRenderer.invoke('workspace:forget', dir),
 
   list: (dir) => ipcRenderer.invoke('fs:list', dir),
   listAll: () => ipcRenderer.invoke('fs:list-all'),
