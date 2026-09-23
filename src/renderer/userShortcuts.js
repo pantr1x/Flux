@@ -99,7 +99,7 @@ export function createUserShortcuts({ commands, editor, getContext, saveAll, toa
   window.addEventListener(
     'keydown',
     (e) => {
-      if (!list.length || e.repeat) return;
+      if (!list.length || e.repeat || window.fluxRecordingKeys) return;
       const hit = list.find((s) => matches(e, s.parsed));
       if (!hit) return;
       e.preventDefault();

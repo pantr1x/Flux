@@ -1,0 +1,112 @@
+{
+  "plugins": [
+    {
+      "id": "flux.pomodoro",
+      "name": "Pomodoro Timer",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Stay focused: 25 minutes of coding, 5 minutes of break – with a timer in the status bar.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "productivity",
+        "timer",
+        "focus"
+      ],
+      "issue": 1
+    },
+    {
+      "id": "flux.lorem",
+      "name": "Lorem Ipsum",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Placeholder text for your web pages – type lorem and press Tab.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "html",
+        "text",
+        "snippets"
+      ],
+      "issue": 2
+    },
+    {
+      "id": "flux.todo-highlight",
+      "name": "TODO Highlight",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Highlights TODO, FIXME, HACK and NOTE in your code and counts them in the status bar.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "comments",
+        "productivity",
+        "highlight"
+      ],
+      "issue": 3
+    },
+    {
+      "id": "flux.zen-mode",
+      "name": "Zen Mode",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Hide everything except your code – distraction-free writing with one shortcut.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "focus",
+        "layout",
+        "view"
+      ],
+      "issue": 4
+    },
+    {
+      "id": "flux.word-count",
+      "name": "Word Count",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "Words, characters and reading time of your file or selection in the status bar.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "text",
+        "writing",
+        "statistics"
+      ],
+      "issue": 5
+    },
+    {
+      "id": "pantr1x.save-confetti",
+      "name": "Save Confetti",
+      "publisher": "pantr1x",
+      "verified": false,
+      "version": "1.0.0",
+      "description": "A tiny celebration with confetti every time you save a file. 🎉",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "fun",
+        "save",
+        "example"
+      ],
+      "issue": 6
+    }
+  ]
+}

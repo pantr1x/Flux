@@ -7,7 +7,7 @@ const flux = window.flux;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // Jednoduchý Markdown: bloky kódu, `kód`, **tučné**, odkazy, zoznamy, odseky.
-function markdown(text) {
+export function markdown(text) {
   const parts = String(text).split(/```/);
   let html = '';
   parts.forEach((part, i) => {
@@ -141,10 +141,14 @@ export function createAIPanel({ getContext, insertCode, openSettingsAI, toast })
         bot.note = t('Stopped.');
         history.pop();
         view.splice(view.length - 2, 1);
+        // (prerušená odpoveď sa do histórie nepridá)
       } else {
-        // Celý obsah (aj bloky MCP nástrojov) ide späť do ďalšej otázky.
-        history.push({ role: 'assistant', content: res.content });
-        if (!bot.text) bot.text = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+        // Celý priebeh (aj volania nástrojov a ich výsledky) ide späť do ďalšej otázky.
+        history.push(...res.added);
+        if (!bot.text) {
+          const last = res.added.filter((m) => m.role === 'assistant').pop();
+          bot.text = (last?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+        }
         if (res.refused) bot.note = t('Claude could not help with this request.');
       }
     } catch (err) {

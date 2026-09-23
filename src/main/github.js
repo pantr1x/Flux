@@ -143,7 +143,7 @@ function createGitHub({ getSettings, saveSettings }) {
     return { url: repo.html_url, full: repo.full_name };
   }
 
-  return { info, connect, disconnect, repos, clone, status, commitPush, pull, publish };
+  return { info, connect, disconnect, repos, clone, status, commitPush, pull, publish, api };
 }
 
 module.exports = { createGitHub };

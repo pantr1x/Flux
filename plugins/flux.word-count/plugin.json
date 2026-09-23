@@ -1,0 +1,26 @@
+{
+  "id": "flux.word-count",
+  "name": "Word Count",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Words, characters and reading time of your file or selection in the status bar.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "text",
+    "writing",
+    "statistics"
+  ],
+  "license": "MIT",
+  "issue": 5
+}

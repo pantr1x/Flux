@@ -17,6 +17,9 @@ import { setupEditorExtras } from './editorExtras.js';
 import { createUserShortcuts } from './userShortcuts.js';
 import { createAIPanel } from './aiPanel.js';
 import { createGitHub } from './github.js';
+import { BINDINGS, CATEGORIES, createKeymap, kbdHtml } from './keymap.js';
+import { createPluginHost } from './pluginHost.js';
+import { createPluginsUI } from './pluginsUI.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -70,6 +73,25 @@ const DEFAULTS = {
   wordWrap: false,
   autosave: true,
   autoUpdateLangs: true,
+  caretStyle: 'line',
+  caretBlink: 'smooth',
+  caretWidth: 2,
+  caretSmooth: true,
+  caretColor: '',
+  caretAccent: false,
+  pointer: 'text',
+  pointerColor: '',
+  fontCustom: '',
+  uiFont: '',
+  uiZoom: 100,
+  lineNumbers: 'on',
+  whitespace: 'selection',
+  letterSpacing: 0,
+  bracketColors: true,
+  cornerRadius: 14,
+  wallBlur: 40,
+  wallOpacity: 55,
+  userName: '',
   clearOnRun: true,
   terminalFontSize: 13,
   suggestDetails: true,
@@ -237,14 +259,26 @@ function applyTheme() {
 // Nastavenia editora a terminálu (písmo, veľkosť, minimapa…).
 function applyEditorSettings() {
   const font = FONTS.find((f) => f.id === setting('fontFamily')) || FONTS[0];
+  // Vlastné písmo (ľubovoľné nainštalované) má prednosť pred zoznamom.
+  const custom = String(setting('fontCustom') || '').trim();
+  const fontCss = custom ? `'${custom.replace(/'/g, '')}', ${font.css}` : font.css;
   editor?.updateOptions({
-    fontFamily: font.css,
+    fontFamily: fontCss,
     fontSize: setting('fontSize'),
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
     minimap: { enabled: false },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
+    cursorStyle: setting('caretStyle'),
+    cursorBlinking: setting('caretBlink'),
+    cursorWidth: Number(setting('caretWidth')) || 2,
+    cursorSmoothCaretAnimation: setting('caretSmooth') ? 'on' : 'off',
+    lineNumbers: setting('lineNumbers'),
+    renderWhitespace: setting('whitespace'),
+    letterSpacing: Number(setting('letterSpacing')) || 0,
+    bracketPairColorization: { enabled: setting('bracketColors') },
   });
+  applyCustomization();
   codemap?.setVisible(setting('minimap'));
   if (term) {
     term.options.fontFamily = font.css;
@@ -253,6 +287,39 @@ function applyEditorSettings() {
       fit.fit();
     } catch {}
   }
+}
+
+// Vzhľad podľa tvojho gusta: farba kurzora, ukazovateľ myši (aj crosshair), zaoblenie, písmo rozhrania, veľkosť, pozadie.
+const POINTERS = {
+  text: 'text',
+  default: 'default',
+  pointer: 'pointer',
+  crosshair: 'crosshair',
+};
+function pointerCss(kind, color) {
+  if (POINTERS[kind]) return POINTERS[kind];
+  const c = encodeURIComponent(color || '#ffffff');
+  const svg = {
+    'flux-cross': `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M12 2v7M12 15v7M2 12h7M15 12h7' stroke='${c}' stroke-width='2' stroke-linecap='round'/><circle cx='12' cy='12' r='1.6' fill='${c}'/></svg>`,
+    'flux-dot': `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='5' fill='${c}' fill-opacity='.85' stroke='black' stroke-opacity='.4'/></svg>`,
+    'flux-ring': `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='7' fill='none' stroke='${c}' stroke-width='2'/><circle cx='12' cy='12' r='1.5' fill='${c}'/></svg>`,
+  }[kind];
+  return svg ? `url("data:image/svg+xml,${svg}") 12 12, crosshair` : 'text';
+}
+
+function applyCustomization() {
+  const root = document.documentElement;
+  const caret = setting('caretColor');
+  root.style.setProperty('--caret', caret || 'var(--accent)');
+  document.body.classList.toggle('custom-caret', !!caret || setting('caretAccent'));
+  root.style.setProperty('--editor-pointer', pointerCss(setting('pointer'), setting('pointerColor') || currentAccent()));
+  root.style.setProperty('--radius', `${Number(setting('cornerRadius'))}px`);
+  const uiFont = String(setting('uiFont') || '').trim();
+  if (uiFont) root.style.setProperty('--ui-font', `'${uiFont.replace(/'/g, '')}', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif`);
+  else root.style.removeProperty('--ui-font');
+  root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
+  root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
+  flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
 
 async function saveSettings(patch) {
@@ -321,6 +388,10 @@ let tools;
 let userKeys;
 let aiPanel;
 let gh;
+let keymap;
+let pluginHost;
+let pluginsUI;
+let userKeysCommands = {};
 let onboarding;
 function createEditor() {
   editor = monaco.editor.create($('#editor'), {
@@ -709,6 +780,7 @@ function activate(tab) {
   renderStatus();
   followPreview(tab);
   document.title = `${basename(tab.path)} — Flux`;
+  pluginHost?.emitOpen({ path: tab.path, name: basename(tab.path), language: tab.model.getLanguageId() });
 }
 
 // Stránka projektu: súbory ostanú otvorené v kartách, len sa žiadna nezobrazí.
@@ -766,6 +838,7 @@ async function saveTab(tab) {
   }
   tab.savedVersion = version;
   lsp.didSave(tab.model);
+  pluginHost?.emitSave({ path: tab.path, name: basename(tab.path), language: tab.model.getLanguageId(), text: tab.model.getValue() });
   // Uložil si vlastné skratky alebo tému → hneď sa použijú.
   if (/[\\/]config[\\/]shortcuts\.json$/i.test(tab.path)) userKeys?.load(true);
   if (/[\\/]config[\\/]themes[\\/][^\\/]+\.json$/i.test(tab.path)) loadCustomThemes(true);
@@ -1401,6 +1474,9 @@ async function detectPython() {
 
 function renderStatus() {
   const py = $('#st-python');
+  // Python dole len pri Python súbore alebo Python projekte (nie pri HTML a pod.).
+  const activeLang = state.active?.model.getLanguageId();
+  py.hidden = !(activeLang === 'python' || (!state.active && state.projectKind === 'python'));
   if (state.python) {
     py.className = 'status-item';
     py.innerHTML = `${icon('python', 13)}<span>Python ${state.python.version}</span><span style="opacity:.6">${escapeHtml(state.python.source)}</span>`;
@@ -1941,6 +2017,7 @@ function commands() {
     c(t('Toggle light / dark theme'), toggleTheme, '', isDark() ? 'sun' : 'moon', 'theme dark light colors appearance'),
     c(t('Color theme…'), chooseTheme, '', 'palette', 'theme colors vs code dracula one dark'),
     c(t('Settings'), openSettings, 'Ctrl+,', 'settings', 'settings preferences font'),
+    c(t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A', 'command', 'search find all settings'),
     c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'git', 'github clone repo'),
     c(t('AI: open assistant'), () => aiPanel.show(), 'Ctrl+I', 'sparkle', 'ai claude chat assistant'),
     c(t('AI: explain this file'), () => aiPanel.ask(t('Explain this file.')), '', 'sparkle', 'ai claude explain'),
@@ -1968,8 +2045,12 @@ function commands() {
   return list;
 }
 
+function pluginCommands() {
+  return (pluginHost?.commands() || []).map((c) => ({ label: `${c.plugin}: ${c.label}`, run: c.run, kbd: c.key, icon: icon('sparkle', 15), keywords: 'plugin' }));
+}
+
 function openCommandPalette() {
-  openPalette({ placeholder: t('Type a command…'), items: commands(), onPick: (it) => it.run() });
+  openPalette({ placeholder: t('Type a command…'), items: [...commands(), ...pluginCommands()], onPick: (it) => it.run() });
 }
 
 function workspaceSwitcher() {
@@ -2123,9 +2204,11 @@ function openSettings() {
   const tabs = [
     ['appearance', 'palette', t('Appearance')],
     ['editor', 'code', t('Editor')],
+    ['custom', 'sparkle', t('Personalize')],
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
     ['keys', 'command', t('Shortcuts')],
+    ['plugins', 'sparkle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
     ['github', 'git', 'GitHub'],
     ['general', 'globe', t('Language & intro')],
@@ -2135,6 +2218,7 @@ function openSettings() {
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
       <nav class="s-nav">
         <div class="s-nav-title">${t('Settings')}</div>
+        <label class="s-find">${icon('command', 13)}<input id="s-find" placeholder="${t('Search settings…')}" spellcheck="false" autocomplete="off"></label>
         ${tabs.map(([id, ic, label]) => `<button class="s-tab${id === tab ? ' on' : ''}" data-tab="${id}">${icon(ic, 16)}<span>${label}</span></button>`).join('')}
         <div class="grow"></div>
         <div class="s-ver">flux</div>
@@ -2175,6 +2259,44 @@ function openSettings() {
               ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
             </div>
           </section>
+          <section data-pane="custom">
+            <h3>${t('Text cursor')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Cursor shape')}</b></span><select data-key="caretStyle">${[['line', t('line')], ['line-thin', t('thin line')], ['block', t('block')], ['block-outline', t('block outline')], ['underline', t('underline')], ['underline-thin', t('thin underline')]].map(([v, l]) => opt(v, l, setting('caretStyle'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Blinking')}</b></span><select data-key="caretBlink">${[['smooth', t('smooth')], ['blink', t('blink')], ['phase', t('fade')], ['expand', t('expand')], ['solid', t('no blinking')]].map(([v, l]) => opt(v, l, setting('caretBlink'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Cursor width')}</b><small>${t('for the line shape')}</small></span><input type="range" min="1" max="6" data-key="caretWidth" value="${setting('caretWidth')}"></label>
+              ${toggle('caretSmooth', 'Smooth cursor movement', 'the cursor glides when it moves')}
+              <label class="s-row"><span><b>${t('Cursor color')}</b><small>${t('empty = color of the theme')}</small></span><span class="s-inline"><input type="color" data-key="caretColor" value="${setting('caretColor') || accent}"><button class="s-btn" data-action="caret-reset">${t('Reset')}</button></span></label>
+            </div>
+            <h3>${t('Mouse pointer in the editor')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('Pointer')}</b><small>${t('Crosshair and dot use your pointer color.')}</small></span><span class="ptr-pick">${[['text', 'I'], ['default', '↖'], ['crosshair', '+'], ['flux-cross', '⌖'], ['flux-dot', '●'], ['flux-ring', '◎']]
+                .map(([v, l]) => `<button class="ptr${setting('pointer') === v ? ' on' : ''}" data-pointer="${v}" title="${v}">${l}</button>`)
+                .join('')}</span></div>
+              <label class="s-row"><span><b>${t('Pointer color')}</b></span><input type="color" data-key="pointerColor" value="${setting('pointerColor') || '#ffffff'}"></label>
+            </div>
+            <h3>${t('Text & fonts')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Custom code font')}</b><small>${t('any font installed on your computer, e.g. Hack or Iosevka')}</small></span><input class="s-text" data-key="fontCustom" value="${escapeAttr(setting('fontCustom'))}" placeholder="${t('font name')}"></label>
+              <label class="s-row"><span><b>${t('App font')}</b><small>${t('font of menus and buttons')}</small></span><input class="s-text" data-key="uiFont" value="${escapeAttr(setting('uiFont'))}" placeholder="Segoe UI"></label>
+              <label class="s-row"><span><b>${t('Letter spacing')}</b></span><input type="range" min="-1" max="3" step="0.5" data-key="letterSpacing" value="${setting('letterSpacing')}"></label>
+              <label class="s-row"><span><b>${t('Line numbers')}</b></span><select data-key="lineNumbers">${[['on', t('on')], ['relative', t('relative')], ['off', t('off')]].map(([v, l]) => opt(v, l, setting('lineNumbers'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Show spaces and tabs')}</b></span><select data-key="whitespace">${[['none', t('never')], ['selection', t('in selection')], ['boundary', t('between words')], ['all', t('always')]].map(([v, l]) => opt(v, l, setting('whitespace'))).join('')}</select></label>
+              ${toggle('bracketColors', 'Colored brackets', 'matching brackets get the same color')}
+            </div>
+            <h3>${t('Window')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
+              <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
+              <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
+              <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
+              <div class="s-row"><span><b>${t('Background image')}</b><small>${t('your own picture instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${t('Choose…')}</button><button class="s-btn" data-action="bg-reset">${t('Reset')}</button></span></div>
+            </div>
+            <h3>${t('Home screen')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
+            </div>
+          </section>
           <section data-pane="running">
             <h3>Python</h3>
             <div class="s-group">
@@ -2200,7 +2322,7 @@ function openSettings() {
               ${(userKeys?.list() || []).map((k) => `<div class="s-row s-key"><span><b>${escapeHtml(k.label || k.run || k.insert || k.command || k.url || t('Custom'))}</b></span><span class="kbds">${String(k.key).split('+').map((x) => `<kbd>${escapeHtml(x)}</kbd>`).join('<i>+</i>')}</span></div>`).join('')}
             </div>
             <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
-            <div class="s-group" id="s-keys">${shortcutRows()}</div>
+            <div id="s-keys">${shortcutRows()}</div>
           </section>
           <section data-pane="ai">
             <p class="s-lead">${t('Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.')}</p>
@@ -2220,6 +2342,7 @@ function openSettings() {
             </form>
           </section>
           <section data-pane="github" id="s-github"></section>
+          <section data-pane="plugins" id="s-plugins"></section>
           <section data-pane="general">
             <h3>${t('Language')}</h3>
             <div class="s-group">
@@ -2239,8 +2362,10 @@ function openSettings() {
     if (box) box.innerHTML = st.list.map((tc) => tools.row(tc)).join('');
   });
   $('#s-keys-q').oninput = (e) => {
-    const q = e.target.value.toLowerCase();
-    for (const r of panel.querySelectorAll('#s-keys .s-key')) r.hidden = q && !r.textContent.toLowerCase().includes(q);
+    const q = e.target.value.toLowerCase().trim();
+    // .s-row má display:flex, preto skrývame cez style (atribút hidden by nezabral).
+    for (const r of panel.querySelectorAll('#s-keys .s-key')) r.style.display = !q || r.textContent.toLowerCase().includes(q) ? '' : 'none';
+    for (const c of panel.querySelectorAll('#s-keys .s-keycat')) c.style.display = [...c.querySelectorAll('.s-key')].some((r) => r.style.display !== 'none') ? '' : 'none';
   };
   // AI: kľúč, model, MCP servery
   let aiCfg = null;
@@ -2284,10 +2409,41 @@ function openSettings() {
   const showTab = (id) => {
     state.settingsTab = id;
     $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
+    if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
   showTab(tab);
+  // Hľadanie naprieč všetkými záložkami: ukáže len riadky, ktoré sedia.
+  const ROWS = '.s-row, .theme-card, .tc-row, .ob-row';
+  $('#s-find').oninput = (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    const sections = panel.querySelectorAll('[data-pane]');
+    for (const el of panel.querySelectorAll(ROWS + ', .s-group, .s-body h3, .s-lead, .s-keycat')) el.style.display = '';
+    if (!q) return showTab(state.settingsTab || 'appearance');
+    $('#s-title').textContent = t('Search results');
+    panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('on'));
+    let any = false;
+    for (const sec of sections) {
+      const tabName = tabs.find(([x]) => x === sec.dataset.pane)?.[2]?.toLowerCase() || '';
+      let hits = 0;
+      for (const r of sec.querySelectorAll(ROWS)) {
+        const ok = tabName.includes(q) || r.textContent.toLowerCase().includes(q);
+        r.style.display = ok ? '' : 'none';
+        if (ok) hits++;
+      }
+      for (const g of sec.querySelectorAll('.s-group, .theme-grid, .tc-list, .s-keycat')) {
+        const vis = [...g.querySelectorAll(ROWS)].some((r) => r.style.display !== 'none');
+        g.style.display = vis || !g.querySelector(ROWS) ? '' : 'none';
+      }
+      for (const h of sec.querySelectorAll('h3, .s-lead')) h.style.display = 'none';
+      sec.hidden = !hits;
+      any ||= !!hits;
+    }
+    $('#s-noresult')?.remove();
+    if (!any) panel.querySelector('.s-body').insertAdjacentHTML('beforeend', `<div class="s-loading" id="s-noresult">${t('Nothing found')}</div>`);
+  };
+  requestAnimationFrame(() => $('#s-find')?.focus());
   // Zoznam jazykov z GitHubu.
   flux.i18nList().then((list) => {
     const sel = $('#s-lang');
@@ -2343,6 +2499,48 @@ function openSettings() {
     if (mdel) return saveMcp(aiCfg.mcp.filter((_, i) => i !== Number(mdel.dataset.mcpDel)));
     const mon = e.target.closest('[data-mcp-on]');
     if (mon) return saveMcp(aiCfg.mcp.map((m, i) => (i === Number(mon.dataset.mcpOn) ? { ...m, enabled: mon.checked } : m)));
+    const rebind = e.target.closest('[data-rebind]');
+    if (rebind) {
+      const b = BINDINGS.find((x) => x.id === rebind.dataset.rebind);
+      return keymap.record(rebind, b, () => {
+        $('#s-keys').innerHTML = shortcutRows();
+        $('#s-keys-q').dispatchEvent(new Event('input'));
+      });
+    }
+    const resetKey = e.target.closest('[data-reset-key]');
+    if (resetKey) {
+      e.preventDefault();
+      const over = { ...(setting('keymap') || {}) };
+      delete over[resetKey.dataset.resetKey];
+      await saveSettings({ keymap: over });
+      $('#s-keys').innerHTML = shortcutRows();
+      return;
+    }
+    const ptr = e.target.closest('[data-pointer]');
+    if (ptr) {
+      panel.querySelectorAll('[data-pointer]').forEach((b) => b.classList.toggle('on', b === ptr));
+      await saveSettings({ pointer: ptr.dataset.pointer });
+      return applyCustomization();
+    }
+    if (e.target.closest('[data-action="caret-reset"]')) {
+      await saveSettings({ caretColor: '' });
+      return applyCustomization();
+    }
+    if (e.target.closest('[data-action="bg-pick"]')) {
+      const ok = await flux.chooseBackground();
+      if (ok) {
+        wallpaperUrl = null;
+        window.dispatchEvent(new Event('focus'));
+        toast(t('Background changed.'), 'ok');
+      }
+      return;
+    }
+    if (e.target.closest('[data-action="bg-reset"]')) {
+      await flux.resetBackground();
+      wallpaperUrl = null;
+      window.dispatchEvent(new Event('focus'));
+      return;
+    }
     if (e.target.closest('[data-action="edit-keys"]')) {
       closeSettings();
       const f = await flux.shortcutsFile();
@@ -2371,6 +2569,15 @@ function openSettings() {
       onboarding.startTour();
     }
   };
+  // Posuvníky a farby sa prejavia hneď pri ťahaní.
+  panel.oninput = (e) => {
+    const el = e.target;
+    const key = el.dataset?.key;
+    if (!key || !['range', 'color'].includes(el.type)) return;
+    state.settings = { ...state.settings, [key]: el.type === 'range' ? Number(el.value) : el.value };
+    if (key === 'uiZoom') $('#s-zoom-v').textContent = `${el.value} %`;
+    applyEditorSettings();
+  };
   panel.onchange = async (e) => {
     const el = e.target;
     if (el.dataset.customAccent !== undefined) {
@@ -2380,7 +2587,7 @@ function openSettings() {
     const key = el.dataset.key;
     if (!key) return;
     let value = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.type === 'number' || key === 'lineHeight') value = Number(value);
+    if (el.type === 'number' || el.type === 'range' || key === 'lineHeight') value = Number(value);
     await saveSettings({ [key]: value });
     if (key === 'suggestDetails') showSuggestDetails(value);
     if (key === 'material') await saveSettings({ translucent: true });
@@ -2389,34 +2596,72 @@ function openSettings() {
   };
 }
 
-// Zoznam skratiek: príkazy Fluxu + najužitočnejšie skratky editora.
+// Plávajúce hľadanie všetkého (Ctrl+Shift+A): príkazy, nastavenia, súbory, projekty.
+let settingsIndexCache = null;
+function settingsIndex() {
+  if (settingsIndexCache) return settingsIndexCache;
+  const wasHidden = $('#settings').hidden;
+  openSettings();
+  const out = [];
+  for (const sec of $('#settings').querySelectorAll('[data-pane]')) {
+    for (const el of sec.querySelectorAll('.s-row > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
+      const label = el.firstChild?.textContent?.trim() || el.textContent.trim();
+      if (label && !out.some((o) => o.label === label)) out.push({ tab: sec.dataset.pane, label });
+    }
+  }
+  if (wasHidden) $('#settings').hidden = true;
+  settingsIndexCache = out;
+  return out;
+}
+
+async function searchEverything() {
+  const cmds = [...commands(), ...pluginCommands()].map((c) => ({ ...c, group: t('Command') }));
+  const sets = settingsIndex().map((x) => ({
+    label: x.label,
+    icon: icon('settings', 15),
+    detail: t('Setting'),
+    keywords: 'settings',
+    run: () => {
+      state.settingsTab = x.tab;
+      openSettings();
+      // Nájdený riadok zablikne.
+      const row = [...$('#settings').querySelectorAll('.s-row, .theme-card, .tc-row')].find((r) => r.textContent.includes(x.label));
+      if (row) {
+        row.scrollIntoView({ block: 'center' });
+        row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 1400);
+      }
+    },
+  }));
+  const projects = (state.projectList || []).map((p) => ({
+    label: p.name,
+    icon: kindIcon(p.kind),
+    detail: t('Project'),
+    run: () => (keyOf(p.dir) === keyOf(state.workspace || '') ? showProjectPage() : setWorkspace(p.dir)),
+  }));
+  let files = [];
+  try {
+    files = state.workspace ? await flux.listAll() : [];
+  } catch {}
+  const fileItems = files.slice(0, 3000).map((f) => ({ label: relPath(f), icon: fileIcon(basename(f)), detail: t('File'), run: () => openFile(f) }));
+  openPalette({
+    placeholder: t('Search commands, settings, files and projects…'),
+    items: [...cmds, ...sets, ...projects, ...fileItems],
+    onPick: (it) => it.run(),
+  });
+}
+
+// Skratky po kategóriách; klik na skratku = nahrať novú (Backspace vráti pôvodnú).
 function shortcutRows() {
-  const editorKeys = [
-    [t('Comment / uncomment line'), 'Ctrl+/'],
-    [t('Add a comment above the line'), 'Ctrl+Alt+/'],
-    [t('Rename symbol everywhere'), 'F2'],
-    [t('Find'), 'Ctrl+F'],
-    [t('Find and replace'), 'Ctrl+H'],
-    [t('Select next match'), 'Ctrl+D'],
-    [t('Move line up / down'), 'Alt+↑ / Alt+↓'],
-    [t('Copy line up / down'), 'Shift+Alt+↑ / ↓'],
-    [t('Delete line'), 'Ctrl+Shift+K'],
-    [t('Add cursor above / below'), 'Ctrl+Alt+↑ / ↓'],
-    [t('Go to line'), 'Ctrl+G'],
-    [t('Show suggestions'), 'Ctrl+Space'],
-    [t('Go to definition'), 'F12'],
-    [t('Fold / unfold block'), 'Ctrl+Shift+[ / ]'],
-  ];
-  const seen = new Set();
-  const own = commands()
-    .filter((c) => c.kbd && !seen.has(c.kbd) && seen.add(c.kbd))
-    .map((c) => [c.label, c.kbd]);
-  const row = ([label, kbd]) =>
-    `<div class="s-row s-key"><span><b>${escapeHtml(label)}</b></span><span class="kbds">${kbd
-      .split(' / ')
-      .map((k) => k.split('+').map((x) => `<kbd>${escapeHtml(x)}</kbd>`).join('<i>+</i>'))
-      .join('<i>/</i>')}</span></div>`;
-  return own.map(row).join('') + `<div class="s-key-head">${t('Editor')}</div>` + editorKeys.map(row).join('');
+  return CATEGORIES.map(
+    ([cat, name]) =>
+      `<div class="s-keycat" data-cat="${cat}"><h3>${t(name)}</h3><div class="s-group">${BINDINGS.filter((b) => b.cat === cat)
+        .map(
+          (b) =>
+            `<div class="s-row s-key" data-key-row="${b.id}"><span><b>${escapeHtml(t(b.label))}</b>${keymap.isChanged(b) ? `<small class="s-changed">${t('changed')} · <a href="#" data-reset-key="${b.id}">${t('reset')}</a></small>` : ''}</span><button class="kbds kbd-btn" data-rebind="${b.id}" title="${t('Click and press a new shortcut')}">${kbdHtml(keymap.current(b), escapeHtml)}</button></div>`,
+        )
+        .join('')}</div></div>`,
+  ).join('');
 }
 
 function closeSettings() {
@@ -2459,7 +2704,9 @@ async function openStart() {
     .sort((a, b) => (a.recent < 0 ? 999 : a.recent) - (b.recent < 0 ? 999 : b.recent))
     .slice(0, 6);
   const h = new Date().getHours();
-  const greet = h < 5 ? t('Good night') : h < 12 ? t('Good morning') : h < 18 ? t('Good afternoon') : t('Good evening');
+  const name = String(setting('userName') || '').trim();
+  const greetBase = h < 5 ? t('Good night') : h < 12 ? t('Good morning') : h < 18 ? t('Good afternoon') : t('Good evening');
+  const greet = name ? `${greetBase}, ${escapeHtml(name)}` : greetBase;
   const desc = (p) => projectMeta(p.dir).description;
   const card = (p) =>
     `<button class="hm-card${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}"><span class="hm-ic">${kindIcon(p.kind, 26)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
@@ -2468,7 +2715,7 @@ async function openStart() {
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
     <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span></div>
-    <div class="st-inner hm">
+    <div class="st-scroll"><div class="st-inner hm">
       <h1>${greet}</h1>
       <p class="st-sub">${t('What do you want to work on?')}</p>
       <div class="hm-actions">
@@ -2487,7 +2734,7 @@ async function openStart() {
         )
         .join('')}</div>
       ${state.workspace ? `<button class="st-back" data-act="back">${t('Back to editor')} <kbd>Esc</kbd></button>` : ''}
-    </div>`;
+    </div></div>`;
   for (const p of [...pinned, ...recent]) {
     flux.projectStats(p.dir).then((st) => {
       for (const x of el.querySelectorAll('.hm-stat')) {
@@ -2636,12 +2883,18 @@ function renderWelcome() {
       if (state.workspace !== ws || !$('#pj-files')) return;
       state.projectFiles = files;
       const main = mainFileOf(files, kind);
-      const want = kind === 'web' ? /\.html?$/i : new RegExp(`\\.(${(MAIN_EXT[kind] || ['py', 'html', 'js']).join('|')})$`, 'i');
-      const picks = files.filter((f) => want.test(f)).slice(0, 8);
-      if (!picks.length) return;
-      $('#pj-files').innerHTML = `<div class="pj-h"><span>${kind === 'web' ? t('Pages') : t('Files')}</span></div><div class="pj-chips">${picks
-        .map((f) => `<button class="pj-file${f === main ? ' main' : ''}" data-open="${escapeAttr(f)}">${fileIcon(basename(f))}<span>${escapeHtml(relPath(f))}</span></button>`)
-        .join('')}</div>`;
+      const chip = (f) => `<button class="pj-file${f === main ? ' main' : ''}" data-open="${escapeAttr(f)}">${fileIcon(basename(f))}<span>${escapeHtml(relPath(f))}</span></button>`;
+      // Web: stránky, štýly a skripty zvlášť; inak hlavné súbory jazyka.
+      const groups =
+        kind === 'web'
+          ? [[t('Pages'), /\.html?$/i], [t('Styles'), /\.(css|scss|sass|less)$/i], [t('Scripts'), /\.(m?js|ts)$/i]]
+          : [[t('Files'), new RegExp(`\\.(${(MAIN_EXT[kind] || ['py', 'html', 'js']).join('|')})$`, 'i')]];
+      const html = groups
+        .map(([label, re]) => [label, files.filter((f) => re.test(f)).slice(0, 8)])
+        .filter(([, list]) => list.length)
+        .map(([label, list]) => `<div class="pj-group"><div class="pj-h"><span>${label}</span></div><div class="pj-chips">${list.map(chip).join('')}</div></div>`)
+        .join('');
+      if (html) $('#pj-files').innerHTML = `<div class="pj-groups">${html}</div>`;
     });
   }
   w.onclick = async (e) => {
@@ -2759,6 +3012,7 @@ function keybindings() {
   window.addEventListener(
     'keydown',
     (e) => {
+      if (window.fluxRecordingKeys) return;
       if (palette) {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -2814,6 +3068,7 @@ function keybindings() {
       else if (e.key === 'F5' && e.shiftKey) stop();
       else if (e.key === 'F5' || (ctrl && e.key === 'Enter')) run();
       else if (ctrl && e.shiftKey && key === 'p') openCommandPalette();
+      else if (ctrl && e.shiftKey && key === 'a') searchEverything();
       else if (ctrl && !e.shiftKey && key === 'p') quickOpen();
       else if (ctrl && key === 's') e.shiftKey ? saveAll() : saveTab(activeTab()).then(() => {
           announceProblems();
@@ -2995,7 +3250,7 @@ async function main() {
     toast,
     saveAll,
     // Príkazy Fluxu, ktoré sa dajú dať na vlastnú skratku ("command": "run").
-    commands: {
+    commands: (userKeysCommands = {
       run,
       stop,
       save: () => saveTab(activeTab()),
@@ -3013,7 +3268,9 @@ async function main() {
       panel: () => showPanel($('#panel').classList.contains('collapsed')),
       theme: toggleTheme,
       projectPage: showProjectPage,
-    },
+      searchAll: () => searchEverything(),
+      ai: () => aiPanel.toggle(),
+    }),
     getContext: () => {
       const tab = activeTab();
       const file = tab?.path || '';
@@ -3021,6 +3278,43 @@ async function main() {
       const sel = editor.getModel() && editor.getSelection() ? editor.getModel().getValueInRange(editor.getSelection()) : '';
       const word = editor.getModel() && pos ? editor.getModel().getWordAtPosition(pos)?.word || '' : '';
       return { file, fileName: basename(file), dir: file ? file.slice(0, file.length - basename(file).length - 1) : state.workspace || '', workspace: state.workspace || '', selection: sel, word, line: pos?.lineNumber ?? '' };
+    },
+  });
+  // Pluginy (Nastavenia → Plugins)
+  const activeFileInfo = () => {
+    const tab = activeTab();
+    if (!tab) return null;
+    return { path: tab.path, name: basename(tab.path), language: tab.model.getLanguageId(), text: tab.model.getValue(), selection: editor.getModel() ? tab.model.getValueInRange(editor.getSelection()) : '' };
+  };
+  pluginHost = createPluginHost({
+    monaco,
+    editor,
+    toast,
+    getActiveFile: activeFileInfo,
+    getSettings: () => state.settings,
+    saveSettings,
+    runCommand: (id) => userKeysCommands[id]?.(),
+  });
+  pluginsUI = createPluginsUI({ host: pluginHost, toast, openProject: (dir) => (closeSettings(), setWorkspace(dir)) });
+
+  // Zmenené vstavané skratky (Nastavenia → Skratky).
+  keymap = createKeymap({
+    toast,
+    getOverrides: () => setting('keymap') || {},
+    saveOverrides: (keymapObj) => saveSettings({ keymap: keymapObj }),
+    runAction: (b) => {
+      if (b.editorAction) {
+        const action = editor.getAction(b.editorAction);
+        return action ? action.run() : editor.trigger('keyboard', b.editorAction, {});
+      }
+      const extra = {
+        closeFile: () => state.active && closeTab(state.active),
+        searchAll: () => searchEverything(),
+        ai: () => aiPanel.toggle(),
+        zoomIn: () => setFontSize(1),
+        zoomOut: () => setFontSize(-1),
+      };
+      return (extra[b.id] || userKeysCommands[b.id])?.();
     },
   });
   gh = createGitHub({
@@ -3057,6 +3351,11 @@ async function main() {
     },
   });
   editor.onDidChangeCursorSelection(() => aiPanel.updateContext());
+  // AI zmenila popis alebo úlohy projektu → hneď to vidno na stránke projektu.
+  flux.onProjectMetaChanged(async () => {
+    state.settings = await flux.setSettings({});
+    if (!state.active) renderWelcome();
+  });
   editor.addAction({
     id: 'flux.askAI',
     label: t('Ask AI about this'),
@@ -3101,6 +3400,7 @@ async function main() {
   });
 
   if (!state.settings.onboarded) onboarding.open();
+  pluginHost.start(); // nainštalované pluginy
   if (init.lastFolder) await setWorkspace(init.lastFolder);
   else {
     detectPython();

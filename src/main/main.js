@@ -9,6 +9,7 @@ const { Runner, commandFor, toolchainFor } = require('./runner');
 const toolchains = require('./toolchains');
 const { createAI } = require('./ai');
 const { createGitHub } = require('./github');
+const { createPlugins, pluginsDir } = require('./plugins');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
 const i18n = require('./i18n');
@@ -44,6 +45,8 @@ function saveSettings() {
 // „wallpaper“: Flux si sám nakreslí rozmazanú tapetu – vyzerá priesvitne aj keď okno nie je aktívne
 // (Acrylic/Mica od Windows vtedy okno vždy zosivia).
 function wallpaperPath() {
+  // Vlastný obrázok pozadia (Nastavenia → Personalize) má prednosť.
+  if (settings.bgImage && fs.existsSync(settings.bgImage)) return settings.bgImage;
   if (process.env.FLUX_WALLPAPER) return process.env.FLUX_WALLPAPER;
   if (!isWin || !process.env.APPDATA) return null;
   const p = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
@@ -87,7 +90,87 @@ const send = (channel, payload) => {
 
 const runner = new Runner(send);
 const knownTools = new Set(); // jazyky, o ktorých už vieme, že sú nainštalované
+// Čo AI smie vidieť a meniť v otvorenom projekte (len v rámci priečinka projektu).
+async function projectTool(name, input = {}) {
+  if (name === 'has') return !!workspace;
+  if (!workspace) return { error: 'No project is open.' };
+  const all = { ...(settings.projectMeta || {}) };
+  const meta = { ...(all[workspace] || {}) };
+  const save = () => {
+    all[workspace] = meta;
+    settings.projectMeta = all;
+    saveSettings();
+  };
+  if (name === 'flux_project_info') {
+    const files = [];
+    const walk = async (d, depth) => {
+      if (depth > 6 || files.length > 400) return;
+      let entries = [];
+      try {
+        entries = await fsp.readdir(d, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        if (IGNORED_DIRS.has(e.name) || e.name.startsWith('.') || e.name === 'venv') continue;
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) await walk(p, depth + 1);
+        else files.push(path.relative(workspace, p).split(path.sep).join('/'));
+      }
+    };
+    await walk(workspace, 0);
+    return {
+      result: {
+        name: path.basename(workspace),
+        folder: workspace,
+        type: await projectKind(workspace),
+        description: meta.description || '',
+        todos: (meta.todos || []).map((x) => ({ id: x.id, text: x.text, done: !!x.done })),
+        files,
+      },
+    };
+  }
+  if (name === 'flux_read_file') {
+    const file = path.resolve(workspace, input.path);
+    if (!insideWorkspace(file)) return { error: 'That file is outside the project.' };
+    try {
+      const st = await fsp.stat(file);
+      if (st.size > 400 * 1024) return { error: 'The file is too large to read (over 400 KB).' };
+      return { result: await fsp.readFile(file, 'utf8') };
+    } catch {
+      return { error: `File not found: ${input.path}` };
+    }
+  }
+  if (name === 'flux_add_todos') {
+    const now = Date.now();
+    const added = input.tasks.map((text, i) => ({ id: now + i, text: String(text).slice(0, 200), done: false }));
+    meta.todos = [...(meta.todos || []), ...added];
+    save();
+    return { result: { added: added.map((x) => ({ id: x.id, text: x.text })) }, changed: true };
+  }
+  if (name === 'flux_update_todo') {
+    const todos = meta.todos || [];
+    const item = todos.find((x) => x.id === input.id);
+    if (!item) return { error: `No to-do with id ${input.id}.` };
+    if (input.remove) meta.todos = todos.filter((x) => x !== item);
+    else {
+      if (typeof input.done === 'boolean') item.done = input.done;
+      if (typeof input.text === 'string' && input.text.trim()) item.text = input.text.trim().slice(0, 200);
+      meta.todos = todos;
+    }
+    save();
+    return { result: 'ok', changed: true };
+  }
+  if (name === 'flux_set_description') {
+    meta.description = String(input.description).trim().slice(0, 160);
+    save();
+    return { result: 'ok', changed: true };
+  }
+  return { error: `Unknown tool ${name}` };
+}
+
 const ai = createAI({
+  project: projectTool,
   getSettings: () => settings,
   saveSettings: (patch) => {
     Object.assign(settings, patch);
@@ -101,6 +184,14 @@ const github = createGitHub({
     Object.assign(settings, patch);
     saveSettings();
   },
+});
+const plugins = createPlugins({
+  getSettings: () => settings,
+  saveSettings: (patch) => {
+    Object.assign(settings, patch);
+    saveSettings();
+  },
+  githubApi: (p, opts) => github.api(p, opts),
 });
 const live = new LiveServer((entry) => send('live:log', entry));
 const lsp = new LanguageServer(
@@ -545,6 +636,27 @@ function registerIpc() {
     return github.publish(workspace, { name: opts?.name || path.basename(workspace), isPrivate: opts?.private !== false, description: opts?.description || '' });
   });
 
+  // Pluginy
+  ipcMain.handle('plugins:registry', (_e, force) => plugins.registry(!!force));
+  ipcMain.handle('plugins:details', (_e, id) => plugins.details(id));
+  ipcMain.handle('plugins:install', (_e, id) => plugins.install(id));
+  ipcMain.handle('plugins:uninstall', (_e, id) => plugins.uninstall(id));
+  ipcMain.handle('plugins:enable', (_e, id, on) => plugins.setEnabled(id, on));
+  ipcMain.handle('plugins:active', () => plugins.active());
+  ipcMain.handle('plugins:installed', () => plugins.installedList());
+  ipcMain.handle('plugins:rate', (_e, issue, like) => plugins.rate(Number(issue), !!like));
+  ipcMain.handle('plugins:load-folder', async () => {
+    const r = await dialog.showOpenDialog(win, { title: t('Plugin folder (with plugin.json)'), properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    return plugins.installFromFolder(r.filePaths[0]);
+  });
+  ipcMain.handle('plugins:reload-local', async (_e, id) => {
+    const m = plugins.installedList().find((x) => x.id === id);
+    if (m?.source && fs.existsSync(m.source)) await plugins.installFromFolder(m.source);
+    return true;
+  });
+  ipcMain.handle('plugins:scaffold', (_e, name) => plugins.scaffold(defaultRoot(), name));
+
   // AI asistent
   ipcMain.handle('ai:config', () => ai.publicConfig());
   ipcMain.handle('ai:update', (_e, patch) => ai.update(patch || {}));
@@ -576,6 +688,28 @@ function registerIpc() {
     return file;
   });
   ipcMain.handle('config:dir', () => configDir());
+  ipcMain.on('app:zoom', (_e, f) => {
+    const z = Math.min(1.6, Math.max(0.7, Number(f) || 1));
+    if (win && Math.abs(win.webContents.getZoomFactor() - z) > 0.001) win.webContents.setZoomFactor(z);
+  });
+  ipcMain.handle('app:choose-background', async () => {
+    const r = await dialog.showOpenDialog(win, { title: t('Background image'), properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }] });
+    if (r.canceled || !r.filePaths[0]) return false;
+    const dest = path.join(app.getPath('userData'), `background${path.extname(r.filePaths[0]).toLowerCase()}`);
+    await fsp.copyFile(r.filePaths[0], dest);
+    settings.bgImage = dest;
+    settings.material = 'wallpaper';
+    settings.translucent = true;
+    saveSettings();
+    applyMaterial();
+    return true;
+  });
+  ipcMain.handle('app:reset-background', () => {
+    delete settings.bgImage;
+    saveSettings();
+    applyMaterial();
+    return true;
+  });
   // Vlastný príkaz zo skratky – beží vo výstupe ako program.
   ipcMain.handle('run:shell', (_e, command, cwd) => {
     const dir = cwd && fs.existsSync(cwd) ? cwd : workspace || os.homedir();
@@ -790,6 +924,19 @@ app.whenReady().then(() => {
   nativeTheme.themeSource = settings.theme === 'light' ? 'light' : 'dark';
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url);
+    // Nainštalované pluginy: app://flux/plugins/<id>/<súbor>
+    if (pathname.startsWith('/plugins/')) {
+      const base = pluginsDir();
+      const file = path.normalize(path.join(base, decodeURIComponent(pathname.slice('/plugins/'.length))));
+      if (!file.startsWith(base + path.sep)) return new Response('Forbidden', { status: 403 });
+      return net.fetch(pathToFileURL(file).toString());
+    }
+    if (pathname.startsWith('/registry/') && process.env.FLUX_PLUGIN_REGISTRY) {
+      const base = path.resolve(process.env.FLUX_PLUGIN_REGISTRY);
+      const file = path.normalize(path.join(base, decodeURIComponent(pathname.slice('/registry/'.length))));
+      if (!file.startsWith(base + path.sep)) return new Response('Forbidden', { status: 403 });
+      return net.fetch(pathToFileURL(file).toString());
+    }
     const file = path.normalize(path.join(RENDERER_DIR, decodeURIComponent(pathname)));
     if (!file.startsWith(RENDERER_DIR)) return new Response('Forbidden', { status: 403 });
     return net.fetch(pathToFileURL(file).toString());

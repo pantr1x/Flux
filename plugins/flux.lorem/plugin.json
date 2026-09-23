@@ -1,0 +1,26 @@
+{
+  "id": "flux.lorem",
+  "name": "Lorem Ipsum",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "Placeholder text for your web pages – type lorem and press Tab.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "html",
+    "text",
+    "snippets"
+  ],
+  "license": "MIT",
+  "issue": 2
+}
