@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('flux', {
   gitStatus: () => ipcRenderer.invoke('git:status'),
   gitCommitPush: (message) => ipcRenderer.invoke('git:commit-push', message),
   gitPull: () => ipcRenderer.invoke('git:pull'),
+  gitSync: () => ipcRenderer.invoke('git:sync'),
   pluginRegistry: (force) => ipcRenderer.invoke('plugins:registry', force),
   pluginDetails: (id) => ipcRenderer.invoke('plugins:details', id),
   pluginInstall: (id) => ipcRenderer.invoke('plugins:install', id),

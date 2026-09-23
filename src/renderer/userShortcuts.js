@@ -45,9 +45,7 @@ export function createUserShortcuts({ commands, editor, getContext, saveAll, toa
       file = res.path;
       const data = JSON.parse(res.text);
       const items = Array.isArray(data) ? data : data.shortcuts || [];
-      list = items
-        .map((s) => ({ ...s, parsed: parseKey(s.key) }))
-        .filter((s) => s.parsed);
+      list = items.map((s, index) => ({ ...s, index, parsed: parseKey(s.key) })).filter((s) => s.parsed || s.key === '');
       if (showErrors) toast(t('{n} custom shortcut(s) loaded.', { n: list.length }), 'ok');
     } catch (err) {
       if (showErrors) toast(t('shortcuts.json has an error: {msg}', { msg: String(err.message || err) }), 'error', 8000);
@@ -100,7 +98,7 @@ export function createUserShortcuts({ commands, editor, getContext, saveAll, toa
     'keydown',
     (e) => {
       if (!list.length || e.repeat || window.fluxRecordingKeys) return;
-      const hit = list.find((s) => matches(e, s.parsed));
+      const hit = list.find((s) => s.parsed && matches(e, s.parsed));
       if (!hit) return;
       e.preventDefault();
       e.stopImmediatePropagation(); // aby nezbehla aj vstavaná skratka (napr. Ctrl+P pri Ctrl+Alt+P)
@@ -110,5 +108,16 @@ export function createUserShortcuts({ commands, editor, getContext, saveAll, toa
   );
 
   load();
-  return { load, list: () => list, file: () => file, exec };
+  // Zmena skratky z Nastavení → Skratky: prepíše "key" v shortcuts.json.
+  async function setKey(index, combo) {
+    const res = await flux.shortcutsFile();
+    const data = JSON.parse(res.text);
+    const items = Array.isArray(data) ? data : data.shortcuts || [];
+    if (!items[index]) return;
+    items[index].key = combo;
+    await flux.write(res.path, JSON.stringify(data, null, 2) + '\n');
+    await load();
+  }
+
+  return { load, list: () => list, file: () => file, exec, setKey };
 }

@@ -5,6 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices.js';
 import { IStorageService } from 'monaco-editor/platform/storage/common/storage.js';
+import { IKeybindingService } from 'monaco-editor/platform/keybinding/common/keybinding.js';
 import { icon, fileIcon } from './icons.js';
 import { flag } from './flags.js';
 import { PythonLanguageClient } from './pyLsp.js';
@@ -21,6 +22,7 @@ import { createGitHub } from './github.js';
 import { BINDINGS, CATEGORIES, createKeymap, kbdHtml } from './keymap.js';
 import { createPluginHost } from './pluginHost.js';
 import { createPluginsUI } from './pluginsUI.js';
+import { createThemeStudio } from './themeStudio.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -660,6 +662,7 @@ function createTab(path, model, readonly) {
     reportDirty();
     updateRunGlyphs(tab);
     scheduleAutosave(tab);
+    if (/[\\/]config[\\/]themes[\\/][^\\/]+\.json$/i.test(path)) liveThemeFromText(path, model.getValue());
   });
   state.tabs.push(tab);
   return tab;
@@ -1223,6 +1226,11 @@ async function setWorkspace(dir) {
   setTimeout(() => $('#tree').classList.remove('switching'), 600);
   renderWelcome();
   gh?.refreshStatus();
+  gh?.syncOnOpen().then(async (pulled) => {
+    if (!pulled) return;
+    await refreshTree();
+    gh.refreshStatus();
+  });
   await detectPython();
   lsp.start(opened, state.python?.path);
 }
@@ -2124,6 +2132,15 @@ async function toggleCompact() {
 const THEME_KEYS = ['fg', 'comment', 'keyword', 'storage', 'string', 'number', 'type', 'function', 'variable', 'parameter', 'property', 'constant', 'tag', 'attr', 'delimiter', 'regexp'];
 let customThemeFiles = {};
 
+// Téma zo súboru JSON → objekt témy (farby bez #).
+function parseTheme(data, fallbackName) {
+  const type = data.type === 'light' ? 'light' : 'dark';
+  const base = THEMES[data.basedOn] || THEMES[type === 'light' ? 'vscode-light' : 'vscode-dark'];
+  const colors = {};
+  for (const [k, v] of Object.entries(data.colors || {})) if (typeof v === 'string' && /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v)) colors[k] = v.replace('#', '').toUpperCase();
+  return { name: data.name || fallbackName, type, custom: true, t: { ...base.t, ...colors, italicComments: data.italicComments ?? base.t.italicComments } };
+}
+
 async function loadCustomThemes(announce = false) {
   let files = [];
   try {
@@ -2133,13 +2150,8 @@ async function loadCustomThemes(announce = false) {
   customThemeFiles = {};
   for (const f of files) {
     try {
-      const data = JSON.parse(f.text);
-      const type = data.type === 'light' ? 'light' : 'dark';
-      const base = THEMES[data.basedOn] || THEMES[type === 'light' ? 'vscode-light' : 'vscode-dark'];
-      const colors = {};
-      for (const [k, v] of Object.entries(data.colors || {})) if (typeof v === 'string' && /^#?[0-9a-f]{3,8}$/i.test(v)) colors[k] = v.replace('#', '').toUpperCase();
       const id = `custom-${f.id}`;
-      THEMES[id] = { name: data.name || f.id, type, custom: true, t: { ...base.t, ...colors, italicComments: data.italicComments ?? base.t.italicComments } };
+      THEMES[id] = parseTheme(JSON.parse(f.text), f.id);
       customThemeFiles[id] = f.path;
     } catch (err) {
       if (announce) toast(t('Theme {file} has an error: {msg}', { file: `${f.id}.json`, msg: err.message }), 'error', 8000);
@@ -2151,18 +2163,67 @@ async function loadCustomThemes(announce = false) {
   }
 }
 
-// Nová téma = kópia aktuálnej; otvorí sa v editore, po uložení sa hneď použije.
+// Advanced: JSON témy v editore – farby sa menia už počas písania (bez uloženia).
+let themeLiveTimer = null;
+function liveThemeFromText(file, text) {
+  const id = Object.keys(customThemeFiles).find((k) => keyOf(customThemeFiles[k]) === keyOf(file));
+  if (!id) return;
+  clearTimeout(themeLiveTimer);
+  themeLiveTimer = setTimeout(() => {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return; // rozpísaný JSON – počkáme na ďalšiu zmenu
+    }
+    const th = parseTheme(data, THEMES[id]?.name || id);
+    const typeChanged = THEMES[id]?.type !== th.type;
+    THEMES[id] = th;
+    if (setting('codeTheme') !== id || typeChanged) return setCodeTheme(id);
+    monaco.editor.setTheme(defineMonacoTheme(monaco, id, currentAccent()));
+    codemap?.refresh();
+  }, 200);
+}
+
+// Nová téma = kópia aktuálnej; hneď sa otvorí štúdio s farbami.
 async function createCustomTheme() {
   const cur = themeOf(setting('codeTheme'));
   const colors = {};
   for (const k of THEME_KEYS) if (cur.t[k]) colors[k] = `#${cur.t[k]}`;
-  const name = t('My theme');
-  const file = await flux.newTheme(name, cur.type, colors);
+  const file = await flux.newTheme(t('My theme'), cur.type, colors);
   await loadCustomThemes();
   const id = Object.keys(customThemeFiles).find((k) => customThemeFiles[k] === file);
-  if (id) await setCodeTheme(id);
-  await openFile(file);
-  toast(t('Change the colors and press Ctrl+S – the editor updates right away.'), 'info', 7000);
+  if (!id) return;
+  await openThemeStudio(id);
+}
+
+let themeStudio = null;
+async function openThemeStudio(id) {
+  closeSettings();
+  if (setting('codeTheme') !== id) await setCodeTheme(id);
+  themeStudio ||= createThemeStudio({
+    monaco,
+    THEMES,
+    builtIns: () => Object.entries(THEMES).filter(([bid]) => !bid.startsWith('custom-')),
+    getFile: (tid) => customThemeFiles[tid],
+    apply: (tid) => {
+      monaco.editor.setTheme(defineMonacoTheme(monaco, tid, currentAccent()));
+      codemap?.refresh();
+    },
+    setType: (tid) => setCodeTheme(tid),
+    openAdvanced: async (tid) => {
+      await openFile(customThemeFiles[tid]);
+      toast(t('Colors change while you type. Ctrl+S saves the theme.'), 'info', 6000);
+    },
+    remove: async (tid) => {
+      if (!(await flux.trash(customThemeFiles[tid]))) return false;
+      const type = THEMES[tid]?.type;
+      await loadCustomThemes();
+      await setCodeTheme(type === 'light' ? 'vscode-light' : 'flux');
+      return true;
+    },
+  });
+  themeStudio.open(id);
 }
 
 async function setCodeTheme(id) {
@@ -2205,7 +2266,6 @@ function openSettings() {
   const tabs = [
     ['appearance', 'palette', t('Appearance')],
     ['editor', 'code', t('Editor')],
-    ['custom', 'sparkle', t('Personalize')],
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
     ['keys', 'command', t('Shortcuts')],
@@ -2214,6 +2274,7 @@ function openSettings() {
     ['github', 'git', 'GitHub'],
     ['general', 'globe', t('Language & intro')],
   ];
+  if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
   panel.innerHTML = `
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
@@ -2241,26 +2302,6 @@ function openSettings() {
             <div class="s-group"><div class="accent-grid">${Object.keys(ACCENTS)
               .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? t('black & white (like Zen)') : name}"></button>`)
               .join('')}<label class="custom-color" title="${t('Custom color')}"><input type="color" value="${accent}" data-custom-accent></label></div></div>
-            ${state.platform === 'win32' ? `<h3>${t('Window')}</h3><div class="s-group"><label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label></div>` : ''}
-          </section>
-          <section data-pane="editor">
-            <h3>${t('Text')}</h3>
-            <div class="s-group">
-              <label class="s-row"><span><b>${t('Font')}</b></span><select data-key="fontFamily">${FONTS.map((f) => opt(f.id, t(f.label), setting('fontFamily'))).join('')}</select></label>
-              <label class="s-row"><span><b>${t('Font size')}</b></span><input type="number" min="9" max="32" data-key="fontSize" value="${setting('fontSize')}"></label>
-              <label class="s-row"><span><b>${t('Line height')}</b></span><select data-key="lineHeight">${[1.3, 1.45, 1.6, 1.8].map((v) => opt(v, t({ 1.3: 'compact', 1.45: 'normal', 1.6: 'relaxed', 1.8: 'large' }[v]), setting('lineHeight'))).join('')}</select></label>
-              ${toggle('ligatures', 'Ligatures', 'joined characters like => and != (e.g. in Cascadia Code)')}
-              ${toggle('wordWrap', 'Wrap long lines')}
-            </div>
-            <h3>${t('Behaviour')}</h3>
-            <div class="s-group">
-              ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
-              ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
-              ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
-              ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
-            </div>
-          </section>
-          <section data-pane="custom">
             <h3>${t('Text cursor')}</h3>
             <div class="s-group">
               <label class="s-row"><span><b>${t('Cursor shape')}</b></span><select data-key="caretStyle">${[['line', t('line')], ['line-thin', t('thin line')], ['block', t('block')], ['block-outline', t('block outline')], ['underline', t('underline')], ['underline-thin', t('thin underline')]].map(([v, l]) => opt(v, l, setting('caretStyle'))).join('')}</select></label>
@@ -2287,6 +2328,7 @@ function openSettings() {
             </div>
             <h3>${t('Window')}</h3>
             <div class="s-group">
+              ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
@@ -2296,6 +2338,23 @@ function openSettings() {
             <h3>${t('Home screen')}</h3>
             <div class="s-group">
               <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
+            </div>
+          </section>
+          <section data-pane="editor">
+            <h3>${t('Text')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Font')}</b></span><select data-key="fontFamily">${FONTS.map((f) => opt(f.id, t(f.label), setting('fontFamily'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Font size')}</b></span><input type="number" min="9" max="32" data-key="fontSize" value="${setting('fontSize')}"></label>
+              <label class="s-row"><span><b>${t('Line height')}</b></span><select data-key="lineHeight">${[1.3, 1.45, 1.6, 1.8].map((v) => opt(v, t({ 1.3: 'compact', 1.45: 'normal', 1.6: 'relaxed', 1.8: 'large' }[v]), setting('lineHeight'))).join('')}</select></label>
+              ${toggle('ligatures', 'Ligatures', 'joined characters like => and != (e.g. in Cascadia Code)')}
+              ${toggle('wordWrap', 'Wrap long lines')}
+            </div>
+            <h3>${t('Behaviour')}</h3>
+            <div class="s-group">
+              ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
+              ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
+              ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
+              ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
             </div>
           </section>
           <section data-pane="running">
@@ -2320,7 +2379,6 @@ function openSettings() {
           <section data-pane="keys">
             <div class="s-group s-mb">
               <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
-              ${(userKeys?.list() || []).map((k) => `<div class="s-row s-key"><span><b>${escapeHtml(k.label || k.run || k.insert || k.command || k.url || t('Custom'))}</b></span><span class="kbds">${String(k.key).split('+').map((x) => `<kbd>${escapeHtml(x)}</kbd>`).join('<i>+</i>')}</span></div>`).join('')}
             </div>
             <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
             <div id="s-keys">${shortcutRows()}</div>
@@ -2482,8 +2540,8 @@ function openSettings() {
     if (e.target === panel || e.target.closest('[data-close]')) return closeSettings();
     const editTheme = e.target.closest('[data-edit-theme]');
     if (editTheme) {
-      closeSettings();
-      return openFile(customThemeFiles[editTheme.dataset.editTheme]);
+      e.stopPropagation();
+      return openThemeStudio(editTheme.dataset.editTheme);
     }
     const tabBtn = e.target.closest('[data-tab]');
     if (tabBtn) return showTab(tabBtn.dataset.tab);
@@ -2517,7 +2575,8 @@ function openSettings() {
     if (mon) return saveMcp(aiCfg.mcp.map((m, i) => (i === Number(mon.dataset.mcpOn) ? { ...m, enabled: mon.checked } : m)));
     const rebind = e.target.closest('[data-rebind]');
     if (rebind) {
-      const b = BINDINGS.find((x) => x.id === rebind.dataset.rebind);
+      const b = allBindings().find((x) => x.id === rebind.dataset.rebind);
+      if (!b) return;
       return keymap.record(rebind, b, () => {
         $('#s-keys').innerHTML = shortcutRows();
         $('#s-keys-q').dispatchEvent(new Event('input'));
@@ -2620,7 +2679,8 @@ function settingsIndex() {
   openSettings();
   const out = [];
   for (const sec of $('#settings').querySelectorAll('[data-pane]')) {
-    for (const el of sec.querySelectorAll('.s-row > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
+    // Skratky sú v hľadaní ako príkazy, nie ako nastavenia.
+    for (const el of sec.querySelectorAll('.s-row:not(.s-key) > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
       const label = el.firstChild?.textContent?.trim() || el.textContent.trim();
       if (label && !out.some((o) => o.label === label)) out.push({ tab: sec.dataset.pane, label });
     }
@@ -2670,16 +2730,54 @@ async function searchEverything() {
 }
 
 // Skratky po kategóriách; klik na skratku = nahrať novú (Backspace vráti pôvodnú).
+// Všetky skratky: vstavané + každý príkaz editora + pluginy + vlastné zo shortcuts.json.
+let editorBindingsCache = null;
+function editorBindings() {
+  if (editorBindingsCache) return editorBindingsCache;
+  const known = new Set(BINDINGS.map((b) => b.editorAction).filter(Boolean));
+  let kb = null;
+  try {
+    kb = StandaloneServices.get(IKeybindingService);
+  } catch {}
+  const keyOf = (id) => {
+    try {
+      return (kb?.lookupKeybinding(id)?.getLabel() || '').replace(/UpArrow/g, 'Up').replace(/DownArrow/g, 'Down').replace(/LeftArrow/g, 'Left').replace(/RightArrow/g, 'Right');
+    } catch {
+      return '';
+    }
+  };
+  editorBindingsCache = editor
+    .getSupportedActions()
+    .filter((a) => a.label && !known.has(a.id))
+    .map((a) => ({ id: `ed:${a.id}`, cat: 'more', label: a.label, key: keyOf(a.id), editorAction: a.id }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  return editorBindingsCache;
+}
+
+function allBindings() {
+  const plugins = (pluginHost?.commands() || []).map((c) => ({ id: `plugin:${c.id}`, cat: 'plugins', label: `${c.plugin}: ${c.label}`, key: c.key || '', run: c.run }));
+  const custom = (userKeys?.list() || []).map((k) => ({
+    id: `custom:${k.index}`,
+    cat: 'custom',
+    label: k.label || k.run || k.insert || k.command || k.url || t('Custom'),
+    key: k.key || '',
+    save: (combo) => userKeys.setKey(k.index, combo),
+  }));
+  return [...BINDINGS, ...custom, ...plugins, ...(editor ? editorBindings() : [])];
+}
+
 function shortcutRows() {
-  return CATEGORIES.map(
-    ([cat, name]) =>
-      `<div class="s-keycat" data-cat="${cat}"><h3>${t(name)}</h3><div class="s-group">${BINDINGS.filter((b) => b.cat === cat)
-        .map(
-          (b) =>
-            `<div class="s-row s-key" data-key-row="${b.id}"><span><b>${escapeHtml(t(b.label))}</b>${keymap.isChanged(b) ? `<small class="s-changed">${t('changed')} · <a href="#" data-reset-key="${b.id}">${t('reset')}</a></small>` : ''}</span><button class="kbds kbd-btn" data-rebind="${b.id}" title="${t('Click and press a new shortcut')}">${kbdHtml(keymap.current(b), escapeHtml)}</button></div>`,
-        )
-        .join('')}</div></div>`,
-  ).join('');
+  const all = allBindings();
+  return CATEGORIES.map(([cat, name]) => {
+    const rows = all.filter((b) => b.cat === cat);
+    if (!rows.length) return '';
+    return `<div class="s-keycat" data-cat="${cat}"><h3>${t(name)}</h3><div class="s-group">${rows
+      .map(
+        (b) =>
+          `<div class="s-row s-key" data-key-row="${escapeAttr(b.id)}"><span><b>${escapeHtml(t(b.label))}</b>${keymap.isChanged(b) ? `<small class="s-changed">${t('changed')} · <a href="#" data-reset-key="${escapeAttr(b.id)}">${t('reset')}</a></small>` : ''}</span><button class="kbds kbd-btn" data-rebind="${escapeAttr(b.id)}" title="${t('Click and press a new shortcut')}">${kbdHtml(keymap.current(b), escapeHtml)}</button></div>`,
+      )
+      .join('')}</div></div>`;
+  }).join('');
 }
 
 function closeSettings() {
@@ -3312,15 +3410,18 @@ async function main() {
     getSettings: () => state.settings,
     saveSettings,
     runCommand: (id) => userKeysCommands[id]?.(),
+    isOverridden: (full) => !!keymap?.overridden(`plugin:${full}`),
   });
   pluginsUI = createPluginsUI({ host: pluginHost, toast, openProject: (dir) => (closeSettings(), setWorkspace(dir)) });
 
   // Zmenené vstavané skratky (Nastavenia → Skratky).
   keymap = createKeymap({
     toast,
+    getBindings: allBindings,
     getOverrides: () => setting('keymap') || {},
     saveOverrides: (keymapObj) => saveSettings({ keymap: keymapObj }),
     runAction: (b) => {
+      if (b.run) return b.run();
       if (b.editorAction) {
         const action = editor.getAction(b.editorAction);
         return action ? action.run() : editor.trigger('keyboard', b.editorAction, {});

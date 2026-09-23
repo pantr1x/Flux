@@ -49,6 +49,9 @@ export const CATEGORIES = [
   ['files', 'Files'],
   ['view', 'Window & view'],
   ['editor', 'Editor'],
+  ['custom', 'Your own shortcuts'],
+  ['plugins', 'Plugins'],
+  ['more', 'More editor commands'],
 ];
 
 const CODE_KEYS = { Slash: '/', Backslash: '\\', Comma: ',', Period: '.', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=', Backquote: '`', Space: 'Space' };
@@ -77,8 +80,10 @@ function same(e, combo) {
   return comboFromEvent(e)?.toLowerCase() === combo.toLowerCase() || (e.ctrlKey === k.ctrl && e.shiftKey === k.shift && e.altKey === k.alt && e.metaKey === k.meta && e.key.toLowerCase() === k.key);
 }
 
-export function createKeymap({ getOverrides, saveOverrides, runAction, toast }) {
-  const current = (b) => getOverrides()[b.id] ?? b.key;
+// getBindings: vstavané + všetky príkazy editora + pluginy + vlastné (shortcuts.json).
+// Riadok s b.save(combo) si skratku ukladá sám (vlastné skratky → shortcuts.json).
+export function createKeymap({ getOverrides, saveOverrides, runAction, toast, getBindings = () => BINDINGS }) {
+  const current = (b) => (b.save ? b.key : getOverrides()[b.id] ?? b.key);
 
   // Zmenené skratky: nová kombinácia spustí akciu, stará (predvolená) už nič nerobí.
   window.addEventListener(
@@ -88,7 +93,8 @@ export function createKeymap({ getOverrides, saveOverrides, runAction, toast }) 
       const over = getOverrides();
       const ids = Object.keys(over);
       if (!ids.length || e.repeat) return;
-      for (const b of BINDINGS) {
+      const all = getBindings().filter((b) => !b.save);
+      for (const b of all) {
         if (!(b.id in over)) continue;
         if (over[b.id] && same(e, over[b.id])) {
           e.preventDefault();
@@ -96,10 +102,10 @@ export function createKeymap({ getOverrides, saveOverrides, runAction, toast }) 
           return runAction(b);
         }
       }
-      for (const b of BINDINGS) {
+      for (const b of all) {
         if (!(b.id in over) || !b.key || !same(e, b.key)) continue;
         // Predvolenú kombináciu nepoužíva nič iné → pohltiť, aby nezbehla stará akcia.
-        const usedElsewhere = BINDINGS.some((o) => o !== b && current(o) && same(e, current(o)));
+        const usedElsewhere = all.some((o) => o !== b && current(o) && same(e, current(o)));
         if (!usedElsewhere) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -120,6 +126,10 @@ export function createKeymap({ getOverrides, saveOverrides, runAction, toast }) 
       e.stopImmediatePropagation();
       if (e.key === 'Escape') return stop();
       if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (b.save) {
+          await b.save('');
+          return stop(true);
+        }
         const over = { ...getOverrides() };
         delete over[b.id];
         await saveOverrides(over);
@@ -127,10 +137,13 @@ export function createKeymap({ getOverrides, saveOverrides, runAction, toast }) 
       }
       const combo = comboFromEvent(e);
       if (!combo) return;
-      const clash = BINDINGS.find((o) => o !== b && current(o) && current(o).toLowerCase() === combo.toLowerCase());
+      const clash = getBindings().find((o) => o.id !== b.id && current(o) && current(o).toLowerCase() === combo.toLowerCase());
       if (clash) toast(t('{keys} was used for “{action}” – that one now has no shortcut.', { keys: combo, action: t(clash.label) }), 'info', 6000);
-      const over = { ...getOverrides(), [b.id]: combo };
-      if (clash) over[clash.id] = '';
+      if (clash?.save) await clash.save('');
+      if (b.save) await b.save(combo);
+      const over = { ...getOverrides() };
+      if (!b.save) over[b.id] = combo;
+      if (clash && !clash.save) over[clash.id] = '';
       await saveOverrides(over);
       stop(true);
     };
@@ -143,7 +156,7 @@ export function createKeymap({ getOverrides, saveOverrides, runAction, toast }) 
     window.addEventListener('keydown', onKey, true);
   }
 
-  return { current, record, isChanged: (b) => b.id in getOverrides() };
+  return { current, record, isChanged: (b) => !b.save && b.id in getOverrides(), overridden: (id) => id in getOverrides() };
 }
 
 export function kbdHtml(combo, esc) {

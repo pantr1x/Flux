@@ -20,7 +20,8 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
       <h3>${t('Account')}</h3>
       <div class="s-group">${
         info.connected && info.user
-          ? `<div class="s-row"><span class="gh-user">${info.user.avatar ? `<img src="${esc(info.user.avatar)}" alt="">` : ''}<span><b>${esc(info.user.name)}</b><small>@${esc(info.user.login)}</small></span></span><button class="s-btn" data-gh-disconnect>${t('Disconnect')}</button></div>`
+          ? `<div class="s-row"><span class="gh-user">${info.user.avatar ? `<img src="${esc(info.user.avatar)}" alt="">` : ''}<span><b>${esc(info.user.name)}</b><small>@${esc(info.user.login)}</small></span></span><button class="s-btn" data-gh-disconnect>${t('Disconnect')}</button></div>
+             <div class="s-row"><span><b>${t('Open a repository')}</b><small>${t('Pick one of your repositories – Flux opens it as a project.')}</small></span><button class="s-btn primary" data-gh-pick>${icon('git', 13)}${t('Choose…')}</button></div>`
           : `<div class="s-row"><span><b>${t('Personal access token')}</b><small>${t('Create one on GitHub with the “repo” permission, then paste it here.')} <a href="#" data-gh-newtoken>${t('Create token')}</a></small></span><span class="s-inline"><input type="password" id="gh-token" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn" data-gh-connect>${t('Connect')}</button></span></div>`
       }</div>
       <h3>Git</h3>
@@ -44,6 +45,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
         }
         return renderSettings(box);
       }
+      if (e.target.closest('[data-gh-pick]')) return pickRepo();
       if (e.target.closest('[data-gh-disconnect]')) {
         await flux.ghDisconnect();
         return renderSettings(box);
@@ -52,64 +54,131 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
   }
 
   // ---------- výber repozitára (nový projekt z GitHubu) ----------
+  // Bez pripojenia sa účet pripojí priamo v tomto okne, potom sa hneď ukážu repozitáre.
   async function pickRepo() {
+    const el = document.getElementById('ghpick');
+    const close = () => (el.hidden = true);
+    el.hidden = false;
+    el.onkeydown = (e) => e.key === 'Escape' && close();
+
+    const shell = (body) => {
+      el.innerHTML = `<div class="np-card gh-card" role="dialog">
+        <header><h2>${icon('git', 18)}${t('Open a repository')}</h2><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>${body}</div>`;
+    };
+
     const info = await flux.ghInfo();
     if (!info.connected) {
-      toast(t('Connect GitHub first.'), 'info', 5000);
-      return openSettingsTab('github');
+      shell(`<div class="gh-connect">
+          <p class="s-lead">${t('Connect your GitHub account once – then pick any of your repositories and Flux opens it as a project.')}</p>
+          <ol class="gh-steps">
+            <li><span><b>${t('Create a token on GitHub')}</b><small>${t('The page opens with everything filled in – just press “Generate token” at the bottom and copy it.')}</small></span><button class="s-btn" data-gh-newtoken>${icon('external', 13)}${t('Open GitHub')}</button></li>
+            <li><span><b>${t('Paste it here')}</b></span><span class="s-inline"><input type="password" id="gh-token" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn primary" data-gh-connect>${t('Connect')}</button></span></li>
+          </ol>
+          <p class="gh-foot">${t('The token is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.')}</p>
+          <div class="gh-or"><span>${t('or open a public repository by link')}</span></div>
+          <form class="gh-link" id="gh-link"><input id="gh-url" placeholder="https://github.com/owner/repo" spellcheck="false" autocomplete="off"><button class="s-btn">${t('Open')}</button></form>
+        </div>`);
+      el.onclick = async (e) => {
+        if (e.target === el || e.target.closest('[data-close]')) return close();
+        if (e.target.closest('[data-gh-newtoken]')) return flux.openExternal('https://github.com/settings/tokens/new?scopes=repo&description=Flux');
+        const c = e.target.closest('[data-gh-connect]');
+        if (c) {
+          const token = el.querySelector('#gh-token').value.trim();
+          if (!token) return el.querySelector('#gh-token').focus();
+          c.disabled = true;
+          try {
+            const user = await flux.ghConnect(token);
+            toast(t('Connected as {user}.', { user: user.login }), 'ok');
+            return pickRepo();
+          } catch (err) {
+            c.disabled = false;
+            return toast(errText(err), 'error', 7000);
+          }
+        }
+      };
+      el.querySelector('#gh-link').onsubmit = (e) => {
+        e.preventDefault();
+        const url = el.querySelector('#gh-url').value.trim();
+        if (url) open(url);
+      };
+      el.querySelector('#gh-token').focus();
+      return;
     }
-    const el = document.getElementById('ghpick');
-    el.innerHTML = `<div class="np-card gh-card" role="dialog">
-      <header><h2>${icon('git', 18)}${t('Open a repository')}</h2><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
-      <input class="s-search" id="gh-q" placeholder="${t('Search your repositories…')}" spellcheck="false" autocomplete="off">
+
+    shell(`<div class="gh-who">${info.user?.avatar ? `<img src="${esc(info.user.avatar)}" alt="">` : ''}<span>${t('Signed in as {user}', { user: `<b>${esc(info.user?.login || '')}</b>` })}</span></div>
+      <input class="s-search" id="gh-q" placeholder="${t('Search your repositories or paste a link…')}" spellcheck="false" autocomplete="off">
       <div class="gh-list" id="gh-list"><div class="s-loading"><span class="spin"></span> ${t('Loading…')}</div></div>
-      <p class="gh-foot">${t('Flux downloads (clones) the repository into your projects folder and opens it.')}</p>
-    </div>`;
-    el.hidden = false;
+      <p class="gh-foot">${t('Flux downloads (clones) the repository into your projects folder and opens it. Next time it opens the downloaded copy and gets the newest changes.')}</p>`);
     let repos = [];
     const list = el.querySelector('#gh-list');
     const draw = (q = '') => {
+      const link = /github\.com\/[\w.-]+\/[\w.-]+/i.test(q);
       const f = repos.filter((r) => r.full.toLowerCase().includes(q.toLowerCase()));
-      list.innerHTML = f.length
-        ? f
-            .map(
-              (r) =>
-                `<button class="gh-repo" data-full="${esc(r.full)}"><span class="gh-ic">${icon('git', 16)}</span><span class="gh-txt"><b>${esc(r.full)}</b><small>${esc(r.description || r.language || '')}</small></span>${r.private ? `<span class="gh-badge">${t('private')}</span>` : ''}</button>`,
-            )
-            .join('')
-        : `<div class="s-loading">${t('No repositories found.')}</div>`;
+      list.innerHTML =
+        (link ? `<button class="gh-repo" data-full="${esc(q)}"><span class="gh-ic">${icon('external', 16)}</span><span class="gh-txt"><b>${t('Open this link')}</b><small>${esc(q)}</small></span></button>` : '') +
+        (f.length
+          ? f
+              .map(
+                (r) =>
+                  `<button class="gh-repo" data-full="${esc(r.full)}"><span class="gh-ic">${icon('git', 16)}</span><span class="gh-txt"><b>${esc(r.full)}</b><small>${esc(r.description || r.language || '')}</small></span>${r.private ? `<span class="gh-badge">${t('private')}</span>` : ''}</button>`,
+              )
+              .join('')
+          : link
+            ? ''
+            : `<div class="s-loading">${t('No repositories found.')}</div>`);
     };
     flux
       .ghRepos()
       .then((r) => {
         repos = r;
-        draw();
+        draw(el.querySelector('#gh-q')?.value || '');
       })
       .catch((err) => (list.innerHTML = `<div class="s-loading">${esc(errText(err))}</div>`));
-    el.querySelector('#gh-q').oninput = (e) => draw(e.target.value);
+    el.querySelector('#gh-q').oninput = (e) => draw(e.target.value.trim());
     el.querySelector('#gh-q').focus();
-    const close = () => (el.hidden = true);
-    el.onkeydown = (e) => e.key === 'Escape' && close();
     el.onclick = async (e) => {
       if (e.target === el || e.target.closest('[data-close]')) return close();
       const b = e.target.closest('[data-full]');
-      if (!b) return;
-      await tools.status();
-      if (!tools.info('git')?.installed) {
-        close();
-        if (!(await tools.ask(tools.info('git'), tools.canInstall()))) return;
-      }
-      list.innerHTML = `<div class="s-loading"><span class="spin"></span> ${t('Downloading {repo}…', { repo: esc(b.dataset.full) })}</div>`;
-      try {
-        const dir = await flux.ghClone(b.dataset.full, await flux.projectRoot());
-        close();
-        await openProject(dir);
-        toast(t('{repo} is ready.', { repo: b.dataset.full }), 'ok');
-      } catch (err) {
-        toast(errText(err), 'error', 8000);
-        draw();
-      }
+      if (b) open(b.dataset.full, () => draw(el.querySelector('#gh-q')?.value || ''));
     };
+
+  }
+
+  async function open(full, onFail) {
+    const el = document.getElementById('ghpick');
+    await tools.status();
+    if (!tools.info('git')?.installed) {
+      el.hidden = true;
+      if (!(await tools.ask(tools.info('git'), tools.canInstall()))) return;
+      el.hidden = false;
+    }
+    const list = el.querySelector('#gh-list') || el.querySelector('.gh-connect');
+    const name = full.replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '');
+    if (list) list.innerHTML = `<div class="s-loading"><span class="spin"></span> ${t('Downloading {repo}…', { repo: esc(name) })}</div>`;
+    try {
+      const dir = await flux.ghClone(full, await flux.projectRoot());
+      el.hidden = true;
+      await openProject(dir);
+      toast(t('{repo} is ready.', { repo: name }), 'ok');
+    } catch (err) {
+      toast(errText(err), 'error', 8000);
+      if (onFail) onFail();
+      else pickRepo();
+    }
+  }
+
+  // Pri otvorení projektu z GitHubu: potichu stiahne novinky (len keď nemáš neuložené zmeny).
+  async function syncOnOpen() {
+    try {
+      const st = await flux.gitStatus();
+      if (!st.repo || !st.github) return;
+      const res = await flux.gitSync();
+      if (res.pulled) {
+        toast(t('Got {n} new change(s) from GitHub.', { n: res.pulled }), 'ok');
+        return true;
+      }
+    } catch {}
+    return false;
   }
 
   // ---------- karta Git na stránke projektu ----------
@@ -199,5 +268,5 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
     onStatus(lastStatus);
   }
 
-  return { renderSettings, pickRepo, renderCard, refreshStatus, status: () => lastStatus };
+  return { renderSettings, pickRepo, renderCard, refreshStatus, syncOnOpen, status: () => lastStatus };
 }

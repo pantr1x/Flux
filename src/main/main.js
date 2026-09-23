@@ -625,12 +625,15 @@ function registerIpc() {
   ipcMain.handle('gh:disconnect', () => github.disconnect());
   ipcMain.handle('gh:repos', () => github.repos());
   ipcMain.handle('gh:clone', (_e, full, root) => {
-    if (!/^[\w.-]+\/[\w.-]+$/.test(full)) throw new Error('Invalid repository');
+    // aj celý odkaz: https://github.com/owner/repo(.git)
+    full = String(full || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/\/+$/, '');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(full)) throw new Error(t('That is not a GitHub repository link.'));
     return github.clone(full, root || defaultRoot());
   });
   ipcMain.handle('git:status', () => github.status(workspace));
   ipcMain.handle('git:commit-push', (_e, message) => github.commitPush(workspace, String(message || '')));
   ipcMain.handle('git:pull', () => github.pull(workspace));
+  ipcMain.handle('git:sync', () => (workspace ? github.sync(workspace) : { pulled: 0 }));
   ipcMain.handle('gh:publish', (_e, opts) => {
     if (!workspace) throw new Error(t('Open a folder first.'));
     return github.publish(workspace, { name: opts?.name || path.basename(workspace), isPrivate: opts?.private !== false, description: opts?.description || '' });

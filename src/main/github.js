@@ -84,7 +84,26 @@ function createGitHub({ getSettings, saveSettings }) {
     return list.map((r) => ({ name: r.name, full: r.full_name, private: r.private, description: r.description || '', url: r.clone_url, updated: r.updated_at, language: r.language || '' }));
   }
 
+  // Už stiahnutý repozitár v priečinku projektov → otvorí sa ten, nesťahuje sa znova.
+  async function findClone(full, root) {
+    let names = [];
+    try {
+      names = fs.readdirSync(root);
+    } catch {}
+    for (const n of names) {
+      const dir = path.join(root, n);
+      if (!fs.existsSync(path.join(dir, '.git'))) continue;
+      try {
+        const url = (await git(['remote', 'get-url', 'origin'], dir)).trim();
+        if (url.toLowerCase().replace(/\.git$/, '').endsWith(`github.com/${full.toLowerCase()}`)) return dir;
+      } catch {}
+    }
+    return null;
+  }
+
   async function clone(full, root) {
+    const existing = await findClone(full, root);
+    if (existing) return existing;
     const name = full.split('/')[1];
     let dir = path.join(root, name);
     for (let i = 2; fs.existsSync(dir); i++) dir = path.join(root, `${name}-${i}`);
@@ -118,6 +137,17 @@ function createGitHub({ getSettings, saveSettings }) {
     return status(dir);
   }
 
+  // Pri otvorení projektu: stiahne novinky z GitHubu, ak nemáš neuložené zmeny (nič sa neprepíše).
+  async function sync(dir) {
+    const st = await status(dir);
+    if (!st.repo || !st.github || !st.branch) return { pulled: 0 };
+    await git(['fetch', 'origin', st.branch], dir, { auth: true, timeout: 60000 });
+    const after = await status(dir);
+    if (!after.behind || after.changes || after.ahead) return { pulled: 0, behind: after.behind };
+    await git(['merge', '--ff-only', `origin/${st.branch}`], dir);
+    return { pulled: after.behind };
+  }
+
   async function pull(dir) {
     await git(['pull', '--rebase', '--autostash'], dir, { auth: true, timeout: 300000 });
     return status(dir);
@@ -143,7 +173,7 @@ function createGitHub({ getSettings, saveSettings }) {
     return { url: repo.html_url, full: repo.full_name };
   }
 
-  return { info, connect, disconnect, repos, clone, status, commitPush, pull, publish, api };
+  return { info, connect, disconnect, repos, clone, status, commitPush, pull, sync, publish, api };
 }
 
 module.exports = { createGitHub };

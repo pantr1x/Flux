@@ -4,7 +4,7 @@ import { parseKey } from './userShortcuts.js';
 
 const bridge = window.flux;
 
-export function createPluginHost({ monaco, editor, toast, getActiveFile, getSettings, saveSettings, runCommand }) {
+export function createPluginHost({ monaco, editor, toast, getActiveFile, getSettings, saveSettings, runCommand, isOverridden = () => false }) {
   const loaded = new Map(); // id → { module, disposables, commands, name }
   const saveListeners = new Set();
   const openListeners = new Set();
@@ -15,6 +15,7 @@ export function createPluginHost({ monaco, editor, toast, getActiveFile, getSett
     (e) => {
       if (window.fluxRecordingKeys) return;
       const hit = keyHandlers.find((h) => {
+        if (isOverridden(h.full)) return false; // skratku si zmenil v Nastaveniach → Skratky
         const k = h.key;
         return e.ctrlKey === k.ctrl && e.shiftKey === k.shift && e.altKey === k.alt && e.metaKey === k.meta && (e.key.toLowerCase() === k.key || e.code.toLowerCase() === `key${k.key}` || e.code.toLowerCase() === `digit${k.key}`);
       });
@@ -52,7 +53,7 @@ export function createPluginHost({ monaco, editor, toast, getActiveFile, getSett
           if (opts.key) {
             const k = parseKey(opts.key);
             if (k) {
-              const h = { key: k, run };
+              const h = { key: k, run, full };
               keyHandlers.push(h);
               own(() => keyHandlers.splice(keyHandlers.indexOf(h), 1));
             }
