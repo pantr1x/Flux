@@ -1,5 +1,6 @@
 // Prvé spustenie (ako v Zen Browseri): animované logo → jazyk → čo programuješ → vzhľad → hotovo,
 // potom voliteľná krátka prehliadka funkcií so zvýraznením častí okna.
+import { flag } from './flags.js';
 import { t, setLocale } from './i18n.js';
 import { THEMES, themeSwatch } from './themes.js';
 
@@ -63,7 +64,7 @@ export function createOnboarding(app) {
   function langList() {
     const cur = app.getSettings().language || 'en';
     return `<div class="ob-list">${languages
-      .map((l) => `<button class="ob-option${cur === l.code ? ' on' : ''}" data-lang="${l.code}"><b>${l.native || l.name}</b><small>${l.name}</small></button>`)
+      .map((l) => `<button class="ob-option${cur === l.code ? ' on' : ''}" data-lang="${l.code}">${flag(l.code, 26)}<span class="ob-lang-txt"><b>${l.native || l.name}</b><small>${l.name}</small></span></button>`)
       .join('')}</div>`;
   }
 

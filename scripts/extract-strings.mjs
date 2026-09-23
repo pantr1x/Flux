@@ -1,7 +1,7 @@
 // Vytiahne všetky texty na preklad (t('…')) + texty zo zoznamov (šablóny, odznaky…) do locales/en.keys.json.
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const files = ['src/renderer/app.js', 'src/renderer/onboarding.js', 'src/renderer/activity.js', 'src/renderer/tools.js', 'src/renderer/editorExtras.js', 'src/main/toolchains.js', 'src/renderer/aiPanel.js', 'src/renderer/github.js', 'src/renderer/userShortcuts.js', 'src/main/ai.js', 'src/main/github.js', 'src/main/main.js', 'src/main/runner.js'];
+const files = ['src/renderer/app.js', 'src/renderer/onboarding.js', 'src/renderer/activity.js', 'src/renderer/tools.js', 'src/renderer/editorExtras.js', 'src/main/toolchains.js', 'src/renderer/aiPanel.js', 'src/renderer/github.js', 'src/renderer/userShortcuts.js', 'src/main/ai.js', 'src/main/github.js', 'src/main/main.js', 'src/main/runner.js', 'src/renderer/keymap.js', 'src/renderer/pluginHost.js', 'src/renderer/pluginsUI.js', 'src/main/plugins.js'];
 const keys = new Set();
 const lit = (q, body) => body.replace(new RegExp(`\\\\${q}`, 'g'), q).replace(/\\n/g, '\n');
 for (const f of files) {
@@ -18,6 +18,8 @@ for (const f of files) {
     if (/[a-z]/i.test(v) && !/^[\w.-]+\.(py|html|css|js|txt)$/.test(v)) keys.add(v);
   }
 }
+// keymap.js: ['id', 'kategória', 'Popis', …] a ['id', 'Kategória']
+for (const m of readFileSync('src/renderer/keymap.js', 'utf8').matchAll(/^\s*\['\w+', (?:'\w+', )?'([^']+)'/gm)) keys.add(m[1]);
 const tpl = readFileSync('src/renderer/templates.js', 'utf8');
 for (const m of tpl.matchAll(/\b(?:label|detail):\s*(['"])((?:\\.|(?!\1).)*)\1/g)) keys.add(lit(m[1], m[2]));
 for (const w of ['compact', 'normal', 'relaxed', 'large']) keys.add(w);

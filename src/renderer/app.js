@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css';
 import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices.js';
 import { IStorageService } from 'monaco-editor/platform/storage/common/storage.js';
 import { icon, fileIcon } from './icons.js';
+import { flag } from './flags.js';
 import { PythonLanguageClient } from './pyLsp.js';
 import { THEMES, DEFAULT_THEME, themeOf, defineMonacoTheme, themeSwatch } from './themes.js';
 import { TEMPLATES, PY_SNIPPETS, HTML_PAGE } from './templates.js';
@@ -2346,7 +2347,7 @@ function openSettings() {
           <section data-pane="general">
             <h3>${t('Language')}</h3>
             <div class="s-group">
-              <label class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><select id="s-lang"><option>${escapeHtml(setting('language') || 'en')}</option></select></label>
+              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
             </div>
             <h3>${t('Welcome')}</h3>
             <div class="s-group">
@@ -2446,19 +2447,34 @@ function openSettings() {
   requestAnimationFrame(() => $('#s-find')?.focus());
   // Zoznam jazykov z GitHubu.
   flux.i18nList().then((list) => {
-    const sel = $('#s-lang');
-    if (!sel || !Array.isArray(list)) return;
-    sel.innerHTML = list.map((l) => opt(l.code, l.native ? `${l.name} – ${l.native}` : l.name, setting('language') || 'en')).join('');
-    sel.onchange = async () => {
-      sel.disabled = true;
+    const box = $('#s-lang');
+    if (!box || !Array.isArray(list)) return;
+    const cur = setting('language') || 'en';
+    const me = list.find((l) => l.code === cur) || { code: cur, name: cur };
+    box.innerHTML = `<button class="s-btn lang-cur" type="button">${flag(me.code, 20)}<span>${escapeHtml(me.native || me.name)}</span>${icon('chevron', 12)}</button>
+      <div class="lang-menu" hidden>${list
+        .map((l) => `<button type="button" class="lang-opt${l.code === cur ? ' on' : ''}" data-lang-code="${l.code}">${flag(l.code, 22)}<b>${escapeHtml(l.native || l.name)}</b><small>${escapeHtml(l.name)}</small></button>`)
+        .join('')}</div>`;
+    const menu = box.querySelector('.lang-menu');
+    box.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const pick = e.target.closest('[data-lang-code]');
+      if (!pick) return (menu.hidden = !menu.hidden);
+      menu.hidden = true;
+      if (pick.dataset.langCode === cur) return;
+      box.querySelector('.lang-cur').disabled = true;
       try {
-        await flux.i18nUse(sel.value);
+        await flux.i18nUse(pick.dataset.langCode);
         flux.reload();
       } catch {
-        sel.disabled = false;
+        box.querySelector('.lang-cur').disabled = false;
         toast(t('Could not download the language. Check your internet connection.'), 'error');
       }
     };
+    panel.addEventListener('pointerdown', (e) => {
+      if (!box.contains(e.target)) menu.hidden = true;
+    });
   });
   panel.hidden = false;
 

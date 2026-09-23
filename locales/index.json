@@ -10,11 +10,6 @@
   "native": "Slovenčina"
  },
  {
-  "code": "cs",
-  "name": "Czech",
-  "native": "Čeština"
- },
- {
   "code": "de",
   "name": "German",
   "native": "Deutsch"
@@ -23,5 +18,20 @@
   "code": "es",
   "name": "Spanish",
   "native": "Español"
+ },
+ {
+  "code": "fr",
+  "name": "French",
+  "native": "Français"
+ },
+ {
+  "code": "it",
+  "name": "Italian",
+  "native": "Italiano"
+ },
+ {
+  "code": "pl",
+  "name": "Polish",
+  "native": "Polski"
  }
 ]

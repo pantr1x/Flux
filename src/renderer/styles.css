@@ -4977,3 +4977,68 @@ body.custom-caret .monaco-editor .cursor {
   gap: 6px;
   white-space: nowrap;
 }
+
+/* Jazyky s vlajkami (intro + nastavenia) */
+.flag {
+  flex: none;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.ob-option[data-lang] {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.ob-lang-txt {
+  display: flex;
+  flex-direction: column;
+}
+.lang-pick {
+  position: relative;
+  flex: none;
+}
+.lang-cur {
+  gap: 8px;
+  min-width: 170px;
+  justify-content: flex-start;
+}
+.lang-cur > span {
+  flex: 1;
+  text-align: left;
+}
+.lang-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 240px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--card-solid);
+  box-shadow: 0 0 0 1px var(--line), 0 16px 40px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lang-menu[hidden] {
+  display: none;
+}
+.lang-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+}
+.lang-opt b {
+  flex: 1;
+  font-weight: 500;
+}
+.lang-opt small {
+  color: var(--text-3);
+}
+.lang-opt:hover,
+.lang-opt.on {
+  background: var(--hover);
+}
