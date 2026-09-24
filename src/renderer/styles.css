@@ -7374,3 +7374,7 @@ select.fsel-native {
   background: #111;
   color: #fff;
 }
+.s-gen-about,
+.s-gen-keys {
+  margin-top: 26px;
+}

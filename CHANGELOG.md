@@ -2,6 +2,19 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 1.2.1 – 2026-09-24
+
+### Settings
+- **General** now works like *Appearance*: its parts are listed in the left menu, and the one you are looking at is highlighted.
+- General contains:
+  - You,
+  - Performance,
+  - Language,
+  - Welcome,
+  - **Version & updates** (with the release notes),
+  - **Shortcuts**.
+- The separate *Shortcuts* and *About & updates* pages are gone, so the menu is shorter.
+
 ## 1.2.0 – 2026-09-24
 
 ### Flux Together (Wi-Fi)

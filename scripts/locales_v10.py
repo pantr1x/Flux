@@ -1,5 +1,6 @@
 # Flux 1.2: Together cez Wi-Fi, farby aplikácie (sk, de, es, fr, it, pl, pt, uk).
 _V10 = {
+    'Version & updates': ('Verzia a aktualizácie', 'Version & Updates', 'Versión y actualizaciones', 'Version et mises à jour', 'Versione e aggiornamenti', 'Wersja i aktualizacje', 'Versão e atualizações', 'Версія та оновлення'),
     'Free memory': ('Uvoľniť pamäť', 'Speicher freigeben', 'Liberar memoria', 'Libérer la mémoire', 'Libera memoria', 'Zwolnij pamięć', 'Liberar memória', 'Звільнити пам’ять'),
     'General': ('Všeobecné', 'Allgemein', 'General', 'Général', 'Generale', 'Ogólne', 'Geral', 'Загальні'),
     'Memory used by Flux': ('Pamäť, ktorú Flux používa', 'Von Flux genutzter Speicher', 'Memoria que usa Flux', 'Mémoire utilisée par Flux', 'Memoria usata da Flux', 'Pamięć używana przez Flux', 'Memória usada pelo Flux', 'Пам’ять, яку використовує Flux'),

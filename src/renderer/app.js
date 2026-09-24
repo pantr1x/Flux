@@ -2771,11 +2771,9 @@ function openSettings() {
     ['editor', 'code', t('Editor')],
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
-    ['keys', 'command', t('Shortcuts')],
     ['plugins', 'sparkle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
     ghOn() && ['github', 'github', 'GitHub'],
-    ['about', 'refresh', t('About & updates')],
   ].filter(Boolean);
   if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'general';
@@ -2899,7 +2897,33 @@ function openSettings() {
             </div>
             <div class="tc-list" id="s-tools"><div class="s-loading">${t('Checking what is installed…')}</div></div>
           </section>
-          <section data-pane="keys">
+          <section data-pane="general">
+            <div class="s-hero">
+              <div class="s-hero-logo">${icon('code', 22)}</div>
+              <div><b>Flux ${escapeHtml(state.version || '')}</b><small>${t('Code. Run. Create.')}</small></div>
+              <button class="s-btn" data-action="goto-about">${icon('refresh', 13)}${t('Check for updates')}</button>
+            </div>
+            <h3>${t('You')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
+            </div>
+            <h3>${t('Performance')}</h3>
+            <div class="s-group">
+              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
+              <div class="s-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
+            </div>
+            <h3>${t('Language')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
+            </div>
+            <h3>${t('Welcome')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
+            </div>
+          </section>
+          <section data-pane="general" class="s-gen-about"><h3>${t('Version & updates')}</h3><div id="s-about"></div></section>
+          <section data-pane="general" class="s-gen-keys">
+            <h3>${t('Shortcuts')}</h3>
             <div class="s-group s-mb">
               <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
             </div>
@@ -2928,31 +2952,6 @@ function openSettings() {
           </section>
           ${ghOn() ? '<section data-pane="github" id="s-github"></section>' : ''}
           <section data-pane="plugins" id="s-plugins"></section>
-          <section data-pane="about" id="s-about"></section>
-          <section data-pane="general">
-            <div class="s-hero">
-              <div class="s-hero-logo">${icon('code', 22)}</div>
-              <div><b>Flux ${escapeHtml(state.version || '')}</b><small>${t('Code. Run. Create.')}</small></div>
-              <button class="s-btn" data-action="goto-about">${icon('refresh', 13)}${t('Check for updates')}</button>
-            </div>
-            <h3>${t('You')}</h3>
-            <div class="s-group">
-              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
-            </div>
-            <h3>${t('Performance')}</h3>
-            <div class="s-group">
-              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
-              <div class="s-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
-            </div>
-            <h3>${t('Language')}</h3>
-            <div class="s-group">
-              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
-            </div>
-            <h3>${t('Welcome')}</h3>
-            <div class="s-group">
-              <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
-            </div>
-          </section>
         </div>
       </div>
     </div>`;
@@ -3075,15 +3074,20 @@ function openSettings() {
     navNote();
     $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
     if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
-    if (id === 'about') updatesUI.render($('#s-about'));
-    if (id === 'general') showMemory();
+    if (id === 'general') {
+      showMemory();
+      if (!$('#s-about').childElementCount) updatesUI.render($('#s-about'));
+    }
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
   // Dlhý Vzhľad: časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
-  for (const pane of panel.querySelectorAll('[data-pane="appearance"]')) {
-    const heads = [...pane.querySelectorAll(':scope > h3')];
-    const tabBtn = panel.querySelector('.s-tab[data-tab="appearance"]');
+  for (const paneId of ['appearance', 'general']) {
+    const panes = [...panel.querySelectorAll(`[data-pane="${paneId}"]`)];
+    const pane = panes[0];
+    if (!pane) continue;
+    const heads = panes.flatMap((p) => [...p.querySelectorAll(':scope > h3')]);
+    const tabBtn = panel.querySelector(`.s-tab[data-tab="${paneId}"]`);
     if (heads.length < 4 || !tabBtn) continue;
     const sub = document.createElement('div');
     sub.className = 's-sub';
@@ -3093,7 +3097,7 @@ function openSettings() {
       const b = e.target.closest('[data-jump]');
       if (!b) return;
       e.stopPropagation();
-      if (state.settingsTab !== 'appearance') tabBtn.click();
+      if (state.settingsTab !== paneId) tabBtn.click();
       heads[Number(b.dataset.jump)].scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
     };
     const scroller = pane.closest('.s-body') || pane.parentElement;
@@ -3233,7 +3237,10 @@ function openSettings() {
       await saveSettings({ pointer: ptr.dataset.pointer });
       return applyCustomization();
     }
-    if (e.target.closest('[data-action="goto-about"]')) return panel.querySelector('[data-tab="about"]')?.click();
+    if (e.target.closest('[data-action="goto-about"]')) {
+      $('#s-about')?.previousElementSibling?.scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
+      return flux.updateCheck();
+    }
     if (e.target.closest('[data-action="mem-free"]')) {
       if (!state.tabs.some(isPythonTab)) lsp.stop();
       await flux.freeMemory?.();
@@ -3372,7 +3379,7 @@ async function searchEverything() {
   const cmds = [...commands(), ...pluginCommands()].map((c) => ({ ...c, group: t('Command') }));
   const cmdLabels = new Set(cmds.map((c) => c.label));
   // Riadky zo Skratiek sú už medzi príkazmi.
-  const sets = settingsIndex().filter((x) => x.tab !== 'keys' || !cmdLabels.has(x.label)).map((x) => ({
+  const sets = settingsIndex().filter((x) => !cmdLabels.has(x.label)).map((x) => ({
     label: x.label,
     icon: icon('settings', 15),
     detail: t('Setting'),
