@@ -97,10 +97,29 @@ The same release notes appear in the app (Settings → General → About & updat
 - Source: `site/index.html` (+ `site/icon.png`, `site/images/*.png`). Plain HTML/CSS/JS, no build, no dependencies.
 - Deploy: `pages.yml` runs on every push that touches `site/**` (any branch) or by hand (*Actions → Website → Run workflow*). It force-pushes the contents of `site/` to the **`gh-pages`** branch. GitHub Pages must be set once to *Settings → Pages → Deploy from a branch → `gh-pages` / (root)*. Address: https://pantr1x.github.io/Flux/
 - The page is styled like the Flux app itself (top bar = window tabs, home-screen stats and action cards, a live editor window, status bar). Colors are CSS variables in `:root`.
+- The *downloads* stat and the count per release are the `download_count` of each release's `.exe` (GitHub counts every download, including self-updates).
 - **Everything version-related is loaded in the browser from the GitHub API** (`/repos/pantr1x/Flux/releases`): the download buttons (`[data-dl]`) point to the newest `.exe`, the version/size stats, and the *Releases* section (`#releases`) lists every release with its notes (small markdown renderer `md()`) and installer. Nothing on the page has to be changed for a new release. Without the API it falls back to links to GitHub Releases.
 - Content lives in arrays in the script at the bottom: `FILES` (files in the demo editor: tokens per line + what *Run* prints), `FEATURES`, `LANGS`, `KEYS` (shortcuts). Edit those to change the page.
 - The app links to `https://pantr1x.github.io/Flux/#releases` from Settings → General → *All versions*.
 
 ## Plugins
 
-See `docs/PLUGINS.md`. Built-in plugins are in `plugins/flux.*`, listed in `plugins/index.json`; the app downloads plugin files from the same branches as translations.
+See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed in `plugins/index.json`. **Nothing is bundled or turned on by itself**: `BUILTIN_IDS` in `src/main/plugins.js` is empty and `package.json` → `build.files` does not ship `plugins/`. A plugin is downloaded from GitHub (same branches as translations) only when the user presses **Install** in Settings → Plugins. For local testing, `FLUX_PLUGIN_REGISTRY=/path/to/plugins` makes the store read that folder instead of GitHub.
+
+*Built into Flux* in the store are features that live in the app code, not in `plugins/`: **GitHub** and **Flux Together** (list in `app.js`, `createPluginsUI({ builtins })`). Each has `description` (card) and `details` (bullets on its own page, `renderBuiltinDetail` in `pluginsUI.js`).
+
+## Memory & speed
+
+Settings → General → *Memory & speed*. `lite` (*Save memory*) is the master switch. Each part in *Advanced* has its own key and, while unset, follows `lite`: `optOn(key)` = `settings[key] ?? !lite` (same helper in `app.js` and `main.js`).
+
+| Key | Off means |
+|---|---|
+| `optPyAc` | Pyright is never started (`ensureLsp`) |
+| `optFx` | `body.no-fx` (no backdrop blur, no wallpaper) and window material `none` |
+| `optAnim` | `body.no-anim` (no CSS animations/transitions), no smooth scrolling |
+| `optEditorFx` | no sticky scroll, code map, smooth caret, word highlight |
+| `optJsLimit` (on = limit) | `--max-old-space-size=512` for the window, after restart |
+| `pyMemory` | MB for Pyright (default 768 with `lite`, else 2048) |
+| `lspIdle` | minutes until Pyright stops without a Python file (0 = never) |
+
+Changing `lite` or pressing *Reset advanced* clears all these keys. Use `optOn()` for new savings, never `setting('lite')` directly.

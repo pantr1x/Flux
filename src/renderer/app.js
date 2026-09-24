@@ -117,6 +117,11 @@ const DEFAULTS = {
   inertia: true,
 };
 const setting = (key) => state.settings[key] ?? DEFAULTS[key];
+// Pamäť a rýchlosť: každú časť si dá zapnúť/vypnúť v Nastaveniach → Všeobecné → Advanced.
+// Kým ju nezmeníš, riadi sa hlavným prepínačom „Save memory“ (lite). true = funkcia je zapnutá.
+const optOn = (key) => state.settings[key] ?? !setting('lite');
+const OPT_KEYS = ['optFx', 'optAnim', 'optEditorFx', 'optPyAc', 'optJsLimit', 'pyMemory', 'lspIdle'];
+const lspIdleMin = () => Number(state.settings.lspIdle ?? (setting('lite') ? 1 : 5));
 
 const state = {
   platform: 'win32',
@@ -293,23 +298,23 @@ function applyEditorSettings() {
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
     minimap: { enabled: false },
-    stickyScroll: { enabled: setting('stickyScroll') !== false && !setting('lite'), maxLineCount: 4 },
+    stickyScroll: { enabled: setting('stickyScroll') !== false && optOn('optEditorFx'), maxLineCount: 4 },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
     cursorStyle: setting('caretStyle'),
     cursorBlinking: setting('caretBlink'),
     cursorWidth: Number(setting('caretWidth')) || 2,
-    cursorSmoothCaretAnimation: setting('caretSmooth') && !setting('lite') ? 'on' : 'off',
-    // Úsporný režim: menej prekresľovania v editore.
-    occurrencesHighlight: setting('lite') ? 'off' : 'singleFile',
-    renderLineHighlightOnlyWhenFocus: !!setting('lite'),
-    matchBrackets: setting('lite') ? 'near' : 'always',
+    cursorSmoothCaretAnimation: setting('caretSmooth') && optOn('optEditorFx') ? 'on' : 'off',
+    // Bez efektov editora: menej prekresľovania.
+    occurrencesHighlight: optOn('optEditorFx') ? 'singleFile' : 'off',
+    renderLineHighlightOnlyWhenFocus: !optOn('optEditorFx'),
+    matchBrackets: optOn('optEditorFx') ? 'always' : 'near',
     lineNumbers: setting('lineNumbers'),
     renderWhitespace: setting('whitespace'),
     letterSpacing: Number(setting('letterSpacing')) || 0,
     bracketPairColorization: { enabled: setting('bracketColors') },
   });
   applyCustomization();
-  codemap?.setVisible(setting('minimap') && !setting('lite'));
+  codemap?.setVisible(setting('minimap') && optOn('optEditorFx'));
   if (term) {
     term.options.fontFamily = font.css;
     term.options.fontSize = setting('terminalFontSize');
@@ -395,7 +400,8 @@ function applyCustomization() {
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
   document.body.classList.toggle('density-compact', setting('density') === 'compact');
-  document.body.classList.toggle('lite', !!setting('lite'));
+  document.body.classList.toggle('no-fx', !optOn('optFx'));
+  document.body.classList.toggle('no-anim', !optOn('optAnim'));
   applyAppColors();
   root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
@@ -1392,11 +1398,20 @@ async function setWorkspace(dir) {
   together?.onProject();
 }
 
+// Po zmene pamäte/rýchlosti: vzhľad, editor a Python autocomplete hneď podľa nastavení.
+function applyPerformance() {
+  applyCustomization();
+  applyEditorSettings();
+  if (!optOn('optPyAc')) lsp?.stop();
+  else if (state.tabs.some(isPythonTab)) ensureLsp(true);
+  renderStatus();
+}
+
 // ---------- Python autocomplete len na požiadanie ----------
 const isPythonTab = (tab) => tab?.model?.getLanguageId() === 'python' && inside(tab.path);
 let lspIdleSince = 0;
 function ensureLsp(force = false) {
-  if (!state.workspace || !lsp) return;
+  if (!state.workspace || !lsp || !optOn('optPyAc')) return;
   lspIdleSince = 0;
   if (!force && lsp.root === state.workspace) return;
   lsp.start(state.workspace, state.python?.path);
@@ -1409,7 +1424,7 @@ setInterval(() => {
     return;
   }
   lspIdleSince ||= Date.now();
-  if (Date.now() - lspIdleSince > (setting('lite') ? 60e3 : 5 * 60e3)) lsp.stop();
+  if (lspIdleMin() && Date.now() - lspIdleSince > lspIdleMin() * 60e3) lsp.stop();
 }, 30e3);
 
 // ---------- projekty (ako „workspaces“ v Zene) ----------
@@ -2071,7 +2086,7 @@ function onRunExit({ code, error, ms }) {
   analyzeOutput(code);
   renderRunButton();
   // Po pip install alebo vytvorení venv znova zistiť Python.
-  if (/^(pip install|python -m venv)/.test(state.lastLabel || '')) detectPython().then(() => lsp.start(state.workspace, state.python?.path));
+  if (/^(pip install|python -m venv)/.test(state.lastLabel || '')) detectPython().then(() => ensureLsp(true));
 }
 
 // Tlačidlá sa ukazujú len keď dávajú zmysel: ▶ Spustiť pri Pythone/JS…, Live Server pri webe.
@@ -2935,11 +2950,27 @@ function openSettings() {
             <div class="s-group">
               <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
             </div>
-            <h3>${t('Performance')}</h3>
+            <h3>${t('Memory & speed')}</h3>
             <div class="s-group">
-              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
-              <div class="s-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
+              <div class="s-row s-mem-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
+              <label class="s-row s-lite"><span><b>${t('Save memory')}</b><small>${t('Uses less memory and turns off effects – good for slower PCs. You can change each part under Advanced.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
             </div>
+            <details class="s-adv"${OPT_KEYS.some((k) => state.settings[k] !== undefined) ? ' open' : ''}><summary>${icon('chevron', 12)}${t('Advanced')}</summary>
+              <div class="s-group">
+                ${[
+                  ['optPyAc', t('Python autocomplete'), t('suggestions and error checking for Python (Pyright) – uses the most memory')],
+                  ['optFx', t('Transparency and blur'), t('see-through panels and your blurred wallpaper')],
+                  ['optAnim', t('Animations'), t('windows, menus and cards glide in and out')],
+                  ['optEditorFx', t('Extra editor effects'), t('sticky headers, code map, smooth cursor and highlighting the word under the cursor')],
+                  ['optJsLimit', t('Limit memory of the window'), t('at most 512 MB for the app window – applies after a restart')],
+                ]
+                  .map(([k, label, hint]) => `<label class="s-row"><span><b>${label}</b><small>${hint}</small></span><input type="checkbox" class="switch" data-key="${k}"${(k === 'optJsLimit' ? state.settings[k] ?? !!setting('lite') : optOn(k)) ? ' checked' : ''}></label>`)
+                  .join('')}
+                <label class="s-row"><span><b>${t('Memory for Python autocomplete')}</b><small>${t('more memory helps with big projects')}</small></span><select data-key="pyMemory">${[768, 1024, 2048].map((v) => opt(v, v < 1024 ? `${v} MB` : `${v / 1024} GB`, state.settings.pyMemory ?? (setting('lite') ? 768 : 2048))).join('')}</select></label>
+                <label class="s-row"><span><b>${t('Stop Python autocomplete when not used')}</b><small>${t('frees its memory when no Python file is open')}</small></span><select data-key="lspIdle">${[1, 5, 15, 0].map((v) => opt(v, v ? t('after {n} min', { n: v }) : t('never'), lspIdleMin())).join('')}</select></label>
+                <div class="s-row"><span><b>${t('Reset advanced')}</b><small>${t('every part follows “Save memory” again')}</small></span><button class="s-btn" data-action="opt-reset">${icon('refresh', 13)}${t('Reset')}</button></div>
+              </div>
+            </details>
             <h3>${t('Language')}</h3>
             <div class="s-group">
               <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
@@ -3098,7 +3129,7 @@ function openSettings() {
       if (!b) return;
       e.stopPropagation();
       if (state.settingsTab !== pane.dataset.pane) tabBtn.click();
-      heads[Number(b.dataset.jump)].scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
+      heads[Number(b.dataset.jump)].scrollIntoView({ behavior: optOn('optAnim') ? 'smooth' : 'auto', block: 'start' });
     };
     const scroller = pane.closest('.s-body') || pane.parentElement;
     const spy = () => {
@@ -3123,6 +3154,7 @@ function openSettings() {
     const sections = panel.querySelectorAll('[data-pane]');
     for (const el of panel.querySelectorAll(ROWS + ', .s-group, .s-body h3, .s-lead, .s-keycat, .s-jump')) el.style.display = '';
     if (!q) return showTab(state.settingsTab || 'appearance');
+    panel.querySelectorAll('details.s-adv').forEach((d) => (d.open = true));
     $('#s-title').textContent = t('Search results');
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('on'));
     let any = false;
@@ -3247,6 +3279,11 @@ function openSettings() {
       await flux.freeMemory?.();
       return showMemory();
     }
+    if (e.target.closest('[data-action="opt-reset"]')) {
+      await saveSettings(Object.fromEntries(OPT_KEYS.map((k) => [k, undefined])));
+      applyPerformance();
+      return rerenderSettings();
+    }
     const cr = e.target.closest('[data-color-reset]');
     if (cr) {
       await saveSettings({ [cr.dataset.colorReset]: '' });
@@ -3348,8 +3385,15 @@ function openSettings() {
     const key = el.dataset.key;
     if (!key) return;
     let value = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.type === 'number' || el.type === 'range' || key === 'lineHeight') value = Number(value);
+    if (el.type === 'number' || el.type === 'range' || ['lineHeight', 'pyMemory', 'lspIdle'].includes(key)) value = Number(value);
     await saveSettings({ [key]: value });
+    // Hlavný prepínač pamäte: všetky časti v Advanced sa zase riadia ním.
+    if (key === 'lite') {
+      await saveSettings(Object.fromEntries(OPT_KEYS.map((k) => [k, undefined])));
+      applyPerformance();
+      rerenderSettings();
+    }
+    if (OPT_KEYS.includes(key)) applyPerformance();
     if (key === 'suggestDetails') showSuggestDetails(value);
     if (key === 'material') await saveSettings({ translucent: true });
     applyEditorSettings();
@@ -3400,6 +3444,8 @@ async function searchEverything() {
         const pane = $(`#settings [data-pane="${x.tab}"]`);
         const row = [...(pane || $('#settings')).querySelectorAll('.s-row, .theme-card, .tc-row, h3, .up-notes-fold')].find((r) => r.textContent.includes(x.label));
         if (!row) return retry && setTimeout(() => find(false), 500);
+        const fold = row.closest('details');
+        if (fold) fold.open = true;
         row.scrollIntoView({ block: row.tagName === 'H3' ? 'start' : 'center' });
         row.classList.add('flash');
         setTimeout(() => row.classList.remove('flash'), 1400);
@@ -4520,6 +4566,13 @@ async function main() {
         icon: 'github',
         needs: t('needs Git'),
         description: t('Sign in with GitHub, open your repositories as projects, save changes with commit & push and publish new projects. Installs Git if it is missing.'),
+        details: [
+          t('Sign in with your GitHub account – Flux shows a short code you enter on github.com.'),
+          t('Open any of your repositories as a project with one click.'),
+          t('Save your changes with commit & push right from the sidebar.'),
+          t('Publish a new project to GitHub with one click.'),
+          t('If Git is missing on your computer, Flux installs it for you.'),
+        ],
         enabled: ghOn,
         set: setGitHubPlugin,
       },
@@ -4529,6 +4582,13 @@ async function main() {
         icon: 'globe',
         needs: t('same Wi-Fi'),
         description: t('Work together with friends on the same Wi-Fi: see who has which file open, where their cursor is and what they are typing – live. Nothing goes to the internet.'),
+        details: [
+          t('Everyone on the same Wi-Fi enters the same room code – that is all.'),
+          t('A green dot shows where your friends are working: next to the project, every folder on the way and the file.'),
+          t('See which file each friend has open, on which line and what they are typing – live.'),
+          t('Click a friend to jump to their file and line.'),
+          t('It connects directly inside your network – nothing goes to the internet and there are no limits.'),
+        ],
         enabled: () => setting('togetherPlugin') === true,
         set: async (on) => {
           if (!on) await together?.stop();

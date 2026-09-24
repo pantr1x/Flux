@@ -57,9 +57,12 @@ function wallpaperPath() {
   return fs.existsSync(p) ? p : null;
 }
 
+// Pamäť a rýchlosť (Nastavenia → Všeobecné → Advanced): kým časť nezmeníš, riadi sa „Save memory“ (lite).
+const optOn = (key) => settings[key] ?? !settings.lite;
+
 function materialMode() {
   let m = settings.material || 'wallpaper';
-  if (settings.translucent === false || settings.lite) m = 'none';
+  if (settings.translucent === false || !optOn('optFx')) m = 'none';
   if (m === 'wallpaper' && !wallpaperPath()) m = mica ? 'acrylic' : 'none';
   if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
   return m;
@@ -277,7 +280,7 @@ const live = new LiveServer(
 const lsp = new LanguageServer(
   (msg) => send('lsp:message', msg),
   (code) => send('lsp:exit', code),
-  () => (settings.lite ? 768 : 2048), // strop pamäte pre Pyright (MB)
+  () => Number(settings.pyMemory) || (settings.lite ? 768 : 2048), // strop pamäte pre Pyright (MB)
 );
 
 // Automatické aktualizácie jazykov (raz za deň, na pozadí, len ak sú zapnuté).
@@ -566,7 +569,7 @@ function registerIpc() {
       win.setTitleBarOverlay({ color: '#00000000', symbolColor: patch.theme === 'light' ? '#1d1d24' : '#e8e8ef', height: 44 });
     }
     if (patch.theme) nativeTheme.themeSource = patch.theme;
-    if ('material' in patch || 'translucent' in patch || 'theme' in patch || 'lite' in patch) applyMaterial();
+    if ('material' in patch || 'translucent' in patch || 'theme' in patch || 'lite' in patch || 'optFx' in patch) applyMaterial();
     return settings;
   });
   ipcMain.on('app:dirty', (_e, count) => {
@@ -1383,11 +1386,9 @@ if (settings.lite === undefined) {
   saveSettings();
 }
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
-if (settings.lite) {
-  // Úsporný režim: menej pamäte pre JavaScript okna a bez plynulého posúvania.
-  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
-  app.commandLine.appendSwitch('disable-smooth-scrolling');
-}
+// Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
+if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');
 app.on('second-instance', (_e, argv) => {
   if (!win) return;
   const files = filesFromArgv(argv).map(allowFile).filter(Boolean);

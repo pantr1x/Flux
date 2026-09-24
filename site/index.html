@@ -69,9 +69,9 @@
     h1 { font-size: clamp(38px, 6.4vw, 68px); line-height: 1.04; letter-spacing: -1.8px; margin: 10px 0 12px; }
     h1 .grad { background: linear-gradient(90deg, #9fb8ff, #5b8cff 45%, #3ecfb2); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .lead { color: var(--text-2); font-size: 18px; max-width: 580px; margin: 0; }
-    .stats { display: grid; grid-template-columns: repeat(4, 128px); gap: 8px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 136px); gap: 8px; }
     .stat { position: relative; padding: 12px 14px; border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); backdrop-filter: blur(12px); }
-    .stat b { display: block; padding-right: 24px; font-size: 20px; letter-spacing: -.4px; }
+    .stat b { display: block; padding-right: 26px; white-space: nowrap; font-size: 19px; letter-spacing: -.4px; }
     .stat small { color: var(--text-2); font-size: 13px; }
     .stat .si { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--active); color: var(--text-2); }
     .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 26px 0 0; }
@@ -248,7 +248,7 @@
       </div>
       <div class="stats">
         <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></span><b>13</b><small>languages</small></div>
-        <div class="stat"><span class="si"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg></span><b>F5</b><small>to run</small></div>
+        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M21 19c0-2.5-1.5-4.3-4-4.9"/></svg></span><b id="st-dl">–</b><small>downloads</small></div>
         <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg></span><b id="st-size">~117 MB</b><small>installer</small></div>
         <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></span><b id="st-ver">1.2</b><small>newest version</small></div>
       </div>
@@ -345,7 +345,7 @@
           <ul class="list">
             <li><span class="dot">◐</span><span><b>Themes</b> – or build your own in the theme studio.</span></li>
             <li><span class="dot">✦</span><span><b>Plugins</b> – Theme Pack, Glass UI, Snippets, Flux Together and more.</span></li>
-            <li><span class="dot">⚡</span><span><b>Power saving</b> for slower PCs – less memory, no effects.</span></li>
+            <li><span class="dot">⚡</span><span><b>Save memory</b> on slower PCs – and fine-tune every part yourself under <i>Advanced</i>.</span></li>
             <li><span class="dot">🌐</span><span><b>9 app languages</b>, downloaded only when you pick one.</span></li>
           </ul>
         </div>
@@ -616,6 +616,7 @@
       return html + (inList ? '</ul>' : '');
     }
     const mb = (n) => `${Math.round(n / 1048576)} MB`;
+    const num = (n) => n.toLocaleString('en');
     const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
     fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } })
@@ -634,14 +635,19 @@
         $('#dl-text').textContent = `Download Flux ${v}`;
         $('#dl-meta').textContent = exe ? `${mb(exe.size)} · ${fmtDate(latest.published_at)}` : fmtDate(latest.published_at);
         $('#st-ver').textContent = v;
+        // Koľko ľudí si Flux stiahlo: súčet stiahnutí inštalátorov všetkých verzií (GitHub počíta download_count).
+        const dls = (r) => exeOf(r)?.download_count || 0;
+        const total = list.reduce((n, r) => n + dls(r), 0);
+        $('#st-dl').textContent = num(total);
+        $('#dl-meta').textContent = `${exe ? `${mb(exe.size)} · ` : ''}${num(total)} downloads`;
         if (exe) $('#st-size').textContent = mb(exe.size);
         $('#rel-name').textContent = `Flux ${v}`;
-        $('#rel-meta').textContent = `Newest version · ${fmtDate(latest.published_at)}${exe ? ` · ${exe.name} · ${mb(exe.size)}` : ''}`;
+        $('#rel-meta').textContent = `Newest version · ${fmtDate(latest.published_at)}${exe ? ` · ${exe.name} · ${mb(exe.size)}` : ''} · downloaded ${num(total)}× in total`;
         $('#rel-list').innerHTML = list.map((r, i) => {
           const rv = String(r.tag_name || '').replace(/^v/, '');
           const e = exeOf(r);
           return `<details class="rel"${r === latest ? ' open' : ''}>
-            <summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg><b>${esc(r.name || `Flux ${rv}`)}</b>${r === latest ? '<span class="badge new">newest</span>' : ''}${r.prerelease ? '<span class="badge">preview</span>' : ''}<small>${fmtDate(r.published_at)}</small></summary>
+            <summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg><b>${esc(r.name || `Flux ${rv}`)}</b>${r === latest ? '<span class="badge new">newest</span>' : ''}${r.prerelease ? '<span class="badge">preview</span>' : ''}<small>${e ? `${num(e.download_count || 0)} downloads · ` : ''}${fmtDate(r.published_at)}</small></summary>
             <div class="body">${md(r.body) || '<p>No notes for this version.</p>'}
               <div class="dl">${e ? `<a class="pill-btn${r === latest ? ' run-btn' : ''}" href="${esc(e.browser_download_url)}">${svg('<path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/>')}Download ${esc(e.name)} · ${mb(e.size)}</a>` : ''}<a class="pill-btn" href="${esc(r.html_url)}">Open on GitHub</a></div>
             </div></details>`;

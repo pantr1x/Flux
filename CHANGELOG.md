@@ -2,6 +2,27 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.2.3 – 2026-09-24
+
+### Memory & speed
+- **Settings → General → Memory & speed** replaces *Performance*. At the top you see **how much memory Flux uses** and can free it.
+- **Save memory** (was *Power saving*) turns on every saving at once – good for slower PCs.
+- New **Advanced** part: change each saving yourself –
+  - **Python autocomplete** on or off (it uses the most memory),
+  - **Transparency and blur**, **Animations** and **Extra editor effects** separately,
+  - **Limit memory of the window** to 512 MB,
+  - how much **memory Python autocomplete** may use (768 MB, 1 GB or 2 GB),
+  - when to **stop Python autocomplete** if no Python file is open (after 1, 5 or 15 min, or never).
+- *Reset advanced* makes every part follow *Save memory* again.
+
+### Plugins
+- Plugins are **no longer installed by themselves**. Error Lens, Bookmarks, Theme Pack and the others are in the store – press **Install** and Flux downloads them from GitHub.
+- **GitHub** and **Flux Together** open their own page with a description and everything they do.
+- A normal **back arrow** on plugin pages.
+
+### Website
+- Shows **how many people downloaded Flux** – in total and for every version.
+
 ## 1.2.2 – 2026-09-24
 
 ### Flux Together 1.1 – green dots

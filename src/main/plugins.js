@@ -13,8 +13,9 @@ const ID = /^[a-z0-9][a-z0-9.-]{1,60}$/;
 
 const pluginsDir = () => path.join(app.getPath('userData'), 'plugins');
 
-// Pluginy pribalené vo Fluxe (zapnuté od začiatku, dajú sa vypnúť v Nastaveniach → Plugins).
-const BUILTIN_IDS = ['flux.error-lens', 'flux.auto-rename-tag', 'flux.bookmarks', 'flux.color-highlight', 'flux.word-count', 'flux.snippet-pack', 'flux.theme-pack'];
+// Pribalené pluginy: žiadne. Všetky pluginy sa sťahujú z GitHubu až keď ich v obchode nainštaluješ
+// (predtým sa Error Lens, Bookmarks… inštalovali a zapínali samé). Mechanizmus ostáva pre prípad potreby.
+const BUILTIN_IDS = [];
 const BUILTIN_DIR = path.join(__dirname, '..', '..', 'plugins');
 
 function createPlugins({ getSettings, saveSettings, githubApi }) {

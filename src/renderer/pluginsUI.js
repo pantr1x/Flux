@@ -66,11 +66,29 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
         : on
           ? `<button class="s-btn" data-bi-off="${b.id}">${t('Uninstall')}</button>`
           : `<button class="s-btn primary" data-bi-on="${b.id}">${icon('download', 13)}${t('Install')}</button>`;
-    return `<div class="pl-card builtin">
+    return `<div class="pl-card builtin" data-bi-open="${b.id}">
       <span class="pl-icon ph bi-ic" style="width:40px;height:40px">${icon(b.icon, 20)}</span>
       <div class="pl-txt"><b>${esc(b.name)}</b><small>Flux${verified({ verified: true })}${b.needs ? ` · ${esc(b.needs)}` : ''}</small><p>${esc(b.description)}</p></div>
       <div class="pl-side">${on ? `<span class="pl-new on">${icon('check', 11)}${t('Installed')}</span>` : ''}${btn}</div>
     </div>`;
+  }
+  // Detail vstavaného pluginu (GitHub, Flux Together): popis a čo všetko robí.
+  function builtinBtn(b) {
+    if (builtinBusy === b.id) return `<button class="s-btn" disabled><span class="spin"></span></button>`;
+    return b.enabled() ? `<button class="s-btn" data-bi-off="${b.id}">${t('Uninstall')}</button>` : `<button class="s-btn primary" data-bi-on="${b.id}">${icon('download', 13)}${t('Install')}</button>`;
+  }
+  function renderBuiltinDetail(id) {
+    const b = builtins.find((x) => x.id === id);
+    if (!b) return renderHome();
+    detailId = `bi:${id}`;
+    box.innerHTML = `
+      <button class="pl-back" data-pl-back>${icon('arrowLeft', 15)}${t('All plugins')}</button>
+      <div class="pl-head">
+        <span class="pl-icon ph bi-ic" style="width:64px;height:64px">${icon(b.icon, 30)}</span>
+        <div class="pl-txt"><h2>${esc(b.name)}</h2><small>Flux${verified({ verified: true })} · ${t('Built in')}${b.needs ? ` · ${esc(b.needs)}` : ''}</small><p>${esc(b.description)}</p></div>
+        <div class="pl-side">${b.enabled() ? `<span class="pl-new on">${icon('check', 11)}${t('Installed')}</span>` : ''}${builtinBtn(b)}</div>
+      </div>
+      ${b.details?.length ? `<h3>${t('What it does')}</h3><ul class="bi-feats">${b.details.map((d) => `<li>${icon('check', 13)}<span>${esc(d)}</span></li>`).join('')}</ul>` : ''}`;
   }
   let bundled = [];
   const bundledCard = (p) => `<div class="pl-card builtin" data-pl-open="${p.id}">
@@ -138,7 +156,7 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
 
   async function renderDetail(id) {
     const p = list.find((x) => x.id === id) || { id };
-    box.innerHTML = `<button class="pl-back" data-pl-back>${icon('chevron', 13)}${t('All plugins')}</button><div class="s-loading"><span class="spin"></span></div>`;
+    box.innerHTML = `<button class="pl-back" data-pl-back>${icon('arrowLeft', 15)}${t('All plugins')}</button><div class="s-loading"><span class="spin"></span></div>`;
     let d;
     try {
       d = await flux.pluginDetails(id);
@@ -148,7 +166,7 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
     }
     const full = { ...p, ...d, installed: p.installed || bundled.some((x) => x.id === id), builtin: p.builtin || bundled.some((x) => x.id === id), enabled: p.enabled ?? bundled.find((x) => x.id === id)?.enabled, update: p.update };
     box.innerHTML = `
-      <button class="pl-back" data-pl-back>${icon('chevron', 13)}${t('All plugins')}</button>
+      <button class="pl-back" data-pl-back>${icon('arrowLeft', 15)}${t('All plugins')}</button>
       <div class="pl-head">
         ${iconImg(full, 64)}
         <div class="pl-txt"><h2>${esc(full.name)}</h2><small>${esc(full.publisher)}${verified(full)} · v${esc(full.version)}${full.license ? ` · ${esc(full.license)}` : ''}</small><p>${esc(full.description)}</p>
@@ -186,7 +204,7 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
   }
 
   async function onClick(e) {
-    const b = e.target.closest('button, input, [data-pl-open], img[data-pl-zoom]');
+    const b = e.target.closest('button, input, [data-pl-open], [data-bi-open], img[data-pl-zoom]');
     if (!b) return;
     if (b.matches('img[data-pl-zoom]')) {
       b.classList.toggle('zoom');
@@ -196,11 +214,13 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       const bi = builtins.find((x) => x.id === (b.dataset.biOn || b.dataset.biOff));
       builtinBusy = bi.id;
       renderBuiltins();
+      if (detailId === `bi:${bi.id}`) renderBuiltinDetail(bi.id);
       try {
         await bi.set(!!b.dataset.biOn);
       } finally {
         builtinBusy = null;
-        renderBuiltins();
+        if (detailId === `bi:${bi.id}`) renderBuiltinDetail(bi.id);
+        else renderBuiltins();
       }
       return;
     }
@@ -270,6 +290,8 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       return renderHome();
     }
     if (b.dataset.plDocs !== undefined) return flux.openExternal('https://github.com/pantr1x/Flux/blob/HEAD/docs/PLUGINS.md');
+    const biOpen = e.target.closest('[data-bi-open]');
+    if (biOpen && !e.target.closest('button, input')) return renderBuiltinDetail(biOpen.dataset.biOpen);
     const open = e.target.closest('[data-pl-open]');
     if (open && !e.target.closest('button, input')) {
       detailId = open.dataset.plOpen;
