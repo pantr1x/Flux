@@ -34,14 +34,6 @@ jobs:
             # neúplné vydanie (napr. po chybe) zmazať, tag ostane
             if [ -n "$assets" ] || gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then gh release delete "v$v" --repo "$GITHUB_REPOSITORY" --yes; fi
           fi
-      - name: Create the version tag
-        if: steps.check.outputs.exists == 'false'
-        shell: bash
-        run: |
-          t="v${{ steps.check.outputs.version }}"
-          if ! git ls-remote --exit-code --tags origin "refs/tags/$t" >/dev/null; then
-            git tag "$t" && git push origin "$t"
-          fi
       - if: steps.check.outputs.exists == 'false'
         uses: actions/setup-node@v4
         with:
@@ -54,8 +46,16 @@ jobs:
       - if: steps.check.outputs.exists == 'false'
         run: node scripts/release-notes.mjs
       - if: steps.check.outputs.exists == 'false'
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Publish the release
+        if: steps.check.outputs.exists == 'false'
         shell: bash
-        run: npx electron-builder --win --publish always --config.releaseInfo.releaseNotesFile=build/release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          v="${{ steps.check.outputs.version }}"
+          ls release
+          gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap release/latest.yml \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Flux $v" --notes-file build/release-notes.md --latest
