@@ -5,6 +5,12 @@ a **autocomplete**. Vzhľad je inšpirovaný Zen Browserom.
 
 ![ikona](build/icon.png)
 
+## ⬇️ Stiahnuť
+
+**[Stiahnuť Flux pre Windows](https://github.com/pantr1x/Flux/releases/latest)** → v časti **Assets** klikni na `Flux-Setup-….exe`.
+
+Flux sa potom aktualizuje sám. Čo je nové v každej verzii, nájdeš v [Releases](https://github.com/pantr1x/Flux/releases) aj priamo vo Fluxe (Nastavenia → About & updates).
+
 ## Čo vie
 
 | | |
