@@ -70,9 +70,13 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
     } catch {}
     flux.openExternal(started.url);
     box.innerHTML = `<div class="gh-signin">
-      <p>${t('Your browser opened GitHub. Paste this code there and press “Authorize”:')}</p>
+      <p>${t('Your browser opened GitHub and asks for this code:')}</p>
       <div class="gh-code" title="${t('Click to copy')}">${esc(started.userCode)}</div>
-      <small>${t('The code is already copied – just press Ctrl+V on the GitHub page.')}</small>
+      <ol class="gh-howto">
+        <li>${t('On the GitHub page click the first box and press Ctrl+V – the code is already copied.')}</li>
+        <li>${t('Press Continue, then Authorize.')}</li>
+      </ol>
+      <small>${t('GitHub does not send anything to your phone for this – the code is only here in Flux.')}</small>
       <div class="gh-wait"><span class="spin"></span>${t('Waiting for GitHub…')}</div>
       <div class="s-inline"><button class="s-btn" data-gh-reopen>${icon('external', 13)}${t('Open GitHub again')}</button><button class="s-btn" data-gh-cancel>${t('Cancel')}</button></div>
     </div>`;

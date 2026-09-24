@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.2.2 – 2026-09-24
+
+- Installer: the “Start Flux now” text on the last page is readable on the dark background.
+- Sign in with GitHub: clearer steps – where the code is and what to press.
+
 ## 0.2.1 – 2026-09-24
 
 - **Sign in with GitHub** now works: click it, log in in your browser (or create an account, also with Google), press *Authorize* – and all your repositories are in Flux.
