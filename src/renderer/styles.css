@@ -7947,3 +7947,66 @@ body.fx-trans .bi-feats {
   background: var(--accent);
   transition: width 0.3s;
 }
+
+/* Editor pri prepnutí súboru: vysunie sa zo strany novej karty */
+@keyframes fx-from-r {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+@keyframes fx-from-l {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+}
+body.fx-trans .fx-from-r {
+  animation: fx-from-r 0.26s var(--ease);
+}
+body.fx-trans .fx-from-l {
+  animation: fx-from-l 0.26s var(--ease);
+}
+body.fx-trans .fx-in {
+  animation: fx-in 0.24s var(--ease);
+}
+
+/* Posuvný podklad pod vybranou kartou / riadkom – presúva sa plynulo */
+.has-ind {
+  position: relative;
+}
+.has-ind > :not(.slide-ind) {
+  position: relative;
+  z-index: 1;
+}
+.slide-ind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 9px;
+  background: var(--active);
+  transition:
+    transform 0.3s var(--ease),
+    width 0.3s var(--ease),
+    height 0.3s var(--ease);
+}
+#tabs > .slide-ind {
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+#tabs.has-ind .tab.active,
+#tree.has-ind .row.active,
+#projects.has-ind .pr-row.active,
+.s-nav.has-ind .s-tab.on {
+  background: transparent;
+  box-shadow: none;
+}
+#tree > .slide-ind,
+#projects > .slide-ind {
+  border-radius: 8px;
+}
+.s-nav > .slide-ind {
+  border-radius: 10px;
+}

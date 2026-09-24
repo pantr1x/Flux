@@ -671,12 +671,49 @@ function announceProblems() {
   }, 700);
 }
 
-// Prechodová animácia (jemné objavenie) – pri prepnutí súboru, záložky panela a pod.; dá sa vypnúť.
-function playTransition(el) {
+// Prechodová animácia – pri prepnutí súboru, záložky panela a pod.; dá sa vypnúť.
+// dir: 1 = prišiel si sprava (karta vpravo), -1 = zľava, 0 = len jemné objavenie.
+function playTransition(el, dir = 0) {
   if (!el || !setting('transitions')) return;
-  el.classList.remove('fx-in');
+  el.classList.remove('fx-in', 'fx-from-r', 'fx-from-l');
   void el.offsetWidth; // znova spustiť animáciu
-  el.classList.add('fx-in');
+  el.classList.add(dir > 0 ? 'fx-from-r' : dir < 0 ? 'fx-from-l' : 'fx-in');
+}
+
+// Posuvný podklad pod vybranou položkou (karta súboru, riadok v strome, projekt, menu nastavení):
+// pri zmene výberu sa plynulo presunie z pôvodného miesta na nové. Zoznamy sa prekresľujú celé,
+// preto si pamätáme poslednú polohu podľa kľúča.
+const slideMem = new Map();
+function slideIndicator(box, active, key) {
+  if (!box) return;
+  let ind = box.querySelector(':scope > .slide-ind');
+  if (!setting('transitions') || !active || !active.offsetParent) {
+    ind?.remove();
+    box.classList.remove('has-ind');
+    if (!active) slideMem.delete(key);
+    return;
+  }
+  if (!ind) {
+    ind = document.createElement('div');
+    ind.className = 'slide-ind';
+    box.prepend(ind);
+  }
+  box.classList.add('has-ind');
+  const to = { x: active.offsetLeft, y: active.offsetTop, w: active.offsetWidth, h: active.offsetHeight };
+  const from = slideMem.get(key);
+  slideMem.set(key, to);
+  const put = (p) => {
+    ind.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    ind.style.width = `${p.w}px`;
+    ind.style.height = `${p.h}px`;
+  };
+  ind.style.transition = 'none';
+  if (from && (from.x !== to.x || from.y !== to.y || from.w !== to.w)) {
+    put(from);
+    void ind.offsetWidth;
+    ind.style.transition = '';
+  }
+  put(to);
 }
 
 // ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
@@ -881,7 +918,8 @@ function placeholderFor(tab) {
 function activate(tab) {
   const prev = activeTab();
   if (prev && prev !== tab) prev.viewState = editor.saveViewState();
-  if (prev !== tab) playTransition($('#editor'));
+  // editor sa vysunie zo strany, na ktorej je nová karta
+  if (prev !== tab) playTransition($('#editor'), prev ? Math.sign(state.tabs.indexOf(tab) - state.tabs.indexOf(prev)) : 0);
   state.active = tab;
   editor.setModel(tab.model);
   editor.updateOptions({ readOnly: tab.readonly, placeholder: placeholderFor(tab) });
@@ -1070,6 +1108,7 @@ function renderTabs() {
     el.append(div);
     if (tab === state.active) requestAnimationFrame(() => div.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
   }
+  slideIndicator(el, el.querySelector('.tab.active'), 'tabs');
 }
 
 function updateRunGlyphs(tab) {
@@ -1179,6 +1218,7 @@ function renderTree() {
   walk(state.workspace, 0);
   el.innerHTML = html.join('') || `<div class="tree-empty">${t('This folder is empty.')}<br><button id="tree-new">${t('Create a file')}</button></div>`;
   together?.markTree();
+  slideIndicator(el, el.querySelector('.row.active'), 'tree');
   const newBtn = $('#tree-new');
   if (newBtn) newBtn.onclick = () => newFile();
 }
@@ -1498,6 +1538,7 @@ async function renderProjects() {
         (state.showHidden ? `<div class="pr-hidden-list">${list.filter((p) => !shown(p)).map(row).join('')}</div>` : '')
       : '');
   together?.markTree();
+  slideIndicator(el, el.querySelector('.pr-row.active'), 'projects');
   const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
   if (current && state.projectKind !== current.kind) {
     state.projectKind = current.kind;
@@ -3146,6 +3187,7 @@ function openSettings() {
       if (!$('#s-about').childElementCount) updatesUI.render($('#s-about'), { compact: true });
     }
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+    slideIndicator(panel.querySelector('.s-nav'), panel.querySelector(`.s-tab[data-tab="${id}"]`), 'settings');
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
   // Dlhé karty (Vzhľad, Všeobecné): časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
