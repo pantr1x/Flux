@@ -6,6 +6,7 @@
 //  - hover nad obrázkom v HTML/CSS ukáže náhľad, nad odkazom odkaz.
 import { t } from './i18n.js';
 import { createRefactor, stringsIn } from './refactor.js';
+import { icon } from './icons.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -150,7 +151,13 @@ function renameEverywhere(monaco, editor, { refactor, getFilePath, toast }) {
     const draw = () => {
       const files = others.length;
       node.title = `${old} → ${neu}`;
-      node.innerHTML = `<span class="rn-text">${t('Rename {old} → {new} everywhere?', { old: `<code>${esc(short(old))}</code>`, new: `<code>${esc(short(neu))}</code>` })}${here.length ? ` <small>${t('{n} more', { n: here.length })}</small>` : ''}</span>${here.length ? `<button class="rn-yes" data-scope="file">${t('Rename all')}</button>` : ''}${files ? `<button class="rn-yes rn-all" data-scope="all">${files === 1 ? t('Also in 1 other file') : t('Also in {n} other files', { n: files })}</button>` : ''}<button class="rn-no" title="${t('Close (Esc)')}">✕</button>`;
+      const btns = [
+        here.length ? `<button class="rn-yes" data-scope="file">${t('This file')}<span class="rn-n">${here.length}</span></button>` : '',
+        files ? `<button class="rn-yes" data-scope="all">${t('Whole project')}<span class="rn-n">${files === 1 ? t('+1 file') : t('+{n} files', { n: files })}</span></button>` : '',
+      ].join('');
+      node.innerHTML = `<div class="rn-body"><div class="rn-head">${icon('edit', 14)}<span>${t('Rename everywhere?')}</span><button class="rn-no" title="${t('Close (Esc)')}">${icon('x', 13)}</button></div>
+        <div class="rn-change"><code class="rn-old">${esc(short(old))}</code>${icon('arrowRight', 13)}<code class="rn-new">${esc(short(neu))}</code></div>
+        <div class="rn-actions">${btns}</div></div>`;
     };
     const show = () => {
       if (id !== offerId) return;

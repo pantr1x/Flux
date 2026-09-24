@@ -1,4 +1,4 @@
-# Flux 1.4.8: premenovanie všade – aj v ostatných súboroch a cesty po premenovaní priečinka (sk, de, es, fr, it, pl, pt, uk).
+# Flux 1.4.8–1.4.10: premenovanie všade – aj v ostatných súboroch a cesty po premenovaní priečinka (sk, de, es, fr, it, pl, pt, uk).
 _V17 = {
     'Also in 1 other file': ('Aj v 1 ďalšom súbore', 'Auch in 1 weiteren Datei', 'También en 1 archivo más', 'Aussi dans 1 autre fichier', 'Anche in 1 altro file', 'Także w 1 innym pliku', 'Também em mais 1 arquivo', 'Також в 1 іншому файлі'),
     'Also in {n} other files': ('Aj v ďalších súboroch: {n}', 'Auch in {n} weiteren Dateien', 'También en {n} archivos más', 'Aussi dans {n} autres fichiers', 'Anche in altri {n} file', 'Także w innych plikach: {n}', 'Também em mais {n} arquivos', 'Також в інших файлах: {n}'),
@@ -38,6 +38,11 @@ _V17 = {
         'Zaktualizować ścieżki do {name} ({n}) w plikach: {f}?',
         'Atualizar {n} caminhos para {name} em {f} arquivos?',
         'Оновити шляхи до {name} ({n}) у файлах: {f}?'),
+    'Rename everywhere?': ('Premenovať všade?', 'Überall umbenennen?', '¿Renombrar en todas partes?', 'Renommer partout ?', 'Rinominare ovunque?', 'Zmienić nazwę wszędzie?', 'Renomear em todo lugar?', 'Перейменувати всюди?'),
+    'This file': ('Tento súbor', 'Diese Datei', 'Este archivo', 'Ce fichier', 'Questo file', 'Ten plik', 'Este arquivo', 'Цей файл'),
+    'Whole project': ('Celý projekt', 'Ganzes Projekt', 'Todo el proyecto', 'Tout le projet', 'Tutto il progetto', 'Cały projekt', 'Projeto inteiro', 'Увесь проєкт'),
+    '+1 file': ('+1 súbor', '+1 Datei', '+1 archivo', '+1 fichier', '+1 file', '+1 plik', '+1 arquivo', '+1 файл'),
+    '+{n} files': ('+{n} súbory', '+{n} Dateien', '+{n} archivos', '+{n} fichiers', '+{n} file', '+{n} pliki', '+{n} arquivos', '+{n} файли'),
     'Updated {n} paths.': ('Upravené cesty: {n}.', '{n} Pfade angepasst.', 'Se actualizaron {n} rutas.', '{n} chemins mis à jour.', '{n} percorsi aggiornati.', 'Zaktualizowano ścieżki: {n}.', '{n} caminhos atualizados.', 'Оновлено шляхів: {n}.'),
 }
 V17 = {code: {k: v[i] for k, v in _V17.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

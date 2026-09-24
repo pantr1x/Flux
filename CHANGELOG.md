@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.10 – 2026-09-24
+
+### Rename everywhere
+- The **Rename everywhere?** offer has a new, cleaner look: a small card that shows the old and the new name, with two clear buttons. **This file** shows how many places change, and **Whole project** shows how many other files change.
+
 ## 1.4.9 – 2026-09-24
 
 ### Rename everywhere
