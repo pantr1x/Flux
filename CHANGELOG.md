@@ -2,6 +2,12 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.3 – 2026-09-24
+
+### Updating
+- Updating Flux now shows a **small “Updating Flux” window** with just a progress bar – no “Flux Setup”, no “Installing” and no buttons. Flux opens again by itself when it is done.
+- The first installation of Flux looks the same as before.
+
 ## 1.4.2 – 2026-09-24
 
 ### Fixes
