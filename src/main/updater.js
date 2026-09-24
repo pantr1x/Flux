@@ -97,7 +97,7 @@ function createUpdater({ getSettings, send }) {
   }
 
   function install() {
-    if (state.canUpdate && state.status === 'ready') autoUpdater.quitAndInstall(false, true);
+    if (state.canUpdate && state.status === 'ready') autoUpdater.quitAndInstall(true, true);
   }
 
   // Pri štarte: skontrolovať (a pri automatických aktualizáciách aj stiahnuť).

@@ -1,101 +1,82 @@
-# Flux
+<p align="center">
+  <img src="build/icon.png" width="96" alt="Flux">
+</p>
 
-Moderný mini-editor pre Windows 11: **▶ jedno tlačidlo na spustenie Pythonu**, **Live Server** pre weby
-a **autocomplete**. Vzhľad je inšpirovaný Zen Browserom.
+<h1 align="center">Flux</h1>
 
-![ikona](build/icon.png)
+<p align="center">
+  A small, modern code editor for Windows 11 – run your code with one click, see websites live, get help from AI.
+  <br><br>
+  <a href="https://github.com/pantr1x/Flux/releases/latest"><b>Download for Windows</b></a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">What's new</a>
+  &nbsp;·&nbsp;
+  <a href="docs/PLUGINS.md">Make a plugin</a>
+</p>
 
-## ⬇️ Stiahnuť
+<p align="center">
+  <img src="docs/images/home.png" width="860" alt="Flux home screen">
+</p>
 
-**[Stiahnuť Flux pre Windows](https://github.com/pantr1x/Flux/releases/latest)** → v časti **Assets** klikni na `Flux-Setup-….exe`.
+## Install
 
-Flux sa potom aktualizuje sám. Čo je nové v každej verzii, nájdeš v [Releases](https://github.com/pantr1x/Flux/releases) aj priamo vo Fluxe (Nastavenia → About & updates).
+1. Open the [latest release](https://github.com/pantr1x/Flux/releases/latest) and download `Flux-Setup-x.y.z.exe` under **Assets**.
+2. Run it. Windows may show *"Windows protected your PC"* because Flux is not signed yet – click **More info → Run anyway**.
+3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → About & updates).
 
-## Čo vie
+Programming languages are not bundled, so the installer stays small. Flux downloads only the ones you pick, from their official sources.
+
+## What it does
 
 | | |
 |---|---|
-| **▶ Spustiť (F5)** | Spustí otvorený `.py` súbor – žiadne `cd` ani `python program.py`. Funguje `input()`, farby aj okná (tkinter, turtle, pygame). Pred spustením sa všetko uloží. |
-| **■ Zastaviť (Shift+F5)** | Ukončí program aj všetko, čo spustil. |
-| **Zelený ▶ v okraji** | Pri `if __name__ == "__main__":` – klik spustí súbor (ako v PyCharme). |
-| **Chyby** | Riadky `File "…", line 12` vo výstupe sú klikateľné. Pri chybe sa ukáže tlačidlo „Chyba: main.py, riadok 12“. |
-| **Chýbajúci balík** | Pri `ModuleNotFoundError` ponúkne „Nainštalovať requests“ (vie aj `cv2 → opencv-python`, `PIL → pillow`…). |
-| **Python** | Sám nájde `.venv` / `venv` v projekte, potom `py` launcher alebo Python v PATH. Dá sa vybrať aj ručne (klik na „Python 3.x“ dole). |
-| **Autocomplete – Python** | basedpyright (Pyright ako vo VS Code): návrhy s popisom vedľa zoznamu, parametre funkcií, automatické importy, podčiarknuté chyby, Ctrl+klik = prejsť na definíciu. Farby funkcií, tried a parametrov ako vo VS Code. |
-| **Úryvky (snippety)** | V Pythone napíš `main`, `for`, `def`, `class`, `input`, `try`… a stlač Tab. |
-| **Autocomplete – web** | HTML, CSS, JavaScript, JSON + **Emmet**: `!` + Tab = kostra HTML stránky, `ul>li*3` + Tab = zoznam. |
-| **Šablóny (Ctrl+N)** | Python skript, program s `main()`, `input`, okno (tkinter), kreslenie (turtle), hra (pygame), HTML stránka, celý web projekt (HTML + CSS + JS). |
-| **Tlačidlá podľa súboru** | ▶ Spustiť sa ukáže pri Pythone/JS, Live Server pri HTML/CSS. |
-| **Nastavenia (Ctrl+,)** | 12 farebných tém kódu (VS Code Dark/Light, One Dark, Dracula, Tokyo Night, Catppuccin, Nord, GitHub, Monokai…), 12 farieb + vlastná, písmo (predvolene Consolas ako VS Code), veľkosť, ligatúry, minimapa, zalamovanie, priesvitnosť. |
-| **Live Server (Alt+L)** | Náhľad webu priamo vedľa kódu. Po uložení sa stránka obnoví, CSS sa vymení bez reloadu. `console.log` zo stránky sa zobrazí vo výstupe. Náhľad ako mobil / tablet / PC. |
-| **Auto-ukladanie** | Zapnuté – ukladá samo po chvíli nepísania (vypneš dole v stavovom riadku). |
-| **Vzhľad** | Zen štýl: sivá priesvitná karta (Acrylic na Windows 11), zvislý panel, farba pre každý priečinok, ikony súborov ako vo VS Code, kompaktný režim (Ctrl+B). |
+| <img src="docs/icons/play.svg" width="20"> **One-click Run** | Press **F5** to run Python, JavaScript, Java, C/C++, C#, Go, Rust, Ruby, PHP or Lua. `input()`, colors and windows (tkinter, turtle, pygame) work. Missing languages are installed for you. |
+| <img src="docs/icons/globe.svg" width="20"> **Live Server** | A preview of your website right next to the code that reloads on save – also as a phone or tablet. |
+| <img src="docs/icons/code.svg" width="20"> **Smart editor** | Autocomplete and error checking for Python (Pyright), HTML, CSS and JavaScript, Emmet, snippets, rename everywhere, auto-closing HTML tags, image previews on hover, Markdown preview. |
+| <img src="docs/icons/sparkle.svg" width="20"> **Claude AI** | Ask Claude about your code (Ctrl+I) with your own API key. It can read your project and plan your to-do list. Flux also works the other way round: Claude Desktop, Claude Code and Cursor can use your Flux projects through MCP. |
+| <img src="docs/icons/git.svg" width="20"> **GitHub** | Sign in with GitHub, open any of your repositories as a project, commit and push, or publish a new project with one click. |
+| <img src="docs/icons/file.svg" width="20"> **Projects and files** | Projects with a description, to-do list and statistics (coding time, runs, lines). Open single files like `.md` or `.txt` without a project, or drop them onto the window. |
+| <img src="docs/icons/palette.svg" width="20"> **Make it yours** | Code themes and a theme studio with live preview, accent colors, text and mouse cursor (also your own picture), fonts, app size, corners, background image. 7 app languages. |
+| <img src="docs/icons/command.svg" width="20"> **Keyboard first** | Every shortcut can be changed. Search everything with Ctrl+Shift+A, run your own scripts from `shortcuts.json`. |
+| <img src="docs/icons/download.svg" width="20"> **Plugins** | A plugin store with ratings and screenshots: Error Lens, Auto Rename Tag, Python Docstring, Indent Rainbow, Better Comments, CSS Class Completion, Bookmarks, Color Highlight, Snippet Pack and Word Count. Writing your own takes a few lines of JavaScript. |
 
-## Skratky
+<p align="center">
+  <img src="docs/images/editor.png" width="420" alt="Editor with program output">
+  <img src="docs/images/project.png" width="420" alt="Project page">
+</p>
 
-| Klávesy | Akcia |
+## Shortcuts
+
+| Keys | Action |
 |---|---|
-| `F5` alebo `Ctrl+Enter` | Spustiť súbor / otvoriť náhľad webu |
-| `Shift+F5` | Zastaviť |
-| `Alt+L` | Live Server zap./vyp. |
-| `Ctrl+P` | Nájsť súbor |
-| `Ctrl+Shift+P` | Všetky príkazy |
-| `Ctrl+S` / `Ctrl+Shift+S` | Uložiť / uložiť všetko |
-| `Ctrl+N` / `Ctrl+W` | Nový súbor zo šablóny / zavrieť súbor |
-| `Ctrl+,` | Nastavenia |
-| `Ctrl+B` | Skryť bočný panel (vysunie sa pri nabehnutí myšou k ľavému okraju) |
-| `Ctrl+J` | Skryť/zobraziť výstup |
-| `Ctrl+Tab` | Ďalší otvorený súbor |
-| `Ctrl+koliesko`, `Ctrl+=`, `Ctrl+-` | Veľkosť písma |
+| `F5` / `Shift+F5` | Run / stop |
+| `Alt+L` | Live Server on / off |
+| `Ctrl+Shift+A` | Search everything |
+| `Ctrl+Shift+P` | Commands |
+| `Ctrl+P` | Open a file of the project |
+| `Ctrl+Alt+O` | Open any file |
+| `Ctrl+I` | Claude AI |
+| `Ctrl+Shift+V` | Markdown preview |
+| `Ctrl+,` | Settings |
 
-## Inštalácia
+All of them can be changed in Settings → Shortcuts.
 
-### Možnosť A – hotový inštalátor
-1. Na GitHube otvor záložku **Actions** → **Windows build** → posledný zelený beh.
-2. Dole v časti **Artifacts** stiahni **Flux-Windows** a rozbaľ ho.
-3. Spusti `Flux-Setup-0.1.0.exe`. Windows môže ukázať „Windows ochránil váš počítač“, pretože
-   inštalátor nie je podpísaný → **Ďalšie informácie** → **Spustiť aj tak**.
+## Plugins
 
-### Možnosť B – spustenie zo zdrojového kódu
-Potrebuješ [Node.js LTS](https://nodejs.org) a [Python](https://www.python.org/downloads/)
-(pri inštalácii zaškrtni **Add python.exe to PATH**). Najrýchlejšie v PowerShelli:
+<p align="center">
+  <img src="docs/images/plugins.png" width="700" alt="Plugin store">
+</p>
 
-```powershell
-winget install OpenJS.NodeJS.LTS
-winget install Python.Python.3.13
-```
+Plugins live in [`plugins/`](plugins) and are installed from **Settings → Plugins**. To make your own, press **Create a plugin** there, or read the [plugin guide](docs/PLUGINS.md). Publishing is a pull request that adds your plugin folder.
 
-Potom v priečinku projektu:
+## Build it yourself
 
-```powershell
+```bash
 npm install
-npm start
+npm start          # run Flux from the source
+npm run dist       # build the Windows installer into release/
 ```
 
-alebo len dvojklik na **`Flux.bat`**.
+Flux is built with Electron, Monaco (the editor of VS Code), xterm.js and basedpyright.
 
-Vlastný inštalátor zostavíš príkazom `npm run dist` (výsledok je v priečinku `release/`).
-
-## Ako je to postavené
-
-```
-src/
-  main/            hlavný proces (Node.js)
-    main.js        okno, súbory, nastavenia, prepojenie s UI
-    runner.js      spúšťanie programov v pseudoterminále (ConPTY)
-    python.js      hľadanie Python interpretera
-    liveServer.js  HTTP server + automatický reload
-    lsp.js         spustenie basedpyrightu (autocomplete pre Python)
-  preload.js       bezpečný most medzi UI a hlavným procesom
-  renderer/        rozhranie
-    app.js         editor (Monaco), taby, strom, terminál (xterm.js), náhľad, paleta
-    pyLsp.js       prepojenie basedpyrightu s editorom
-    themes.js      farebné témy kódu
-    templates.js   šablóny súborov a úryvky kódu
-    icons.js       ikony (aj ikony typov súborov)
-    styles.css     vzhľad
-scripts/build.mjs  zabalenie rozhrania cez esbuild
-```
-
-Technológie: Electron, Monaco Editor (editor z VS Code), xterm.js, node-pty, basedpyright, Emmet.
-Prieskum a plán ďalších krokov je v [RESEARCH.md](RESEARCH.md).
+A new version is released by raising `version` in `package.json` and adding its notes to `CHANGELOG.md` – GitHub Actions builds the installer and publishes the release, and installed copies update themselves.

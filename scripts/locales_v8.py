@@ -45,6 +45,12 @@ _V8 = {
     '{n} days ago': ('pred {n} dňami', 'vor {n} Tagen', 'hace {n} días', 'il y a {n} jours', '{n} giorni fa', '{n} dni temu'),
     '{n} h ago': ('pred {n} h', 'vor {n} Std.', 'hace {n} h', 'il y a {n} h', '{n} h fa', '{n} godz. temu'),
     '{n} min ago': ('pred {n} min', 'vor {n} Min.', 'hace {n} min', 'il y a {n} min', '{n} min fa', '{n} min temu'),
+    'Cursor / VS Code': ('Cursor / VS Code',)*6,
+    'flux': ('flux',)*6,
+    'coding time': ('čas kódenia', 'Programmierzeit', 'tiempo programando', 'temps de code', 'tempo di codice', 'czas kodowania'),
+    'last change': ('posledná zmena', 'letzte Änderung', 'último cambio', 'dernière modification', 'ultima modifica', 'ostatnia zmiana'),
+    'lines of code': ('riadkov kódu', 'Codezeilen', 'líneas de código', 'lignes de code', 'righe di codice', 'linii kodu'),
+    'projects': ('projektov', 'Projekte', 'proyectos', 'projets', 'progetti', 'projektów'),
 }
 _V8 = {k: v for k, v in _V8.items() if v[0]}
 V8 = {code: {k: v[i] for k, v in _V8.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl'])}

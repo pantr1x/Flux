@@ -20,8 +20,25 @@ const CODE_LANGS = [
   { id: 'cpp', label: 'C / C++', icon: 'a.cpp', tool: 'cpp' },
   { id: 'csharp', label: 'C#', icon: 'a.cs', tool: 'csharp' },
   { id: 'go', label: 'Go', icon: 'a.go', tool: 'go' },
-  { id: 'explore', label: 'Just exploring', icon: null },
+  { id: 'rust', label: 'Rust', icon: 'a.rs', tool: 'rust', more: true },
+  { id: 'ruby', label: 'Ruby', icon: 'a.rb', tool: 'ruby', more: true },
+  { id: 'php', label: 'PHP', icon: 'a.php', tool: 'php', more: true },
+  { id: 'lua', label: 'Lua', icon: 'a.lua', tool: 'lua', more: true },
+  { id: 'explore', label: 'Just exploring', icon: null, more: true },
 ];
+
+// Ukážka kódu pri výbere vzhľadu (farby sa menia podľa zvolenej témy).
+const PREVIEW_CODE = `# Guess the number
+import random
+
+def play(name: str) -> int:
+    secret = random.randint(1, 10)
+    tries = 0
+    while True:
+        tries += 1
+        if int(input("Guess: ")) == secret:
+            print(f"Well done, {name}!")
+            return tries`;
 
 // Ktoré vybrané jazyky ešte treba stiahnuť.
 function chosenTools(app) {
@@ -44,6 +61,7 @@ export function createOnboarding(app) {
   let step = 0;
   let languages = [{ code: 'en', name: 'English' }];
   let langChanged = false;
+  let moreLangs = false;
 
   function dots() {
     return `<div class="ob-dots">${[1, 2, 3, 4].map((i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>`;
@@ -81,16 +99,22 @@ export function createOnboarding(app) {
     }
     if (step === 2) {
       const chosen = s.codeLangs || [];
+      // Ďalšie jazyky sa ukážu po kliknutí na „More languages“ (alebo keď už nejaký z nich vybral).
+      const showMore = moreLangs || CODE_LANGS.some((c) => c.more && c.id !== 'explore' && chosen.includes(c.id));
+      const list = CODE_LANGS.filter((c) => showMore || !c.more);
       return `<div class="ob-step"><h2>${t('What do you want to code?')}</h2><p>${t('Flux will show the right templates and buttons first. Pick as many as you like.')}</p>
-        <div class="ob-grid">${CODE_LANGS.map(
-          (c) =>
-            `<button class="ob-card${chosen.includes(c.id) ? ' on' : ''}" data-code="${c.id}"><span class="ob-ic">${
-              c.icon ? app.fileIcon(c.icon).replace(/width="16" height="16"/, 'width="34" height="34"') : app.icon('sparkle', 30)
-            }</span><b>${t(c.label)}</b>${cardStatus(c)}<i class="ob-check">${app.icon('check', 14)}</i></button>`,
-        ).join('')}</div></div>${nav()}`;
+        <div class="ob-grid${showMore ? ' more' : ''}">${list
+          .map(
+            (c) =>
+              `<button class="ob-card${chosen.includes(c.id) ? ' on' : ''}" data-code="${c.id}"><span class="ob-ic">${
+                c.icon ? app.fileIcon(c.icon).replace(/width="16" height="16"/, 'width="34" height="34"') : app.icon('sparkle', 30)
+              }</span><b>${t(c.label)}</b>${cardStatus(c)}<i class="ob-check">${app.icon('check', 14)}</i></button>`,
+          )
+          .join('')}${showMore ? '' : `<button class="ob-card ob-more" data-more-langs><span class="ob-ic">${app.icon('plus', 28)}</span><b>${t('More languages')}</b><small class="ob-st">Rust, Ruby, PHP, Lua…</small></button>`}</div></div>${nav()}`;
     }
     if (step === 3) {
-      return `<div class="ob-step"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
+      return `<div class="ob-step ob-look"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
+        <div class="ob-look-cols"><div class="ob-look-pick">
         <div class="ob-themes">${LOOK_THEMES.map(
           (id) =>
             `<button class="ob-theme${(s.codeTheme || 'vscode-dark') === id ? ' on' : ''}" data-theme="${id}"><span class="swatch">${themeSwatch(id)
@@ -99,7 +123,11 @@ export function createOnboarding(app) {
         ).join('')}</div>
         <div class="ob-accents">${app.accents
           .map((a) => `<button data-accent="${a}" style="--c:${app.accentHex(a)}" class="${app.accentHex(a) === app.currentAccent() ? 'on' : ''}"></button>`)
-          .join('')}</div></div>${nav()}`;
+          .join('')}</div></div>
+        <div class="ob-preview" aria-hidden="true">
+          <div class="obp-bar"><i></i><i></i><i></i><span class="obp-tab">${app.fileIcon('main.py')}main.py</span><span class="obp-run">${app.icon('play', 11)}${t('Run')}</span></div>
+          <pre class="obp-code"></pre>
+        </div></div></div>${nav()}`;
     }
     if (step === 4) {
       // Inštalácia vybraných jazykov – beží na pozadí, dá sa preskočiť.
@@ -144,6 +172,9 @@ export function createOnboarding(app) {
     next.innerHTML = body();
     stage.append(next);
     if (animate) busyUntil = performance.now() + 420;
+    // Ukážka editora pri výbere vzhľadu – farby sa menia hneď s témou a akcentom.
+    const pre = next.querySelector('.obp-code');
+    if (pre && app.colorize) app.colorize(PREVIEW_CODE, 'python').then((html) => (pre.innerHTML = html));
   }
 
   // Označenie výberu bez prekreslenia celej stránky.
@@ -223,6 +254,16 @@ export function createOnboarding(app) {
         b.classList.remove('loading');
         mark('[data-lang]', (x) => x.dataset.lang === (app.getSettings().language || 'en'));
         app.toast(t('Could not download the language. Check your internet connection.'), 'error');
+      }
+      return;
+    }
+    if (b.dataset.moreLangs !== undefined) {
+      moreLangs = true;
+      const grid = el.querySelector('.ob-body:not(.leaving) .ob-grid');
+      if (grid) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = body();
+        grid.replaceWith(tmp.querySelector('.ob-grid'));
       }
       return;
     }

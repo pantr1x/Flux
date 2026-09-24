@@ -2,6 +2,28 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.3 – 2026-09-24
+
+### Project page
+- A new layout: big tiles with coding time, runs, lines of code, files and the last change at the top.
+- Files, to-do list and Git side by side; the languages of the project are shown under its name.
+
+### Home screen
+- Your statistics across all projects – coding time, runs, lines of code and projects.
+
+### Looks
+- New drop-down menus in the Flux style instead of the white Windows lists.
+- Switches in the Windows 11 style.
+- Switching between light and dark mode works every time (it broke when a remembered theme was deleted).
+
+### First start
+- *More languages* – Rust, Ruby, PHP, Lua and more.
+- The *Look* step shows a live preview of the code with the theme and accent you pick.
+
+### Updates
+- *Restart and update* installs quietly in the background, without the installer windows. Only the changed parts of Flux are downloaded.
+- The *What's new* window closes with Esc or Enter.
+
 ## 0.3.2 – 2026-09-24
 
 ### New home screen

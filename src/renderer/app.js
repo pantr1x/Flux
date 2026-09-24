@@ -23,6 +23,7 @@ import { BINDINGS, CATEGORIES, createKeymap, kbdHtml } from './keymap.js';
 import { createPluginHost } from './pluginHost.js';
 import { createPluginsUI } from './pluginsUI.js';
 import { createThemeStudio } from './themeStudio.js';
+import { setupFancySelects } from './fselect.js';
 import { createUpdatesUI } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
 
@@ -2172,9 +2173,11 @@ async function createVenv() {
 // ---------- nastavenia ----------
 async function toggleTheme() {
   // Prepne medzi naposledy použitou tmavou a svetlou témou kódu.
-  const next = isDark() ? setting('lastLight') : setting('lastDark');
+  // Ak si zapamätaná téma medzitým zmizla alebo zmenila typ (vlastná téma), použije sa predvolená.
+  const want = isDark() ? 'light' : 'dark';
+  let next = want === 'light' ? setting('lastLight') : setting('lastDark');
+  if (!THEMES[next] || THEMES[next].type !== want) next = want === 'light' ? 'vscode-light' : DEFAULT_THEME;
   await setCodeTheme(next);
-  applyTheme();
 }
 
 async function toggleAutosave() {
@@ -3080,6 +3083,16 @@ async function openStart() {
     <div class="st-scroll"><div class="st-inner hm">
       <header class="hm-hero">
         <div><small class="hm-date">${escapeHtml(date)}</small><h1>${greet}</h1><p class="st-sub">${t('What do you want to work on?')}</p></div>
+        ${
+          list.length
+            ? `<div class="hm-stats" id="hm-stats">
+          <div class="pj-tile"><span class="pj-tile-ic">${icon('clock', 14)}</span><b data-k="time">–</b><small>${t('coding time')}</small></div>
+          <div class="pj-tile"><span class="pj-tile-ic">${icon('play', 13)}</span><b data-k="runs">–</b><small>${t('runs')}</small></div>
+          <div class="pj-tile"><span class="pj-tile-ic">${icon('code', 14)}</span><b data-k="lines">–</b><small>${t('lines of code')}</small></div>
+          <div class="pj-tile"><span class="pj-tile-ic">${icon('folder', 14)}</span><b data-k="projects">${list.length}</b><small>${t('projects')}</small></div>
+        </div>`
+            : ''
+        }
       </header>
       <div class="hm-actions">
         <button class="hm-act primary" data-act="newproject"><span class="hm-act-ic">${icon('plus', 17)}</span><span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
@@ -3121,6 +3134,16 @@ async function openStart() {
       }
       el.querySelector('.hm-none').hidden = any;
     };
+  // Súčty za všetky projekty: čas, spustenia, riadky.
+  Promise.all(list.map((p) => flux.projectStats(p.dir).catch(() => null))).then((all) => {
+    const box = el.querySelector('#hm-stats');
+    if (!box) return;
+    const ok = all.filter(Boolean);
+    const time = ok.reduce((n, st) => n + (st.time || 0), 0);
+    box.querySelector('[data-k="time"]').textContent = time >= 60 ? formatTime(time) : '0 min';
+    countUp(box.querySelector('[data-k="lines"]'), ok.reduce((n, st) => n + (st.lines || 0), 0));
+    countUp(box.querySelector('[data-k="runs"]'), list.reduce((n, p) => n + (activity.runs(p.dir) || 0), 0));
+  });
   for (const p of [...pinned, ...recent]) {
     flux.projectStats(p.dir).then((st) => {
       for (const x of el.querySelectorAll('.hm-stat')) {
@@ -3226,32 +3249,41 @@ function renderWelcome() {
         : kind === 'folder'
           ? []
           : [['open-main', 'code', t('Open main file')], ['run-main', 'play', t('Run it')]];
+    const info = (state.projectList || []).find((p) => keyOf(p.dir) === keyOf(ws)) || {};
+    const langs = (info.langs || []).filter((l) => KIND_LANG_NAMES[l]);
+    const tile = (k, ic, labelText, value = '–') => `<div class="pj-tile"><span class="pj-tile-ic">${icon(ic, 15)}</span><b data-k="${k}">${value}</b><small>${labelText}</small></div>`;
     w.innerHTML = `
-      <div class="welcome-inner pj">
-        <div class="wl-head">
-          <span class="wl-icon">${kindIcon(kind, 40)}</span>
+      <div class="welcome-inner pj pj2">
+        <header class="pj-top">
+          <span class="wl-icon">${kindIcon(kind, 40, info.github)}</span>
           <div class="wl-title">
             <h1>${escapeHtml(basename(ws))}</h1>
             <p class="pj-desc${meta.description ? '' : ' empty'}" data-edit-desc title="${t('Click to edit')}">${escapeHtml(meta.description || t('Add a short description…'))}</p>
+            ${langs.length ? `<div class="pj-langs">${langs.map((l) => `<span class="pj-lang">${fileIcon(KIND_FILE[l] || 'a.txt')}${escapeHtml(KIND_LANG_NAMES[l])}</span>`).join('')}${info.github ? `<span class="pj-lang">${icon('git', 12)}GitHub</span>` : ''}</div>` : ''}
           </div>
+          <div class="pj-actions">
+            ${acts.map(([act, ic, label], i) => `<button class="s-btn${i ? '' : ' primary'}" data-act="${act}">${icon(ic, 14)}${label}</button>`).join('')}
+            <button class="s-btn${acts.length ? '' : ' primary'}" data-act="new">${icon('filePlus', 14)}${t('New file')}</button>
+            <button class="icon-btn" data-act="quick" title="${t('Find file')} (Ctrl+P)">${icon('search', 16)}</button>
+          </div>
+        </header>
+        <div class="pj-tiles" id="wl-stats">
+          ${tile('time', 'clock', t('coding time'))}
+          ${tile('runs', 'play', t('runs'), runs)}
+          ${tile('lines', 'code', t('lines of code'))}
+          ${tile('files', 'file', t('files'))}
+          ${tile('changed', 'refresh', t('last change'))}
         </div>
-        <div class="pj-stats" id="wl-stats">
-          <span>${icon('clock', 13)}<b data-k="time">–</b></span>
-          <span>${icon('play', 12)}<b data-k="runs">${runs}</b> ${t('runs')}</span>
-          <span>${icon('code', 13)}<b data-k="lines">–</b> ${t('lines')}</span>
-          <span>${icon('file', 13)}<b data-k="files">–</b> ${t('files')}</span>
-        </div>
-        <div class="welcome-actions">
-          ${acts.map(([act, ic, label], i) => `<button class="${i ? '' : 'primary'}" data-act="${act}">${icon(ic)}${label}</button>`).join('')}
-          <button class="${acts.length ? '' : 'primary'}" data-act="new">${icon('filePlus')}${t('New file')}</button>
-          <button data-act="quick">${icon('command')}${t('Find file')}</button>
-        </div>
-        <div class="pj-files" id="pj-files"></div>
-        <div class="pj-git" id="pj-git"></div>
-        <div class="pj-todo">
-          <div class="pj-h"><span>${t('To-do')}</span><small id="pj-count"></small></div>
-          <form class="pj-add" id="pj-add"><span class="pj-plus">${icon('plus', 14)}</span><input id="pj-new" placeholder="${t('Add a task and press Enter…')}" autocomplete="off" spellcheck="false" maxlength="200"></form>
-          <ul class="pj-list" id="pj-list"></ul>
+        <div class="pj-cols">
+          <section class="pj-panel"><div class="pj-files" id="pj-files"><div class="pj-h"><span>${t('Files')}</span></div><div class="s-loading"><span class="spin"></span></div></div></section>
+          <div class="pj-side">
+            <section class="pj-panel pj-todo">
+              <div class="pj-h"><span>${t('To-do')}</span><small id="pj-count"></small></div>
+              <form class="pj-add" id="pj-add"><span class="pj-plus">${icon('plus', 14)}</span><input id="pj-new" placeholder="${t('Add a task and press Enter…')}" autocomplete="off" spellcheck="false" maxlength="200"></form>
+              <ul class="pj-list" id="pj-list"></ul>
+            </section>
+            <section class="pj-panel pj-git" id="pj-git"></section>
+          </div>
         </div>
       </div>`;
     renderTodos(ws);
@@ -3268,27 +3300,34 @@ function renderWelcome() {
     flux.projectStats(ws).then((st) => {
       if (state.workspace !== ws || !$('#wl-stats')) return;
       const q = (k) => $(`#wl-stats [data-k="${k}"]`);
-      q('time').textContent = formatTime(st.time);
+      q('time').textContent = st.time >= 60 ? formatTime(st.time) : '0 min';
       countUp(q('lines'), st.lines);
       countUp(q('files'), st.files);
       countUp(q('runs'), runs);
+      q('changed').textContent = st.lastModified ? timeAgo(st.lastModified) : '–';
     });
     // Hlavné súbory projektu (pri webe stránky .html) na jeden klik.
     flux.listAll().then((files) => {
       if (state.workspace !== ws || !$('#pj-files')) return;
       state.projectFiles = files;
       const main = mainFileOf(files, kind);
-      const chip = (f) => `<button class="pj-file${f === main ? ' main' : ''}" data-open="${escapeAttr(f)}">${fileIcon(basename(f))}<span>${escapeHtml(relPath(f))}</span></button>`;
-      // Web: stránky, štýly a skripty zvlášť; inak hlavné súbory jazyka.
+      const row = (f) => {
+        const rel = relPath(f);
+        const dir = rel.slice(0, rel.length - basename(f).length).replace(/[\\/]$/, '');
+        return `<button class="pj-row${f === main ? ' main' : ''}" data-open="${escapeAttr(f)}">${fileIcon(basename(f))}<b>${escapeHtml(basename(f))}</b><small>${escapeHtml(dir)}</small>${f === main ? `<span class="pj-main">${t('main')}</span>` : ''}</button>`;
+      };
+      // Web: stránky, štýly a skripty zvlášť; inak súbory jazykov projektu.
+      const exts = [...new Set([...(MAIN_EXT[kind] || []), ...langs.flatMap((l) => MAIN_EXT[l] || [])])];
       const groups =
         kind === 'web'
           ? [[t('Pages'), /\.html?$/i], [t('Styles'), /\.(css|scss|sass|less)$/i], [t('Scripts'), /\.(m?js|ts)$/i]]
-          : [[t('Files'), new RegExp(`\\.(${(MAIN_EXT[kind] || ['py', 'html', 'js']).join('|')})$`, 'i')]];
+          : [[t('Files'), new RegExp(`\\.(${(exts.length ? exts : ['py', 'html', 'js', 'md', 'txt']).join('|')})$`, 'i')]];
       const html = groups
-        .map(([label, re]) => [label, files.filter((f) => re.test(f)).slice(0, 8)])
+        .map(([label, re]) => [label, files.filter((f) => re.test(f))])
         .filter(([, list]) => list.length)
-        .map(([label, list]) => `<div class="pj-group"><div class="pj-h"><span>${label}</span></div><div class="pj-chips">${list.map(chip).join('')}</div></div>`)
+        .map(([label, list]) => `<div class="pj-group"><div class="pj-h"><span>${label}</span><small>${list.length}</small></div><div class="pj-rows">${list.slice(0, 12).map(row).join('')}</div>${list.length > 12 ? `<button class="pj-more" data-act="quick">${t('{n} more', { n: list.length - 12 })}</button>` : ''}</div>`)
         .join('');
+      if (!html) $('#pj-files').innerHTML = `<div class="pj-h"><span>${t('Files')}</span></div><div class="pj-empty">${t('This folder is empty.')}</div>`;
       if (html) $('#pj-files').innerHTML = `<div class="pj-groups">${html}</div>`;
     });
   }
@@ -3631,6 +3670,7 @@ function layoutEvents() {
 async function main() {
   const init = await flux.init();
   state.platform = init.platform;
+  setupFancySelects();
   state.home = init.home || '';
   state.version = init.version || '';
   state.mica = !!init.mica;
@@ -3651,6 +3691,7 @@ async function main() {
   activity = createActivity({ getSettings: () => state.settings, saveSettings });
   tools = createTools({ toast });
   onboarding = createOnboarding({
+    colorize: (code, lang) => monaco.editor.colorize(code, lang, { tabSize: 4 }),
     fileIcon,
     icon,
     setCodeTheme,

@@ -116,8 +116,20 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       <div class="ai-body up-wn-body">${markdown(rel?.body || t('Flux was updated to version {v}.', { v: st.version }), { icons: true })}</div>
       <footer><div class="grow"></div><button class="ob-primary" data-close>${t('Continue')}</button></footer></div>`;
     document.body.append(el);
+    const close = () => {
+      el.remove();
+      window.removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
     el.onclick = (e) => {
-      if (e.target === el || e.target.closest('[data-close]')) el.remove();
+      if (e.target === el || e.target.closest('[data-close]')) close();
     };
   }
 
