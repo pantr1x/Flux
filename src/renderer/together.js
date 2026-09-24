@@ -98,15 +98,32 @@ export function createTogether({ monaco, editor, t, icon, esc, toast, getWorkspa
     );
   }
 
-  // Bodka v strome pri súboroch, ktoré majú ostatní otvorené.
+  // Zelená bodka = niekto tu práve pracuje: pri súbore, pri každom priečinku nad ním
+  // (aj zbalenom) a pri projekte v zozname projektov. Keď píše, bodka pulzuje.
+  const norm = (p) => String(p).replace(/[\\/]+/g, '/').replace(/\/$/, '').toLowerCase();
+  const dot = (who) =>
+    `<i class="tg-dot${who.some((p) => p.state.typing) ? ' live' : ''}" title="${esc(who.map((p) => `${p.name}${p.state.file ? ` – ${p.state.file.split('/').pop()}` : ''}${p.state.typing ? ' ✎' : ''}`).join('\n'))}"></i>`;
   function markTree() {
-    document.querySelectorAll('#tree .tg-dot').forEach((d) => d.remove());
-    if (!running || !getWorkspace()) return;
+    document.querySelectorAll('#tree .tg-dot, #projects .tg-dot').forEach((d) => d.remove());
+    if (!running) return;
+    for (const row of document.querySelectorAll('#projects .pr-row[data-dir]')) {
+      const who = peers.filter((p) => p.state?.project && p.state.project === basename(row.dataset.dir));
+      if (who.length) row.querySelector('.pr-name')?.insertAdjacentHTML('beforeend', dot(who));
+    }
+    if (!getWorkspace()) return;
+    const marks = new Map();
     for (const p of peers.filter(samePlace)) {
       if (!p.state.file) continue;
-      const abs = join(getWorkspace(), p.state.file).toLowerCase();
-      const row = [...document.querySelectorAll('#tree [data-path]')].find((r) => r.dataset.path.toLowerCase() === abs);
-      if (row) row.insertAdjacentHTML('beforeend', `<i class="tg-dot" style="--c:${COLORS[colorIdx(p.id)]}" title="${esc(p.name)}"></i>`);
+      const parts = p.state.file.split('/');
+      for (let i = 1; i <= parts.length; i++) {
+        const k = norm(join(getWorkspace(), ...parts.slice(0, i)));
+        marks.set(k, [...(marks.get(k) || []), p]);
+      }
+    }
+    if (!marks.size) return;
+    for (const row of document.querySelectorAll('#tree [data-path]')) {
+      const who = marks.get(norm(row.dataset.path));
+      if (who) row.insertAdjacentHTML('beforeend', dot(who));
     }
   }
 

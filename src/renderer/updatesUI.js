@@ -71,8 +71,8 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       <div class="s-group">
         <div class="s-row" id="up-status"></div>
         <label class="s-row"><span><b>${t('Update automatically')}</b><small>${t('downloads new versions in the background and installs them when you close Flux')}</small></span><input type="checkbox" class="switch" id="up-auto"${getSetting('autoUpdate') !== false ? ' checked' : ''}></label>
+        ${compact ? `<div class="s-row"><span><b>${t('All versions')}</b><small>${t('Download any version of Flux from GitHub Releases.')}</small></span><button class="s-btn" data-up-releases>${icon('external', 13)}${t('Open')}</button></div>` : ''}
       </div>
-      ${compact ? `<div class="s-group"><div class="s-row"><span><b>${t('All versions')}</b><small>${t('Download any version of Flux from GitHub Releases.')}</small></span><button class="s-btn" data-up-releases>${icon('external', 13)}${t('Open')}</button></div></div>` : ''}
       ${compact ? `<details class="up-notes-fold"><summary>${icon('chevron', 12)}${t('Release notes')}</summary>${notes}</details>` : `<h3>${t('Release notes')}</h3>${notes}`}`;
     drawStatus();
     const fold = box.querySelector('.up-notes-fold');

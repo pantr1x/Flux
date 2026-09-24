@@ -31,6 +31,22 @@ node --input-type=module --check < src/renderer/app.js   # renderer files are ES
 node --check src/main/main.js                            # main process is CommonJS
 ```
 
+**Check the UI in the real app, not only the code.** In a cloud session Electron runs headless:
+
+```bash
+npm ci --ignore-scripts && node node_modules/electron/install.js && node scripts/build.mjs
+xvfb-run -a -s "-screen 0 1280x800x24" node test.mjs   # Playwright `_electron.launch()`
+```
+
+Launch with `executablePath: 'node_modules/electron/dist/electron'`, `args: ['--no-sandbox', '--user-data-dir=<tmp>', '.']` and put a `settings.json` in that folder (`onboarded: true`, `projects`, `lastFolder`, `togetherPlugin`…) so the app opens straight into a project. Take screenshots of every screen you touched and also check:
+
+- no element with the `hidden` attribute is still displayed (`[hidden]` is forced to `display: none` globally – keep it that way),
+- text does not run under icons or get cut to `…` in cards (`.pj-tile`),
+- layouts at narrow widths (AI panel open, Live Server open),
+- shortcuts on every screen (home screen, settings, dialogs) – the global key handler in `app.js` returns early per screen, so order matters (settings are checked before the home screen because they can open on top of it).
+
+Flux Together peers can be faked from the test: `app.evaluate(({ BrowserWindow }, p) => BrowserWindow.getAllWindows()[0].webContents.send('lan:peers', p), peers)` with `peers = [{ id, name, state: { project, file, line, col, text, typing, recent } }]` (send again before each check – the real LAN module re-emits every 2 s).
+
 For the website, open `site/index.html` in a browser (or Playwright with `/opt/pw-browsers/chromium` in cloud sessions) and check desktop and phone width (no horizontal scroll).
 
 ## Conventions

@@ -1104,6 +1104,11 @@ async function revealInTree(path) {
   renderTree();
 }
 
+// Dlhé hodnoty v kartách štatistík („12 min ago“, „3 h 20 min“) menším písmom, aby sa zmestili celé.
+function fitTiles(box) {
+  for (const b of box?.querySelectorAll('.pj-tile b') || []) b.classList.toggle('pj-long', b.textContent.trim().length > 6);
+}
+
 function renderTree() {
   const el = $('#tree');
   if (!state.workspace) {
@@ -1451,6 +1456,7 @@ async function renderProjects() {
       ? `<button class="pr-row pr-new pr-hidden${state.showHidden ? ' open' : ''}" data-act="hidden">${icon('chevron', 13)}<span>${t('{n} hidden', { n: hiddenCount })}</span></button>` +
         (state.showHidden ? `<div class="pr-hidden-list">${list.filter((p) => !shown(p)).map(row).join('')}</div>` : '')
       : '');
+  together?.markTree();
   const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
   if (current && state.projectKind !== current.kind) {
     state.projectKind = current.kind;
@@ -3140,6 +3146,8 @@ function openSettings() {
     if (!any) panel.querySelector('.s-body').insertAdjacentHTML('beforeend', `<div class="s-loading" id="s-noresult">${t('Nothing found')}</div>`);
   };
   requestAnimationFrame(() => $('#s-find')?.focus());
+  // Otvorené z domovskej obrazovky (koliesko, Ctrl+,): domov ide pod nastavenia, inak by ich zakryl.
+  $('#start').classList.add('under-settings');
   // Zoznam jazykov z GitHubu.
   flux.i18nList().then((list) => {
     const box = $('#s-lang');
@@ -3358,12 +3366,19 @@ function settingsIndex() {
   const out = [];
   for (const sec of $('#settings').querySelectorAll('[data-pane]')) {
     // Skratky sú v hľadaní ako príkazy, nie ako nastavenia.
-    for (const el of sec.querySelectorAll('.s-row:not(.s-key) > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
+    // aj nadpisy častí (Accent color, Code theme…), nielen riadky
+    for (const el of sec.querySelectorAll(':scope > h3, .s-row:not(.s-key) > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
       const label = el.firstChild?.textContent?.trim() || el.textContent.trim();
       if (label && !out.some((o) => o.label === label)) out.push({ tab: sec.dataset.pane, label });
     }
   }
-  if (wasHidden) $('#settings').hidden = true;
+  // Aktualizácie sa do Všeobecných dokresľujú až neskôr (updatesUI) – ich riadky pridáme ručne.
+  for (const label of [t('Check for updates'), t('Update automatically'), t('All versions'), t('Release notes')])
+    if (!out.some((o) => o.label === label)) out.push({ tab: 'general', label });
+  if (wasHidden) {
+    $('#settings').hidden = true;
+    $('#start').classList.remove('under-settings');
+  }
   settingsIndexCache = out;
   return out;
 }
@@ -3380,13 +3395,16 @@ async function searchEverything() {
     run: () => {
       state.settingsTab = x.tab;
       openSettings();
-      // Nájdený riadok zablikne.
-      const row = [...$('#settings').querySelectorAll('.s-row, .theme-card, .tc-row')].find((r) => r.textContent.includes(x.label));
-      if (row) {
-        row.scrollIntoView({ block: 'center' });
+      // Nájdený riadok zablikne (riadky aktualizácií sa dokreslia o chvíľu – skúsi sa znova).
+      const find = (retry) => {
+        const pane = $(`#settings [data-pane="${x.tab}"]`);
+        const row = [...(pane || $('#settings')).querySelectorAll('.s-row, .theme-card, .tc-row, h3, .up-notes-fold')].find((r) => r.textContent.includes(x.label));
+        if (!row) return retry && setTimeout(() => find(false), 500);
+        row.scrollIntoView({ block: row.tagName === 'H3' ? 'start' : 'center' });
         row.classList.add('flash');
         setTimeout(() => row.classList.remove('flash'), 1400);
-      }
+      };
+      find(true);
     },
   }));
   const projects = (state.projectList || []).map((p) => ({
@@ -3480,6 +3498,7 @@ function rerenderSettings() {
 
 function closeSettings() {
   $('#settings').hidden = true;
+  $('#start').classList.remove('under-settings');
   navNote();
   if (state.active) editor.focus();
 }
@@ -3779,6 +3798,7 @@ async function openStart() {
     const ok = all.filter(Boolean);
     const time = ok.reduce((n, st) => n + (st.time || 0), 0);
     box.querySelector('[data-k="time"]').textContent = time >= 60 ? formatTime(time) : '0 min';
+    fitTiles(box);
     countUp(box.querySelector('[data-k="lines"]'), ok.reduce((n, st) => n + (st.lines || 0), 0));
     countUp(box.querySelector('[data-k="runs"]'), list.reduce((n, p) => n + (activity.runs(p.dir) || 0), 0));
   });
@@ -3953,6 +3973,7 @@ function renderWelcome() {
       countUp(q('files'), st.files);
       countUp(q('runs'), runs);
       q('changed').textContent = st.lastModified ? timeAgo(st.lastModified) : '–';
+      fitTiles($('#wl-stats'));
     });
     // Hlavné súbory projektu (pri webe stránky .html) na jeden klik.
     flux.listAll().then((files) => {
@@ -4158,18 +4179,30 @@ function keybindings() {
         }
         return;
       }
-      if (!$('#start').hidden) {
-        if (e.key === 'Escape' && state.workspace) {
-          e.preventDefault();
-          closeStart();
-        }
-        return;
-      }
+      // Nastavenia môžu byť otvorené aj nad domovskou obrazovkou – Esc zavrie najprv ich.
       if (!$('#settings').hidden) {
         if (e.key === 'Escape') {
           e.preventDefault();
           closeSettings();
         }
+        return;
+      }
+      if (!$('#start').hidden) {
+        // Na domovskej obrazovke fungujú skratky, ktoré sú na nej napísané.
+        const ctrl = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
+        let used = true;
+        if (e.key === 'Escape' && state.workspace) closeStart();
+        else if (ctrl && e.shiftKey && key === 'n') {
+          closeStart();
+          newProject();
+        } else if (ctrl && e.altKey && e.code === 'KeyO') openFileDialog();
+        else if (ctrl && !e.shiftKey && key === 'o') openFolderDialog();
+        else if (ctrl && e.shiftKey && key === 'a') searchEverything();
+        else if (ctrl && e.shiftKey && key === 'p') openCommandPalette();
+        else if (ctrl && e.key === ',') openSettings();
+        else used = false;
+        if (used) e.preventDefault();
         return;
       }
       const ctrl = e.ctrlKey || e.metaKey;

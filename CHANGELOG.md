@@ -2,6 +2,23 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.2.2 – 2026-09-24
+
+### Flux Together 1.1 – green dots
+- A **green dot** now shows where your friends are working: next to the **project**, next to **every folder** on the way to their file (even when the folder is folded) and next to the **file** itself.
+- The dot **pulses while someone is typing**. Hover it to see who it is and which file they have open.
+- You also see the dot next to your other projects in the sidebar when a friend works in one of them.
+
+### Fixes
+- **Sidebar:** no more empty strips with double lines under *N hidden* when the *Files* or *Together* list is empty.
+- **Home screen:** *Ctrl+Shift+N*, *Ctrl+O*, *Ctrl+Shift+A* and *Ctrl+,* work there now – before, only Esc did.
+- **Home screen:** the gear button (and Ctrl+,) opened Settings *behind* the home screen, so nothing seemed to happen. Esc now closes Settings first.
+- **Home screen:** the action cards always fill the whole row, also when *From GitHub* is off.
+- **Project page:** numbers like *12 min ago* are shown in full instead of *12 …*, and the page fits when the AI panel is open.
+- **Live Server + AI panel:** the editor keeps a usable width instead of shrinking to a few letters.
+- **Settings → General:** *All versions* sits in the same box as the other update settings.
+- **Search everything (Ctrl+Shift+A)** finds section names like *Accent color* and the update settings (*Update automatically*, *All versions*).
+
 ## 1.2.1 – 2026-09-24
 
 ### Settings → General
