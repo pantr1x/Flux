@@ -1878,6 +1878,8 @@ body:not(.no-mica):not(.wallpaper) #start {
   align-items: center;
   gap: 8px;
   padding-left: 16px;
+  /* miesto pre tlačidlá okna Windows vpravo hore (inak by boli cez koliesko nastavení) */
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
   font-weight: 650;
   font-size: 15px;
 }
@@ -4488,43 +4490,9 @@ body.theme-light .ob-aurora i:nth-child(2) {
   gap: 12px;
 }
 
-/* zverejnenie na GitHube: kto to uvidí + tlačidlo */
-.gh-pub {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-.gh-pub-q {
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-.gh-vis {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 9px;
-  background: var(--hover);
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.gh-vis button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: var(--text-2);
-  font: 600 12px var(--ui-font);
-  cursor: pointer;
-}
-.gh-vis button.on {
-  background: var(--card-solid);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-}
+
+
+
 
 .gh-files {
   display: flex;
@@ -7865,4 +7833,69 @@ body.compact.side-right #main {
 .s-sug:hover,
 .s-sug.on {
   background: var(--hover);
+}
+
+/* Aktualizácia: pruh priebehu (v nastaveniach aj v okne pri inštalácii) */
+.up-bar {
+  display: block;
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 99px;
+  background: var(--active);
+  overflow: hidden;
+}
+.up-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.3s;
+}
+.up-bar.busy i {
+  width: 35% !important;
+  animation: up-busy 1.2s ease-in-out infinite;
+}
+@keyframes up-busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.up-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+.up-ov-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(380px, 90vw);
+  padding: 26px 26px 24px;
+  border-radius: 18px;
+  background: var(--card-solid);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 30px 80px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+.up-ov-card .brand-mark {
+  margin-bottom: 8px;
+}
+.up-ov-title {
+  font-size: 16px;
+}
+.up-ov-step {
+  color: var(--text-2);
+}
+.up-ov-card .up-bar {
+  max-width: none;
+  margin-top: 12px;
 }

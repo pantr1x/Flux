@@ -252,21 +252,8 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
     const info = await flux.ghInfo();
     if (!st.repo) {
       box.innerHTML = `<div class="pj-h"><span>GitHub</span></div>
-        <div class="gh-box col">
-          <div class="gh-row"><span class="gh-ic big">${icon('github', 20)}</span><span class="gh-txt"><b>${t('Save this project on GitHub')}</b><small>${t('Keep a backup online and share it with a link.')}</small></span>${info.connected ? '' : `<button class="s-btn" data-gh-settings>${t('Connect GitHub')}</button>`}</div>
-          ${
-            info.connected
-              ? `<div class="gh-pub">
-            <span class="gh-pub-q">${t('Who can see it?')}</span>
-            <span class="gh-vis" role="radiogroup">
-              <button type="button" class="on" data-vis="private" title="${t('Only you can see the code on GitHub.')}">${icon('lock', 13)}${t('Only you')}</button>
-              <button type="button" data-vis="public" title="${t('Anyone with the link can see the code.')}">${icon('globe', 13)}${t('Everyone')}</button>
-            </span>
-            <div class="grow"></div>
-            <button class="s-btn primary" data-gh-publish>${icon('rocket', 14)}${t('Publish on GitHub')}</button>
-          </div>`
-              : ''
-          }
+        <div class="gh-box"><span class="gh-ic big">${icon('github', 20)}</span><span class="gh-txt"><b>${t('Save this project on GitHub')}</b><small>${t('Keep a backup online and share it with a link.')}</small></span>
+          ${info.connected ? `<button class="s-btn primary" data-gh-publish>${icon('rocket', 14)}${t('Publish')}</button>` : `<button class="s-btn" data-gh-settings>${t('Connect GitHub')}</button>`}
         </div>`;
     } else {
       const sync = [st.ahead ? `↑${st.ahead}` : '', st.behind ? `↓${st.behind}` : ''].filter(Boolean).join(' ');
@@ -284,9 +271,10 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
         </div>`;
     }
     box.onclick = async (e) => {
-      if (e.target.closest('[data-gh-settings]')) return openSettingsTab('github');
-      const vis = e.target.closest('[data-vis]');
-      if (vis) return box.querySelectorAll('[data-vis]').forEach((b) => b.classList.toggle('on', b === vis));
+      if (e.target.closest('[data-gh-settings]')) {
+        e.preventDefault();
+        return openSettingsTab('github');
+      }
       if (e.target.closest('[data-gh-open]')) return flux.openExternal(`https://github.com/${st.github}`);
       const pub = e.target.closest('[data-gh-publish]');
       if (pub) {
@@ -295,7 +283,8 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
         pub.disabled = true;
         pub.innerHTML = `<span class="spin"></span>${t('Publishing…')}`;
         try {
-          const res = await flux.ghPublish({ private: box.querySelector('[data-vis="private"]').classList.contains('on') });
+          // Súkromný repozitár – viditeľnosť sa dá zmeniť v nastaveniach repozitára na GitHube.
+          const res = await flux.ghPublish({ private: true });
           toast(t('Published on GitHub: {repo}', { repo: res.full }), 'ok', 6000);
         } catch (err) {
           toast(errText(err), 'error', 8000);

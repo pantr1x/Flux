@@ -6,48 +6,54 @@
   <title>Flux – a small, modern code editor for Windows</title>
   <meta name="description" content="Run your code with one click, see websites live, get help from AI. Free code editor for Windows 10 and 11.">
   <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <meta property="og:title" content="Flux – code editor for Windows">
   <meta property="og:description" content="Run your code with one click, see websites live, get help from AI.">
   <meta property="og:image" content="images/editor.png">
   <style>
     :root {
-      --base: #0d0f1a;
-      --card: rgba(30, 32, 46, .72);
-      --card-solid: #1b1d2a;
+      --base: #1d2238;
+      --card: rgba(46, 52, 82, .62);
+      --card-solid: #22263a;
       --card-2: rgba(255, 255, 255, .045);
       --hover: rgba(255, 255, 255, .06);
       --active: rgba(255, 255, 255, .1);
-      --line: rgba(255, 255, 255, .08);
-      --line-strong: rgba(255, 255, 255, .14);
-      --text: #e9e9f2;
-      --text-2: #a3a3b6;
-      --text-3: #75758a;
+      --line: rgba(255, 255, 255, .09);
+      --line-strong: rgba(255, 255, 255, .16);
+      --text: #f0f1f8;
+      --text-2: #b9bcd0;
+      --text-3: #8e92aa;
       --accent: #5b8cff;
       --ok: #3ecf8e;
       --warn: #f0a44b;
-      --mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
-      --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+      --ui: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
       --r: 14px;
     }
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; scroll-padding-top: 76px; }
-    body { margin: 0; background: var(--base); color: var(--text); font: 15px/1.55 var(--ui); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    html { scroll-padding-top: 76px; }
+    body { margin: 0; background: linear-gradient(160deg, #26306a 0%, #1f2548 38%, var(--base) 62%, #2a2050 100%); color: var(--text); font: 15.5px/1.6 var(--ui); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow-x: hidden; }
+    h1, h2, h3 { font-feature-settings: 'ss01', 'cv11'; }
     a { color: inherit; text-decoration: none; }
     button { font: inherit; color: inherit; }
     svg { flex: none; }
 
     /* pozadie ako vo Fluxe: rozmazané farebné škvrny + bodky */
     .wall { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
-    .wall i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; }
-    .wall i:nth-child(1) { width: 60vw; height: 60vw; left: -18vw; top: -22vw; background: #2c4fd8; }
-    .wall i:nth-child(2) { width: 45vw; height: 45vw; right: -12vw; top: 30vh; background: #6a2fb8; opacity: .4; }
-    .wall i:nth-child(3) { width: 40vw; height: 40vw; left: 25vw; bottom: -20vw; background: #0f7a63; opacity: .35; }
+    .wall i { position: absolute; border-radius: 50%; filter: blur(100px); opacity: .6; }
+    .wall i:nth-child(1) { width: 62vw; height: 62vw; left: -18vw; top: -24vw; background: #3558e6; }
+    .wall i:nth-child(2) { width: 52vw; height: 52vw; right: -14vw; top: 22vh; background: #7a3ad0; opacity: .5; }
+    .wall i:nth-child(3) { width: 46vw; height: 46vw; left: 18vw; bottom: -22vw; background: #138f73; opacity: .42; }
+    .wall i:nth-child(4) { width: 42vw; height: 42vw; left: 30vw; top: 30vh; background: #3d63e0; opacity: .34; }
+    .wall i:nth-child(5) { width: 44vw; height: 44vw; right: -6vw; top: -18vw; background: #5a46d6; opacity: .45; }
     .wall::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; mask-image: linear-gradient(#000 0, transparent 70%); }
 
     .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
 
     /* horná lišta ako titulok okna Fluxu */
-    .bar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); background: rgba(13, 15, 26, .6); border-bottom: 1px solid var(--line); }
+    .bar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); background: rgba(24, 28, 48, .62); border-bottom: 1px solid var(--line); }
     .bar .wrap { display: flex; align-items: center; gap: 6px; height: 58px; }
     .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-right: 14px; }
     .logo .mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #111; box-shadow: inset 0 0 0 1px var(--line-strong); }
@@ -60,15 +66,17 @@
     .grow { flex: 1; }
     .pill-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 14px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; transition: background .15s, transform .15s; }
     .pill-btn:hover { background: var(--active); }
+    .pill-btn.star svg { color: #f5c542; }
+    .star-n { margin-left: 2px; padding: 0 7px; border-radius: 99px; background: var(--active); font-size: 12px; }
     .run-btn { background: #ecedf3; color: #111; box-shadow: none; }
     .run-btn:hover { background: #fff; transform: translateY(-1px); }
 
     /* HOME – ako domovská obrazovka Fluxu */
     .home { padding: 64px 0 20px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: end; }
-    .date { color: var(--text-3); font-weight: 600; font-size: 14px; }
-    h1 { font-size: clamp(38px, 6.4vw, 68px); line-height: 1.04; letter-spacing: -1.8px; margin: 10px 0 12px; }
+    .date { color: var(--text-2); font-weight: 600; font-size: 14px; }
+    h1 { font-size: clamp(40px, 6.4vw, 70px); line-height: 1.02; letter-spacing: -2.4px; font-weight: 800; margin: 10px 0 14px; }
     h1 .grad { background: linear-gradient(90deg, #9fb8ff, #5b8cff 45%, #3ecfb2); -webkit-background-clip: text; background-clip: text; color: transparent; }
-    .lead { color: var(--text-2); font-size: 18px; max-width: 580px; margin: 0; }
+    .lead { color: var(--text-2); font-size: 18.5px; line-height: 1.6; max-width: 590px; margin: 0; }
     .stats { display: grid; grid-template-columns: repeat(4, 136px); gap: 8px; }
     .stat { position: relative; padding: 12px 14px; border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); backdrop-filter: blur(12px); }
     .stat b { display: block; padding-right: 26px; white-space: nowrap; font-size: 19px; letter-spacing: -.4px; }
@@ -88,7 +96,7 @@
     kbd { font: 600 11.5px var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--active); box-shadow: inset 0 -1px 0 rgba(0,0,0,.4), inset 0 0 0 1px var(--line-strong); color: var(--text); white-space: nowrap; }
 
     /* EDITOR – živá ukážka okna */
-    .window { margin: 44px 0 0; display: grid; grid-template-columns: 236px 1fr; height: 560px; border-radius: 18px; overflow: hidden; background: rgba(16, 18, 30, .55); box-shadow: 0 0 0 1px var(--line-strong), 0 40px 120px rgba(0, 0, 0, .55), 0 0 90px rgba(91, 140, 255, .14); backdrop-filter: blur(24px); }
+    .window { margin: 44px 0 0; display: grid; grid-template-columns: 236px 1fr; height: 560px; border-radius: 18px; overflow: hidden; background: rgba(30, 34, 56, .6); box-shadow: 0 0 0 1px var(--line-strong), 0 40px 120px rgba(0, 0, 0, .55), 0 0 90px rgba(91, 140, 255, .14); backdrop-filter: blur(24px); }
     .side { display: flex; flex-direction: column; padding: 12px 8px; min-width: 0; }
     .side .head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 12px; font-weight: 700; }
     .side .cap { color: var(--text-3); font-size: 11.5px; font-weight: 700; letter-spacing: 1px; padding: 6px 8px; }
@@ -108,7 +116,7 @@
     .ebtn.run { background: #e8e9f0; color: #111; box-shadow: none; }
     .ebtn.run:hover { background: #fff; }
     .ebtn:disabled { opacity: .6; cursor: default; }
-    .pane { flex: 1; display: flex; flex-direction: column; border-radius: 12px; background: rgba(28, 30, 44, .82); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; min-height: 0; }
+    .pane { flex: 1; display: flex; flex-direction: column; border-radius: 12px; background: rgba(34, 37, 56, .88); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; min-height: 0; }
     .code { flex: 1; overflow: auto; padding: 12px 0; font: 14px/1.52 var(--mono); tab-size: 4; min-height: 0; }
     .ln { display: flex; white-space: pre; }
     .ln .n { flex: none; width: 52px; padding-right: 18px; text-align: right; color: #4f5370; user-select: none; }
@@ -127,8 +135,8 @@
 
     /* sekcie */
     section { padding: 110px 0 0; }
-    .cap2 { color: var(--text-3); font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
-    h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -1px; line-height: 1.12; margin: 8px 0 10px; }
+    .cap2 { display: inline-block; padding: 3px 10px; border-radius: 99px; background: rgba(91, 140, 255, .14); color: #a9c1ff; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+    h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -1.2px; line-height: 1.12; font-weight: 800; margin: 8px 0 12px; }
     .sub { color: var(--text-2); font-size: 17px; max-width: 640px; margin: 0 0 34px; }
     .panel { padding: 18px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); backdrop-filter: blur(14px); }
     .feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -220,7 +228,7 @@
   </style>
 </head>
 <body>
-  <div class="wall"><i></i><i></i><i></i></div>
+  <div class="wall"><i></i><i></i><i></i><i></i><i></i></div>
 
   <header class="bar">
     <div class="wrap">
@@ -233,6 +241,7 @@
         <a class="tab" href="#releases"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>Releases</a>
       </nav>
       <div class="grow"></div>
+      <a class="pill-btn gh star" href="https://github.com/pantr1x/Flux" title="Star Flux on GitHub"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.8 2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8Z"/></svg>Star<span class="star-n" id="stars" hidden></span></a>
       <a class="pill-btn gh" href="https://github.com/pantr1x/Flux"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
       <a class="pill-btn run-btn" href="#releases" data-dl><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Download</a>
     </div>
@@ -247,7 +256,7 @@
         <p class="lead">A small, modern code editor. Run your code with one click, see your website live while you type and get help from AI – without setting anything up.</p>
       </div>
       <div class="stats">
-        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></span><b>13</b><small>languages</small></div>
+        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></span><b>16</b><small>languages</small></div>
         <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M21 19c0-2.5-1.5-4.3-4-4.9"/></svg></span><b id="st-dl">–</b><small>downloads</small></div>
         <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg></span><b id="st-size">~117 MB</b><small>installer</small></div>
         <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></span><b id="st-ver">1.2</b><small>newest version</small></div>
@@ -387,6 +396,7 @@
       <div class="cta">
         <a class="pill-btn run-btn big" href="https://github.com/pantr1x/Flux/releases/latest" data-dl><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg><span data-dl-label>Download for Windows</span></a>
         <a class="pill-btn big" href="https://github.com/pantr1x/Flux/releases">All versions on GitHub</a>
+        <a class="pill-btn big star" href="https://github.com/pantr1x/Flux"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.8 2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8Z"/></svg>Star on GitHub</a>
       </div>
     </section>
   </main>
@@ -582,7 +592,7 @@
     ];
     $('#feat').innerHTML = FEATURES.map(([d, fill, h, p]) => `<div class="fc"><span class="fi2">${svg(d, fill)}</span><div><h3>${h}</h3><p>${p}</p></div></div>`).join('');
 
-    const LANGS = [['Python', '#3776ab'], ['JavaScript', '#f7df1e'], ['TypeScript', '#3178c6'], ['HTML & CSS', '#e44d26'], ['Java', '#e76f00'], ['C / C++', '#659ad2'], ['C#', '#9b4f96'], ['Go', '#00add8'], ['Rust', '#dea584'], ['Ruby', '#cc342d'], ['PHP', '#777bb3'], ['Lua', '#2c2d72'], ['Perl', '#39457e']];
+    const LANGS = [['Python', '#3776ab'], ['JavaScript', '#f7df1e'], ['TypeScript', '#3178c6'], ['HTML & CSS', '#e44d26'], ['Java', '#e76f00'], ['C / C++', '#659ad2'], ['C#', '#9b4f96'], ['Go', '#00add8'], ['Rust', '#dea584'], ['Ruby', '#cc342d'], ['PHP', '#777bb3'], ['Lua', '#2c2d72'], ['Perl', '#39457e'], ['Zig', '#f7a41d'], ['R', '#2266b8'], ['Julia', '#9558b2']];
     $('#langs').innerHTML = LANGS.map(([n, c]) => `<span class="lang"><i style="background:${c}"></i>${esc(n)}</span>`).join('');
 
     const KEYS = [
@@ -657,6 +667,77 @@
         $('#rel-meta').textContent = 'Get the newest installer on GitHub Releases.';
         $('#rel-list').innerHTML = `<div class="loading">Could not load the list right now. <a style="color:#9fb8ff" href="https://github.com/${REPO}/releases">See all releases on GitHub →</a></div>`;
       });
+
+    // ---------- hviezdičky na GitHube ----------
+    fetch(`https://api.github.com/repos/${REPO}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((repo) => {
+        if (!repo || !repo.stargazers_count) return;
+        const el = $('#stars');
+        el.textContent = repo.stargazers_count.toLocaleString('en');
+        el.hidden = false;
+      })
+      .catch(() => {});
+
+    // ---------- plynulé skrolovanie so zotrvačnosťou (ako vo Fluxe) ----------
+    // Koliesko neposúva stránku skokom – cieľ sa posunie a stránka k nemu dokĺže; po pustení ešte chvíľu „slidne“.
+    (() => {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      let target = scrollY;
+      let current = scrollY;
+      let raf = 0;
+      let own = false;
+      const max = () => document.documentElement.scrollHeight - innerHeight;
+      const clamp = (v) => Math.max(0, Math.min(max(), v));
+      const step = () => {
+        current += (target - current) * 0.085;
+        if (Math.abs(target - current) < 0.4) current = target;
+        own = true;
+        scrollTo(0, current);
+        raf = current === target ? 0 : requestAnimationFrame(step);
+      };
+      const go = (y) => {
+        target = clamp(y);
+        if (!raf) raf = requestAnimationFrame(step);
+      };
+      // vnorené posuvné časti (kód, výstup v ukážke) sa posúvajú samé
+      const innerScroller = (el, dy) => {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const s = getComputedStyle(n).overflowY;
+          if ((s === 'auto' || s === 'scroll') && n.scrollHeight > n.clientHeight + 1) {
+            if ((dy > 0 && n.scrollTop + n.clientHeight < n.scrollHeight - 1) || (dy < 0 && n.scrollTop > 0)) return true;
+          }
+        }
+        return false;
+      };
+      addEventListener(
+        'wheel',
+        (e) => {
+          if (e.ctrlKey || innerScroller(e.target, e.deltaY)) return;
+          e.preventDefault();
+          if (!raf) target = current = scrollY;
+          go(target + e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? innerHeight : 1));
+        },
+        { passive: false },
+      );
+      // skok na časť stránky (karty v lište, tlačidlá) tiež plynulo
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href^="#"]');
+        if (!a) return;
+        const el = a.getAttribute('href') === '#top' ? document.body : document.querySelector(a.getAttribute('href'));
+        if (!el) return;
+        e.preventDefault();
+        if (!raf) target = current = scrollY;
+        go(el === document.body ? 0 : el.getBoundingClientRect().top + scrollY - 70);
+        history.replaceState(null, '', a.getAttribute('href'));
+      });
+      // klávesnica / posuvník: plynulé skrolovanie sa zastaví a prevezme aktuálnu polohu
+      addEventListener('scroll', () => {
+        if (own) return (own = false);
+        if (raf) cancelAnimationFrame(raf), (raf = 0);
+        target = current = scrollY;
+      }, { passive: true });
+    })();
 
     // ---------- animácie a aktívna karta v lište ----------
     const io = new IntersectionObserver((ents) => ents.forEach((x) => x.isIntersecting && x.target.classList.add('in')), { threshold: 0.08 });

@@ -121,6 +121,36 @@ const TOOLCHAINS = [
     disk: 5,
     url: 'https://www.lua.org/download.html',
   },
+  {
+    id: 'zig',
+    name: 'Zig',
+    probe: [['zig', ['version']]],
+    winget: 'zig.zig',
+    download: 50,
+    disk: 300,
+    url: 'https://ziglang.org/download/',
+  },
+  {
+    id: 'r',
+    name: 'R',
+    detail: 'statistics & data',
+    probe: [['Rscript', ['--version']]],
+    winget: 'RProject.R',
+    download: 85,
+    disk: 300,
+    url: 'https://cran.r-project.org/bin/windows/base/',
+  },
+  {
+    id: 'julia',
+    name: 'Julia',
+    detail: 'Juliaup',
+    probe: [['julia', ['--version']]],
+    // Juliaup z Microsoft Store – oficiálny spôsob inštalácie Julie vo Windows
+    winget: '9NJNWW8PVKMN',
+    download: 180,
+    disk: 600,
+    url: 'https://julialang.org/downloads/',
+  },
 ];
 
 function run(cmd, args, timeout = 8000) {
@@ -140,7 +170,28 @@ async function refreshPath() {
     "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')",
   ]);
   if (out) process.env.PATH = [...new Set([...out.split(';'), ...(process.env.PATH || '').split(';')].filter(Boolean))].join(';');
+  addRPath();
 }
+
+// Inštalátor R nepridáva R do PATH – pridáme priečinok bin najnovšej verzie (C:\Program Files\R\R-4.x.y\bin).
+function addRPath() {
+  if (!isWin) return;
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const root of [process.env.ProgramFiles, process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs')].filter(Boolean)) {
+    let dirs = [];
+    try {
+      dirs = fs.readdirSync(path.join(root, 'R')).filter((d) => /^R-\d/.test(d));
+    } catch {
+      continue;
+    }
+    const newest = dirs.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0];
+    const bin = newest && path.join(root, 'R', newest, 'bin');
+    if (bin && fs.existsSync(path.join(bin, 'Rscript.exe')) && !(process.env.PATH || '').includes(bin)) process.env.PATH = `${process.env.PATH};${bin}`;
+    return;
+  }
+}
+addRPath();
 
 async function probeOne(tc) {
   for (const [cmd, args] of tc.probe) {

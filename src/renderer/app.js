@@ -171,7 +171,7 @@ const LANGS = {
   yml: 'yaml', yaml: 'yaml', toml: 'ini', ini: 'ini', cfg: 'ini', env: 'ini',
   sh: 'shell', bat: 'bat', cmd: 'bat', ps1: 'powershell', sql: 'sql',
   c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust',
-  php: 'php', rb: 'ruby', lua: 'lua', kt: 'kotlin', swift: 'swift', dart: 'dart', r: 'r',
+  php: 'php', rb: 'ruby', lua: 'lua', kt: 'kotlin', swift: 'swift', dart: 'dart', r: 'r', jl: 'julia',
 };
 const LANG_NAMES = { python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', html: 'HTML', css: 'CSS', json: 'JSON', markdown: 'Markdown', plaintext: 'Text' };
 const langFor = (p) => LANGS[extOf(p)] || 'plaintext';
@@ -187,7 +187,7 @@ function guessLang(text) {
 }
 const langOf = (path, text) => (extOf(path) ? langFor(path) : guessLang(text));
 
-const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua', 'ts', 'mts', 'cts', 'pl']);
+const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua', 'ts', 'mts', 'cts', 'pl', 'zig', 'r', 'jl']);
 const WEB = new Set(['html', 'htm', 'css']);
 
 // ---------- drobnosti UI ----------
@@ -1443,7 +1443,7 @@ setInterval(() => {
 // ---------- projekty (ako „workspaces“ v Zene) ----------
 // Zoznam nedávnych priečinkov s ikonou podľa obsahu – prepnutie jedným klikom.
 // Ikona typu projektu (Python, web, Java…).
-const KIND_FILE = { python: 'a.py', web: 'a.html', node: 'a.js', java: 'a.java', cpp: 'a.cpp', c: 'a.c', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua' };
+const KIND_FILE = { python: 'a.py', web: 'a.html', node: 'a.js', java: 'a.java', cpp: 'a.cpp', c: 'a.c', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua', zig: 'a.zig', r: 'a.r', julia: 'a.jl' };
 function kindIcon(kind, size = 16, github = false) {
   const svg = KIND_FILE[kind] ? fileIcon(KIND_FILE[kind]) : icon('folder', 16);
   const out = size === 16 ? svg : svg.replace(/width="16" height="16"/, `width="${size}" height="${size}"`);
@@ -1451,7 +1451,7 @@ function kindIcon(kind, size = 16, github = false) {
   return github ? `<span class="kind-ic" title="GitHub">${out}<i class="kind-gh">${icon('github', Math.max(8, Math.round(size * 0.55)))}</i></span>` : out;
 }
 
-const KIND_LANG_NAMES = { python: 'Python', web: 'HTML/CSS', node: 'JavaScript', java: 'Java', cpp: 'C/C++', go: 'Go', csharp: 'C#', rust: 'Rust', ruby: 'Ruby', php: 'PHP', lua: 'Lua' };
+const KIND_LANG_NAMES = { python: 'Python', web: 'HTML/CSS', node: 'JavaScript', java: 'Java', cpp: 'C/C++', go: 'Go', csharp: 'C#', rust: 'Rust', ruby: 'Ruby', php: 'PHP', lua: 'Lua', zig: 'Zig', r: 'R', julia: 'Julia' };
 // „JavaScript +3“ – hlavný jazyk a koľko ďalších má projekt
 function langLine(p) {
   const langs = (p.langs || []).filter((l) => KIND_LANG_NAMES[l]);
@@ -1515,6 +1515,9 @@ const PROJECT_KINDS = [
   { id: 'ruby', title: 'Ruby', icon: 'a.rb', tpl: 'rb-main', tool: 'ruby', more: true },
   { id: 'php', title: 'PHP', icon: 'a.php', tpl: 'php-main', tool: 'php', more: true },
   { id: 'lua', title: 'Lua', icon: 'a.lua', tpl: 'lua-main', tool: 'lua', more: true },
+  { id: 'zig', title: 'Zig', icon: 'a.zig', tpl: 'zig-main', tool: 'zig', more: true },
+  { id: 'r', title: 'R', icon: 'a.r', tpl: 'r-main', tool: 'r', more: true },
+  { id: 'julia', title: 'Julia', icon: 'a.jl', tpl: 'jl-main', tool: 'julia', more: true },
   { id: 'ts', title: 'TypeScript', icon: 'a.ts', tpl: 'ts-main', tool: 'node', more: true },
   { id: 'perl', title: 'Perl', icon: 'a.pl', tpl: 'pl-main', tool: 'perl', more: true },
 ];
@@ -1881,7 +1884,7 @@ function createTerminal() {
       for (const m of line.matchAll(/((?:[A-Za-z]:\\|\/)[^\s:()'"]+\.\w+):(\d+)(?::(\d+))?/g)) add(m.index, m[0], m[1], Number(m[2]), m[3] ? Number(m[3]) : undefined);
       // Relatívne cesty (Java „Main.java:5“, Go, Rust „src/main.rs:3:5“, gcc…) – voči priečinku spusteného súboru.
       if (state.runDir)
-        for (const m of line.matchAll(/(?<![\w\\/:.])((?:[\w.-]+[\\/])*[\w.-]+\.(?:java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|lua|ts|pl|py|js|kt|dart)):(\d+)(?::(\d+))?/g)) {
+        for (const m of line.matchAll(/(?<![\w\\/:.])((?:[\w.-]+[\\/])*[\w.-]+\.(?:java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|lua|ts|pl|py|js|kt|dart|zig|r|jl)):(\d+)(?::(\d+))?/g)) {
           const p = join(state.runDir, m[1]);
           if (!links.some((l) => l.range.start.x === m.index + 1)) add(m.index, m[0], p, Number(m[2]), m[3] ? Number(m[3]) : undefined);
         }
@@ -2540,7 +2543,6 @@ function commands() {
     c(t('Settings'), openSettings, 'Ctrl+,', 'settings', 'settings preferences font'),
     c(t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A', 'command', 'search find all settings'),
     ghOn() && c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'github', 'github clone repo'),
-    c(t('AI: open assistant'), () => aiPanel.show(), 'Ctrl+I', 'sparkle', 'ai claude chat assistant'),
     c(t('AI: explain this file'), () => aiPanel.ask(t('Explain this file.')), '', 'sparkle', 'ai claude explain'),
     c(t('AI: fix the errors in this file'), () => aiPanel.ask(t('Find and fix the errors in this file. Show the corrected code.')), '', 'sparkle', 'ai claude fix bug error'),
     c(t('New file from template…'), () => newFile(), 'Ctrl+N', 'template', 'template html python web project'),
@@ -4230,7 +4232,7 @@ function renderWelcome() {
 }
 
 // Hlavný súbor projektu: index.html, main.py, Main.java…
-const MAIN_EXT = { python: ['py'], web: ['html', 'htm'], node: ['js', 'mjs'], java: ['java'], cpp: ['cpp', 'c'], go: ['go'], csharp: ['cs'], rust: ['rs'], ruby: ['rb'], php: ['php'], lua: ['lua'] };
+const MAIN_EXT = { python: ['py'], web: ['html', 'htm'], node: ['js', 'mjs'], java: ['java'], cpp: ['cpp', 'c'], go: ['go'], csharp: ['cs'], rust: ['rs'], ruby: ['rb'], php: ['php'], lua: ['lua'], zig: ['zig'], r: ['r'], julia: ['jl'] };
 function mainFileOf(files, kind) {
   const exts = MAIN_EXT[kind];
   if (!exts) return null;
@@ -4551,6 +4553,7 @@ function appMenus() {
         [t('Release notes'), () => ((state.settingsTab = 'about'), openSettings())],
         '-',
         [t('Website'), () => flux.openExternal('https://pantr1x.github.io/Flux/')],
+        [t('Star Flux on GitHub'), () => flux.openExternal('https://github.com/pantr1x/Flux')],
         [t('Report a problem'), () => flux.openExternal('https://github.com/pantr1x/Flux/issues/new')],
       ],
     },

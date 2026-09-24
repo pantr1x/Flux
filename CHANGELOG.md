@@ -2,6 +2,29 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.3.2 – 2026-09-24
+
+### Updating with progress
+- **Restart and update** now shows a window with a **progress bar**: first it finishes downloading (in %), then it installs.
+- While Flux is closed and the update installs, a small window with a progress bar stays on the screen until Flux opens again.
+- In *Settings → General → About & updates* you see a progress bar while a new version downloads.
+
+### More languages
+- **Zig**, **R** and **Julia** – install them with one click in *Settings → Languages*, run them with **F5** and start a new project with them (*More languages*).
+
+### GitHub
+- *Save this project on GitHub* is just one **Publish** button – the project is private, and you can change that on GitHub any time.
+- **Like Flux?** Give it a star: *Settings → General* or *Help → Star Flux on GitHub*.
+
+### Other
+- The command *AI: open assistant* is gone – use the **AI** button or **Ctrl+I**.
+- **Home screen:** the settings button is no longer hidden under the window buttons (minimize, maximize, close).
+
+### Website
+- Brighter colors instead of large black areas, clearer text and a new font.
+- **Smooth scrolling** that glides a little after you stop the wheel.
+- A **Star** button with the number of stars, and Zig, R and Julia in the list of languages.
+
 ## 1.3.1 – 2026-09-24
 
 ### Menu

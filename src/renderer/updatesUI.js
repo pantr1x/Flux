@@ -20,6 +20,8 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
         return t('Version {v} is available.', { v: esc(s.latest) });
       case 'downloading':
         return `<span class="spin"></span>${t('Downloading version {v}… {p} %', { v: esc(s.latest), p: s.progress })}`;
+      case 'installing':
+        return `<span class="spin"></span>${t('Installing Flux {v}…', { v: esc(s.latest) })}`;
       case 'ready':
         return `${icon('check', 13)}${t('Version {v} is ready – it installs when you restart Flux.', { v: esc(s.latest) })}`;
       case 'error':
@@ -39,7 +41,9 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
   function drawStatus() {
     if (!box || !state) return;
     const el = box.querySelector('#up-status');
-    if (el) el.innerHTML = `<span><b>${t('Updates')}</b><small class="up-line">${statusText(state)}</small></span>${actions(state)}`;
+    const bar = state.status === 'downloading' || state.status === 'installing' ? `<span class="up-bar${state.status === 'installing' ? ' busy' : ''}"><i style="width:${Number(state.progress) || 0}%"></i></span>` : '';
+    if (el) el.innerHTML = `<span><b>${t('Updates')}</b><small class="up-line">${statusText(state)}</small>${bar}</span>${actions(state)}`;
+    drawOverlay();
   }
 
   async function drawNotes(force = false) {
@@ -71,6 +75,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       <div class="s-group">
         <div class="s-row" id="up-status"></div>
         <label class="s-row"><span><b>${t('Update automatically')}</b><small>${t('downloads new versions in the background and installs them when you close Flux')}</small></span><input type="checkbox" class="switch" id="up-auto"${getSetting('autoUpdate') !== false ? ' checked' : ''}></label>
+        ${compact ? `<div class="s-row"><span><b>${t('Like Flux?')}</b><small>${t('A star on GitHub helps other people find it.')}</small></span><button class="s-btn" data-up-star>${icon('star', 13)}${t('Star on GitHub')}</button></div>` : ''}
         ${compact ? `<div class="s-row"><span><b>${t('All versions')}</b><small>${t('Download any version of Flux from GitHub Releases.')}</small></span><button class="s-btn" data-up-releases>${icon('external', 13)}${t('Open')}</button></div>` : ''}
       </div>
       ${compact ? `<details class="up-notes-fold"><summary>${icon('chevron', 12)}${t('Release notes')}</summary>${notes}</details>` : `<h3>${t('Release notes')}</h3>${notes}`}`;
@@ -88,10 +93,34 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     box.onclick = async (e) => {
       if (e.target.closest('[data-up-check]')) return flux.updateCheck();
       if (e.target.closest('[data-up-download]')) return flux.updateDownload().catch((err) => toast(String(err.message || err), 'error'));
-      if (e.target.closest('[data-up-install]')) return flux.updateInstall();
+      if (e.target.closest('[data-up-install]')) return startInstall();
+      if (e.target.closest('[data-up-star]')) return flux.openExternal('https://github.com/pantr1x/Flux');
       if (e.target.closest('[data-up-releases]')) return flux.openExternal('https://pantr1x.github.io/Flux/#releases');
       if (e.target.closest('[data-up-open]')) return flux.openExternal('https://github.com/pantr1x/Flux/releases/latest');
     };
+  }
+
+  // „Reštartovať a aktualizovať“: okno s priebehom (dosťahovanie novšej verzie, potom inštalácia).
+  // Po zatvorení Fluxu priebeh ukazuje malé okno Windows, kým sa Flux znova neotvorí.
+  let overlay = null;
+  function drawOverlay() {
+    if (!overlay || !state) return;
+    const pct = state.status === 'downloading' ? Number(state.progress) || 0 : 100;
+    overlay.querySelector('.up-ov-title').textContent = t('Updating Flux to {v}…', { v: state.latest || '' });
+    overlay.querySelector('.up-ov-step').textContent =
+      state.status === 'downloading' ? t('Downloading… {p} %', { p: pct }) : state.status === 'error' ? t('Could not check for updates: {msg}', { msg: state.error }) : t('Installing… Flux closes and opens again by itself.');
+    overlay.querySelector('.up-bar').classList.toggle('busy', state.status !== 'downloading');
+    overlay.querySelector('.up-bar i').style.width = `${pct}%`;
+    if (state.status === 'error') setTimeout(() => ((overlay?.remove(), (overlay = null))), 4000);
+  }
+  function startInstall() {
+    overlay?.remove();
+    overlay = document.createElement('div');
+    overlay.className = 'up-overlay';
+    overlay.innerHTML = `<div class="up-ov-card"><div class="brand-mark big">${icon('code', 22)}</div><b class="up-ov-title"></b><small class="up-ov-step"></small><span class="up-bar busy"><i></i></span></div>`;
+    document.body.append(overlay);
+    drawOverlay();
+    return flux.updateInstall();
   }
 
   // Zmeny stavu z hlavného procesu (aj keď nastavenia nie sú otvorené).
@@ -106,7 +135,9 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
   flux.onUpdateState((s) => {
     state = s;
     if (box?.isConnected) drawStatus();
-    if (!s.latest) return;
+    else drawOverlay();
+    // počas inštalácie ukazuje priebeh okno – bez ďalších správ
+    if (!s.latest || overlay) return;
     if (s.status === 'available')
       once(`a${s.latest}`, () =>
         toast(t('Flux {v} is available.', { v: s.latest }), 'info', 20000, {
@@ -117,7 +148,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     if (s.status === 'downloading') once(`d${s.latest}`, () => toast(t('Downloading Flux {v} in the background…', { v: s.latest }), 'info', 5000));
     if (s.status === 'ready')
       once(`r${s.latest}`, () =>
-        toast(t('Flux {v} is ready – it installs when you restart.', { v: s.latest }), 'ok', 20000, { label: t('Restart now'), run: () => flux.updateInstall() }),
+        toast(t('Flux {v} is ready – it installs when you restart.', { v: s.latest }), 'ok', 20000, { label: t('Restart now'), run: () => startInstall() }),
       );
   });
 
@@ -164,5 +195,5 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     };
   }
 
-  return { render, whatsNew };
+  return { render, whatsNew, startInstall };
 }

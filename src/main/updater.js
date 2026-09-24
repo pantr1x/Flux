@@ -117,7 +117,53 @@ function createUpdater({ getSettings, send }) {
     try {
       fs.writeFileSync(path.join(require('node:os').tmpdir(), 'flux-relaunch-after-update'), String(Date.now()));
     } catch {}
-    setImmediate(() => autoUpdater.quitAndInstall(true, true));
+    emit({ status: 'installing', progress: 100 });
+    showInstallWindow(state.latest);
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 900);
+  }
+
+  // Kým je Flux zatvorený a inštalátor beží potichu, malé okno Windows ukazuje priebeh.
+  // Samostatný proces PowerShellu (Flux sa počas inštalácie nesmie spustiť) – zavrie sa,
+  // keď sa Flux znova otvorí, najneskôr po 3 minútach. Ak by sa nepodarilo, aktualizácia ide ďalej.
+  function showInstallWindow(version) {
+    if (process.platform !== 'win32') return;
+    const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+    const title = t('Updating Flux to {v}…', { v: version });
+    const note = t('Flux closes, installs the update and opens again by itself.');
+    const ps = `
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$f = New-Object System.Windows.Forms.Form
+$f.FormBorderStyle = 'None'; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object System.Drawing.Size(420, 132)
+$f.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 30); $f.TopMost = $true; $f.ShowInTaskbar = $true; $f.Text = 'Flux'
+$a = New-Object System.Windows.Forms.Label; $a.Text = ${q(title)}; $a.ForeColor = 'White'
+$a.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 12); $a.AutoSize = $true; $a.Location = New-Object System.Drawing.Point(24, 20)
+$b = New-Object System.Windows.Forms.Label; $b.Text = ${q(note)}; $b.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 176)
+$b.Font = New-Object System.Drawing.Font('Segoe UI', 9); $b.AutoSize = $true; $b.Location = New-Object System.Drawing.Point(25, 50)
+$p = New-Object System.Windows.Forms.ProgressBar; $p.Style = 'Marquee'; $p.MarqueeAnimationSpeed = 25
+$p.Location = New-Object System.Drawing.Point(24, 86); $p.Size = New-Object System.Drawing.Size(372, 8)
+$f.Controls.AddRange(@($a, $b, $p))
+# proces je spustený skrytý – okno treba ukázať výslovne
+Add-Type -Name W -Namespace FluxUpd -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);'
+$f.Add_Shown({ [FluxUpd.W]::ShowWindow($f.Handle, 5) | Out-Null; $f.Activate() })
+$start = Get-Date
+$t = New-Object System.Windows.Forms.Timer; $t.Interval = 700
+$t.Add_Tick({
+  # nový Flux (spustený inštalátorom po aktualizácii) = hotovo
+  $flux = Get-Process -Name 'Flux' -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $start.AddSeconds(3) }
+  if ($flux -or ((Get-Date) - $start).TotalSeconds -gt 180) { $f.Close() }
+})
+$t.Start(); [void]$f.ShowDialog()
+`;
+    try {
+      const { spawn } = require('node:child_process');
+      const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      child.unref();
+    } catch {}
   }
 
   // Pri štarte: skontrolovať (a pri automatických aktualizáciách aj stiahnuť).

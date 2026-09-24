@@ -116,6 +116,14 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
 - Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).
 - The intro (`onboarding.js`, step *extras*) asks about `autoUpdate` (*Automatically* / *Ask me first*).
 
+## Programming languages
+
+A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe` command, `winget` package id, sizes, `url`), how to run a file in `commandFor()` and the extension in `toolchainFor()` (`src/main/runner.js`), and in the UI: `LANGS`/`RUNNABLE`/`KIND_FILE`/`KIND_LANG_NAMES`/`PROJECT_KINDS`/`MAIN_EXT` (`app.js`), `TOOL_FILE` (`tools.js`), `CODE_LANGS` (`onboarding.js`), a template (`templates.js`), an icon + `EXT_ICON` (`icons.js`), `KIND_EXT` and `TEXT_EXT` (`main.js`), comment tokens (`editorExtras.js`) and the website `LANGS`. Only use winget ids the language's own docs name (Zig `zig.zig`, R `RProject.R`, Julia `9NJNWW8PVKMN` = Juliaup from the Store). R does not add itself to PATH – `addRPath()` in `toolchains.js` does it.
+
+## Updates
+
+`updater.js` → `install()`: re-checks for a newer version, emits `status: 'installing'`, starts `showInstallWindow()` (a detached PowerShell WinForms window with a progress bar that closes when the new Flux process starts, max 3 min) and then `quitAndInstall(true, true)` (silent install + relaunch). In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` while downloading.
+
 ## Memory & speed
 
 Settings → General → *Memory & speed*. `lite` (*Save memory*) is the master switch. Each part in *Advanced* has its own key and, while unset, follows `lite`: `optOn(key)` = `settings[key] ?? !lite` (same helper in `app.js` and `main.js`).

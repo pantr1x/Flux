@@ -1271,6 +1271,9 @@ const KIND_EXT = {
   ruby: /\.rb$/i,
   php: /\.php$/i,
   lua: /\.lua$/i,
+  zig: /\.zig$/i,
+  r: /\.r$/i,
+  julia: /\.jl$/i,
 };
 
 // Jazyky projektu podľa množstva kódu (ako na GitHube): hlavný jazyk, ostatné a či je to repozitár z GitHubu.
@@ -1332,7 +1335,7 @@ const statsCache = new Map();
 function staleStats(file) {
   for (const dir of statsCache.keys()) if (String(file).startsWith(dir)) statsCache.delete(dir);
 }
-const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql)$/i;
+const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql|zig|r|jl)$/i;
 async function projectStats(dir) {
   const cached = statsCache.get(dir);
   if (cached && Date.now() - cached.at < 20000) return { ...cached.data, time: settings.projectTime?.[dir] || 0 };
