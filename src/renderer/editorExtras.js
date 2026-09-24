@@ -126,6 +126,8 @@ function renameEverywhere(monaco, editor, { refactor, getFilePath, toast }) {
   // reťazec, v ktorom je kurzor (stĺpce od 1; start = prvý znak obsahu)
   const stringAt = (model, line, col) => stringsIn(model.getLineContent(line)).find((s) => col - 1 >= s.start && col - 1 <= s.end);
 
+  // dlhá cesta → len jej koniec („…/Desktop“), celá je v title
+  const short = (v) => (v.length > 16 && /[\\/]/.test(v) ? `…/${v.split(/[\\/]/).filter(Boolean).pop()}` : v.length > 32 ? `${v.slice(0, 30)}…` : v);
   const identMatches = (model, name) => refactor.identRanges(model.getValue(), model.getLanguageId(), name);
   // bez samotného upraveného reťazca („data“ → „data/sub“ by sa inak zmenil znova)
   const stringMatches = (model, old, neu, self) => refactor.stringRanges(model.getValue(), old, neu).filter((r) => !(self && r.line === self.line && r.start === self.start));
@@ -147,7 +149,8 @@ function renameEverywhere(monaco, editor, { refactor, getFilePath, toast }) {
     node.className = 'rn-offer';
     const draw = () => {
       const files = others.length;
-      node.innerHTML = `<span>${t('Rename {old} → {new} everywhere?', { old: `<code>${esc(old)}</code>`, new: `<code>${esc(neu)}</code>` })}${here.length ? ` <small>${t('{n} more', { n: here.length })}</small>` : ''}</span>${here.length ? `<button class="rn-yes" data-scope="file">${t('Rename all')}</button>` : ''}${files ? `<button class="rn-yes rn-all" data-scope="all">${files === 1 ? t('Also in 1 other file') : t('Also in {n} other files', { n: files })}</button>` : ''}<button class="rn-no" title="${t('Close (Esc)')}">✕</button>`;
+      node.title = `${old} → ${neu}`;
+      node.innerHTML = `<span class="rn-text">${t('Rename {old} → {new} everywhere?', { old: `<code>${esc(short(old))}</code>`, new: `<code>${esc(short(neu))}</code>` })}${here.length ? ` <small>${t('{n} more', { n: here.length })}</small>` : ''}</span>${here.length ? `<button class="rn-yes" data-scope="file">${t('Rename all')}</button>` : ''}${files ? `<button class="rn-yes rn-all" data-scope="all">${files === 1 ? t('Also in 1 other file') : t('Also in {n} other files', { n: files })}</button>` : ''}<button class="rn-no" title="${t('Close (Esc)')}">✕</button>`;
     };
     const show = () => {
       if (id !== offerId) return;
@@ -217,7 +220,27 @@ function renameEverywhere(monaco, editor, { refactor, getFilePath, toast }) {
     if (close < 0) return;
     const neu = line.slice(s.start - 1, close);
     if (!neu || neu === s.old || s.old.length < 2) return;
-    offer(s, neu);
+    // Cesta: zmenil si priečinok v strede („…/Desktop/python/a.py“ → „…/Documents/python/a.py“)?
+    // Potom sa ponúkne zmena všetkých ciest, ktoré začínajú tým priečinkom, nielen presne rovnakých.
+    const [from, to] = changedPrefix(s.old, neu);
+    offer({ ...s, old: from }, to);
+  }
+
+  // Najkratší začiatok cesty (po koniec zmeneného úseku), ktorý pokryje celú zmenu.
+  function changedPrefix(a, b) {
+    if (!/[\\/]/.test(a + b)) return [a, b];
+    let p = 0;
+    while (p < a.length && p < b.length && a[p] === b[p]) p++;
+    let s = 0;
+    while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+    // koniec zmeny v starej ceste → po najbližší oddeľovač
+    const sep = a.slice(a.length - s).search(/[\\/]/);
+    if (sep < 0) return [a, b];
+    const endA = a.length - s + sep;
+    const endB = b.length - s + sep;
+    const from = a.slice(0, endA);
+    const to = b.slice(0, endB);
+    return from.length >= 2 && to ? [from, to] : [a, b];
   }
 
   // koniec „úpravy“: kurzor opustil slovo / reťazec

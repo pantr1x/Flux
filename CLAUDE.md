@@ -141,6 +141,7 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
   - Edit an identifier, or the text inside quotes, after moving the cursor there yourself. When the cursor leaves it, the offer appears: *Rename all* (this file) and *Also in N other files*.
   - Identifiers skip comments and strings; this uses Monaco tokens.
   - Strings match the same content or longer paths that start with it (`old/…`).
+  - For paths, `changedPrefix()` first cuts both values to the end of the changed segment. Changing `Desktop` in `C:/…/Desktop/python/a.py` then renames every path under `C:/…/Desktop`.
 - **Sidebar rename**: `offerPathRefs()` in `app.js`, after `renameItem()`.
   - It finds quoted paths that really resolve to the renamed file or folder: relative to the file, to the project, or `/…` as web root.
   - It then offers to update them.

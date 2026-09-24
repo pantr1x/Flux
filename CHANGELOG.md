@@ -2,6 +2,12 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.9 – 2026-09-24
+
+### Rename everywhere
+- When you change a **folder in the middle of a path**, for example `"C:/Users/admin/Desktop/python/simon.py"` to `".../Documents/python/simon.py"`, Flux now offers to change **every path in that folder**, not only the exact same text. It works in this file and in the other files of the project. A folder with a similar name, such as `Desktop2`, stays as it is.
+- The offer shows long paths shortened, so it always fits in the editor.
+
 ## 1.4.8 – 2026-09-24
 
 ### Rename everywhere

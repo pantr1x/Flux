@@ -2368,6 +2368,9 @@ body.theme-light .wall-img {
   z-index: 50;
 }
 
+.rn-offer button {
+  flex: none;
+}
 .rn-offer code {
   font: 12px var(--mono);
   padding: 1px 5px;
