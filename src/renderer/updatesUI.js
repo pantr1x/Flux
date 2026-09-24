@@ -72,6 +72,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
         <div class="s-row" id="up-status"></div>
         <label class="s-row"><span><b>${t('Update automatically')}</b><small>${t('downloads new versions in the background and installs them when you close Flux')}</small></span><input type="checkbox" class="switch" id="up-auto"${getSetting('autoUpdate') !== false ? ' checked' : ''}></label>
       </div>
+      ${compact ? `<div class="s-group"><div class="s-row"><span><b>${t('All versions')}</b><small>${t('Download any version of Flux from GitHub Releases.')}</small></span><button class="s-btn" data-up-releases>${icon('external', 13)}${t('Open')}</button></div></div>` : ''}
       ${compact ? `<details class="up-notes-fold"><summary>${icon('chevron', 12)}${t('Release notes')}</summary>${notes}</details>` : `<h3>${t('Release notes')}</h3>${notes}`}`;
     drawStatus();
     const fold = box.querySelector('.up-notes-fold');
@@ -88,6 +89,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       if (e.target.closest('[data-up-check]')) return flux.updateCheck();
       if (e.target.closest('[data-up-download]')) return flux.updateDownload().catch((err) => toast(String(err.message || err), 'error'));
       if (e.target.closest('[data-up-install]')) return flux.updateInstall();
+      if (e.target.closest('[data-up-releases]')) return flux.openExternal('https://pantr1x.github.io/Flux/#releases');
       if (e.target.closest('[data-up-open]')) return flux.openExternal('https://github.com/pantr1x/Flux/releases/latest');
     };
   }

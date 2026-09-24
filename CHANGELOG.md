@@ -1,6 +1,18 @@
 # Flux – what's new
 
-Every version with its changes. Flux shows these notes in **Settings → About & updates**.
+Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
+
+## 1.2.1 – 2026-09-24
+
+### Settings → General
+- **General** now shows its parts in the left menu, just like **Appearance** – click one to jump to it, and the part you are looking at is highlighted.
+- **About & updates** moved into General as its first part: your version, *Check for updates*, *Update automatically* and the release notes (folded, they load when you open them).
+- **Shortcuts** moved into General too – the whole list, search, changing keys and *Edit shortcuts.json* are at the end of the page.
+- **All versions** opens the Releases page of the website, where you can download any version of Flux.
+- Links that used to open the old *Shortcuts* or *About & updates* tab now jump to the right part of General.
+
+### New website
+- A new website that looks like Flux itself: a live editor you can click through and run, all features, shortcuts, and a **Releases** page with every version, its notes and its installer – loaded straight from GitHub Releases.
 
 ## 1.2.0 – 2026-09-24
 

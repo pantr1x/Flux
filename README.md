@@ -24,7 +24,7 @@
 
 1. Open the [latest release](https://github.com/pantr1x/Flux/releases/latest) and download `Flux-Setup-x.y.z.exe` under **Assets**.
 2. Run it. Windows may show *"Windows protected your PC"* because Flux is not signed yet – click **More info → Run anyway**.
-3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → About & updates).
+3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → General → About & updates). Every version is also on the [website](https://pantr1x.github.io/Flux/#releases).
 
 Programming languages are not bundled, so the installer stays small. Flux downloads only the ones you pick, from their official sources.
 
@@ -69,7 +69,7 @@ Programming languages are not bundled, so the installer stays small. Flux downlo
 | `Alt+click` in the preview | Jump to that element in the HTML |
 | `Ctrl+,` | Settings |
 
-All of them can be changed in Settings → Shortcuts.
+All of them can be changed in Settings → General → Shortcuts.
 
 ## Plugins
 
@@ -89,6 +89,6 @@ npm run dist       # build the Windows installer into release/
 
 Flux is built with Electron, Monaco (the editor of VS Code), xterm.js and basedpyright.
 
-The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`).
+The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`). How the website, releases and the rest of the repository work is described in [`CLAUDE.md`](CLAUDE.md).
 
 A new version is released by raising `version` in `package.json` and adding its notes to `CHANGELOG.md` – GitHub Actions builds the installer and publishes the release, and installed copies update themselves.
