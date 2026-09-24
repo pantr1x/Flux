@@ -17,7 +17,7 @@ import { createActivity } from './activity.js';
 import { createTools, TOOL_FILE } from './tools.js';
 import { setupEditorExtras } from './editorExtras.js';
 import { createUserShortcuts } from './userShortcuts.js';
-import { createAIPanel } from './aiPanel.js';
+import { createAIPanel, markdown } from './aiPanel.js';
 import { createGitHub } from './github.js';
 import { BINDINGS, CATEGORIES, createKeymap, kbdHtml } from './keymap.js';
 import { createPluginHost } from './pluginHost.js';
@@ -673,6 +673,7 @@ function createTab(path, model, readonly) {
     reportDirty();
     updateRunGlyphs(tab);
     scheduleAutosave(tab);
+    if (tab === state.active && !$('#mdview').hidden) scheduleMdPreview();
     if (/[\\/]config[\\/]themes[\\/][^\\/]+\.json$/i.test(path)) liveThemeFromText(path, model.getValue());
   });
   state.tabs.push(tab);
@@ -784,6 +785,8 @@ function activate(tab) {
   }
   updateRunGlyphs(tab);
   updateProblems();
+  renderMdButton(tab);
+  if (!$('#mdview').hidden) renderMdPreview();
   $('#welcome').hidden = true;
   if (inside(tab.path)) {
     state.selected = tab.path;
@@ -2030,6 +2033,45 @@ async function quickOpen() {
   });
 }
 
+// Aktuálna skratka vstavanej akcie (aj keď si ju zmenil v Nastaveniach → Skratky).
+const keymapKey = (id) => {
+  const b = BINDINGS.find((x) => x.id === id);
+  return b ? keymap?.current(b) || '' : '';
+};
+
+// ---------- náhľad Markdownu (.md) vedľa editora ----------
+let mdTimer = 0;
+function renderMdPreview() {
+  const tab = activeTab();
+  const box = $('#mdview');
+  if (!box || box.hidden) return;
+  if (!tab || !['md', 'markdown'].includes(extOf(tab.path))) return closeMdPreview();
+  $('#mdview-name').textContent = basename(tab.path);
+  $('#mdview-body').innerHTML = markdown(tab.model.getValue(), { preview: true });
+}
+function toggleMdPreview(show) {
+  const tab = activeTab();
+  const box = $('#mdview');
+  const want = show ?? box.hidden;
+  if (want && (!tab || !['md', 'markdown'].includes(extOf(tab.path)))) return toast(t('Open a Markdown (.md) file first.'), 'info');
+  box.hidden = !want;
+  $('#md-resizer').hidden = !want;
+  document.body.classList.toggle('md-open', want);
+  if (want) renderMdPreview();
+}
+// Tlačidlo „Náhľad“ v rohu editora pri .md súboroch.
+function renderMdButton(tab = activeTab()) {
+  const b = $('#md-toggle');
+  if (b) b.hidden = !tab || !['md', 'markdown'].includes(extOf(tab.path));
+}
+function closeMdPreview() {
+  toggleMdPreview(false);
+}
+function scheduleMdPreview() {
+  clearTimeout(mdTimer);
+  mdTimer = setTimeout(renderMdPreview, 150);
+}
+
 function commands() {
   const c = (label, run, kbd, ic, keywords = '') => ({ label, run, kbd, keywords, icon: ic ? icon(ic, 15) : '' });
   const list = [
@@ -2037,6 +2079,8 @@ function commands() {
     c(t('Stop program'), stop, 'Shift+F5', 'stop'),
     c(state.live ? t('Live Server: stop') : t('Live Server: start'), toggleLive, 'Alt+L', 'globe', 'web preview html browser'),
     c(t('Open folder…'), openFolderDialog, 'Ctrl+O', 'folderOpen'),
+    c(t('Open file…'), openFileDialog, keymapKey('openFile'), 'file', 'markdown md txt single file'),
+    c(t('Markdown: show preview'), () => toggleMdPreview(), keymapKey('mdPreview'), 'file', 'md readme'),
     c(t('New project…'), newProject, 'Ctrl+Shift+N', 'plus', 'project folder'),
     c(t('Quick open file…'), quickOpen, 'Ctrl+P', 'filePlus'),
     c(t('New file…'), () => newFile(), 'Ctrl+N', 'filePlus'),
@@ -2927,6 +2971,36 @@ const START_CHOICES = [
   { id: 'empty', lang: '', title: 'Empty file', sub: 'your own name and extension', icon: 'file.txt' },
 ];
 
+// ---------- samostatné súbory (aj bez projektu) ----------
+async function openStandalone(files) {
+  if (!files?.length) return;
+  closeStart();
+  for (const f of files) await openFile(f);
+}
+async function openFileDialog() {
+  openStandalone(await flux.openFileDialog());
+}
+// Pretiahnutie súborov alebo priečinka do okna.
+function setupDrop() {
+  window.addEventListener('dragover', (e) => {
+    if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault();
+  });
+  window.addEventListener('drop', async (e) => {
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.length) return;
+    e.preventDefault();
+    const ok = [];
+    for (const f of files) {
+      const p = flux.pathForFile(f);
+      if (!p) continue;
+      const allowed = await flux.allowFile(p);
+      if (allowed?.dir) await setWorkspace(allowed.dir); // pretiahnutý priečinok = projekt
+      else if (allowed) ok.push(allowed);
+    }
+    openStandalone(ok);
+  });
+}
+
 // Domov Fluxu (klik na logo): pripnuté a nedávne projekty, nový/otvoriť a rýchly štart zo šablóny.
 async function openStart() {
   const el = $('#start');
@@ -2935,6 +3009,10 @@ async function openStart() {
   let list = state.projectList || [];
   try {
     list = await flux.projects();
+  } catch {}
+  let recentFiles = [];
+  try {
+    recentFiles = (await flux.recentFiles()).slice(0, 5);
   } catch {}
   const pinned = list.filter((p) => p.pinned);
   const recent = list
@@ -2959,11 +3037,13 @@ async function openStart() {
       <div class="hm-actions">
         <button class="hm-act primary" data-act="newproject">${icon('plus', 18)}<span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
         <button class="hm-act" data-act="open">${icon('folderOpen', 18)}<span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
+        <button class="hm-act" data-act="openfile">${icon('file', 18)}<span><b>${t('Open file')}</b><small>${t('.md, .txt, any file')}</small></span></button>
         <button class="hm-act" data-act="github">${icon('git', 18)}<span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>
         ${state.workspace ? `<button class="hm-act" data-act="newfile">${icon('filePlus', 18)}<span><b>${t('New file')}</b><small>${escapeHtml(basename(state.workspace))}</small></span></button>` : ''}
       </div>
       ${pinned.length ? `<h3 class="hm-h">${icon('pin', 12)}${t('Pinned')}</h3><div class="hm-cards">${pinned.map(card).join('')}</div>` : ''}
       ${recent.length ? `<h3 class="hm-h">${t('Recent')}</h3><div class="hm-lines">${recent.map(line).join('')}</div>` : ''}
+      ${recentFiles.length ? `<h3 class="hm-h">${t('Recent files')}</h3><div class="hm-lines">${recentFiles.map((f) => `<button class="hm-line" data-file="${escapeAttr(f)}">${fileIcon(basename(f)).replace(/width="16" height="16"/, 'width="18" height="18"')}<b>${escapeHtml(basename(f))}</b><small>${escapeHtml(f)}</small></button>`).join('')}</div>` : ''}
       <h3 class="hm-h">${t('Quick start')} <small>${state.workspace ? t('new file in {dir}', { dir: escapeHtml(basename(state.workspace)) }) : t('creates a new project')}</small></h3>
       <div class="st-grid hm-quick">${choices
         .map(
@@ -3003,6 +3083,13 @@ async function openStart() {
     if (b.dataset.act === 'newproject') {
       closeStart();
       return newProject();
+    }
+    if (b.dataset.act === 'openfile') return openFileDialog();
+    if (b.dataset.file) {
+      const f = await flux.openRecentFile(b.dataset.file);
+      if (f) return openStandalone([f]);
+      await flux.forgetRecentFile(b.dataset.file);
+      return openStart();
     }
     if (b.dataset.act === 'open') {
       await openFolderDialog();
@@ -3056,6 +3143,7 @@ function renderWelcome() {
         <div class="welcome-actions">
           <button class="primary" data-act="newproject">${icon('plus')}${t('New project')}</button>
           <button data-act="open">${icon('folderOpen')}${t('Open folder')}</button>
+          <button data-act="openfile">${icon('file')}${t('Open file')}</button>
         </div>
       </div>`;
   } else {
@@ -3153,6 +3241,7 @@ function renderWelcome() {
       return;
     }
     if (b.dataset.act === 'open') openFolderDialog();
+    else if (b.dataset.act === 'openfile') openFileDialog();
     else if (b.dataset.act === 'new') newFile();
     else if (b.dataset.act === 'quick') quickOpen();
     else if (b.dataset.act === 'start') openStart();
@@ -3313,6 +3402,8 @@ function keybindings() {
           const tb = activeTab();
           if (!tb) return;
         });
+      else if (ctrl && e.altKey && e.code === 'KeyO') openFileDialog();
+      else if (ctrl && e.shiftKey && e.code === 'KeyV' && state.active && ['md', 'markdown'].includes(extOf(state.active.path))) toggleMdPreview();
       else if (ctrl && key === 'o') openFolderDialog();
       else if (ctrl && e.shiftKey && key === 'n') newProject();
       else if (ctrl && key === 'n') newFile();
@@ -3369,6 +3460,26 @@ function layoutEvents() {
     const rect = $('#workarea').getBoundingClientRect();
     const w = Math.min(rect.width - 200, Math.max(240, rect.right - e.clientX));
     $('#preview').style.width = `${w}px`;
+  });
+  resizer($('#md-resizer'), (e) => {
+    const rect = $('#workarea').getBoundingClientRect();
+    $('#mdview').style.width = `${Math.min(rect.width - 200, Math.max(240, rect.right - e.clientX))}px`;
+  });
+  $('#md-toggle').innerHTML = `${icon('file', 13)}<span>${t('Preview')}</span>`;
+  $('#md-toggle').onclick = () => toggleMdPreview();
+  $('#mdview-close').innerHTML = icon('x', 15);
+  $('#mdview-close').onclick = () => closeMdPreview();
+  $('#mdview-body').addEventListener('click', (e) => {
+    const copy = e.target.closest('[data-copy]');
+    if (copy) {
+      navigator.clipboard.writeText(copy.closest('.ai-code').querySelector('code').textContent);
+      return toast(t('Copied.'), 'ok', 1500);
+    }
+    const a = e.target.closest('a[href]');
+    if (a) {
+      e.preventDefault();
+      flux.openExternal(a.href);
+    }
   });
   resizer($('#ai-resizer'), (e) => {
     const rect = $('#workarea').getBoundingClientRect();
@@ -3497,6 +3608,8 @@ async function main() {
       newFile: () => newFile(),
       newProject: () => newProject(),
       openFolder: openFolderDialog,
+      openFile: openFileDialog,
+      mdPreview: () => toggleMdPreview(),
       quickOpen,
       palette: openCommandPalette,
       settings: openSettings,
@@ -3644,6 +3757,10 @@ async function main() {
     await refreshTree();
     syncOpenTabs();
   });
+  // Súbory otvorené cez „Otvoriť v programe → Flux“ alebo pretiahnuté do okna.
+  setupDrop();
+  flux.onOpenFiles((files) => openStandalone(files));
+  flux.startupFiles().then((files) => files.length && setTimeout(() => openStandalone(files), 600));
   flux.onSaveAllAndClose(async () => {
     await saveAll();
     flux.close();

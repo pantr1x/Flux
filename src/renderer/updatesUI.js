@@ -52,7 +52,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
             .map(
               (r, i) => `<details class="up-rel"${i === 0 || r.version === state?.version ? ' open' : ''}>
               <summary><b>${esc(r.name || `v${r.version}`)}</b>${r.version === state?.version ? `<span class="up-badge">${t('installed')}</span>` : ''}${i === 0 ? `<span class="up-badge new">${t('newest')}</span>` : ''}<small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></summary>
-              <div class="ai-body">${markdown(r.body || t('No notes for this version.'))}</div></details>`,
+              <div class="ai-body">${markdown(r.body || t('No notes for this version.'), { icons: true })}</div></details>`,
             )
             .join('')
         : `<div class="s-loading">${t('No releases yet.')}</div>`;
@@ -113,7 +113,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     const el = document.createElement('div');
     el.className = 'up-whatsnew';
     el.innerHTML = `<div class="np-card"><header><h2>${icon('sparkle', 18)}${t('What’s new in Flux {v}', { v: esc(st.version) })}</h2><button class="icon-btn" data-close>${icon('x', 16)}</button></header>
-      <div class="ai-body up-wn-body">${markdown(rel?.body || t('Flux was updated to version {v}.', { v: st.version }))}</div>
+      <div class="ai-body up-wn-body">${markdown(rel?.body || t('Flux was updated to version {v}.', { v: st.version }), { icons: true })}</div>
       <footer><div class="grow"></div><button class="ob-primary" data-close>${t('Continue')}</button></footer></div>`;
     document.body.append(el);
     el.onclick = (e) => {

@@ -6,25 +6,53 @@ const flux = window.flux;
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// Jednoduchý Markdown: bloky kódu, `kód`, **tučné**, odkazy, zoznamy, odseky.
-export function markdown(text) {
-  const parts = String(text).split(/```/);
+// Ikona k nadpisu podľa témy (v poznámkach k vydaniu namiesto emoji).
+const HEAD_ICONS = [
+  [/ai|claude|mcp|assistant/i, 'sparkle'],
+  [/fix|bug|repair/i, 'check'],
+  [/updat|release|version/i, 'refresh'],
+  [/look|theme|design|make it yours|personal/i, 'palette'],
+  [/github|git\b/i, 'git'],
+  [/plugin|extension/i, 'download'],
+  [/file|markdown|editor/i, 'file'],
+  [/run|language/i, 'play'],
+];
+const EMOJI = /^[\p{Extended_Pictographic}\uFE0F\u200D\s]+/u;
+
+// Jednoduchý Markdown: nadpisy, zoznamy, tabuľky, citácie, bloky kódu, `kód`, **tučné**, *kurzíva*, ~~prečiarknuté~~, odkazy a obrázky.
+// opts.icons – nadpisy dostanú ikonu namiesto emoji; opts.preview – náhľad súboru (bloky kódu bez „Insert“).
+export function markdown(text, opts = {}) {
+  const parts = String(text).replace(/\r\n?/g, '\n').split(/```/);
   let html = '';
   parts.forEach((part, i) => {
     if (i % 2 === 1) {
       const nl = part.indexOf('\n');
       const lang = nl > 0 ? part.slice(0, nl).trim() : '';
       const code = nl >= 0 ? part.slice(nl + 1).replace(/\n$/, '') : part;
-      html += `<div class="ai-code"><div class="ai-code-bar"><span>${esc(lang || 'code')}</span><button data-copy>${icon('file', 12)}${t('Copy')}</button><button data-insert>${icon('plus', 12)}${t('Insert')}</button></div><pre><code>${esc(code)}</code></pre></div>`;
+      html += `<div class="ai-code"><div class="ai-code-bar"><span>${esc(lang || 'code')}</span><button data-copy>${icon('file', 12)}${t('Copy')}</button>${opts.preview ? '' : `<button data-insert>${icon('plus', 12)}${t('Insert')}</button>`}</div><pre><code>${esc(code)}</code></pre></div>`;
       return;
     }
     const inline = (s) =>
       esc(s)
         .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g, '<img src="$2" alt="$1">')
         .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/__([^_]+)__/g, '<b>$1</b>')
+        .replace(/~~([^~]+)~~/g, '<s>$1</s>')
         .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,!?:]|$)/g, '$1<i>$2</i>')
+        .replace(/(^|[\s(])_([^_\s][^_]*)_(?=[\s).,!?:]|$)/g, '$1<i>$2</i>')
         .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    // Riadok po riadku: nadpisy, zoznamy, tabuľky a odseky (aj keď nie sú oddelené prázdnym riadkom).
+    const heading = (level, raw) => {
+      let txt = raw;
+      let ic = '';
+      if (opts.icons) {
+        txt = raw.replace(EMOJI, '');
+        ic = `<span class="md-h-ic">${icon((HEAD_ICONS.find(([re]) => re.test(txt)) || [0, 'sparkle'])[1], 14)}</span>`;
+      }
+      const tag = opts.preview ? `h${Math.min(level + 1, 6)}` : 'h4';
+      return `<${tag} class="md-h md-h${level}">${ic}${inline(txt)}</${tag}>`;
+    };
+    // Riadok po riadku (aj keď bloky nie sú oddelené prázdnym riadkom).
     const lines = part.split('\n');
     let para = [];
     const flush = () => {
@@ -37,19 +65,37 @@ export function markdown(text) {
         flush();
         continue;
       }
-      const head = line.match(/^\s*#{1,6}\s+(.*)$/);
+      const head = line.match(/^\s*(#{1,6})\s+(.*?)\s*#*\s*$/);
       if (head) {
         flush();
-        html += `<h4>${inline(head[1])}</h4>`;
+        html += heading(head[1].length, head[2]);
+        continue;
+      }
+      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+        flush();
+        html += '<hr>';
+        continue;
+      }
+      if (/^\s*>/.test(line)) {
+        flush();
+        const q = [];
+        while (k < lines.length && /^\s*>/.test(lines[k])) q.push(lines[k++].replace(/^\s*>\s?/, ''));
+        k--;
+        html += `<blockquote>${markdown(q.join('\n'), opts)}</blockquote>`;
         continue;
       }
       if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
         flush();
         const ordered = /^\s*\d+\./.test(line);
         const items = [];
-        while (k < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[k])) items.push(lines[k++].replace(/^\s*([-*+]|\d+\.)\s+/, ''));
+        const same = ordered ? /^\s*\d+\.\s+/ : /^\s*[-*+]\s+/;
+        while (k < lines.length && same.test(lines[k])) items.push(lines[k++].replace(/^\s*([-*+]|\d+\.)\s+/, ''));
         k--;
-        html += `<${ordered ? 'ol' : 'ul'}>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`;
+        const li = (x) => {
+          const box = x.match(/^\[([ xX])\]\s+(.*)$/);
+          return box ? `<li class="md-task"><input type="checkbox" disabled${box[1] !== ' ' ? ' checked' : ''}> ${inline(box[2])}</li>` : `<li>${inline(x)}</li>`;
+        };
+        html += `<${ordered ? 'ol' : 'ul'}>${items.map(li).join('')}</${ordered ? 'ol' : 'ul'}>`;
         continue;
       }
       if (/^\s*\|.*\|\s*$/.test(line)) {

@@ -385,9 +385,29 @@ function insideConfig(p) {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
+// Samostatné súbory, ktoré si používateľ sám otvoril (aj bez projektu).
+const openedFiles = new Set();
+const fileKey = (p) => (isWin ? path.resolve(p).toLowerCase() : path.resolve(p));
+function allowFile(p) {
+  const abs = path.resolve(p);
+  try {
+    if (!fs.statSync(abs).isFile()) return null;
+  } catch {
+    return null;
+  }
+  openedFiles.add(fileKey(abs));
+  const recent = (settings.recentFiles || []).filter((f) => fileKey(f) !== fileKey(abs));
+  settings.recentFiles = [abs, ...recent].slice(0, 12);
+  saveSettings();
+  return abs;
+}
+// Súbory z príkazového riadku („Otvoriť v programe → Flux“, pretiahnutie na ikonu).
+const filesFromArgv = (argv) => argv.slice(1).filter((a) => !a.startsWith('-') && /\.[\w]+$/.test(a) && fs.existsSync(a) && fs.statSync(a).isFile() && path.resolve(a) !== path.resolve(process.argv[1] || ''));
+
 function guard(p) {
   const abs = path.resolve(p);
   if (insideConfig(abs)) return abs;
+  if (openedFiles.has(fileKey(abs))) return abs;
   if (!insideWorkspace(abs)) throw new Error(t('The path is outside the open folder.'));
   return abs;
 }
@@ -757,6 +777,29 @@ function registerIpc() {
 
   // Jazyky na stiahnutie (Java, C++, Go…)
   // GitHub / Git – operácie len nad otvoreným projektom
+  // Samostatné súbory (bez projektu)
+  ipcMain.handle('file:open-dialog', async () => {
+    const r = await dialog.showOpenDialog(win, { title: t('Open file'), properties: ['openFile', 'multiSelections'] });
+    if (r.canceled) return [];
+    return r.filePaths.map(allowFile).filter(Boolean);
+  });
+  ipcMain.handle('file:allow', (_e, p) => {
+    const abs = path.resolve(String(p || ''));
+    try {
+      if (fs.statSync(abs).isDirectory()) return { dir: abs };
+    } catch {
+      return null;
+    }
+    return allowFile(abs);
+  });
+  ipcMain.handle('file:recent', () => (settings.recentFiles || []).filter((f) => fs.existsSync(f)));
+  ipcMain.handle('file:open-recent', (_e, p) => ((settings.recentFiles || []).some((f) => fileKey(f) === fileKey(String(p))) ? allowFile(p) : null));
+  ipcMain.handle('file:forget-recent', (_e, p) => {
+    settings.recentFiles = (settings.recentFiles || []).filter((f) => fileKey(f) !== fileKey(String(p)));
+    saveSettings();
+    return true;
+  });
+  ipcMain.handle('file:startup', () => filesFromArgv(process.argv).map(allowFile).filter(Boolean));
   // MCP server pre iné AI aplikácie
   ipcMain.handle('mcp:info', () => ({ ...mcp.info(), exe: process.execPath, bridge: path.join(__dirname, 'mcp-bridge.js'), claudeConfig: claudeDesktopConfigPath() }));
   ipcMain.handle('mcp:enable', async (_e, on) => {
@@ -1135,8 +1178,10 @@ async function projectStats(dir) {
 // ---------- štart ----------
 // Iba jedno okno aplikácie – druhé spustenie len prenesie existujúce okno dopredu.
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => {
+app.on('second-instance', (_e, argv) => {
   if (!win) return;
+  const files = filesFromArgv(argv).map(allowFile).filter(Boolean);
+  if (files.length) send('open-files', files);
   if (win.isMinimized()) win.restore();
   win.focus();
 });

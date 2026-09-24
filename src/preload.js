@@ -1,5 +1,5 @@
 // Bezpečný most medzi oknom (UI) a hlavným procesom – UI nemá priamy prístup k Node.js.
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const on = (channel) => (callback) => {
   const listener = (_e, payload) => callback(payload);
@@ -17,6 +17,14 @@ contextBridge.exposeInMainWorld('flux', {
   chooseBackground: () => ipcRenderer.invoke('app:choose-background'),
   resetBackground: () => ipcRenderer.invoke('app:reset-background'),
   chooseCursor: () => ipcRenderer.invoke('app:choose-cursor'),
+  openFileDialog: () => ipcRenderer.invoke('file:open-dialog'),
+  allowFile: (p) => ipcRenderer.invoke('file:allow', p),
+  recentFiles: () => ipcRenderer.invoke('file:recent'),
+  openRecentFile: (p) => ipcRenderer.invoke('file:open-recent', p),
+  forgetRecentFile: (p) => ipcRenderer.invoke('file:forget-recent', p),
+  startupFiles: () => ipcRenderer.invoke('file:startup'),
+  onOpenFiles: (cb) => ipcRenderer.on('open-files', (_e, files) => cb(files)),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   mcpInfo: () => ipcRenderer.invoke('mcp:info'),
   mcpEnable: (on) => ipcRenderer.invoke('mcp:enable', on),
   mcpNewKey: () => ipcRenderer.invoke('mcp:new-key'),
