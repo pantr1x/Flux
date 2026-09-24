@@ -2,6 +2,12 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.2.1 – 2026-09-24
+
+- **Sign in with GitHub** now works: click it, log in in your browser (or create an account, also with Google), press *Authorize* – and all your repositories are in Flux.
+- Release notes are built into Flux, so *Settings → About & updates* always shows what is new.
+- Lists and tables in release notes, plugin pages and the AI chat look right.
+
 ## 0.2.0 – 2026-09-24
 
 The first public version of Flux – a small, modern code editor for Windows 11.
