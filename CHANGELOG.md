@@ -1,3 +1,9 @@
+# Flux – what's new
+
+Every version with its changes. Flux shows these notes in **Settings → About & updates**.
+
+## 0.2.0 – 2026-09-24
+
 The first public version of Flux – a small, modern code editor for Windows 11.
 
 ### ✨ Highlights
@@ -18,3 +24,18 @@ Error Lens, Auto Rename Tag, Python Docstring, Indent Rainbow, Better Comments, 
 
 ### 🔄 Updates
 Flux now updates itself. Turn it off any time in **Settings → About & updates**, where you also find these notes for every version.
+
+### 🛠 Also new
+- **Sign in with GitHub** in your browser – you can log in (or create an account, also with Google) right there.
+- **Theme studio**, **all shortcuts editable**, custom mouse cursor and a *Reset* for every look option.
+- Plugins store with ratings and screenshots; ten plugins from the Flux team.
+- Dark installer with the Flux artwork.
+
+## 0.1.0 – 2026-09-23
+
+The first build of Flux.
+
+- One-click Run for Python and JavaScript, Live Server for websites.
+- Python autocomplete and error checking.
+- Translucent, Zen-like look with code themes, projects in the sidebar and a code map.
+- First-start intro and feature tour.

@@ -5431,3 +5431,35 @@ body.pointer-everywhere * {
   overflow: auto;
   padding: 4px 2px 10px;
 }
+.s-row-details > summary {
+  padding: 10px 16px;
+  margin: 0;
+}
+.s-row-details[open] > summary {
+  padding-bottom: 0;
+}
+
+/* Markdown: zoznamy a tabuľky (poznámky k vydaniu, pluginy, AI) */
+.ai-body ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+.ai-body li + li {
+  margin-top: 3px;
+}
+.ai-body table {
+  width: 100%;
+  margin: 6px 0 10px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.ai-body th,
+.ai-body td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.ai-body th {
+  color: var(--text-2);
+  font-weight: 600;
+}

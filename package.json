@@ -21,7 +21,8 @@
       "src/preload.js",
       "dist/renderer/**/*",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "CHANGELOG.md"
     ],
     "asarUnpack": [
       "node_modules/basedpyright/**/*",
@@ -66,10 +67,7 @@
         "repo": "Flux",
         "releaseType": "release"
       }
-    ],
-    "releaseInfo": {
-      "releaseNotesFile": "build/release-notes.md"
-    }
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

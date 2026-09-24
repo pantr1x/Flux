@@ -22,7 +22,8 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
         info.connected && info.user
           ? `<div class="s-row"><span class="gh-user">${info.user.avatar ? `<img src="${esc(info.user.avatar)}" alt="">` : ''}<span><b>${esc(info.user.name)}</b><small>@${esc(info.user.login)}</small></span></span><button class="s-btn" data-gh-disconnect>${t('Disconnect')}</button></div>
              <div class="s-row"><span><b>${t('Open a repository')}</b><small>${t('Pick one of your repositories – Flux opens it as a project.')}</small></span><button class="s-btn primary" data-gh-pick>${icon('git', 13)}${t('Choose…')}</button></div>`
-          : `${info.canSignIn ? `<div class="s-row"><span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in and press Authorize.')}</small></span><button class="s-btn primary" data-gh-signin>${icon('git', 13)}${t('Sign in')}</button></div>` : ''}<div class="s-row"><span><b>${t('Personal access token')}</b><small>${t('Create one on GitHub with the “repo” permission, then paste it here.')} <a href="#" data-gh-newtoken>${t('Create token')}</a></small></span><span class="s-inline"><input type="password" id="gh-token" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn" data-gh-connect>${t('Connect')}</button></span></div>`
+          : `<div class="s-row"><span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in or create an account (also with Google) and press Authorize.')}</small></span><button class="s-btn primary" data-gh-signin>${icon('git', 13)}${t('Sign in')}</button></div>
+             <details class="gh-more s-row-details"><summary>${t('Advanced: use a token')}</summary><div class="s-row"><span><b>${t('Personal access token')}</b><small>${t('Create one on GitHub with the “repo” permission, then paste it here.')} <a href="#" data-gh-newtoken>${t('Create token')}</a></small></span><span class="s-inline"><input type="password" id="gh-token" class="s-text" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn" data-gh-connect>${t('Connect')}</button></span></div></details>`
       }</div>
       <h3>Git</h3>
       <div class="tc-list">${gitTc ? tools.row(gitTc) : ''}</div>`;
@@ -119,13 +120,9 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
           </ol>`;
       shell(`<div class="gh-connect">
           <p class="s-lead">${t('Connect your GitHub account once – then pick any of your repositories and Flux opens it as a project.')}</p>
-          ${
-            info.canSignIn
-              ? `<button class="gh-big" data-gh-signin>${icon('git', 20)}<span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in and press Authorize.')}</small></span></button>
-                 <details class="gh-more"><summary>${t('Use a token instead')}</summary>${tokenSteps}</details>`
-              : tokenSteps
-          }
-          <p class="gh-foot">${t('The token is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.')}</p>
+          <button class="gh-big" data-gh-signin>${icon('git', 20)}<span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in or create an account (also with Google) and press Authorize.')}</small></span></button>
+          <details class="gh-more"><summary>${t('Advanced: use a token')}</summary>${tokenSteps}</details>
+          <p class="gh-foot">${t('Your login is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.')}</p>
           <div class="gh-or"><span>${t('or open a public repository by link')}</span></div>
           <form class="gh-link" id="gh-link"><input id="gh-url" placeholder="https://github.com/owner/repo" spellcheck="false" autocomplete="off"><button class="s-btn">${t('Open')}</button></form>
         </div>`);

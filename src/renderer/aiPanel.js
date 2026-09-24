@@ -22,18 +22,50 @@ export function markdown(text) {
       esc(s)
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,!?:]|$)/g, '$1<i>$2</i>')
         .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    for (const block of part.split(/\n{2,}/)) {
-      const lines = block.split('\n').filter((l) => l.trim());
-      if (!lines.length) continue;
-      if (lines.every((l) => /^\s*([-*]|\d+\.)\s+/.test(l))) {
-        html += `<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*([-*]|\d+\.)\s+/, ''))}</li>`).join('')}</ul>`;
-      } else if (/^#{1,4}\s/.test(lines[0])) {
-        html += `<h4>${inline(lines[0].replace(/^#+\s/, ''))}</h4>${lines.length > 1 ? `<p>${lines.slice(1).map(inline).join('<br>')}</p>` : ''}`;
-      } else {
-        html += `<p>${lines.map(inline).join('<br>')}</p>`;
+    // Riadok po riadku: nadpisy, zoznamy, tabuľky a odseky (aj keď nie sú oddelené prázdnym riadkom).
+    const lines = part.split('\n');
+    let para = [];
+    const flush = () => {
+      if (para.length) html += `<p>${para.map(inline).join('<br>')}</p>`;
+      para = [];
+    };
+    for (let k = 0; k < lines.length; k++) {
+      const line = lines[k];
+      if (!line.trim()) {
+        flush();
+        continue;
       }
+      const head = line.match(/^\s*#{1,6}\s+(.*)$/);
+      if (head) {
+        flush();
+        html += `<h4>${inline(head[1])}</h4>`;
+        continue;
+      }
+      if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
+        flush();
+        const ordered = /^\s*\d+\./.test(line);
+        const items = [];
+        while (k < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[k])) items.push(lines[k++].replace(/^\s*([-*+]|\d+\.)\s+/, ''));
+        k--;
+        html += `<${ordered ? 'ol' : 'ul'}>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`;
+        continue;
+      }
+      if (/^\s*\|.*\|\s*$/.test(line)) {
+        flush();
+        const rows = [];
+        while (k < lines.length && /^\s*\|.*\|\s*$/.test(lines[k])) rows.push(lines[k++]);
+        k--;
+        const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+        const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+        const [first, ...rest] = body;
+        html += `<table><thead><tr>${cells(first).map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${rest.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+        continue;
+      }
+      para.push(line);
     }
+    flush();
   });
   return html;
 }
