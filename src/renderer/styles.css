@@ -6558,3 +6558,68 @@ body.theme-dark #onboard::before {
 .s-head .nav-btns + h2 {
   flex: 1;
 }
+
+/* ---------- panel dole: Výstup / Terminál ---------- */
+.panel-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--card-2);
+}
+.panel-tab {
+  border: 0;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  font: 600 12px var(--ui-font);
+  cursor: pointer;
+}
+.panel-tab:hover {
+  color: var(--text);
+}
+.panel-tab.on {
+  background: var(--active);
+  color: var(--text);
+}
+#shell {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 0 6px 14px;
+  overflow: hidden;
+}
+#shell[hidden],
+#terminal[hidden] {
+  display: none;
+}
+#shell .xterm {
+  height: 100%;
+}
+#shell .xterm-viewport {
+  background: transparent !important;
+}
+
+/* súbory mimo projektu */
+.projects.loose {
+  max-height: 26%;
+}
+.lf-row .pr-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lf-row.open .pr-name::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.pr-hidden {
+  color: var(--text-3);
+  font-size: 12px;
+}

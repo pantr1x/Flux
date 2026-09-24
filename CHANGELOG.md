@@ -2,6 +2,26 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.5 – 2026-09-24
+
+### Updates on start
+- Flux looks for a new version right after it starts.
+- With *Update automatically* on, it downloads the new version in the background and tells you when it is ready – with a *Restart now* button.
+- With it off, you get a message that a new version is available, with a *Download* button.
+
+### Terminal
+- The panel at the bottom has two tabs: *Output* for your programs and *Terminal* – a real command line (PowerShell on Windows) in your project folder.
+- Ctrl+Shift+` opens the terminal. Running a program switches back to *Output*.
+
+### Files outside a project
+- Files you open or create outside a project are listed under *Files* in the sidebar, so you can get back to them quickly.
+
+### Projects
+- Right-click a project (in the sidebar or on the home screen) for more options:
+  - *Hide from the sidebar* – the project stays on the home screen. Hidden projects are one click away at the bottom of the list.
+  - *Remove from Flux* – the files stay on your disk.
+  - *Delete project* – the folder goes to the Recycle Bin, so you can still restore it.
+
 ## 0.3.4 – 2026-09-24
 
 ### Back and forward

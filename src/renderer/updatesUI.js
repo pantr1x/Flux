@@ -90,14 +90,30 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
   }
 
   // Zmeny stavu z hlavného procesu (aj keď nastavenia nie sú otvorené).
-  let announced = '';
+  // Upozornenia pri štarte: s automatickými aktualizáciami sa nová verzia rovno sťahuje,
+  // bez nich príde správa s tlačidlom na stiahnutie.
+  const announced = {};
+  const once = (key, fn) => {
+    if (announced[key]) return;
+    announced[key] = true;
+    fn();
+  };
   flux.onUpdateState((s) => {
     state = s;
     if (box?.isConnected) drawStatus();
-    if (s.status === 'ready' && announced !== s.latest) {
-      announced = s.latest;
-      toast(t('Flux {v} is ready – it installs when you restart.', { v: s.latest }), 'ok', 9000);
-    }
+    if (!s.latest) return;
+    if (s.status === 'available')
+      once(`a${s.latest}`, () =>
+        toast(t('Flux {v} is available.', { v: s.latest }), 'info', 20000, {
+          label: t('Download'),
+          run: () => (s.canUpdate ? flux.updateDownload().catch((err) => toast(String(err.message || err), 'error')) : flux.openExternal('https://github.com/pantr1x/Flux/releases/latest')),
+        }),
+      );
+    if (s.status === 'downloading') once(`d${s.latest}`, () => toast(t('Downloading Flux {v} in the background…', { v: s.latest }), 'info', 5000));
+    if (s.status === 'ready')
+      once(`r${s.latest}`, () =>
+        toast(t('Flux {v} is ready – it installs when you restart.', { v: s.latest }), 'ok', 20000, { label: t('Restart now'), run: () => flux.updateInstall() }),
+      );
   });
 
   // Po aktualizácii: „Čo je nové“.

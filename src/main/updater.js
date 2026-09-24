@@ -102,7 +102,7 @@ function createUpdater({ getSettings, send }) {
 
   // Pri štarte: skontrolovať (a pri automatických aktualizáciách aj stiahnuť).
   function start() {
-    setTimeout(check, 12000);
+    setTimeout(check, 4000);
     setInterval(check, 6 * 60 * 60 * 1000);
   }
 

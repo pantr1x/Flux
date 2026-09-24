@@ -6,6 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { findPython, probe } = require('./python');
 const { Runner, commandFor, toolchainFor } = require('./runner');
+const { Shell } = require('./shell');
 const toolchains = require('./toolchains');
 const { createAI } = require('./ai');
 const { createGitHub } = require('./github');
@@ -91,6 +92,7 @@ const send = (channel, payload) => {
 };
 
 const runner = new Runner(send);
+const shellTerm = new Shell(send);
 const knownTools = new Set(); // jazyky, o ktorých už vieme, že sú nainštalované
 // Čo AI smie vidieť a meniť v otvorenom projekte (len v rámci priečinka projektu).
 async function projectTool(name, input = {}) {
@@ -554,12 +556,40 @@ function registerIpc() {
     return Promise.all(
       ordered.map(async (p) => {
         const l = await projectLangs(p.dir);
-        return { dir: p.dir, pinned: !!p.pinned, name: path.basename(p.dir), kind: await projectKind(p.dir), langs: l.langs, github: l.github, recent: settings.recent.indexOf(p.dir) };
+        return { dir: p.dir, pinned: !!p.pinned, hidden: !!p.hidden, name: path.basename(p.dir), kind: await projectKind(p.dir), langs: l.langs, github: l.github, recent: settings.recent.indexOf(p.dir) };
       }),
     );
   });
   ipcMain.handle('workspace:forget', (_e, dir) => {
     ensureProjects();
+    settings.recent = settings.recent.filter((d) => d !== dir);
+    settings.projects = settings.projects.filter((p) => p.dir !== dir);
+    saveSettings();
+    return true;
+  });
+  // Skryť z bočného panela – projekt ostane na domovskej obrazovke.
+  ipcMain.handle('project:hide', (_e, dir, hidden) => {
+    ensureProjects();
+    const p = settings.projects.find((x) => x.dir === dir);
+    if (p) p.hidden = !!hidden;
+    saveSettings();
+    return true;
+  });
+  // Odstrániť projekt: priečinok ide do Koša (dá sa obnoviť).
+  ipcMain.handle('project:trash', async (_e, dir) => {
+    ensureProjects();
+    if (!settings.projects.some((p) => p.dir === dir)) throw new Error(t('This is not a Flux project.'));
+    if (workspace === dir) {
+      if (workspaceWatcher) workspaceWatcher.close();
+      workspaceWatcher = null;
+      lsp.stop();
+      await live.stop();
+      runner.stop();
+      shellTerm.kill();
+      workspace = null;
+      settings.lastFolder = null;
+    }
+    await shell.trashItem(dir);
     settings.recent = settings.recent.filter((d) => d !== dir);
     settings.projects = settings.projects.filter((p) => p.dir !== dir);
     saveSettings();
@@ -1038,6 +1068,11 @@ function registerIpc() {
   ipcMain.on('run:input', (_e, text) => runner.input(text));
   ipcMain.on('run:stop', () => runner.stop());
   ipcMain.on('run:resize', (_e, cols, rows) => runner.resize(cols, rows));
+  // Terminál (príkazový riadok) v paneli dole
+  ipcMain.handle('shell:start', (_e, fresh) => (fresh ? shellTerm.restart(workspace) : shellTerm.start(workspace)));
+  ipcMain.on('shell:input', (_e, text) => shellTerm.write(text));
+  ipcMain.on('shell:resize', (_e, cols, rows) => shellTerm.resize(cols, rows));
+  ipcMain.on('shell:kill', () => shellTerm.kill());
 
   // Live Server
   ipcMain.handle('live:start', async () => {
@@ -1232,6 +1267,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   runner.stop();
+  shellTerm.kill();
   lsp.stop();
   live.stop();
   app.quit();

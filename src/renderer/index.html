@@ -20,6 +20,7 @@
         </div>
 
         <div class="projects" id="projects"></div>
+        <div class="projects loose" id="loose" hidden></div>
 
         <div class="essentials" id="essentials">
           <button class="icon-btn" data-cmd="new-file" title="New file from template (Ctrl+N)"></button>
@@ -91,7 +92,10 @@
           <div class="resizer rz-row" id="panel-resizer"></div>
           <div id="panel">
             <div class="panel-bar">
-              <span class="panel-title" id="panel-title" data-t>Output</span>
+              <div class="panel-tabs" role="tablist">
+                <button class="panel-tab on" data-ptab="output" id="panel-title" data-t>Output</button>
+                <button class="panel-tab" data-ptab="shell" data-t>Terminal</button>
+              </div>
               <span class="run-state" id="run-state"></span>
               <div id="hint"></div>
               <div class="grow"></div>
@@ -99,6 +103,7 @@
               <button class="icon-btn" id="btn-panel" title="Hide panel (Ctrl+J)"></button>
             </div>
             <div id="terminal"></div>
+            <div id="shell" hidden></div>
           </div>
 
           <footer id="statusbar">

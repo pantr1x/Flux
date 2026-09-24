@@ -262,6 +262,7 @@ function applyTheme() {
   monaco.editor.setTheme(defineMonacoTheme(monaco, setting('codeTheme'), accent));
   $('#btn-theme').innerHTML = icon(dark ? 'sun' : 'moon');
   if (term) term.options.theme = terminalTheme();
+  if (shTerm) shTerm.options.theme = terminalTheme();
   codemap?.refresh();
 }
 
@@ -885,7 +886,60 @@ function reportDirty() {
   flux.setDirty(state.tabs.filter(isDirty).length);
 }
 
+// ---------- súbory mimo projektu v bočnom paneli ----------
+let looseRecent = [];
+async function refreshLooseFiles() {
+  try {
+    looseRecent = await flux.recentFiles();
+  } catch {}
+  renderLooseFiles();
+}
+function renderLooseFiles() {
+  const el = $('#loose');
+  if (!el) return;
+  const open = state.tabs.filter((tb) => !inside(tb.path) && !tb.readonly).map((tb) => tb.path);
+  const seen = new Set(open.map(keyOf));
+  const recent = looseRecent.filter((f) => !inside(f) && !seen.has(keyOf(f))).slice(0, Math.max(0, 5 - open.length));
+  const files = [...open, ...recent];
+  el.hidden = !files.length;
+  if (!files.length) return (el.innerHTML = '');
+  const cur = state.active ? keyOf(state.active.path) : '';
+  el.innerHTML =
+    `<div class="pr-head"><span>${t('Files')}</span><button class="icon-btn" data-act="newloose" title="${t('New file outside a project')}">${icon('filePlus', 15)}</button></div>` +
+    files
+      .map(
+        (f) =>
+          `<div class="pr-row lf-row${keyOf(f) === cur ? ' active' : ''}${seen.has(keyOf(f)) ? ' open' : ''}" data-file="${escapeAttr(f)}" title="${escapeAttr(f)}">${fileIcon(basename(f))}<span class="pr-text"><span class="pr-name">${escapeHtml(basename(f))}</span><small class="pr-sub">${escapeHtml(shortPath(dirname(f)))}</small></span><button class="pr-pin lf-x" data-forget title="${t('Remove from the list')}">${icon('x', 13)}</button></div>`,
+      )
+      .join('');
+}
+function setupLooseFiles() {
+  const el = $('#loose');
+  el.onclick = async (e) => {
+    if (e.target.closest('[data-act="newloose"]')) return newStandaloneFile();
+    const row = e.target.closest('[data-file]');
+    if (!row) return;
+    const f = row.dataset.file;
+    if (e.target.closest('[data-forget]')) {
+      const tab = state.tabs.find((tb) => keyOf(tb.path) === keyOf(f));
+      if (tab) await closeTab(tab);
+      if (state.tabs.some((tb) => keyOf(tb.path) === keyOf(f))) return;
+      await flux.forgetRecentFile(f);
+      return refreshLooseFiles();
+    }
+    const tab = state.tabs.find((tb) => keyOf(tb.path) === keyOf(f));
+    if (tab) return activate(tab);
+    const ok = await flux.openRecentFile(f);
+    if (ok) return openStandalone([ok]);
+    await flux.forgetRecentFile(f);
+    toast(t('The file no longer exists.'), 'error');
+    refreshLooseFiles();
+  };
+  refreshLooseFiles();
+}
+
 function renderTabs() {
+  renderLooseFiles();
   const el = $('#tabs');
   el.innerHTML = '';
   for (const tab of state.tabs) {
@@ -1232,6 +1286,7 @@ async function setWorkspace(dir) {
   await saveAll();
   for (const tab of [...state.tabs]) await closeTab(tab, { force: true });
   state.workspace = opened;
+  if (shellAlive) startShell(true); // terminál sa presunie do nového projektu
   state.expanded.clear();
   state.dirCache.clear();
   state.selected = null;
@@ -1285,14 +1340,17 @@ async function renderProjects() {
   } catch {}
   state.projectList = list;
   const row = (p) =>
-    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click to rename or remove')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
-  const pinned = list.filter((p) => p.pinned);
-  const rest = list.filter((p) => !p.pinned);
+    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click for more – rename, hide, delete')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
+  const shown = (p) => !p.hidden || keyOf(p.dir) === keyOf(state.workspace || '');
+  const pinned = list.filter((p) => p.pinned && shown(p));
+  const rest = list.filter((p) => !p.pinned && shown(p));
+  const hiddenCount = list.filter((p) => !shown(p)).length;
   el.innerHTML =
     (pinned.length ? `<div class="pr-head pr-head-pin"><span>${icon('pin', 11)}${t('Pinned')}</span></div><div class="pr-pinned">${pinned.map(row).join('')}</div>` : '') +
     `<div class="pr-head"><span>${t('Projects')}</span><button class="icon-btn" data-act="open" title="${t('Open an existing folder (Ctrl+O)')}">${icon('folderOpen', 15)}</button></div>` +
     rest.map(row).join('') +
-    `<button class="pr-row pr-new" data-act="new">${icon('plus', 16)}<span>${t('New project')}</span></button>`;
+    `<button class="pr-row pr-new" data-act="new">${icon('plus', 16)}<span>${t('New project')}</span></button>` +
+    (hiddenCount ? `<button class="pr-row pr-new pr-hidden" data-act="hidden">${icon('folder', 15)}<span>${t('{n} hidden', { n: hiddenCount })}</span></button>` : '');
   const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
   if (current && state.projectKind !== current.kind) {
     state.projectKind = current.kind;
@@ -1484,6 +1542,7 @@ function projectEvents() {
     if (!b) return;
     if (b.dataset.act === 'open') return openFolderDialog();
     if (b.dataset.act === 'new') return newProject();
+    if (b.dataset.act === 'hidden') return pickHiddenProject();
     if (!b.dataset.dir) return;
     if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
     else showProjectPage(); // už otvorený projekt → jeho stránka (popis, úlohy, štatistiky)
@@ -1492,19 +1551,62 @@ function projectEvents() {
     const b = e.target.closest('[data-dir]');
     if (!b) return;
     e.preventDefault();
-    const dir = b.dataset.dir;
-    const pinned = !!b.dataset.pinned;
-    const choice = await confirmPalette(basename(dir), [
-      { label: pinned ? t('Unpin') : t('Pin to top'), value: 'pin', icon: icon('pin', 15) },
-      { label: t('Rename…'), value: 'rename', icon: icon('edit', 15) },
-      { label: t('Remove from list (files stay on disk)'), value: 'forget', icon: icon('x', 15) },
-    ]);
-    if (choice === 'pin') await flux.pinProject(dir, !pinned);
-    if (choice === 'rename') return renameProject(dir);
-    if (choice === 'forget') await flux.forgetProject(dir);
-    state.settings = await flux.setSettings({});
+    await projectMenu(b.dataset.dir);
     renderProjects();
   };
+}
+
+// Skryté projekty: otvoriť alebo vrátiť do bočného panela.
+async function pickHiddenProject() {
+  const hidden = (state.projectList || []).filter((p) => p.hidden);
+  const it = await new Promise((resolve) =>
+    openPalette({
+      placeholder: t('Hidden projects'),
+      note: t('Right-click a project to show it in the sidebar again.'),
+      items: hidden.map((p) => ({ label: p.name, detail: shortPath(p.dir), icon: kindIcon(p.kind, 16, p.github), dir: p.dir })),
+      onPick: resolve,
+      onCancel: () => resolve(null),
+    }),
+  );
+  if (it) await setWorkspace(it.dir);
+}
+
+// Ponuka projektu (pravý klik v bočnom paneli aj na domovskej obrazovke).
+async function projectMenu(dir) {
+  const p = (state.projectList || []).find((x) => keyOf(x.dir) === keyOf(dir)) || {};
+  const choice = await confirmPalette(basename(dir), [
+    { label: p.pinned ? t('Unpin') : t('Pin to top'), value: 'pin', icon: icon('pin', 15) },
+    { label: t('Rename…'), value: 'rename', icon: icon('edit', 15) },
+    { label: p.hidden ? t('Show in the sidebar') : t('Hide from the sidebar (stays on the home screen)'), value: 'hide', icon: icon('sidebar', 15) },
+    { label: t('Remove from Flux (files stay on disk)'), value: 'forget', icon: icon('x', 15) },
+    { label: t('Delete project… (moves the folder to the Recycle Bin)'), value: 'trash', icon: icon('trash', 15) },
+  ]);
+  if (choice === 'pin') await flux.pinProject(dir, !p.pinned);
+  if (choice === 'rename') return renameProject(dir);
+  if (choice === 'hide') {
+    await flux.hideProject(dir, !p.hidden);
+    if (!p.hidden) toast(t('“{name}” is hidden from the sidebar. You find it on the home screen.', { name: basename(dir) }), 'ok');
+  }
+  if (choice === 'forget') await flux.forgetProject(dir);
+  if (choice === 'trash') {
+    const sure = await confirmPalette(t('Delete “{name}”? The folder goes to the Recycle Bin, so you can still restore it.', { name: basename(dir) }), [
+      { label: t('Delete project'), value: 'yes', icon: icon('trash', 15) },
+      { label: t('Cancel'), value: null },
+    ]);
+    if (sure !== 'yes') return;
+    const current = keyOf(dir) === keyOf(state.workspace || '');
+    if (current) for (const tab of [...state.tabs]) if (inside(tab.path)) await closeTab(tab, { force: true });
+    try {
+      await flux.trashProject(dir);
+    } catch (err) {
+      return toast(errorText(err), 'error');
+    }
+    toast(t('“{name}” was moved to the Recycle Bin.', { name: basename(dir) }), 'ok');
+    if (current) return location.reload();
+  }
+  state.settings = await flux.setSettings({});
+  await renderProjects();
+  if (!$('#start').hidden) openStart();
 }
 
 // ---------- Python ----------
@@ -1635,6 +1737,80 @@ function createTerminal() {
   });
 }
 
+// ---------- terminál (príkazový riadok) vedľa výstupu ----------
+let shTerm = null;
+let shFit = null;
+let shellAlive = false;
+async function startShell(fresh = false) {
+  if (!shTerm) {
+    shTerm = new Terminal({
+      fontFamily: "'Cascadia Mono', 'Cascadia Code', Consolas, monospace",
+      fontSize: setting('terminalFontSize') || 13,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      scrollback: 5000,
+      allowProposedApi: true,
+      allowTransparency: true,
+      theme: terminalTheme(),
+    });
+    shFit = new FitAddon();
+    shTerm.loadAddon(shFit);
+    shTerm.open($('#shell'));
+    shTerm.onData((d) => flux.shellInput(d));
+    shTerm.onResize(({ cols, rows }) => flux.shellResize(cols, rows));
+    shTerm.attachCustomKeyEventHandler((e) => {
+      if (e.type === 'keydown' && e.ctrlKey && e.key.toLowerCase() === 'c' && shTerm.hasSelection()) {
+        navigator.clipboard.writeText(shTerm.getSelection());
+        shTerm.clearSelection();
+        return false;
+      }
+      if (e.type === 'keydown' && e.ctrlKey && e.key.toLowerCase() === 'v') {
+        navigator.clipboard.readText().then((x) => x && flux.shellInput(x));
+        return false;
+      }
+      return true;
+    });
+    flux.onShellData((d) => shTerm.write(d));
+    flux.onShellExit(() => {
+      shellAlive = false;
+      shTerm.writeln(`\r\n\x1b[2m${t('The terminal has ended. Press Enter to start a new one.')}\x1b[0m`);
+      const sub = shTerm.onData((d) => {
+        if (d !== '\r') return;
+        sub.dispose();
+        startShell(true);
+      });
+    });
+    new ResizeObserver(() => {
+      if ($('#shell').hidden) return;
+      try {
+        shFit.fit();
+      } catch {}
+    }).observe($('#shell'));
+  }
+  try {
+    shFit.fit();
+  } catch {}
+  flux.shellResize(shTerm.cols, shTerm.rows);
+  if (!shellAlive || fresh) {
+    if (fresh) shTerm.reset();
+    shellAlive = await flux.shellStart(fresh);
+    if (!shellAlive) shTerm.writeln(t('The terminal could not start on this computer.'));
+  }
+}
+function showPanelTab(id) {
+  state.panelTab = id;
+  document.querySelectorAll('.panel-tab').forEach((b) => b.classList.toggle('on', b.dataset.ptab === id));
+  $('#terminal').hidden = id !== 'output';
+  $('#shell').hidden = id !== 'shell';
+  $('#run-state').hidden = id !== 'output';
+  $('#hint').hidden = id !== 'output';
+  updatePanelVisibility();
+  showPanel(true);
+  if (id === 'shell') startShell().then(() => shTerm.focus());
+  else requestAnimationFrame(() => fit.fit());
+}
+
 function greet() {
   term.writeln(`\x1b[2m${t('Program output appears here. Press')} \x1b[0m\x1b[1mF5\x1b[0m\x1b[2m ${t('or ▶ Run.')}\x1b[0m`);
 }
@@ -1728,6 +1904,7 @@ function onRunStart({ label, pty }) {
   state.runOutput = '';
   state.stoppedByUser = false;
   inputBuffer = '';
+  if (state.panelTab === 'shell') showPanelTab('output');
   showPanel(true);
   setHint([]);
   if (setting('clearOnRun')) term.reset();
@@ -1783,7 +1960,7 @@ function fileKind(tab) {
 
 // Výstup sa ukazuje len keď je otvorený súbor (alebo niečo beží) – na úvodnej obrazovke nie.
 function updatePanelVisibility() {
-  const show = !!state.active || state.running;
+  const show = !!state.active || state.running || state.panelTab === 'shell';
   $('#panel').hidden = !show;
   $('#panel-resizer').hidden = !show;
 }
@@ -1810,7 +1987,11 @@ function showPanel(show) {
   panel.classList.toggle('collapsed', !show);
   $('#btn-panel').innerHTML = icon('panel', 15);
   $('#btn-panel').title = show ? t('Hide panel (Ctrl+J)') : t('Show panel (Ctrl+J)');
-  if (show) requestAnimationFrame(() => fit.fit());
+  if (show)
+    requestAnimationFrame(() => {
+      if (state.panelTab === 'shell') shFit?.fit();
+      else fit.fit();
+    });
 }
 
 // ---------- Live Server a náhľad ----------
@@ -3090,6 +3271,7 @@ async function openStandalone(files) {
   if (!files?.length) return;
   closeStart();
   for (const f of files) await openFile(f);
+  refreshLooseFiles();
 }
 async function openFileDialog() {
   openStandalone(await flux.openFileDialog());
@@ -3281,6 +3463,12 @@ async function openStart() {
   el.hidden = false;
   document.body.classList.add('start-open');
   navNote();
+  el.oncontextmenu = async (e) => {
+    const b = e.target.closest('[data-dir]');
+    if (!b) return;
+    e.preventDefault();
+    await projectMenu(b.dataset.dir);
+  };
   el.onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -3654,6 +3842,7 @@ function keybindings() {
       else if (ctrl && key === 'w') state.active && closeTab(state.active);
       else if (ctrl && key === 'b') toggleCompact();
       else if (ctrl && !e.shiftKey && key === 'i') aiPanel.toggle();
+      else if (ctrl && e.shiftKey && e.code === 'Backquote') showPanelTab('shell');
       else if (ctrl && (key === 'j' || e.key === '`' || e.key === ';')) showPanel($('#panel').classList.contains('collapsed'));
       else if (ctrl && e.key === 'Tab' && state.tabs.length > 1) {
         const i = state.tabs.indexOf(state.active);
@@ -3755,7 +3944,9 @@ function layoutEvents() {
   $('#btn-stop').onclick = stop;
   $('#btn-live').onclick = toggleLive;
   $('#btn-ai').onclick = () => aiPanel.toggle();
+  document.querySelectorAll('.panel-tab').forEach((b) => (b.onclick = () => showPanelTab(b.dataset.ptab)));
   $('#btn-clear').onclick = () => {
+    if (state.panelTab === 'shell') return shTerm?.clear();
     term.reset();
     term.write(state.running ? '' : '\x1b[?25l');
     setHint([]);
@@ -4014,6 +4205,7 @@ async function main() {
   // Súbory otvorené cez „Otvoriť v programe → Flux“ alebo pretiahnuté do okna.
   setupDrop();
   setupNav();
+  setupLooseFiles();
   flux.onOpenFiles((files) => openStandalone(files));
   flux.startupFiles().then((files) => files.length && setTimeout(() => openStandalone(files), 600));
   flux.onSaveAllAndClose(async () => {
