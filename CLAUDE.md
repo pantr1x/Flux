@@ -65,11 +65,11 @@ For the website, open `site/index.html` in a browser (or Playwright with `/opt/p
 - **General** is the first tab. Its parts (each an `<h3>` directly inside the section): *About & updates* (`#g-updates`, filled by `updatesUI.render(el, { compact: true })`), *You*, *Performance*, *Language*, *Welcome*, *Shortcuts* (`#g-keys`, list from `shortcutRows()`).
 - **General** and **Appearance** show their `<h3>` parts as sub-items in the left menu (the `.s-sub` loop after `showTab`). A new `<h3>` directly in those sections automatically becomes a menu item.
 - The old tab ids `keys` and `about` still work: `state.settingsTab = 'keys'` opens General and scrolls to *Shortcuts* (`jumpTo`).
-- The *Search settings* box filters `.s-row` rows across all tabs.
+- The *Search settings* box (`#s-find`) filters rows across all tabs and shows suggestions (`.s-suggest`, arrow keys + Enter jump to the row). Matching: every word must hit the row's name, description, section (`h3`) or tab; related words come from `SYN` (phrases separated by `|`), and one typo (incl. swapped letters) is allowed via `near()`/`fuzzy()`. Add a `SYN` entry when people would search a setting by another word.
 
 ## Translations
 
-The app ships English only; other languages are downloaded from GitHub when picked (`src/main/i18n.js`, branches listed in `BRANCHES` – currently `main` and `claude/optimistic-darwin-5i7m9t`). **New strings reach users only after they are on one of those branches.**
+All app languages are **bundled** (`package.json` → `build.files` ships `locales/*.json`), so switching is instant and works offline. `src/main/i18n.js` merges the bundled file with a newer copy in `userData/locales`, which is downloaded in the background from GitHub (branches in `BRANCHES` – currently `main` and `claude/optimistic-darwin-5i7m9t`). New strings reach users with the next release, or earlier once they are on one of those branches.
 
 Adding strings:
 
@@ -110,7 +110,7 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
 
 ## Layout, menu and search
 
-- **Menu** (`src/renderer/menubar.js`, items in `appMenus()` in `app.js`): opens from the `.brand` logo in the sidebar and from `#btn-menu` (☰, shown only when the sidebar is hidden). Items are `[label, action, shortcut, { checked, radio, disabled }]`, `'-'` = separator, a plain string = caption; a top-level entry with `run` (Home) is a direct action. `menuBar: true` also shows the classic `#menubar` row in the top bar (default off – it takes too much room).
+- **Menu** (`src/renderer/menubar.js`, items in `appMenus()` in `app.js`): opens from `#btn-appmenu` (☰ next to the `.brand` logo – the logo itself opens the start screen) and from `#btn-menu` (☰ in the top bar, shown only when the sidebar is hidden). Submenus switch with a short delay so moving the mouse diagonally does not jump to another one. Items are `[label, action, shortcut, { checked, radio, disabled }]`, `'-'` = separator, a plain string = caption; a top-level entry with `run` (Home) is a direct action. `menuBar: true` also shows the classic `#menubar` row in the top bar (default off – it takes too much room).
 - **Search** is the `#topsearch` magnifier (opens `searchEverything()`); `showSearch: false` hides it.
 - **Panel position** `panelPos` = `bottom` | `right` | `left` (body classes `panel-side`, `panel-right`, `panel-left`; `#card` is a CSS grid). Width `panelWidth` / `--panel-w`, height `panelHeight`. **Sidebar** `sidePos` = `left` | `right` (`body.side-right`, `#app` row-reverse; on Windows the window buttons then sit above the sidebar, so `.side-top` gets the caption padding). Change them with `setLayout(patch)` – it re-lays out Monaco and xterm.
 - Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).

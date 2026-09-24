@@ -186,7 +186,7 @@ export function createOnboarding(app) {
         <button class="ob-primary ob-start" data-next>${t('Get started')}</button></div>`;
     }
     if (step === S('uilang')) {
-      return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('More languages are downloaded from GitHub, so Flux stays small.')}</p>
+      return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('Every language comes with Flux – switching is instant.')}</p>
         ${langList()}</div>${nav()}`;
     }
     if (step === S('name')) {
@@ -489,7 +489,7 @@ export function createOnboarding(app) {
   const TOUR = [
     { sel: '#projects', title: 'Projects', text: 'All your projects in one place. Hover to pin one, right-click to rename it.' },
     { sel: '#essentials', title: 'Files', text: 'Create files from templates (Ctrl+N), folders and refresh the tree.' },
-    { sel: '.brand', title: 'Menu', text: 'Click the logo for the menu – the start screen, File, Edit, View, Run and Help.' },
+    { sel: '.brand', title: 'Start screen', text: 'Click the logo any time to pick what to build next.' },
     { sel: '#topbar .actions', title: 'Run & Live Server', text: 'F5 runs Python instantly. For websites you get a live preview that reloads on save.' },
     { sel: '#statusbar', title: 'Status bar', text: 'Python version, autocomplete and errors – click the error count to jump to a problem.' },
     { sel: '#btn-settings', title: 'Settings', text: 'Themes, colors, fonts, language and more. Tip: Ctrl+Shift+P finds any command.' },

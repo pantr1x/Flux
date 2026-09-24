@@ -2990,7 +2990,7 @@ function openSettings() {
             </details>
             <h3>${t('Language')}</h3>
             <div class="s-group">
-              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
+              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Every language comes with Flux – switching is instant.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
             </div>
             <h3>${t('Welcome')}</h3>
             <div class="s-group">
@@ -3164,22 +3164,134 @@ function openSettings() {
   }
   showTab(tab);
   if (jumpTo) requestAnimationFrame(() => $(`#${jumpTo}`)?.scrollIntoView({ block: 'start' }));
-  // Hľadanie naprieč všetkými záložkami: ukáže len riadky, ktoré sedia.
+  // Hľadanie naprieč všetkými záložkami – podľa názvu, popisu, časti, záložky aj príbuzných slov,
+  // znesie drobný preklep. Pod poľom ukazuje návrhy (šípky + Enter skočí na nastavenie).
   const ROWS = '.s-row, .theme-card, .tc-row, .ob-row';
-  $('#s-find').oninput = (e) => {
-    const q = e.target.value.toLowerCase().trim();
+  const norm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // príbuzné slová/frázy (oddelené |): hľadanie „terminal“ nájde aj Output a Panel position
+  const SYN = {
+    terminal: 'output|shell|console|panel position', output: 'terminal|panel position', console: 'terminal|output', shell: 'terminal',
+    dark: 'theme|light', light: 'theme|dark', theme: 'dark|light|accent color', color: 'theme|accent', colour: 'color|theme',
+    update: 'version|release', version: 'update|release', release: 'update|version',
+    memory: 'ram|speed|performance', ram: 'memory', slow: 'memory|speed', speed: 'memory', performance: 'memory|speed',
+    font: 'text|letter', 'text': 'font', size: 'zoom|font size', zoom: 'size of everything', bigger: 'size|zoom', smaller: 'size|zoom',
+    shortcut: 'keys|keyboard', shortcuts: 'keys|keyboard', keys: 'shortcut', keyboard: 'shortcut', hotkey: 'shortcut',
+    language: 'translation', translation: 'language', cursor: 'caret|pointer', caret: 'cursor', mouse: 'pointer',
+    ai: 'claude|assistant', claude: 'ai', assistant: 'ai|claude', github: 'git|repository', git: 'github', repo: 'github|repository',
+    python: 'interpreter|pyright|autocomplete', autocomplete: 'suggestions|python', wallpaper: 'background image', background: 'wallpaper',
+    transparent: 'transparency|blur', blur: 'transparency', menu: 'menu bar', sidebar: 'sidebar position', layout: 'position',
+    plugin: 'plugins', extension: 'plugin', addon: 'plugin', autosave: 'auto save', run: 'running|output',
+  };
+  // Riadky a ich texty – postavené raz pri otvorení nastavení.
+  const index = [...panel.querySelectorAll('[data-pane]')].flatMap((sec) => {
+    const tabName = tabs.find(([x]) => x === sec.dataset.pane)?.[2] || '';
+    const heads = [...sec.querySelectorAll('h3')];
+    return [...sec.querySelectorAll(ROWS)].map((el) => {
+      const h = heads.filter((x) => x.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).pop();
+      const head = h ? h.childNodes[0]?.textContent?.trim() || h.textContent.trim() : '';
+      const label = (el.querySelector('b')?.textContent || el.children[1]?.textContent || el.textContent).trim();
+      // texty prvkov oddelené medzerou (textContent by zlepil „Auto save“ + popis do jedného slova)
+      const parts = [];
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) parts.push(walk.currentNode.nodeValue);
+      return { el, tab: sec.dataset.pane, tabName, head, label, labelN: norm(label), all: norm(`${parts.join(' ')} ${head} ${tabName}`) };
+    });
+  });
+  // najviac jeden preklep (chýbajúce, navyše, iné alebo prehodené písmeno)
+  const near = (a, b) => {
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0;
+    let j = 0;
+    let diff = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) {
+        i++;
+        j++;
+        continue;
+      }
+      if (++diff > 1) return false;
+      // prehodené susedné písmená (memroy → memory) = jeden preklep
+      if (a[i] === b[j + 1] && a[i + 1] === b[j]) {
+        i += 2;
+        j += 2;
+      } else if (a.length > b.length) i++;
+      else if (b.length > a.length) j++;
+      else {
+        i++;
+        j++;
+      }
+    }
+    return diff + (a.length - i) + (b.length - j) <= 1;
+  };
+  // preklep proti slovu v texte, jeho začiatku alebo dvom slovám spolu („autsave“ → Auto save)
+  const fuzzy = (r, w) => {
+    r.words ||= r.all.split(/[^a-z0-9]+/).filter(Boolean);
+    return r.words.some((x, i) => {
+      const pair = x + (r.words[i + 1] || '');
+      const fits = (y) => near(w, y) || near(w, y.slice(0, w.length)) || near(w, y.slice(0, w.length + 1));
+      return (x.length >= 3 && fits(x)) || fits(pair);
+    });
+  };
+  const score = (r, words) => {
+    let total = 0;
+    for (const w of words) {
+      let v = 0;
+      if (r.labelN.startsWith(w)) v = 10;
+      else if (r.labelN.includes(w)) v = 7;
+      else if (r.all.includes(w)) v = 4;
+      else if ((SYN[w] || '').split('|').some((x) => x && r.all.includes(x))) v = 2;
+      else if (w.length >= 4 && fuzzy(r, w)) v = 1;
+      if (!v) return 0;
+      total += v;
+    }
+    return total;
+  };
+  const find = $('#s-find');
+  const sugBox = document.createElement('div');
+  sugBox.className = 's-suggest';
+  sugBox.hidden = true;
+  panel.append(sugBox);
+  let sugs = [];
+  let sel = 0;
+  const drawSug = () => {
+    sugBox.hidden = !sugs.length || document.activeElement !== find;
+    if (sugBox.hidden) return;
+    const r = find.closest('.s-find').getBoundingClientRect();
+    Object.assign(sugBox.style, { left: `${r.left}px`, top: `${r.bottom + 4}px`, width: `${Math.max(r.width, 300)}px` });
+    sugBox.innerHTML = sugs
+      .map((x, i) => `<button type="button" class="s-sug${i === sel ? ' on' : ''}" data-sug="${i}"><b>${escapeHtml(x.label)}</b><small>${escapeHtml([x.tabName, x.head].filter(Boolean).join(' › '))}</small></button>`)
+      .join('');
+  };
+  const jump = (r) => {
+    find.value = '';
+    find.oninput({ target: find });
+    showTab(r.tab);
+    const fold = r.el.closest('details');
+    if (fold) fold.open = true;
+    r.el.scrollIntoView({ block: 'center' });
+    r.el.classList.add('flash');
+    setTimeout(() => r.el.classList.remove('flash'), 1400);
+  };
+  find.oninput = (e) => {
+    const words = norm(e.target.value).trim().split(/\s+/).filter(Boolean);
     const sections = panel.querySelectorAll('[data-pane]');
     for (const el of panel.querySelectorAll(ROWS + ', .s-group, .s-body h3, .s-lead, .s-keycat, .s-jump')) el.style.display = '';
-    if (!q) return showTab(state.settingsTab || 'appearance');
+    $('#s-noresult')?.remove();
+    if (!words.length) {
+      sugs = [];
+      drawSug();
+      return showTab(state.settingsTab || 'appearance');
+    }
     panel.querySelectorAll('details.s-adv').forEach((d) => (d.open = true));
     $('#s-title').textContent = t('Search results');
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('on'));
+    const scored = index.map((r) => ({ r, v: score(r, words) }));
+    const hit = new Set(scored.filter((x) => x.v).map((x) => x.r.el));
     let any = false;
     for (const sec of sections) {
-      const tabName = tabs.find(([x]) => x === sec.dataset.pane)?.[2]?.toLowerCase() || '';
       let hits = 0;
       for (const r of sec.querySelectorAll(ROWS)) {
-        const ok = tabName.includes(q) || r.textContent.toLowerCase().includes(q);
+        const ok = hit.has(r);
         r.style.display = ok ? '' : 'none';
         if (ok) hits++;
       }
@@ -3191,8 +3303,35 @@ function openSettings() {
       sec.hidden = !hits;
       any ||= !!hits;
     }
-    $('#s-noresult')?.remove();
     if (!any) panel.querySelector('.s-body').insertAdjacentHTML('beforeend', `<div class="s-loading" id="s-noresult">${t('Nothing found')}</div>`);
+    const seen = new Set();
+    sugs = scored
+      .filter((x) => x.v)
+      .sort((a, b) => b.v - a.v)
+      .map((x) => x.r)
+      .filter((r) => !seen.has(r.label + r.tab) && seen.add(r.label + r.tab))
+      .slice(0, 8);
+    sel = 0;
+    drawSug();
+  };
+  find.onkeydown = (e) => {
+    if (sugBox.hidden || !sugs.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      sel = (sel + (e.key === 'ArrowDown' ? 1 : sugs.length - 1)) % sugs.length;
+      drawSug();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      jump(sugs[sel]);
+    }
+  };
+  find.onfocus = drawSug;
+  find.onblur = () => setTimeout(() => (sugBox.hidden = true), 120);
+  sugBox.onpointerdown = (e) => {
+    const b = e.target.closest('[data-sug]');
+    if (!b) return;
+    e.preventDefault();
+    jump(sugs[Number(b.dataset.sug)]);
   };
   requestAnimationFrame(() => $('#s-find')?.focus());
   // Otvorené z domovskej obrazovky (koliesko, Ctrl+,): domov ide pod nastavenia, inak by ich zakryl.
@@ -4352,7 +4491,6 @@ function appMenus() {
         [t('Save all'), saveAll, 'Ctrl+Shift+S'],
         [t('Close file'), () => state.active && closeTab(state.active), 'Ctrl+W', { disabled: !state.active }],
         '-',
-        [t('Home'), () => openStart()],
         [t('Settings'), openSettings, 'Ctrl+,'],
       ],
     },
@@ -4419,13 +4557,15 @@ function appMenus() {
   ];
 }
 function setupMenubar() {
-  // Menu je v logu „flux“ (a v ☰, keď je bočný panel skrytý); riadok File/Edit/View… je voliteľný.
-  const brand = $('.brand');
-  brand.insertAdjacentHTML('beforeend', `<span class="brand-chev">${icon('chevron', 11)}</span>`);
-  brand.title = t('Menu');
-  $('#btn-menu').innerHTML = icon('menu', 16);
-  $('#btn-menu').title = t('Menu');
-  menubar = createMenubar({ bar: $('#menubar'), triggers: [brand, $('#btn-menu')], icon, esc: escapeHtml, getMenus: appMenus });
+  // Logo „flux“ = domovská obrazovka, ☰ vedľa neho = menu (v hornej lište, keď je bočný panel skrytý).
+  // Riadok File/Edit/View… je voliteľný.
+  $('.brand').onclick = openStart;
+  $('.brand').title = t('Start screen');
+  for (const b of [$('#btn-appmenu'), $('#btn-menu')]) {
+    b.innerHTML = icon('menu', 16);
+    b.title = t('Menu');
+  }
+  menubar = createMenubar({ bar: $('#menubar'), triggers: [$('#btn-appmenu'), $('#btn-menu')], icon, esc: escapeHtml, getMenus: appMenus });
   menubar.render();
   const s = $('#topsearch');
   s.innerHTML = icon('search', 16);

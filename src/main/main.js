@@ -545,6 +545,8 @@ function registerIpc() {
     // Použije jazyk; ak ešte nie je stiahnutý, stiahne ho z GitHubu.
     let data = code === 'en' ? {} : i18n.loadCached(code);
     if (!data) data = await i18n.downloadLanguage(code);
+    // pribalený jazyk je hneď; novšie preklady sa stiahnu na pozadí (platia od ďalšieho štartu)
+    else if (code !== 'en') i18n.downloadLanguage(code).catch(() => {});
     settings.language = code;
     saveSettings();
     i18n.setLanguage(code);

@@ -57,26 +57,41 @@ export function createMenubar({ bar, triggers, icon, esc, getMenus }) {
       place(dropFor(menu), r.left, r.bottom + 4);
       return;
     }
-    // Koreň v logu: File ▸, Edit ▸ … a vedľa otvorené podmenu.
+    // Koreň (☰ vedľa loga): File ▸, Edit ▸ … a vedľa otvorené podmenu.
+    // Koreň sa kreslí raz; pri prechode myšou sa mení len podmenu (bez blikania a animácie znova).
     const root = document.createElement('div');
     root.className = 'mb-drop mb-root';
     root.innerHTML = menus
       .map((m) =>
         m.run
           ? `<button class="mb-item" data-run="${m.id}" type="button"><span class="mb-mark">${m.icon ? icon(m.icon, 13) : ''}</span><span class="mb-label">${esc(m.label)}</span>${m.key ? `<kbd>${esc(m.key)}</kbd>` : ''}</button><div class="mb-sep"></div>`
-          : `<button class="mb-item mb-parent${state.sub === m.id ? ' on' : ''}" data-sub="${m.id}" type="button"><span class="mb-mark"></span><span class="mb-label">${esc(m.label)}</span>${icon('chevron', 12)}</button>`,
+          : `<button class="mb-item mb-parent" data-sub="${m.id}" type="button"><span class="mb-mark"></span><span class="mb-label">${esc(m.label)}</span>${icon('chevron', 12)}</button>`,
       )
       .join('');
     const r = state.anchor.getBoundingClientRect();
     place(root, r.left, r.bottom + 4);
-    const open = (id) => {
-      if (state.sub === id) return;
+    let timer = 0;
+    const showSub = (id) => {
+      clearTimeout(timer);
+      if (!state) return;
       state.sub = id;
-      render();
+      root.querySelectorAll('[data-sub]').forEach((b) => b.classList.toggle('on', b.dataset.sub === id));
+      document.querySelector('.mb-sub')?.remove();
+      const menu = menus.find((m) => m.id === id);
+      if (!menu) return;
+      const row = root.querySelector(`[data-sub="${id}"]`).getBoundingClientRect();
+      const sub = dropFor(menu, 'mb-sub');
+      document.body.append(sub);
+      const x = row.right + 4 + sub.offsetWidth > innerWidth ? row.left - sub.offsetWidth - 4 : row.right + 4;
+      place(sub, x, row.top - 5);
+      sub.addEventListener('mouseenter', () => clearTimeout(timer));
     };
+    // Malé oneskorenie: keď ideš myšou šikmo do podmenu cez iný riadok, podmenu nepreskočí.
     root.addEventListener('mouseover', (e) => {
       const b = e.target.closest('[data-sub]');
-      if (b) open(b.dataset.sub);
+      if (!b || b.dataset.sub === state?.sub) return clearTimeout(timer);
+      clearTimeout(timer);
+      timer = setTimeout(() => showSub(b.dataset.sub), 140);
     });
     root.addEventListener('click', (e) => {
       const run = e.target.closest('[data-run]');
@@ -86,15 +101,9 @@ export function createMenubar({ bar, triggers, icon, esc, getMenus }) {
         return setTimeout(() => m?.run(), 0);
       }
       const b = e.target.closest('[data-sub]');
-      if (b) open(b.dataset.sub);
+      if (b) showSub(b.dataset.sub);
     });
-    const menu = menus.find((m) => m.id === state.sub);
-    if (!menu) return;
-    const row = root.querySelector(`[data-sub="${menu.id}"]`).getBoundingClientRect();
-    const sub = dropFor(menu, 'mb-sub');
-    document.body.append(sub);
-    const x = row.right + 4 + sub.offsetWidth > innerWidth ? row.left - sub.offsetWidth - 4 : row.right + 4;
-    place(sub, x, row.top - 5);
+    if (state.sub) showSub(state.sub);
   }
 
   function close() {
@@ -120,7 +129,7 @@ export function createMenubar({ bar, triggers, icon, esc, getMenus }) {
   for (const t of triggers) {
     t.addEventListener('click', (e) => {
       e.stopPropagation();
-      state = state?.anchor === t ? null : { anchor: t, sub: getMenus().find((m) => !m.run)?.id };
+      state = state?.anchor === t ? null : { anchor: t, sub: null };
       render();
     });
   }

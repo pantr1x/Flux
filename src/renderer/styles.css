@@ -4488,12 +4488,42 @@ body.theme-light .ob-aurora i:nth-child(2) {
   gap: 12px;
 }
 
-.gh-priv {
+/* zverejnenie na GitHube: kto to uvidí + tlačidlo */
+.gh-pub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.gh-pub-q {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.gh-vis {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.gh-vis button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
   color: var(--text-2);
+  font: 600 12px var(--ui-font);
+  cursor: pointer;
+}
+.gh-vis button.on {
+  background: var(--card-solid);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .gh-files {
@@ -7651,18 +7681,17 @@ body.no-anim .tg-dot.live {
 body.compact.no-menubar #btn-menu {
   display: grid;
 }
-.brand-chev {
-  display: grid;
-  margin-left: -3px;
-  color: var(--text-3);
-  transform: rotate(90deg);
-  transition: transform 0.15s;
+#btn-appmenu {
+  margin-left: 2px;
 }
-.brand.on {
+#btn-appmenu.on,
+#btn-menu.on {
   background: var(--hover);
+  color: var(--text);
 }
-.brand.on .brand-chev {
-  transform: rotate(-90deg);
+/* podmenu sa pri prechode myšou len vymení – bez animácie */
+.mb-drop.mb-sub {
+  animation: none;
 }
 .mb-root .mb-parent svg {
   color: var(--text-3);
@@ -7800,4 +7829,40 @@ body.compact.side-right #main {
 }
 .ob-up-opt.on .ob-up-dot {
   box-shadow: inset 0 0 0 4px var(--accent);
+}
+
+/* Nastavenia: návrhy pod hľadaním */
+.s-suggest {
+  position: fixed;
+  z-index: 118;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--card-solid);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+.s-sug {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.s-sug b {
+  font: 600 13px var(--ui-font);
+}
+.s-sug small {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.s-sug:hover,
+.s-sug.on {
+  background: var(--hover);
 }

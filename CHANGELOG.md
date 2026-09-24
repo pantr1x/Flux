@@ -2,6 +2,23 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.3.1 – 2026-09-24
+
+### Menu
+- The **flux logo** takes you to the start screen again. The menu is the **☰ button right next to it**.
+- The menu no longer flickers or jumps to another submenu when you move the mouse into it at an angle.
+
+### Search in Settings
+- Finds settings by their name, description, section and tab – and by related words: *terminal* also finds *Output* and *Panel position*, *memory* finds *Save memory*.
+- Small typos are fine: *fnot size* finds *Font size*, *memroy* finds *Memory*.
+- **Suggestions** appear under the search box while you type. Pick one with the arrow keys and Enter (or a click) and Flux jumps right to it.
+
+### Languages
+- **Every app language now comes with Flux.** Switching is instant and works without the internet – newer translations still download in the background.
+
+### GitHub
+- *Save this project on GitHub* is clearer: choose **Who can see it?** – *Only you* or *Everyone* – and press **Publish on GitHub** (with a rocket).
+
 ## 1.3.0 – 2026-09-24
 
 ### Menu

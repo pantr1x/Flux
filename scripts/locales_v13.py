@@ -32,15 +32,6 @@ _V13 = {
         'Plik, Edycja, Widok, Uruchom i Pomoc jako pasek na górze – inaczej otwierają się z logo flux',
         'Arquivo, Editar, Exibir, Executar e Ajuda como linha no topo – senão abrem pelo logo do flux',
         'Файл, Правка, Вигляд, Запуск і Довідка рядком угорі – інакше вони відкриваються з логотипа flux'),
-    'Click the logo for the menu – the start screen, File, Edit, View, Run and Help.': (
-        'Klikni na logo a otvorí sa ponuka – domovská obrazovka, Súbor, Úpravy, Zobraziť, Spustiť a Pomoc.',
-        'Klicke auf das Logo für das Menü – Startbildschirm, Datei, Bearbeiten, Ansicht, Ausführen und Hilfe.',
-        'Haz clic en el logo para abrir el menú – inicio, Archivo, Editar, Ver, Ejecutar y Ayuda.',
-        'Clique sur le logo pour le menu – écran d’accueil, Fichier, Édition, Affichage, Exécuter et Aide.',
-        'Clicca sul logo per il menu – schermata iniziale, File, Modifica, Visualizza, Esegui e Aiuto.',
-        'Kliknij logo, aby otworzyć menu – ekran startowy, Plik, Edycja, Widok, Uruchom i Pomoc.',
-        'Clique no logo para o menu – tela inicial, Arquivo, Editar, Exibir, Executar e Ajuda.',
-        'Натисни на логотип, щоб відкрити меню – початковий екран, Файл, Правка, Вигляд, Запуск і Довідка.'),
     'Should Flux keep itself up to date? You can change this later in Settings → General.': (
         'Má sa Flux aktualizovať sám? Neskôr to zmeníš v Nastavenia → Všeobecné.',
         'Soll sich Flux selbst aktuell halten? Du kannst das später unter Einstellungen → Allgemein ändern.',
