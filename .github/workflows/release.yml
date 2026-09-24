@@ -26,6 +26,14 @@ jobs:
           v=$(node -p "require('./package.json').version")
           echo "version=$v" >> "$GITHUB_OUTPUT"
           if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Create the version tag
+        if: steps.check.outputs.exists == 'false'
+        shell: bash
+        run: |
+          t="v${{ steps.check.outputs.version }}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$t" >/dev/null; then
+            git tag "$t" && git push origin "$t"
+          fi
       - if: steps.check.outputs.exists == 'false'
         uses: actions/setup-node@v4
         with:
