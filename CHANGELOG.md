@@ -2,6 +2,17 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.1 – 2026-09-24
+
+### Updating shows its progress
+- After **Restart and update** the Flux installer opens with **only its progress bar** – no pages to click through – and Flux opens again by itself when it is done. (The small extra window from 1.4.0 did not show reliably.)
+- Restart and update no longer waits long on a slow connection before it starts.
+
+### Smoother switching
+- Switching **files**: the highlight **slides** to the new tab and the code **slides in** from that side.
+- The highlight also glides in the **file list**, the **project list** and the **Settings menu**.
+- Turn it off with **Transition animations** in *Settings → Appearance → Window*.
+
 ## 1.4.0 – 2026-09-24
 
 ### Update progress
