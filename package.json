@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,
@@ -24,13 +24,29 @@
       "package.json",
       "CHANGELOG.md",
       "locales/*.json",
-      "!locales/en.keys.json"
+      "!locales/en.keys.json",
+      "!node_modules/basedpyright/**/*",
+      "!**/*.map",
+      "!**/*.d.ts",
+      "!**/*.d.mts",
+      "!**/*.d.cts",
+      "!node_modules/**/coverage/**",
+      "!node_modules/**/*.md"
     ],
     "asarUnpack": [
-      "node_modules/basedpyright/**/*",
       "node_modules/@lydell/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "build/pyright",
+        "to": ".",
+        "filter": [
+          "*.tar"
+        ]
+      }
+    ],
     "npmRebuild": false,
+    "afterPack": "scripts/after-pack.cjs",
     "win": {
       "target": [
         {

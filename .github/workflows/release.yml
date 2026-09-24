@@ -71,6 +71,9 @@ jobs:
         run: npx electron-builder --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+      # rýchla aktualizácia: len kód Fluxu (app.asar, ~5 MB) + quick.json – src/main/quickUpdate.js
+      - if: steps.check.outputs.exists == 'false'
+        run: node scripts/quick-pack.mjs "${{ steps.check.outputs.version }}"
       - name: Publish the release
         if: steps.check.outputs.exists == 'false'
         shell: bash
@@ -81,4 +84,5 @@ jobs:
           ls release
           if [ "${{ steps.check.outputs.pre }}" = true ]; then kind=--prerelease; title="Flux ${{ steps.check.outputs.show }} (dev build)"; else kind=--latest; title="Flux $v"; fi
           gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap "release/${{ steps.check.outputs.channel }}.yml" \
+            "release/Flux-$v.asar.gz" release/quick.json \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes-file build/release-notes.md $kind

@@ -88,7 +88,10 @@ Flux updates itself from **GitHub Releases** of `pantr1x/Flux` (`src/main/update
 2. Add a `## 1.2.1 – YYYY-MM-DD` section at the top of `CHANGELOG.md`, written for users (simple English, what changed and where to find it).
 3. Commit and push to `main` or a `claude/**` branch.
 
-`release.yml` runs when `package.json` or `CHANGELOG.md` change. If `v<version>` has no complete release (installer + `latest.yml`), it builds on Windows, takes the notes for that version from `CHANGELOG.md` (`scripts/release-notes.mjs`) and publishes `Flux-Setup-<v>.exe`, its `.blockmap` and `latest.yml` with tag `v<version>`. A broken, incomplete release is deleted and built again. If the version was already released, nothing happens – so a fix always needs a new version.
+`release.yml` runs when `package.json` or `CHANGELOG.md` change. If `v<version>` has no complete release (installer + `latest.yml`), it builds on Windows, takes the notes for that version from `CHANGELOG.md` (`scripts/release-notes.mjs`) and publishes these assets with the tag `v<version>`:
+- `Flux-Setup-<v>.exe` and its `.blockmap`,
+- `latest.yml`,
+- the **quick update** files `Flux-<v>.asar.gz` and `quick.json` (`scripts/quick-pack.mjs`; see *Updates*). A broken, incomplete release is deleted and built again. If the version was already released, nothing happens – so a fix always needs a new version.
 
 **Developer builds** (only for the Flux developer):
 - Set `"devBuild": "<version>.N"` in `package.json`, for example `"devBuild": "1.4.4.1"` next to `"version": "1.4.4"`, and push.
@@ -138,7 +141,26 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 
 ## Updates
 
-`updater.js` → `install()`: re-checks for a newer version (max 4 s), writes the TEMP marker `flux-relaunch-after-update`, emits `status: 'installing'` and calls `quitAndInstall(false, true)` – the installer runs **visibly**, but on updates (`${isUpdated}`) `build/installer.nsh` skips the welcome page (`skipPageIfUpdated`), the install-mode page (`customInstallMode` keeps the previous per-user / per-machine mode), the folder page (electron-builder) and the finish page (`FluxFinishPre`), so only the progress bar shows – and `customPageAfterChangeDir` → `FluxInstShow` turns that page into a small **“Updating Flux”** window (caption and header text, Back/Next/Cancel and *Show details* hidden, window cut below the progress bar); `customInstall` then starts Flux because of the marker. The installer UI always comes from the **new** version, so installer changes show up on the very next update. Closing Flux normally with a downloaded update still installs silently (`autoInstallOnAppQuit`). The *Windows build* workflow tests exactly this flow (install, then `--updated --force-run`) and fails if the installer waits for a click or Flux does not reopen – **keep it green before releasing installer changes**. It also takes a screenshot every second during the update and force-pushes them (plus `windows.txt`, the visible window titles) to the **`ci-screens`** branch – `git fetch origin ci-screens && git show origin/ci-screens:update-020.png > x.png` to look at them. In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` and the status bar `#st-update` (Updating N % / Restart to update) while a version downloads.
+**Quick update** (`src/main/quickUpdate.js`) – the normal path when only Flux's own code changed:
+- **How it works.**
+  - `updater.js` sets `autoDownload = false` and `startDownload(v)` first tries `quick.fetch(v)`.
+  - That reads `quick.json` from the release, downloads `Flux-<v>.asar.gz` (~5 MB), checks the sha512 and writes `resources/app.asar.new`.
+  - On *Restart and update*, `quick.apply(true)` starts a helper and Flux quits. The helper is `Flux.exe` run as Node (`ELECTRON_RUN_AS_NODE`), written to TEMP. It waits for Flux to exit, swaps `app.asar`, then starts Flux again, keeping `--user-data-dir`/`--no-sandbox`.
+  - On a normal quit the same swap happens without the restart (`will-quit`).
+- **When it is used.** Only when the release's `base` equals the installed `resources/quick-base.txt` and the install folder is writable (per-user install, not Program Files).
+  - `base` is a fingerprint of everything except `app.asar`, the main `.exe` and `app-update.yml`: Electron, the Pyright tar, native modules.
+  - `scripts/after-pack.cjs` (electron-builder `afterPack`) computes it.
+  - A new Electron, a new basedpyright or a new native module changes `base`. Then Flux silently falls back to the full installer below, as it also does on any error.
+  - Do not make those files differ between builds without a reason: e.g. the Pyright tar is written deterministically in `build.mjs`.
+- **Testing it.** `FLUX_QUICK_URL` points `quick.json` downloads at another server. On Linux: build `--linux dir`, point `resources/app-update.yml` at a generic provider and set `APPIMAGE`.
+
+**Pyright is one file**:
+- `build.mjs` packs `node_modules/basedpyright` into `build/pyright/pyright-<ver>.tar` (deterministic ustar, no `.map` files).
+- It is shipped via `extraResources` and excluded from `files`.
+- `lsp.js` unpacks it into `userData/pyright/<name>` on first use (Windows `System32\tar.exe`) and queues LSP messages meanwhile.
+- The installer used to delete and copy its ~5,400 files on every update. That made updates take about a minute.
+
+**Full installer** – `updater.js` → `install()`: re-checks for a newer version (max 4 s), writes the TEMP marker `flux-relaunch-after-update`, emits `status: 'installing'` and calls `quitAndInstall(false, true)` – the installer runs **visibly**, but on updates (`${isUpdated}`) `build/installer.nsh` skips the welcome page (`skipPageIfUpdated`), the install-mode page (`customInstallMode` keeps the previous per-user / per-machine mode), the folder page (electron-builder) and the finish page (`FluxFinishPre`), so only the progress bar shows – and `customPageAfterChangeDir` → `FluxInstShow` turns that page into a small **“Updating Flux”** window (caption and header text, Back/Next/Cancel and *Show details* hidden, window cut below the progress bar); `customInstall` then starts Flux because of the marker. The installer UI always comes from the **new** version, so installer changes show up on the very next update. Closing Flux normally with a downloaded update still installs silently (`autoInstallOnAppQuit`). The *Windows build* workflow tests exactly this flow (install, then `--updated --force-run`) and fails if the installer waits for a click or Flux does not reopen – **keep it green before releasing installer changes**. It also takes a screenshot every second during the update and force-pushes them (plus `windows.txt`, the visible window titles) to the **`ci-screens`** branch – `git fetch origin ci-screens && git show origin/ci-screens:update-020.png > x.png` to look at them. In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` and the status bar `#st-update` (Updating N % / Restart to update) while a version downloads.
 
 ## Smooth scrolling and transitions
 

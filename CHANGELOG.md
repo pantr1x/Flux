@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.7 – 2026-09-24
+
+### Faster updates
+- **Updates are now much faster.** When only Flux itself changed, Flux downloads just the changed part (about 5 MB instead of the whole 117 MB installer), swaps it and opens again in a few seconds. No installer window appears.
+- When something bigger changes (for example the Electron version), Flux still uses the normal installer, like before.
+- The normal installer is faster too. Python autocomplete used to be about 5,400 separate files, which Windows had to delete, copy and check on every update. It is now one file that Flux unpacks the first time you use Python.
+- This update itself still uses the installer. The fast updates start with the next version.
+
 ## 1.4.6 – 2026-09-24
 
 ### Settings

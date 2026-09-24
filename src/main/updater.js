@@ -4,6 +4,7 @@ const { app, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { t } = require('./i18n');
+const { createQuickUpdate } = require('./quickUpdate');
 
 const REPO = 'pantr1x/Flux';
 const DEV_LOGIN = 'pantr1x';
@@ -27,17 +28,49 @@ function createUpdater({ getSettings, send }) {
   const devAllowed = () => String(getSettings().github?.user?.login || '').toLowerCase() === DEV_LOGIN;
   const dev = () => devAllowed() && getSettings().devUpdates !== false;
 
+  // Rýchla aktualizácia (len app.asar) – quickUpdate.js. FLUX_QUICK_URL = iný zdroj na testovanie.
+  const quick = state.canUpdate
+    ? createQuickUpdate({ repo: REPO, fetch: (u) => net.fetch(u, { headers: { 'User-Agent': 'Flux' } }), resourcesDir: process.resourcesPath, execPath: process.execPath, baseUrl: process.env.FLUX_QUICK_URL })
+    : null;
+
+  // Sťahovanie riadime sami: najprv skúsi rýchlu aktualizáciu, až potom celý inštalátor.
+  const downloads = new Map();
+  function startDownload(v) {
+    if (downloads.has(v)) return downloads.get(v);
+    const job = (async () => {
+      emit({ status: 'downloading', latest: v, progress: 0, quick: false });
+      if (await quick.fetch(v, (p) => emit({ status: 'downloading', latest: v, progress: p }))) {
+        emit({ status: 'ready', latest: v, progress: 100, quick: true });
+        return;
+      }
+      await autoUpdater.downloadUpdate();
+    })()
+      .catch((err) => emit({ status: 'error', error: String(err?.message || err).split('\n')[0] }))
+      .finally(() => downloads.delete(v));
+    downloads.set(v, job);
+    return job;
+  }
+
   if (state.canUpdate) {
-    autoUpdater.autoDownload = auto();
+    quick.cleanup();
+    autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowPrerelease = dev();
     autoUpdater.allowDowngrade = false;
-    autoUpdater.on('checking-for-update', () => emit({ status: 'checking', error: '' }));
-    autoUpdater.on('update-available', (info) => emit({ status: autoUpdater.autoDownload ? 'downloading' : 'available', latest: info.version, progress: 0 }));
+    autoUpdater.on('checking-for-update', () => state.status !== 'ready' && emit({ status: 'checking', error: '' }));
+    autoUpdater.on('update-available', (info) => {
+      if (state.status === 'ready' && state.latest === info.version) return;
+      if (auto()) startDownload(info.version);
+      else emit({ status: 'available', latest: info.version, progress: 0 });
+    });
+    // Rýchla aktualizácia sa pri bežnom zatvorení Fluxu tiež nainštaluje (bez opätovného spustenia).
+    app.on('will-quit', () => {
+      if (!installing && state.quick && quick.ready()) quick.apply(false);
+    });
     // Pri inštalácii pri zatvorení sa vždy použije posledná stiahnutá (najnovšia) verzia.
     autoUpdater.on('update-not-available', (info) => emit({ status: 'latest', latest: info?.version || state.version }));
     autoUpdater.on('download-progress', (p) => emit({ status: 'downloading', progress: Math.round(p.percent || 0) }));
-    autoUpdater.on('update-downloaded', (info) => emit({ status: 'ready', latest: info.version, progress: 100 }));
+    autoUpdater.on('update-downloaded', (info) => emit({ status: 'ready', latest: info.version, progress: 100, quick: false }));
     autoUpdater.on('error', (err) => emit({ status: 'error', error: String(err?.message || err).split('\n')[0] }));
   }
 
@@ -79,7 +112,6 @@ function createUpdater({ getSettings, send }) {
 
   async function check() {
     if (state.canUpdate) {
-      autoUpdater.autoDownload = auto();
       autoUpdater.allowPrerelease = dev();
       try {
         await autoUpdater.checkForUpdates();
@@ -100,9 +132,8 @@ function createUpdater({ getSettings, send }) {
   }
 
   async function download() {
-    if (!state.canUpdate) return false;
-    emit({ status: 'downloading', progress: 0 });
-    await autoUpdater.downloadUpdate();
+    if (!state.canUpdate || !state.latest) return false;
+    await startDownload(state.latest);
     return true;
   }
 
@@ -115,16 +146,23 @@ function createUpdater({ getSettings, send }) {
     installing = true;
     try {
       const ready = state.latest;
-      autoUpdater.autoDownload = true;
       autoUpdater.allowPrerelease = dev();
       // najviac 4 s – pomalé pripojenie nesmie zdržať reštart
       const r = await Promise.race([autoUpdater.checkForUpdates().catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 4000))]);
       const newest = r?.updateInfo?.version;
-      if (newest && newer(newest, ready)) {
-        emit({ status: 'downloading', latest: newest, progress: 0 });
-        await r.downloadPromise;
-      }
+      if (newest && newer(newest, ready)) await startDownload(newest);
     } catch {}
+    // Rýchla aktualizácia: pomocník po zatvorení vymení app.asar a Flux hneď znova otvorí.
+    if (state.status === 'ready' && state.quick && quick.ready() === state.latest) {
+      emit({ status: 'installing', progress: 100 });
+      quick.apply(true);
+      setTimeout(() => app.quit(), 300);
+      return;
+    }
+    if (state.status !== 'ready') {
+      installing = false;
+      return;
+    }
     try {
       fs.writeFileSync(path.join(require('node:os').tmpdir(), 'flux-relaunch-after-update'), String(Date.now()));
     } catch {}

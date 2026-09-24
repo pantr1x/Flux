@@ -1238,7 +1238,7 @@ function registerIpc() {
   // Python autocomplete (Pyright)
   ipcMain.handle('lsp:start', () => {
     lsp.start(workspace || app.getPath('home'));
-    return true;
+    return true; // správy do Pyrightu sa podržia, kým sa (prvýkrát) nerozbalí
   });
   ipcMain.on('lsp:send', (_e, msg) => lsp.send(msg));
   ipcMain.on('lsp:stop', () => lsp.stop());
