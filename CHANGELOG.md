@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.5 – 2026-09-24
+
+### Search
+- You can turn the magnifier at the top into a **wide search field**. Turn it on in **Settings → Appearance → Window → Wide search field** or in **View → Wide search field**. Click it or press Ctrl+Shift+A to search files, commands, settings and projects.
+
 ## 1.4.4 – 2026-09-24
 
 ### Updating

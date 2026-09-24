@@ -25,7 +25,7 @@ import { createPluginsUI } from './pluginsUI.js';
 import { createThemeStudio } from './themeStudio.js';
 import { setupFancySelects } from './fselect.js';
 import { createTogether } from './together.js';
-import { createUpdatesUI } from './updatesUI.js';
+import { createUpdatesUI, showVer } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
 import { createMenubar } from './menubar.js';
 import { setupSmoothScroll } from './smoothScroll.js';
@@ -120,6 +120,7 @@ const DEFAULTS = {
   transitions: true,
   menuBar: false,
   showSearch: true,
+  searchWide: false,
   panelPos: 'bottom',
   sidePos: 'left',
 };
@@ -410,6 +411,7 @@ function applyCustomization() {
   // Rozloženie: menu a hľadanie hore, kde je panel s terminálom a bočný panel.
   document.body.classList.toggle('no-menubar', !setting('menuBar'));
   document.body.classList.toggle('no-topsearch', !setting('showSearch'));
+  document.body.classList.toggle('search-wide', !!setting('searchWide'));
   for (const pos of ['right', 'left']) document.body.classList.toggle(`panel-${pos}`, setting('panelPos') === pos);
   document.body.classList.toggle('panel-side', setting('panelPos') !== 'bottom');
   document.body.classList.toggle('side-right', setting('sidePos') === 'right');
@@ -2913,7 +2915,7 @@ function openSettings() {
         <label class="s-find">${icon('search', 14)}<input id="s-find" placeholder="${t('Search settings…')}" spellcheck="false" autocomplete="off"></label>
         ${tabs.map(([id, ic, label]) => `<button class="s-tab${id === tab ? ' on' : ''}" data-tab="${id}">${icon(ic, 16)}<span>${label}</span></button>`).join('')}
         <div class="grow"></div>
-        <div class="s-ver">Flux ${escapeHtml(state.version || '')}</div>
+        <div class="s-ver">Flux ${escapeHtml(showVer(state.version))}</div>
       </nav>
       <div class="s-main">
         <header class="s-head">${navButtons()}<h2 id="s-title"></h2><button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
@@ -2983,6 +2985,7 @@ function openSettings() {
               ${toggle('transitions', 'Transition animations', 'a soft fade when you switch files, settings pages and screens')}
               ${toggle('menuBar', 'Menu bar', 'File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo')}
               ${toggle('showSearch', 'Search button', 'a magnifier at the top that finds files, commands and settings')}
+              ${toggle('searchWide', 'Wide search field', 'a search box at the top instead of just the magnifier')}
               <label class="s-row"><span><b>${t('Panel position')}</b><small>${t('where output and the terminal are')}</small></span><select data-key="panelPos">${[['bottom', t('Bottom')], ['right', t('Right')], ['left', t('Left')]].map(([v, l]) => opt(v, l, setting('panelPos'))).join('')}</select></label>
               <label class="s-row"><span><b>${t('Sidebar position')}</b><small>${t('projects and files')}</small></span><select data-key="sidePos">${[['left', t('Left')], ['right', t('Right')]].map(([v, l]) => opt(v, l, setting('sidePos'))).join('')}</select></label>
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
@@ -3644,7 +3647,7 @@ function openSettings() {
       rerenderSettings();
     }
     if (OPT_KEYS.includes(key)) applyPerformance();
-    if (['menuBar', 'showSearch', 'panelPos', 'sidePos'].includes(key)) setLayout({});
+    if (['menuBar', 'showSearch', 'searchWide', 'panelPos', 'sidePos'].includes(key)) setLayout({});
     if (key === 'suggestDetails') showSuggestDetails(value);
     if (key === 'material') await saveSettings({ translucent: true });
     applyEditorSettings();
@@ -4621,6 +4624,7 @@ function appMenus() {
         '-',
         [t('Menu bar'), () => setLayout({ menuBar: !setting('menuBar') }), '', { checked: !!setting('menuBar') }],
         [t('Search button'), () => setLayout({ showSearch: !setting('showSearch') }), '', { checked: !!setting('showSearch') }],
+        [t('Wide search field'), () => setLayout({ showSearch: true, searchWide: !setting('searchWide') }), '', { checked: !!setting('showSearch') && !!setting('searchWide') }],
         '-',
         [t('Toggle light / dark theme'), toggleTheme],
       ],
@@ -4663,7 +4667,8 @@ function setupMenubar() {
   menubar = createMenubar({ bar: $('#menubar'), triggers: [$('#btn-appmenu'), $('#btn-menu')], icon, esc: escapeHtml, getMenus: appMenus });
   menubar.render();
   const s = $('#topsearch');
-  s.innerHTML = icon('search', 16);
+  // lupa, alebo (searchWide) roztiahnuté pole – klik otvorí to isté hľadanie
+  s.innerHTML = `${icon('search', 16)}<span class="ts-text">${escapeHtml(t('Search'))}</span><kbd class="ts-key">Ctrl+Shift+A</kbd>`;
   s.title = `${t('Search files, commands, settings and projects')} (Ctrl+Shift+A)`;
   s.onclick = () => searchEverything();
 }

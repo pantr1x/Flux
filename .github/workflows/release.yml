@@ -1,8 +1,9 @@
 # Vydanie novej verzie: zvýš "version" v package.json a pridaj jej sekciu do CHANGELOG.md.
 # Po pushnutí akcia zistí, či táto verzia už na GitHub Releases je; ak nie, zostaví inštalátor
 # a vydá ju (tag vX.Y.Z vytvorí sama). Flux si novú verziu potom stiahne sám.
-# Vývojárska verzia (napr. 1.5.0-beta.1) sa vydá ako „pre-release“ s beta.yml: dostanú ju len tí,
-# čo majú vo Fluxe zapnuté vývojárske aktualizácie; stránka ju neukazuje. Sekcia v CHANGELOG.md nie je nutná.
+# Vývojárska verzia: do package.json daj "devBuild": "<version>.N" (napr. 1.4.4.1). Vydá sa ako „pre-release“
+# 1.4.5-beta.1 s beta.yml (novšia ako 1.4.4, staršia ako 1.4.5) – dostane ju len účet pantr1x, stránka ju neukazuje.
+# Keď zvýšiš "version", starý devBuild už nesedí a vydá sa normálna verzia. Sekcia v CHANGELOG.md nie je nutná.
 name: Release
 
 on:
@@ -29,7 +30,15 @@ jobs:
         run: |
           set +o pipefail
           v=$(node -p "require('./package.json').version")
+          d=$(node -p "require('./package.json').devBuild || ''")
+          show="$v"
+          # devBuild 1.4.4.N platí len k verzii 1.4.4 → semver 1.4.5-beta.N
+          if [[ -n "$d" && "$d" == "$v".* && "$v" != *-* ]]; then
+            IFS=. read -r a b c <<<"$v"
+            show="$d"; v="$a.$b.$((c + 1))-beta.${d##*.}"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "show=$show" >> "$GITHUB_OUTPUT"
           # predbežná verzia (1.5.0-beta.1) → kanál beta.yml, inak latest.yml
           if [[ "$v" == *-* ]]; then ch="${v#*-}"; ch="${ch%%.*}"; echo "pre=true" >> "$GITHUB_OUTPUT"; else ch=latest; echo "pre=false" >> "$GITHUB_OUTPUT"; fi
           echo "channel=$ch" >> "$GITHUB_OUTPUT"
@@ -49,6 +58,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Set the developer build version
+        if: steps.check.outputs.exists == 'false' && steps.check.outputs.pre == 'true'
+        run: npm pkg set "version=${{ steps.check.outputs.version }}"
       - if: steps.check.outputs.exists == 'false'
         run: npm ci
       - if: steps.check.outputs.exists == 'false'
@@ -67,6 +79,6 @@ jobs:
         run: |
           v="${{ steps.check.outputs.version }}"
           ls release
-          if [ "${{ steps.check.outputs.pre }}" = true ]; then kind=--prerelease; title="Flux $v (dev build)"; else kind=--latest; title="Flux $v"; fi
+          if [ "${{ steps.check.outputs.pre }}" = true ]; then kind=--prerelease; title="Flux ${{ steps.check.outputs.show }} (dev build)"; else kind=--latest; title="Flux $v"; fi
           gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap "release/${{ steps.check.outputs.channel }}.yml" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes-file build/release-notes.md $kind

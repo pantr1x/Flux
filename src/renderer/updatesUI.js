@@ -4,6 +4,12 @@ import { icon } from './icons.js';
 import { markdown } from './aiPanel.js';
 
 const flux = window.flux;
+
+// Vývojárske verzie sa zobrazujú ako 1.4.4.1: interne (semver) sú to 1.4.5-beta.1 – novšie ako 1.4.4, staršie ako 1.4.5.
+export function showVer(v) {
+  const m = /^(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$/.exec(String(v || ''));
+  return m && Number(m[3]) > 0 ? `${m[1]}.${m[2]}.${Number(m[3]) - 1}.${m[4]}` : String(v || '');
+}
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export function createUpdatesUI({ toast, getSetting, saveSettings }) {
@@ -17,13 +23,13 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       case 'latest':
         return `${icon('check', 13)}${t('You have the newest version.')}`;
       case 'available':
-        return t('Version {v} is available.', { v: esc(s.latest) });
+        return t('Version {v} is available.', { v: esc(showVer(s.latest)) });
       case 'downloading':
-        return `<span class="spin"></span>${t('Downloading version {v}… {p} %', { v: esc(s.latest), p: s.progress })}`;
+        return `<span class="spin"></span>${t('Downloading version {v}… {p} %', { v: esc(showVer(s.latest)), p: s.progress })}`;
       case 'installing':
-        return `<span class="spin"></span>${t('Installing Flux {v}…', { v: esc(s.latest) })}`;
+        return `<span class="spin"></span>${t('Installing Flux {v}…', { v: esc(showVer(s.latest)) })}`;
       case 'ready':
-        return `${icon('check', 13)}${t('Version {v} is ready – it installs when you restart Flux.', { v: esc(s.latest) })}`;
+        return `${icon('check', 13)}${t('Version {v} is ready – it installs when you restart Flux.', { v: esc(showVer(s.latest)) })}`;
       case 'error':
         return t('Could not check for updates: {msg}', { msg: esc(s.error) });
       default:
@@ -55,7 +61,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
         ? list
             .map(
               (r, i) => `<details class="up-rel"${i === 0 || r.version === state?.version ? ' open' : ''}>
-              <summary><b>${esc(r.name || `v${r.version}`)}</b>${r.version === state?.version ? `<span class="up-badge">${t('installed')}</span>` : ''}${i === 0 ? `<span class="up-badge new">${t('newest')}</span>` : ''}${r.prerelease ? `<span class="up-badge dev">${t('dev build')}</span>` : ''}<small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></summary>
+              <summary><b>${esc(r.name || `v${showVer(r.version)}`)}</b>${r.version === state?.version ? `<span class="up-badge">${t('installed')}</span>` : ''}${i === 0 ? `<span class="up-badge new">${t('newest')}</span>` : ''}${r.prerelease ? `<span class="up-badge dev">${t('dev build')}</span>` : ''}<small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></summary>
               <div class="ai-body">${markdown(r.body || t('No notes for this version.'), { icons: true })}</div></details>`,
             )
             .join('')
@@ -77,7 +83,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     state = await flux.updateState();
     const notes = `<div id="up-notes"><div class="s-loading"><span class="spin"></span> ${t('Loading…')}</div></div>`;
     box.innerHTML = `
-      <div class="up-hero"><div class="brand-mark big">${icon('code', 26)}</div><div><h2>Flux</h2><small>${t('Version {v}', { v: esc(state.version) })}</small></div></div>
+      <div class="up-hero"><div class="brand-mark big">${icon('code', 26)}</div><div><h2>Flux</h2><small>${t('Version {v}', { v: esc(showVer(state.version)) })}</small></div></div>
       <div class="s-group">
         <div class="s-row" id="up-status"></div>
         <label class="s-row"><span><b>${t('Update automatically')}</b><small>${t('downloads new versions in the background and installs them when you close Flux')}</small></span><input type="checkbox" class="switch" id="up-auto"${getSetting('autoUpdate') !== false ? ' checked' : ''}></label>
@@ -119,7 +125,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
   function drawOverlay() {
     if (!overlay || !state) return;
     const pct = state.status === 'downloading' ? Number(state.progress) || 0 : 100;
-    overlay.querySelector('.up-ov-title').textContent = t('Updating Flux to {v}…', { v: state.latest || '' });
+    overlay.querySelector('.up-ov-title').textContent = t('Updating Flux to {v}…', { v: showVer(state.latest) });
     overlay.querySelector('.up-ov-step').textContent =
       state.status === 'downloading' ? t('Downloading… {p} %', { p: pct }) : state.status === 'error' ? t('Could not check for updates: {msg}', { msg: state.error }) : t('Installing… Flux closes and opens again by itself.');
     overlay.querySelector('.up-bar').classList.toggle('busy', state.status !== 'downloading');
@@ -152,7 +158,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     const on = state.status === 'downloading' || state.status === 'ready';
     el.hidden = !on;
     if (!on) return;
-    el.title = state.status === 'ready' ? t('Flux {v} is ready – it installs when you restart.', { v: state.latest }) : t('Downloading Flux {v} in the background…', { v: state.latest });
+    el.title = state.status === 'ready' ? t('Flux {v} is ready – it installs when you restart.', { v: showVer(state.latest) }) : t('Downloading Flux {v} in the background…', { v: showVer(state.latest) });
     el.innerHTML =
       state.status === 'ready'
         ? `${icon('refresh', 12)}<span>${t('Restart to update')}</span>`
@@ -169,15 +175,15 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     if (!s.latest || overlay) return;
     if (s.status === 'available')
       once(`a${s.latest}`, () =>
-        toast(t('Flux {v} is available.', { v: s.latest }), 'info', 20000, {
+        toast(t('Flux {v} is available.', { v: showVer(s.latest) }), 'info', 20000, {
           label: t('Download'),
           run: () => (s.canUpdate ? flux.updateDownload().catch((err) => toast(String(err.message || err), 'error')) : flux.openExternal('https://github.com/pantr1x/Flux/releases/latest')),
         }),
       );
-    if (s.status === 'downloading') once(`d${s.latest}`, () => toast(t('Downloading Flux {v} in the background…', { v: s.latest }), 'info', 5000));
+    if (s.status === 'downloading') once(`d${s.latest}`, () => toast(t('Downloading Flux {v} in the background…', { v: showVer(s.latest) }), 'info', 5000));
     if (s.status === 'ready')
       once(`r${s.latest}`, () =>
-        toast(t('Flux {v} is ready – it installs when you restart.', { v: s.latest }), 'ok', 20000, { label: t('Restart now'), run: () => startInstall() }),
+        toast(t('Flux {v} is ready – it installs when you restart.', { v: showVer(s.latest) }), 'ok', 20000, { label: t('Restart now'), run: () => startInstall() }),
       );
   });
 
@@ -202,13 +208,13 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
         return xa.localeCompare(xb, 'en', { numeric: true }) > 0;
       };
       const range = notes.filter((r) => newer(r.version, seen) && !newer(r.version, st.version));
-      if (range.length > 1) rel = { body: range.map((r) => `## ${r.version}\n\n${r.body}`).join('\n\n') };
+      if (range.length > 1) rel = { body: range.map((r) => `## ${showVer(r.version)}\n\n${r.body}`).join('\n\n') };
       else rel = notes.find((r) => r.version === st.version);
     } catch {}
     const el = document.createElement('div');
     el.className = 'up-whatsnew';
-    el.innerHTML = `<div class="np-card"><header><h2>${icon('sparkle', 18)}${t('What’s new in Flux {v}', { v: esc(st.version) })}</h2><button class="icon-btn" data-close>${icon('x', 16)}</button></header>
-      <div class="ai-body up-wn-body">${markdown(rel?.body || t('Flux was updated to version {v}.', { v: st.version }), { icons: true })}</div>
+    el.innerHTML = `<div class="np-card"><header><h2>${icon('sparkle', 18)}${t('What’s new in Flux {v}', { v: esc(showVer(st.version)) })}</h2><button class="icon-btn" data-close>${icon('x', 16)}</button></header>
+      <div class="ai-body up-wn-body">${markdown(rel?.body || t('Flux was updated to version {v}.', { v: showVer(st.version) }), { icons: true })}</div>
       <footer><div class="grow"></div><button class="ob-primary" data-close>${t('Continue')}</button></footer></div>`;
     document.body.append(el);
     const close = () => {
