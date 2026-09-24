@@ -971,18 +971,36 @@ function registerIpc() {
   ipcMain.handle('update:download', () => updater.download());
   ipcMain.handle('update:install', () => updater.install());
   ipcMain.handle('update:notes', (_e, force) => updater.notes(!!force));
+  ipcMain.handle('update:dev', (_e, on) => {
+    settings.devUpdates = !!on;
+    saveSettings();
+    return updater.setDev();
+  });
   ipcMain.handle('gh:info', () => github.info());
   ipcMain.handle('lan:start', (_e, opts) => lan.start(opts || {}));
   ipcMain.handle('lan:stop', () => lan.stop());
   ipcMain.on('lan:update', (_e, state) => lan.update(state));
-  ipcMain.handle('gh:connect', (_e, token) => github.connect(String(token || '')));
-  ipcMain.handle('gh:disconnect', () => github.disconnect());
+  // zmena účtu môže zapnúť/vypnúť vývojárske aktualizácie (updater.js)
+  ipcMain.handle('gh:connect', async (_e, token) => {
+    const u = await github.connect(String(token || ''));
+    updater.setDev();
+    return u;
+  });
+  ipcMain.handle('gh:disconnect', () => {
+    github.disconnect();
+    updater.setDev();
+    return true;
+  });
   ipcMain.handle('gh:signin-start', async (_e, inApp = true) => {
     const r = await github.signInStart();
     if (inApp) openGitHubLogin(r);
     return r;
   });
-  ipcMain.handle('gh:signin-wait', () => github.signInWait());
+  ipcMain.handle('gh:signin-wait', async () => {
+    const r = await github.signInWait();
+    updater.setDev();
+    return r;
+  });
   ipcMain.handle('gh:signin-cancel', () => {
     closeGitHubLogin();
     return github.signInCancel();

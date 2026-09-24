@@ -1,6 +1,8 @@
 # Vydanie novej verzie: zvýš "version" v package.json a pridaj jej sekciu do CHANGELOG.md.
 # Po pushnutí akcia zistí, či táto verzia už na GitHub Releases je; ak nie, zostaví inštalátor
 # a vydá ju (tag vX.Y.Z vytvorí sama). Flux si novú verziu potom stiahne sám.
+# Vývojárska verzia (napr. 1.5.0-beta.1) sa vydá ako „pre-release“ s beta.yml: dostanú ju len tí,
+# čo majú vo Fluxe zapnuté vývojárske aktualizácie; stránka ju neukazuje. Sekcia v CHANGELOG.md nie je nutná.
 name: Release
 
 on:
@@ -17,6 +19,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
       - name: Is this version already released?
         id: check
         shell: bash
@@ -26,10 +30,13 @@ jobs:
           set +o pipefail
           v=$(node -p "require('./package.json').version")
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          # Hotové vydanie = má inštalátor aj latest.yml (podľa neho sa Flux aktualizuje).
+          # predbežná verzia (1.5.0-beta.1) → kanál beta.yml, inak latest.yml
+          if [[ "$v" == *-* ]]; then ch="${v#*-}"; ch="${ch%%.*}"; echo "pre=true" >> "$GITHUB_OUTPUT"; else ch=latest; echo "pre=false" >> "$GITHUB_OUTPUT"; fi
+          echo "channel=$ch" >> "$GITHUB_OUTPUT"
+          # Hotové vydanie = má inštalátor aj $ch.yml (podľa neho sa Flux aktualizuje).
           assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$v" --jq '.assets[].name' 2>/dev/null | tr -d '\r' || true)
           echo "Assets of v$v: ${assets:-none}"
-          if grep -qx 'latest.yml' <<<"$assets" && grep -q '\.exe$' <<<"$assets"; then
+          if grep -qx "$ch.yml" <<<"$assets" && grep -q '\.exe$' <<<"$assets"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -60,5 +67,6 @@ jobs:
         run: |
           v="${{ steps.check.outputs.version }}"
           ls release
-          gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap release/latest.yml \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Flux $v" --notes-file build/release-notes.md --latest
+          if [ "${{ steps.check.outputs.pre }}" = true ]; then kind=--prerelease; title="Flux $v (dev build)"; else kind=--latest; title="Flux $v"; fi
+          gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap "release/${{ steps.check.outputs.channel }}.yml" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes-file build/release-notes.md $kind

@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('flux', {
   updateDownload: () => ipcRenderer.invoke('update:download'),
   updateInstall: () => ipcRenderer.invoke('update:install'),
   updateNotes: (force) => ipcRenderer.invoke('update:notes', force),
+  updateDev: (on) => ipcRenderer.invoke('update:dev', on),
   onUpdateState: (cb) => ipcRenderer.on('update:state', (_e, s) => cb(s)),
   ghInfo: () => ipcRenderer.invoke('gh:info'),
   lanStart: (opts) => ipcRenderer.invoke('lan:start', opts),

@@ -33,6 +33,7 @@ const paths = {
   panelRight: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M14 4v16"/>',
   puzzle: '<path d="M9.5 4.5a2 2 0 1 1 4 0V6H17a1 1 0 0 1 1 1v3.5h1.5a2 2 0 1 1 0 4H18V18a1 1 0 0 1-1 1h-3.5v-1.5a2 2 0 1 0-4 0V19H6a1 1 0 0 1-1-1v-3.5h1.5a2 2 0 1 0 0-4H5V7a1 1 0 0 1 1-1h3.5Z"/>',
   star: '<path d="m12 3 2.8 5.6 6.2.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.2-.9Z"/>',
+  flask: '<path d="M9 3h6"/><path d="M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/>',
   rocket: '<path d="M5 15c-1.5 1-2 4-2 6 2 0 5-.5 6-2"/><path d="M9 12a13 13 0 0 1 11-9c0 4.5-3 9-9 11l-2-2Z"/><path d="M9 12H5.5l2-3.5H11M12 15v3.5l3.5-2V13"/><circle cx="15.5" cy="8.5" r="1.3"/>',
   upload: '<path d="M12 16V4m0 0 5 5m-5-5-5 5M5 20h14"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',

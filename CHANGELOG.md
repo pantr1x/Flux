@@ -2,6 +2,17 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.4 – 2026-09-24
+
+### Updating
+- Flux compares versions correctly with test builds (for example 1.5.0-beta.1), so updates never go to an older version by mistake.
+- Behind the scenes: the Flux developer can now try test builds before everyone else. They are not public releases. You keep getting only normal versions, and nothing changes for you.
+
+### Website
+- The website scrolls much more smoothly.
+- It now has a questions-and-answers section and a nicer preview when you share the link.
+- The website says that macOS and Linux versions are coming.
+
 ## 1.4.3 – 2026-09-24
 
 ### Updating

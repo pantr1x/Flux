@@ -55,7 +55,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
         ? list
             .map(
               (r, i) => `<details class="up-rel"${i === 0 || r.version === state?.version ? ' open' : ''}>
-              <summary><b>${esc(r.name || `v${r.version}`)}</b>${r.version === state?.version ? `<span class="up-badge">${t('installed')}</span>` : ''}${i === 0 ? `<span class="up-badge new">${t('newest')}</span>` : ''}<small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></summary>
+              <summary><b>${esc(r.name || `v${r.version}`)}</b>${r.version === state?.version ? `<span class="up-badge">${t('installed')}</span>` : ''}${i === 0 ? `<span class="up-badge new">${t('newest')}</span>` : ''}${r.prerelease ? `<span class="up-badge dev">${t('dev build')}</span>` : ''}<small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></summary>
               <div class="ai-body">${markdown(r.body || t('No notes for this version.'), { icons: true })}</div></details>`,
             )
             .join('')
@@ -64,6 +64,12 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       el.innerHTML = `<div class="s-loading">${esc(String(err.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))}</div>`;
     }
   }
+
+  // Vývojárske aktualizácie: riadok vidí len vývojár (prihlásený GitHub účet pantr1x – kontroluje updater.js).
+  const devRow = () =>
+    state?.devAllowed
+      ? `<label class="s-row" id="up-dev-row"><span><b>${icon('flask', 13)}${t('Developer updates')}</b><small>${t('test builds that are not public releases – only you get them')}</small></span><input type="checkbox" class="switch" id="up-dev"${state.dev ? ' checked' : ''}></label>`
+      : '';
 
   // compact: vložené do Všeobecných – poznámky k vydaniam sú zbalené a načítajú sa až po otvorení.
   async function render(el, { compact = false } = {}) {
@@ -75,6 +81,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
       <div class="s-group">
         <div class="s-row" id="up-status"></div>
         <label class="s-row"><span><b>${t('Update automatically')}</b><small>${t('downloads new versions in the background and installs them when you close Flux')}</small></span><input type="checkbox" class="switch" id="up-auto"${getSetting('autoUpdate') !== false ? ' checked' : ''}></label>
+        ${devRow()}
         ${compact ? `<div class="s-row"><span><b>${t('Like Flux?')}</b><small>${t('A star on GitHub helps other people find it.')}</small></span><button class="s-btn" data-up-star>${icon('star', 13)}${t('Star on GitHub')}</button></div>` : ''}
         ${compact ? `<div class="s-row"><span><b>${t('All versions')}</b><small>${t('Download any version of Flux from GitHub Releases.')}</small></span><button class="s-btn" data-up-releases>${icon('external', 13)}${t('Open')}</button></div>` : ''}
       </div>
@@ -85,6 +92,12 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     else drawNotes();
     if (state.status === 'idle') flux.updateCheck();
     box.onchange = async (e) => {
+      if (e.target.id === 'up-dev') {
+        await saveSettings({ devUpdates: e.target.checked });
+        state = await flux.updateDev(e.target.checked);
+        box.querySelector('#up-notes') && drawNotes(true);
+        return;
+      }
       if (e.target.id === 'up-auto') {
         await saveSettings({ autoUpdate: e.target.checked });
         if (e.target.checked) flux.updateCheck();
@@ -178,11 +191,15 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     try {
       // Všetky verzie od poslednej, ktorú si videl (ak si niektoré preskočil).
       const notes = await flux.updateNotes();
+      // semver: 1.5.0 > 1.5.0-beta.2 > 1.5.0-beta.1 > 1.4.9
       const newer = (a, b) => {
-        const pa = String(a).split('.').map(Number);
-        const pb = String(b).split('.').map(Number);
+        const [ma, xa = ''] = String(a).split('-');
+        const [mb, xb = ''] = String(b).split('-');
+        const pa = ma.split('.').map(Number);
+        const pb = mb.split('.').map(Number);
         for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
-        return false;
+        if (!xa || !xb) return !xa && !!xb;
+        return xa.localeCompare(xb, 'en', { numeric: true }) > 0;
       };
       const range = notes.filter((r) => newer(r.version, seen) && !newer(r.version, st.version));
       if (range.length > 1) rel = { body: range.map((r) => `## ${r.version}\n\n${r.body}`).join('\n\n') };

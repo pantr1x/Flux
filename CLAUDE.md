@@ -90,6 +90,8 @@ Flux updates itself from **GitHub Releases** of `pantr1x/Flux` (`src/main/update
 
 `release.yml` runs when `package.json` or `CHANGELOG.md` change. If `v<version>` has no complete release (installer + `latest.yml`), it builds on Windows, takes the notes for that version from `CHANGELOG.md` (`scripts/release-notes.mjs`) and publishes `Flux-Setup-<v>.exe`, its `.blockmap` and `latest.yml` with tag `v<version>`. A broken, incomplete release is deleted and built again. If the version was already released, nothing happens – so a fix always needs a new version.
 
+**Developer builds** (only for the Flux developer): give the version a `-beta.N` suffix, for example `1.5.0-beta.1`. Use `beta` and nothing else: electron-updater treats other ids such as `dev` as custom channels, and a user on one of those would never move back to stable versions. The CHANGELOG section is optional; without it, the notes are the last commit messages. `release.yml` publishes the build as a GitHub **pre-release** with `beta.yml` (not `--latest`). Only a Flux signed in to the GitHub account **`pantr1x`** gets these builds (`DEV_LOGIN` / `devAllowed()` in `updater.js`, which sets `autoUpdater.allowPrerelease`). That user also sees the *Developer updates* switch in About & updates (`devUpdates`, on by default) and the pre-releases in the release notes. Everyone else, and the website, ignore pre-releases completely. Version comparisons (`newer()` in `updater.js` and `updatesUI.js`) understand pre-release suffixes. To end a beta, release the plain version (`1.5.0` > `1.5.0-beta.N`).
+
 The same release notes appear in the app (Settings → General → About & updates, plus the bundled `CHANGELOG.md` when offline) and on the website.
 
 ## Website (GitHub Pages)
@@ -99,6 +101,14 @@ The same release notes appear in the app (Settings → General → About & updat
 - The page is styled like the Flux app itself (top bar = window tabs, home-screen stats and action cards, a live editor window, status bar). Colors are CSS variables in `:root`.
 - The *downloads* stat and the count per release are the `download_count` of each release's `.exe` (GitHub counts every download, including self-updates).
 - **Everything version-related is loaded in the browser from the GitHub API** (`/repos/pantr1x/Flux/releases`): the download buttons (`[data-dl]`) point to the newest `.exe`, the version/size stats, and the *Releases* section (`#releases`) lists every release with its notes (small markdown renderer `md()`) and installer. Nothing on the page has to be changed for a new release. Without the API it falls back to links to GitHub Releases.
+- **SEO / GEO**:
+  - `<head>` carries the description, canonical, Open Graph and Twitter tags, plus JSON-LD (`SoftwareApplication`, `WebSite`, and a `FAQPage` whose Q&As must match the `#faq` section).
+  - `site/images/og.png` (1200×630) is the link preview, and its URLs are absolute.
+  - The site also serves `robots.txt`, `sitemap.xml` and `llms.txt`, a plain summary for AI assistants.
+  - Platforms: Windows is available, macOS and Linux are *coming soon* (the `.platforms` chips, FAQ, footer and og.png). Update them when a new platform ships.
+- **Scrolling**:
+  - The wheel moves a target, and the page eases toward it exponentially (`1 - exp(-dt/95)`). Touchpad and keyboard scrolling stay native.
+  - Keep scrolling cheap: the background `.wall` is plain radial gradients on its own layer, and cards have no `backdrop-filter`. Blur filters there made scrolling stutter. Only the sticky top bar blurs.
 - Content lives in arrays in the script at the bottom: `FILES` (files in the demo editor: tokens per line + what *Run* prints), `FEATURES`, `LANGS`, `KEYS` (shortcuts). Edit those to change the page.
 - The app links to `https://pantr1x.github.io/Flux/#releases` from Settings → General → *All versions*.
 

@@ -5414,6 +5414,18 @@ body.pointer-everywhere * {
   background: var(--accent);
   color: var(--accent-fg);
 }
+.up-badge.dev {
+  background: color-mix(in srgb, #f59e0b 22%, transparent);
+  color: #f59e0b;
+}
+#up-dev-row b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#up-dev-row b svg {
+  color: #f59e0b;
+}
 .up-whatsnew {
   position: fixed;
   inset: 0;
