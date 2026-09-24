@@ -64,7 +64,7 @@ export function createOnboarding(app) {
   let moreLangs = false;
 
   function dots() {
-    return `<div class="ob-dots">${[1, 2, 3, 4].map((i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>`;
+    return `<div class="ob-dots">${[1, 2, 3, 4, 5].map((i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>`;
   }
 
   function nav(nextLabel = t('Continue')) {
@@ -98,6 +98,11 @@ export function createOnboarding(app) {
         ${langList()}</div>${nav()}`;
     }
     if (step === 2) {
+      return `<div class="ob-step ob-name"><h2>${t('What should Flux call you?')}</h2><p>${t('Just for the greeting on the home screen. You can skip this or change it later.')}</p>
+        <input class="ob-input" id="ob-name" maxlength="40" spellcheck="false" autocomplete="off" placeholder="${t('Your name')}" value="${(s.userName || '').replace(/"/g, '&quot;')}"></div>
+        <div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}<span class="ob-nav-r"><button class="ob-ghost" data-skipname>${t('Skip')}</button><button class="ob-primary" data-next>${t('Continue')}</button></span></div>`;
+    }
+    if (step === 3) {
       const chosen = s.codeLangs || [];
       // Ďalšie jazyky sa ukážu po kliknutí na „More languages“ (alebo keď už nejaký z nich vybral).
       const showMore = moreLangs || CODE_LANGS.some((c) => c.more && c.id !== 'explore' && chosen.includes(c.id));
@@ -112,7 +117,7 @@ export function createOnboarding(app) {
           )
           .join('')}${showMore ? '' : `<button class="ob-card ob-more" data-more-langs><span class="ob-ic">${app.icon('plus', 28)}</span><b>${t('More languages')}</b><small class="ob-st">Rust, Ruby, PHP, Lua…</small></button>`}</div></div>${nav()}`;
     }
-    if (step === 3) {
+    if (step === 4) {
       return `<div class="ob-step ob-look"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
         <div class="ob-look-cols"><div class="ob-look-pick">
         <div class="ob-themes">${LOOK_THEMES.map(
@@ -124,13 +129,13 @@ export function createOnboarding(app) {
         <div class="ob-accents">${app.accents
           .map((a) => `<button data-accent="${a}" style="--c:${app.accentHex(a)}" class="${app.accentHex(a) === app.currentAccent() ? 'on' : ''}"></button>`)
           .join('')}</div>
-        <label class="ob-lift"><span><b>${t('Brightness of dark areas')}</b><small>${t('Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-lift value="${Number(s.darkLift) || 0}"></label></div>
+        <label class="ob-lift"><span><b>${t('Brightness of dark areas')}</b><small>${t('Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-lift value="${Number(s.darkLift) || 0}"></label></div>
         <div class="ob-preview" aria-hidden="true">
           <div class="obp-bar"><i></i><i></i><i></i><span class="obp-tab">${app.fileIcon('main.py')}main.py</span><span class="obp-run">${app.icon('play', 11)}${t('Run')}</span></div>
           <pre class="obp-code"></pre>
         </div></div></div>${nav()}`;
     }
-    if (step === 4) {
+    if (step === 5) {
       // Inštalácia vybraných jazykov – beží na pozadí, dá sa preskočiť.
       const miss = missingTools(app, true);
       const total = miss.reduce((a, tc) => a + tc.download, 0);
@@ -174,6 +179,16 @@ export function createOnboarding(app) {
     stage.append(next);
     if (animate) busyUntil = performance.now() + 420;
     // Ukážka editora pri výbere vzhľadu – farby sa menia hneď s témou a akcentom.
+    const nameInput = next.querySelector('#ob-name');
+    if (nameInput) {
+      setTimeout(() => nameInput.focus(), animate ? 350 : 0);
+      nameInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          next.querySelector('[data-next]')?.click();
+        }
+      };
+    }
     const pre = next.querySelector('.obp-code');
     if (pre && app.colorize) app.colorize(PREVIEW_CODE, 'python').then((html) => (pre.innerHTML = html));
   }
@@ -198,25 +213,32 @@ export function createOnboarding(app) {
     if (!b || b.disabled || b.closest('.leaving')) return;
     const nav = b.dataset.next !== undefined || b.dataset.back !== undefined;
     if (nav && performance.now() < busyUntil) return; // dvojklik počas prechodu
-    if (b.dataset.next !== undefined) {
+    if (b.dataset.skipname !== undefined) {
+      await app.saveSettings({ userName: '' });
       dir = 1;
-      step = Math.min(5, step + 1);
+      step = 3;
+      return render();
+    }
+    if (b.dataset.next !== undefined) {
+      if (step === 2) await app.saveSettings({ userName: (el.querySelector('.ob-body:not(.leaving) #ob-name')?.value || '').trim() });
+      dir = 1;
+      step = Math.min(6, step + 1);
       // Krok „inštalácia“ len ak niečo z vybraných jazykov chýba.
-      if (step === 4) {
+      if (step === 5) {
         await app.tools.status();
         const miss = missingTools(app);
-        if (!miss.length && !app.tools.busy()) step = 5;
+        if (!miss.length && !app.tools.busy()) step = 6;
         else if (app.tools.canInstall()) {
           miss.forEach((tc) => installedHere.add(tc.id));
           app.tools.installAll(miss.map((tc) => tc.id));
           // Keď je všetko hotové, úvod sám pokračuje.
           const off = app.tools.onChange(() => {
-            if (step === 4 && !app.tools.busy()) {
+            if (step === 5 && !app.tools.busy()) {
               off();
               setTimeout(() => {
-                if (step !== 4) return;
+                if (step !== 5) return;
                 dir = 1;
-                step = 5;
+                step = 6;
                 render();
               }, 900);
             }
@@ -238,7 +260,7 @@ export function createOnboarding(app) {
     if (b.dataset.back !== undefined) {
       dir = -1;
       step = Math.max(0, step - 1);
-      if (step === 4 && !missingTools(app, true).length) step = 3;
+      if (step === 5 && !missingTools(app, true).length) step = 4;
       return render();
     }
     if (b.dataset.lang) {

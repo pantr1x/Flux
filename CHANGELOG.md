@@ -2,6 +2,17 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.7 – 2026-09-24
+
+### Updates
+- After *Restart now*, Flux installs the update and opens again by itself. This is more reliable from the next update on.
+
+### First start
+- A new step asks what Flux should call you, for the greeting on the home screen. You can skip it.
+
+### Looks
+- *Brightness of dark areas* goes higher now. It only lightens backgrounds – text and outlines stay the same.
+
 ## 0.3.6 – 2026-09-24
 
 ### GitHub is now a plugin

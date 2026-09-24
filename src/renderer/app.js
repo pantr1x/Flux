@@ -335,7 +335,7 @@ function applyCustomization() {
   else root.style.removeProperty('--ui-font');
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
-  root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0022));
+  root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
 
@@ -2605,7 +2605,7 @@ function openSettings() {
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
-              <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
+              <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
               <div class="s-row"><span><b>${t('Background image')}</b><small>${t('your own picture instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${t('Choose…')}</button><button class="s-btn" data-action="bg-reset">${t('Reset')}</button></span></div>
             </div>
             <h3>${t('Home screen')}</h3>

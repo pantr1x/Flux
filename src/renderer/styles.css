@@ -6502,8 +6502,8 @@ body.theme-dark::after {
   pointer-events: none;
   background: rgba(255, 255, 255, var(--dark-lift, 0));
 }
-body.theme-dark #start::before,
-body.theme-dark #onboard::before {
+body.theme-dark.no-mica #start::before,
+body.theme-dark.no-mica #onboard::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -6645,4 +6645,27 @@ body.theme-dark #onboard::before {
   align-items: center;
   gap: 4px;
   color: var(--ok);
+}
+
+/* úvod: meno */
+.ob-input {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--card-2);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text);
+  font: 600 18px var(--ui-font);
+  outline: none;
+  transition: box-shadow 0.15s;
+}
+.ob-input:focus {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.ob-nav-r {
+  display: inline-flex;
+  gap: 8px;
 }

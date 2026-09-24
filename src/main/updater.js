@@ -96,8 +96,14 @@ function createUpdater({ getSettings, send }) {
     return true;
   }
 
+  // „Reštartovať teraz“: tichá inštalácia a Flux sa sám znova otvorí.
+  // Značka v TEMP je poistka – inštalátor podľa nej Flux spustí, aj keby --force-run nezabral.
   function install() {
-    if (state.canUpdate && state.status === 'ready') autoUpdater.quitAndInstall(true, true);
+    if (!(state.canUpdate && state.status === 'ready')) return;
+    try {
+      fs.writeFileSync(path.join(require('node:os').tmpdir(), 'flux-relaunch-after-update'), String(Date.now()));
+    } catch {}
+    setImmediate(() => autoUpdater.quitAndInstall(true, true));
   }
 
   // Pri štarte: skontrolovať (a pri automatických aktualizáciách aj stiahnuť).

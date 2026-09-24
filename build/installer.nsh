@@ -133,6 +133,15 @@
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
   !insertmacro FluxTypes FluxAddType
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+  ; Po „Reštartovať teraz“ vo Fluxe: znova ho otvoriť (poistka k --force-run).
+  ; Keby sa spustil dvakrát, druhá kópia sa sama zavrie (Flux beží len raz).
+  ${if} ${isUpdated}
+    ReadEnvStr $R9 TEMP
+    ${if} ${FileExists} "$R9\flux-relaunch-after-update"
+      Delete "$R9\flux-relaunch-after-update"
+      ${StdUtils.ExecShellAsUser} $R8 "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "open" "--updated"
+    ${endif}
+  ${endif}
 !macroend
 
 !macro customUnInstall
