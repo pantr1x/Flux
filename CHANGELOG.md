@@ -2,6 +2,16 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.6 – 2026-09-24
+
+### GitHub is now a plugin
+- GitHub is built into Flux as a plugin you install in **Settings → Plugins**. Until then, there are no GitHub buttons, settings or status in the app.
+- Installing it also installs Git if it is missing, because GitHub needs it.
+- If you were already signed in to GitHub, it stays on.
+
+### Projects
+- Next to the pin in the sidebar there is now a button to hide a project. It stays on the home screen, and *Undo* brings it right back.
+
 ## 0.3.5 – 2026-09-24
 
 ### Updates on start

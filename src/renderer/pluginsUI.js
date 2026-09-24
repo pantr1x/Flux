@@ -15,7 +15,7 @@ function stars(p) {
   return `<span class="pl-stars" title="${p.likes} 👍 · ${p.dislikes} 👎">★ ${score.toFixed(1)} <small>(${total})</small></span>`;
 }
 
-export function createPluginsUI({ host, toast, openProject }) {
+export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
   let list = [];
   let filter = 'all';
   let query = '';
@@ -55,9 +55,31 @@ export function createPluginsUI({ host, toast, openProject }) {
     box.querySelector('#pl-list').innerHTML = items.length ? items.map(card).join('') : `<div class="s-loading">${t('No plugins found.')}</div>`;
   }
 
+  // Vstavané pluginy (súčasť Fluxu, zapínajú sa tu – napr. GitHub, ktorý potrebuje Git).
+  let builtinBusy = null;
+  function builtinCard(b) {
+    const on = b.enabled();
+    const btn =
+      builtinBusy === b.id
+        ? `<button class="s-btn" disabled><span class="spin"></span></button>`
+        : on
+          ? `<button class="s-btn" data-bi-off="${b.id}">${t('Uninstall')}</button>`
+          : `<button class="s-btn primary" data-bi-on="${b.id}">${icon('download', 13)}${t('Install')}</button>`;
+    return `<div class="pl-card builtin">
+      <span class="pl-icon ph bi-ic" style="width:40px;height:40px">${icon(b.icon, 20)}</span>
+      <div class="pl-txt"><b>${esc(b.name)}</b><small>Flux${verified({ verified: true })}${b.needs ? ` · ${esc(b.needs)}` : ''}</small><p>${esc(b.description)}</p></div>
+      <div class="pl-side">${on ? `<span class="pl-new on">${icon('check', 11)}${t('Installed')}</span>` : ''}${btn}</div>
+    </div>`;
+  }
+  function renderBuiltins() {
+    const el = box?.querySelector('#pl-builtin');
+    if (el) el.innerHTML = builtins.map(builtinCard).join('');
+  }
+
   async function renderHome(force = false) {
     box.innerHTML = `
       <p class="s-lead">${t('Plugins add new features to Flux. Plugins from the Flux team are checked; community plugins are made by other people – install only what you trust.')}</p>
+      ${builtins.length ? `<h3>${t('Built into Flux')}</h3><div class="pl-list" id="pl-builtin"></div><h3>${t('Store')}</h3>` : ''}
       <div class="pl-bar">
         <input class="s-search" id="pl-q" placeholder="${t('Search plugins…')}" value="${esc(query)}" spellcheck="false">
         <div class="pl-filters">${[['all', t('All')], ['installed', t('Installed')], ['flux', 'Flux'], ['community', t('Community')]]
@@ -72,6 +94,7 @@ export function createPluginsUI({ host, toast, openProject }) {
         <div class="s-row"><span><b>${t('Publish it for everyone')}</b><small>${t('Fork Flux on GitHub, add your plugin folder and open a pull request.')}</small></span><button class="s-btn" data-pl-docs>${icon('external', 13)}${t('How to publish')}</button></div>
       </div>
       <div id="pl-local"></div>`;
+    renderBuiltins();
     box.querySelector('#pl-q').oninput = (e) => {
       query = e.target.value;
       renderList();
@@ -151,6 +174,18 @@ export function createPluginsUI({ host, toast, openProject }) {
     if (!b) return;
     if (b.matches('img[data-pl-zoom]')) {
       b.classList.toggle('zoom');
+      return;
+    }
+    if (b.dataset.biOn || b.dataset.biOff) {
+      const bi = builtins.find((x) => x.id === (b.dataset.biOn || b.dataset.biOff));
+      builtinBusy = bi.id;
+      renderBuiltins();
+      try {
+        await bi.set(!!b.dataset.biOn);
+      } finally {
+        builtinBusy = null;
+        renderBuiltins();
+      }
       return;
     }
     if (b.dataset.plFilter) {

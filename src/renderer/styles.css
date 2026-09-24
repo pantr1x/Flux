@@ -6623,3 +6623,26 @@ body.theme-dark #onboard::before {
   color: var(--text-3);
   font-size: 12px;
 }
+
+/* skryť z bočného panela – vedľa špendlíka, len pri prejdení myšou */
+.pr-row .pr-hide {
+  margin-right: -6px;
+}
+.pr-row.pinned:not(:hover) .pr-hide {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+/* vstavané pluginy */
+.pl-card.builtin {
+  cursor: default;
+}
+.bi-ic {
+  color: var(--accent);
+}
+.pl-new.on {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok);
+}

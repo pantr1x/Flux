@@ -406,6 +406,8 @@ let tools;
 let userKeys;
 let aiPanel;
 let gh;
+// GitHub je voliteľný vstavaný plugin (Nastavenia → Plugins); potrebuje Git.
+const ghOn = () => setting('githubPlugin') === true;
 let keymap;
 let pluginHost;
 let pluginsUI;
@@ -1300,8 +1302,9 @@ async function setWorkspace(dir) {
   await refreshTree();
   setTimeout(() => $('#tree').classList.remove('switching'), 600);
   renderWelcome();
-  gh?.refreshStatus();
-  gh?.syncOnOpen().then(async (pulled) => {
+  if (ghOn()) gh?.refreshStatus();
+  else renderGitStatus(null);
+  if (ghOn()) gh?.syncOnOpen().then(async (pulled) => {
     if (!pulled) return;
     await refreshTree();
     gh.refreshStatus();
@@ -1340,8 +1343,8 @@ async function renderProjects() {
   } catch {}
   state.projectList = list;
   const row = (p) =>
-    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click for more – rename, hide, delete')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
-  const shown = (p) => !p.hidden || keyOf(p.dir) === keyOf(state.workspace || '');
+    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click for more – rename, hide, delete')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin pr-hide" data-hide title="${p.hidden ? t('Show in the sidebar') : t('Hide from the sidebar')}">${icon('eyeOff', 13)}</button><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
+  const shown = (p) => !p.hidden;
   const pinned = list.filter((p) => p.pinned && shown(p));
   const rest = list.filter((p) => !p.pinned && shown(p));
   const hiddenCount = list.filter((p) => !shown(p)).length;
@@ -1414,7 +1417,7 @@ async function newProject(opts = {}) {
       <label class="np-field"><span>${t('Name')}</span><input id="np-name" spellcheck="false" autocomplete="off"></label>
       <label class="np-field"><span>${t('Short description')} <small>${t('optional')}</small></span><input id="np-desc" spellcheck="false" autocomplete="off" maxlength="160" placeholder="${t('e.g. A game where you catch falling stars')}"></label>
       <div class="np-field"><span>${t('Location')}</span><div class="np-loc"><code id="np-root"></code><button class="s-btn" data-root>${t('Change…')}</button></div></div>
-      <footer><button class="ob-ghost np-gh" data-gh>${icon('git', 15)}${t('Open from GitHub…')}</button><div class="grow"></div><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
+      <footer>${ghOn() ? `<button class="ob-ghost np-gh" data-gh>${icon('git', 15)}${t('Open from GitHub…')}</button>` : ''}<div class="grow"></div><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
     </div>`;
   const input = $('#np-name');
   tools.bind($('#np-tool'));
@@ -1531,6 +1534,14 @@ async function renameProject(dir) {
 function projectEvents() {
   const el = $('#projects');
   el.onclick = async (e) => {
+    const hide = e.target.closest('[data-hide]');
+    if (hide) {
+      const dir = hide.closest('[data-dir]').dataset.dir;
+      const p = (state.projectList || []).find((x) => x.dir === dir);
+      await flux.hideProject(dir, !p?.hidden);
+      if (!p?.hidden) toast(t('“{name}” is hidden from the sidebar. You find it on the home screen.', { name: basename(dir) }), 'ok', 5000, { label: t('Undo'), run: () => flux.hideProject(dir, false).then(renderProjects) });
+      return renderProjects();
+    }
     const pin = e.target.closest('[data-pin]');
     if (pin) {
       const row = pin.closest('[data-dir]');
@@ -2282,7 +2293,7 @@ function commands() {
     c(t('Color theme…'), chooseTheme, '', 'palette', 'theme colors vs code dracula one dark'),
     c(t('Settings'), openSettings, 'Ctrl+,', 'settings', 'settings preferences font'),
     c(t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A', 'command', 'search find all settings'),
-    c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'git', 'github clone repo'),
+    ghOn() && c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'git', 'github clone repo'),
     c(t('AI: open assistant'), () => aiPanel.show(), 'Ctrl+I', 'sparkle', 'ai claude chat assistant'),
     c(t('AI: explain this file'), () => aiPanel.ask(t('Explain this file.')), '', 'sparkle', 'ai claude explain'),
     c(t('AI: fix the errors in this file'), () => aiPanel.ask(t('Find and fix the errors in this file. Show the corrected code.')), '', 'sparkle', 'ai claude fix bug error'),
@@ -2306,7 +2317,7 @@ function commands() {
     c(t('Increase font size'), () => setFontSize(1), 'Ctrl+=', ''),
     c(t('Decrease font size'), () => setFontSize(-1), 'Ctrl+-', ''),
   ];
-  return list;
+  return list.filter(Boolean);
 }
 
 function pluginCommands() {
@@ -2528,10 +2539,10 @@ function openSettings() {
     ['keys', 'command', t('Shortcuts')],
     ['plugins', 'sparkle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
-    ['github', 'git', 'GitHub'],
+    ghOn() && ['github', 'git', 'GitHub'],
     ['general', 'globe', t('Language & intro')],
     ['about', 'refresh', t('About & updates')],
-  ];
+  ].filter(Boolean);
   if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
   panel.innerHTML = `
@@ -2666,7 +2677,7 @@ function openSettings() {
             <p class="s-lead">${t('Claude Desktop, Claude Code, Cursor and other apps that support MCP can see and change your Flux projects – files, description and to-do list. It works only on this computer and needs a secret key.')}</p>
             <div id="s-flux-mcp"></div>
           </section>
-          <section data-pane="github" id="s-github"></section>
+          ${ghOn() ? '<section data-pane="github" id="s-github"></section>' : ''}
           <section data-pane="plugins" id="s-plugins"></section>
           <section data-pane="about" id="s-about"></section>
           <section data-pane="general">
@@ -3407,7 +3418,7 @@ async function openStart() {
         <button class="hm-act primary" data-act="newproject"><span class="hm-act-ic">${icon('plus', 17)}</span><span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
         <button class="hm-act" data-act="open"><span class="hm-act-ic">${icon('folderOpen', 17)}</span><span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
         <button class="hm-act" data-act="openfile"><span class="hm-act-ic">${icon('file', 17)}</span><span><b>${t('Open file')}</b><small>${t('.md, .txt, any file')}</small></span></button>
-        <button class="hm-act" data-act="github"><span class="hm-act-ic">${icon('git', 17)}</span><span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>
+        ${ghOn() ? `<button class="hm-act" data-act="github"><span class="hm-act-ic">${icon('git', 17)}</span><span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>` : ''}
       </div>
       <div class="hm-cols">
         <section class="hm-main">
@@ -3601,12 +3612,12 @@ function renderWelcome() {
               <form class="pj-add" id="pj-add"><span class="pj-plus">${icon('plus', 14)}</span><input id="pj-new" placeholder="${t('Add a task and press Enter…')}" autocomplete="off" spellcheck="false" maxlength="200"></form>
               <ul class="pj-list" id="pj-list"></ul>
             </section>
-            <section class="pj-panel pj-git" id="pj-git"></section>
+            ${ghOn() ? '<section class="pj-panel pj-git" id="pj-git"></section>' : ''}
           </div>
         </div>
       </div>`;
     renderTodos(ws);
-    gh?.renderCard($('#pj-git'));
+    if (ghOn()) gh?.renderCard($('#pj-git'));
     $('#pj-add').onsubmit = async (e) => {
       e.preventDefault();
       const input = $('#pj-new');
@@ -3751,14 +3762,42 @@ function editDescription(el) {
 function renderGitStatus(st) {
   const el = $('#st-git');
   if (!el) return;
+  if (!ghOn()) st = null;
   el.hidden = !st?.repo;
   if (!st?.repo) return;
   el.innerHTML = `${icon('git', 13)}<span>${escapeHtml(st.branch || 'main')}</span>${st.changes ? `<span class="git-n">${st.changes}</span>` : ''}${st.ahead ? `<span class="git-s">↑${st.ahead}</span>` : ''}`;
   el.title = st.changes ? t('{n} changed file(s) – click to save them to GitHub', { n: st.changes }) : t('Git: everything is saved');
 }
 
+// Zapnutie / vypnutie GitHub pluginu. Git sa pri zapnutí doinštaluje, ak chýba.
+async function setGitHubPlugin(on) {
+  if (on) {
+    const st = await tools.status(true);
+    const git = st?.list?.find((x) => x.id === 'git');
+    if (git && !git.installed) {
+      if (!tools.canInstall()) {
+        toast(t('GitHub needs Git. Install it from git-scm.com, then try again.'), 'error', 9000, { label: 'git-scm.com', run: () => flux.openExternal('https://git-scm.com/downloads') });
+        return false;
+      }
+      toast(t('Installing Git – GitHub needs it…'), 'info', 6000);
+      if (!(await tools.install('git'))) return false;
+    }
+  }
+  await saveSettings({ githubPlugin: on });
+  toast(on ? t('GitHub is installed. Sign in under Settings → GitHub.') : t('GitHub was removed. Your projects and files stay.'), 'ok', 6000);
+  if (on) gh?.refreshStatus();
+  else renderGitStatus(null);
+  if (!state.active) renderWelcome();
+  // Karta GitHub v nastaveniach sa objaví / zmizne.
+  if (!$('#settings').hidden) {
+    state.settingsTab = 'plugins';
+    openSettings();
+  }
+  return true;
+}
+
 function renderGitHubSettings() {
-  gh?.renderSettings($('#s-github'));
+  if (ghOn() && $('#s-github')) gh?.renderSettings($('#s-github'));
 }
 
 // ---------- klávesové skratky ----------
@@ -4004,6 +4043,12 @@ async function main() {
   state.material = init.material;
   state.hasWallpaper = !!init.hasWallpaper;
   state.settings = init.settings;
+  // GitHub je odteraz plugin: kto už bol prihlásený, má ho rovno zapnutý.
+  if (state.settings.githubPlugin === undefined) {
+    try {
+      await saveSettings({ githubPlugin: !!(await flux.ghInfo()).connected });
+    } catch {}
+  }
   // Jazyk rozhrania (stiahnutý z GitHubu) ešte pred vykreslením.
   try {
     setLocale(await flux.i18nCurrent());
@@ -4094,7 +4139,22 @@ async function main() {
     getWorkspace: () => state.workspace,
   });
   updatesUI = createUpdatesUI({ toast, getSetting: setting, saveSettings });
-  pluginsUI = createPluginsUI({ host: pluginHost, toast, openProject: (dir) => (closeSettings(), setWorkspace(dir)) });
+  pluginsUI = createPluginsUI({
+    host: pluginHost,
+    toast,
+    openProject: (dir) => (closeSettings(), setWorkspace(dir)),
+    builtins: [
+      {
+        id: 'github',
+        name: 'GitHub',
+        icon: 'git',
+        needs: t('needs Git'),
+        description: t('Sign in with GitHub, open your repositories as projects, save changes with commit & push and publish new projects. Installs Git if it is missing.'),
+        enabled: ghOn,
+        set: setGitHubPlugin,
+      },
+    ],
+  });
 
   // Zmenené vstavané skratky (Nastavenia → Skratky).
   keymap = createKeymap({
@@ -4193,7 +4253,7 @@ async function main() {
     syncOpenTabs();
     // Počet zmien pre Git – nie pri každom uložení hneď, stačí raz za chvíľu.
     clearTimeout(gitTimer);
-    gitTimer = setTimeout(() => gh?.refreshStatus(), 1500);
+    if (ghOn()) gitTimer = setTimeout(() => gh?.refreshStatus(), 1500);
   });
   // Iná AI aplikácia (cez MCP) otvorila projekt / súbor alebo zapísala súbor.
   flux.onMcpOpenProject((dir) => setWorkspace(dir));

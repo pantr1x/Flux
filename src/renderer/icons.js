@@ -19,6 +19,7 @@ const paths = {
   refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>',
   collapse: '<path d="m7 20 5-5 5 5M7 4l5 5 5-5"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
+  eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-3.2 4.3M6.6 6.6C4.3 8 2.7 10.2 2 12c1 2.5 5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   arrowLeft: '<path d="M19 12H5m6-6-6 6 6 6"/>',
   arrowRight: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
