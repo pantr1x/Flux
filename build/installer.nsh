@@ -11,6 +11,40 @@
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
+; Aktualizácia z Fluxu: namiesto „Flux Setup / Installing“ malé okno „Updating Flux“ len s pruhom priebehu
+; (bez tlačidiel Back / Next / Cancel). Pri prvej inštalácii sa nič nemení.
+!macro customPageAfterChangeDir
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW FluxInstShow
+  Function FluxInstShow
+    ${if} ${isUpdated}
+      SendMessage $HWNDPARENT ${WM_SETTEXT} 0 "STR:Updating Flux"
+      !insertmacro MUI_HEADER_TEXT "Updating Flux" "Flux opens again by itself in a moment."
+      GetDlgItem $0 $HWNDPARENT 1
+      ShowWindow $0 ${SW_HIDE}
+      GetDlgItem $0 $HWNDPARENT 2
+      ShowWindow $0 ${SW_HIDE}
+      GetDlgItem $0 $HWNDPARENT 3
+      ShowWindow $0 ${SW_HIDE}
+      ; stránka s pruhom: bez „Show details“, okno skrátené tesne pod pruh
+      FindWindow $6 "#32770" "" $HWNDPARENT
+      GetDlgItem $0 $6 1027
+      ShowWindow $0 ${SW_HIDE}
+      GetDlgItem $7 $6 1004
+      System::Call "*(i 0, i 0, i 0, i 0) p .r1"
+      System::Call "user32::GetWindowRect(p $HWNDPARENT, p r1)"
+      System::Call "*$1(i .r2, i .r3, i .r4, i .r5)"
+      IntOp $8 $4 - $2
+      System::Call "user32::GetWindowRect(p $7, p r1)"
+      System::Call "*$1(i, i, i, i .r9)"
+      System::Free $1
+      ; výška = od vrchu okna po spodok pruhu + okraj
+      IntOp $9 $9 - $3
+      IntOp $9 $9 + 34
+      System::Call "user32::SetWindowPos(p $HWNDPARENT, p 0, i 0, i 0, i r8, i r9, i 0x16)"
+    ${endif}
+  FunctionEnd
+!macroend
+
 ; Aktualizácia z Fluxu: nepýtať sa „pre koho inštalovať“ – rovnako ako doteraz (pre teba alebo pre všetkých).
 !macro customInstallMode
   ${if} ${isUpdated}
