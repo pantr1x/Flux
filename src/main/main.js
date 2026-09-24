@@ -448,6 +448,30 @@ const THEME_TEMPLATE = (name, type, colors) => `{
 `;
 
 // Súbor s nastaveniami Claude Desktop (tam sa pridávajú MCP servery).
+// Claude Desktop z Microsoft Store (MSIX) má nastavenia v „virtualizovanom“ priečinku balíka.
+function claudeDesktopConfigPaths() {
+  const list = [claudeDesktopConfigPath()];
+  if (process.platform === 'win32') {
+    const pkgs = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Packages');
+    try {
+      for (const d of fs.readdirSync(pkgs)) if (/^(Claude|AnthropicPBC\.Claude)_/i.test(d)) list.push(path.join(pkgs, d, 'LocalCache', 'Roaming', 'Claude', 'claude_desktop_config.json'));
+    } catch {}
+  }
+  return list;
+}
+
+// Most pre MCP skopírovaný mimo app.asar (Flux.exe v režime Node ho tak spoľahlivo nájde).
+function mcpBridgeFile() {
+  const target = path.join(app.getPath('userData'), 'mcp-bridge.js');
+  const src = fs.readFileSync(path.join(__dirname, 'mcp-bridge.js'), 'utf8');
+  let cur = '';
+  try {
+    cur = fs.readFileSync(target, 'utf8');
+  } catch {}
+  if (cur !== src) fs.writeFileSync(target, src);
+  return target;
+}
+
 function claudeDesktopConfigPath() {
   if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
@@ -858,18 +882,35 @@ function registerIpc() {
   });
   ipcMain.handle('mcp:new-key', () => mcp.newKey());
   ipcMain.handle('mcp:add-to-claude', async () => {
-    const file = claudeDesktopConfigPath();
-    let data = {};
-    try {
-      data = JSON.parse(await fsp.readFile(file, 'utf8'));
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw new Error(t('Claude Desktop settings could not be read: {msg}', { msg: err.message }));
+    // Server pre AI aplikácie musí bežať (aj po ďalšom spustení Fluxu).
+    if (!settings.mcpServer?.enabled) {
+      settings.mcpServer = { ...(settings.mcpServer || {}), enabled: true };
+      saveSettings();
     }
+    await mcp.start();
     const i = mcp.info();
-    data.mcpServers = { ...(data.mcpServers || {}), flux: { command: process.execPath, args: [path.join(__dirname, 'mcp-bridge.js'), `http://127.0.0.1:${i.port || settings.mcpServer?.port || 39217}/mcp`, i.token], env: { ELECTRON_RUN_AS_NODE: '1' } } };
-    await fsp.mkdir(path.dirname(file), { recursive: true });
-    await fsp.writeFile(file, JSON.stringify(data, null, 2));
-    return file;
+    const entry = {
+      command: process.execPath,
+      args: [mcpBridgeFile(), `http://127.0.0.1:${i.port || settings.mcpServer?.port || 39217}/mcp`, i.token],
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    };
+    const written = [];
+    for (const file of claudeDesktopConfigPaths()) {
+      let data = {};
+      try {
+        const text = await fsp.readFile(file, 'utf8');
+        data = text.trim() ? JSON.parse(text) : {};
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw new Error(t('Claude Desktop settings could not be read: {msg}', { msg: err.message }));
+        // Priečinok balíka zo Store bez nastavení – nevytvárať, stačí bežné miesto.
+        if (written.length && !fs.existsSync(path.dirname(file))) continue;
+      }
+      data.mcpServers = { ...(data.mcpServers || {}), flux: entry };
+      await fsp.mkdir(path.dirname(file), { recursive: true });
+      await fsp.writeFile(file, JSON.stringify(data, null, 2));
+      written.push(file);
+    }
+    return written[0];
   });
   // Verzia a aktualizácie Fluxu
   ipcMain.handle('update:state', () => updater.state());

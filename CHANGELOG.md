@@ -2,6 +2,13 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 1.0.1 – 2026-09-24
+
+### Claude Desktop
+- **Add to Claude Desktop** works with Claude Desktop from the Microsoft Store too (it keeps its settings in a different folder).
+- The button turns on the Flux server for AI apps by itself.
+- If Flux is closed when Claude needs it, Flux now starts by itself.
+
 ## 1.0.0 – 2026-09-24
 
 Flux 1.0 – the first complete version.
