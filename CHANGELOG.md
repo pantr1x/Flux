@@ -2,6 +2,31 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 1.1.0 – 2026-09-24
+
+### Useful plugins are built in
+- Error Lens, Auto Rename Tag, Bookmarks, Color Highlight, Word Count, Snippet Pack and Theme Pack now come with Flux and are on from the start.
+- Turn each of them off in **Settings → Plugins → Built into Flux**.
+
+### Less memory
+- Python autocomplete (Pyright) only starts when you open a Python file, and stops when no Python file has been open for a few minutes. That saves several hundred MB, for example in web projects.
+- Pyright has a memory limit, so big projects can't eat all your RAM.
+- The wallpaper image is freed when you don't use it, and Flux no longer keeps a spare background process around.
+
+### Power saving for slower PCs
+- New switch in **Settings → Appearance → Window**. It turns off transparency, blur, the wallpaper, animations, glow and other effects.
+- The editor draws less: no code map, no sticky headers and no smooth cursor.
+- Flux uses even less memory: Pyright gets a smaller limit and stops sooner.
+- On PCs with 4 GB of RAM or less, it is on from the start.
+
+### Looks
+- **A new color picker** instead of the Windows one: a color field, a hue slider, preset colors and a hex box.
+- The sections of **Appearance** are now in the left menu of the settings, and the one you are looking at is highlighted.
+
+### Updates
+- **No more updating twice.** If a newer version came out while one was waiting to install, Flux gets the newest one first.
+- *What's new* shows the notes of every version you skipped.
+
 ## 1.0.2 – 2026-09-24
 
 ### Flux as a Claude extension

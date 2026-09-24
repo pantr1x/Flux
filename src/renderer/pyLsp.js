@@ -116,6 +116,19 @@ export class PythonLanguageClient {
     for (const model of this.monaco.editor.getModels()) this.didOpen(model);
   }
 
+  // Vypnúť server (šetrí pamäť, keď nie je otvorený žiadny Python súbor).
+  stop() {
+    if (!this.root && !this.ready) return;
+    this.generation++;
+    this.ready = false;
+    this.root = null;
+    for (const { reject } of this.pending.values()) reject(new Error('stopped'));
+    this.pending.clear();
+    this.open.clear();
+    flux.lspStop?.();
+    this.onStatus('off');
+  }
+
   setPython(pythonPath) {
     this.pythonPath = pythonPath;
     if (this.ready) this.notify('workspace/didChangeConfiguration', { settings: {} });

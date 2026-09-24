@@ -102,6 +102,7 @@ const DEFAULTS = {
   wallOpacity: 55,
   darkLift: 0,
   density: 'comfortable',
+  lite: false,
   userName: '',
   clearOnRun: true,
   terminalFontSize: 13,
@@ -285,19 +286,23 @@ function applyEditorSettings() {
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
     minimap: { enabled: false },
-    stickyScroll: { enabled: setting('stickyScroll') !== false, maxLineCount: 4 },
+    stickyScroll: { enabled: setting('stickyScroll') !== false && !setting('lite'), maxLineCount: 4 },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
     cursorStyle: setting('caretStyle'),
     cursorBlinking: setting('caretBlink'),
     cursorWidth: Number(setting('caretWidth')) || 2,
-    cursorSmoothCaretAnimation: setting('caretSmooth') ? 'on' : 'off',
+    cursorSmoothCaretAnimation: setting('caretSmooth') && !setting('lite') ? 'on' : 'off',
+    // Úsporný režim: menej prekresľovania v editore.
+    occurrencesHighlight: setting('lite') ? 'off' : 'singleFile',
+    renderLineHighlightOnlyWhenFocus: !!setting('lite'),
+    matchBrackets: setting('lite') ? 'near' : 'always',
     lineNumbers: setting('lineNumbers'),
     renderWhitespace: setting('whitespace'),
     letterSpacing: Number(setting('letterSpacing')) || 0,
     bracketPairColorization: { enabled: setting('bracketColors') },
   });
   applyCustomization();
-  codemap?.setVisible(setting('minimap'));
+  codemap?.setVisible(setting('minimap') && !setting('lite'));
   if (term) {
     term.options.fontFamily = font.css;
     term.options.fontSize = setting('terminalFontSize');
@@ -344,6 +349,7 @@ function applyCustomization() {
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
   document.body.classList.toggle('density-compact', setting('density') === 'compact');
+  document.body.classList.toggle('lite', !!setting('lite'));
   root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
@@ -377,6 +383,11 @@ async function setupWallpaper() {
   });
   flux.onMaterial((m) => {
     state.material = m;
+    // Bez tapety uvoľniť obrázok z pamäte.
+    if (m !== 'wallpaper') {
+      img.style.backgroundImage = 'none';
+      wallpaperUrl = null;
+    }
     applyTheme();
     load();
   });
@@ -799,6 +810,7 @@ function activate(tab) {
     editor.setPosition(tab.initialCursor);
     tab.initialCursor = null;
   }
+  if (isPythonTab(tab)) ensureLsp();
   updateRunGlyphs(tab);
   updateProblems();
   renderMdButton(tab);
@@ -1319,8 +1331,30 @@ async function setWorkspace(dir) {
     gh.refreshStatus();
   });
   await detectPython();
-  lsp.start(opened, state.python?.path);
+  // Pyright (doplňovanie pre Python) beží len keď treba – šetrí stovky MB pamäte.
+  if (state.tabs.some(isPythonTab)) ensureLsp(true);
+  else lsp.stop();
 }
+
+// ---------- Python autocomplete len na požiadanie ----------
+const isPythonTab = (tab) => tab?.model?.getLanguageId() === 'python' && inside(tab.path);
+let lspIdleSince = 0;
+function ensureLsp(force = false) {
+  if (!state.workspace || !lsp) return;
+  lspIdleSince = 0;
+  if (!force && lsp.root === state.workspace) return;
+  lsp.start(state.workspace, state.python?.path);
+}
+// Keď dlho nie je otvorený žiadny Python súbor, server sa vypne (v úspornom režime skôr).
+setInterval(() => {
+  if (!lsp?.root) return;
+  if (state.tabs.some(isPythonTab)) {
+    lspIdleSince = 0;
+    return;
+  }
+  lspIdleSince ||= Date.now();
+  if (Date.now() - lspIdleSince > (setting('lite') ? 60e3 : 5 * 60e3)) lsp.stop();
+}, 30e3);
 
 // ---------- projekty (ako „workspaces“ v Zene) ----------
 // Zoznam nedávnych priečinkov s ikonou podľa obsahu – prepnutie jedným klikom.
@@ -2745,6 +2779,7 @@ function openSettings() {
             <div class="s-group">
               ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
+              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
               <label class="s-row"><span><b>${t('Density')}</b><small>${t('Compact fits more files, tabs and lines on the screen.')}</small></span><select data-key="density">${opt('comfortable', t('comfortable'), setting('density'))}${opt('compact', t('compact'), setting('density'))}</select></label>
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
@@ -2961,18 +2996,33 @@ function openSettings() {
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
-  // Dlhé karty (Vzhľad): rýchle skoky na časti
+  // Dlhý Vzhľad: časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
   for (const pane of panel.querySelectorAll('[data-pane="appearance"]')) {
     const heads = [...pane.querySelectorAll(':scope > h3')];
-    if (heads.length < 4) continue;
-    const nav = document.createElement('nav');
-    nav.className = 's-jump';
-    nav.innerHTML = heads.map((h, i) => `<button type="button" data-jump="${i}">${escapeHtml(h.childNodes[0]?.textContent?.trim() || h.textContent.trim())}</button>`).join('');
-    pane.prepend(nav);
-    nav.onclick = (e) => {
+    const tabBtn = panel.querySelector('.s-tab[data-tab="appearance"]');
+    if (heads.length < 4 || !tabBtn) continue;
+    const sub = document.createElement('div');
+    sub.className = 's-sub';
+    sub.innerHTML = heads.map((h, i) => `<button type="button" data-jump="${i}">${escapeHtml(h.childNodes[0]?.textContent?.trim() || h.textContent.trim())}</button>`).join('');
+    tabBtn.after(sub);
+    sub.onclick = (e) => {
       const b = e.target.closest('[data-jump]');
-      if (b) heads[Number(b.dataset.jump)].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!b) return;
+      e.stopPropagation();
+      if (state.settingsTab !== 'appearance') tabBtn.click();
+      heads[Number(b.dataset.jump)].scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
     };
+    const scroller = pane.closest('.s-body') || pane.parentElement;
+    const spy = () => {
+      const top = scroller.getBoundingClientRect().top + 40;
+      let cur = 0;
+      heads.forEach((h, i) => {
+        if (h.getBoundingClientRect().top <= top) cur = i;
+      });
+      sub.querySelectorAll('[data-jump]').forEach((b, i) => b.classList.toggle('on', i === cur));
+    };
+    scroller.addEventListener('scroll', spy, { passive: true });
+    requestAnimationFrame(spy);
   }
   showTab(tab);
   // Hľadanie naprieč všetkými záložkami: ukáže len riadky, ktoré sedia.

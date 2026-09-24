@@ -124,7 +124,17 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     if (!seen || seen === st.version) return;
     let rel = null;
     try {
-      rel = (await flux.updateNotes()).find((r) => r.version === st.version);
+      // Všetky verzie od poslednej, ktorú si videl (ak si niektoré preskočil).
+      const notes = await flux.updateNotes();
+      const newer = (a, b) => {
+        const pa = String(a).split('.').map(Number);
+        const pb = String(b).split('.').map(Number);
+        for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+        return false;
+      };
+      const range = notes.filter((r) => newer(r.version, seen) && !newer(r.version, st.version));
+      if (range.length > 1) rel = { body: range.map((r) => `## ${r.version}\n\n${r.body}`).join('\n\n') };
+      else rel = notes.find((r) => r.version === st.version);
     } catch {}
     const el = document.createElement('div');
     el.className = 'up-whatsnew';

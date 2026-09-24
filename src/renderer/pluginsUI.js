@@ -26,6 +26,7 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
     p.iconUrl ? `<img class="pl-icon" src="${esc(p.iconUrl)}" width="${size}" height="${size}" alt="">` : `<span class="pl-icon ph" style="width:${size}px;height:${size}px">${icon('sparkle', size / 2)}</span>`;
 
   function actionBtn(p) {
+    if (p.builtin) return `<span class="pl-new on">${icon('check', 11)}${t('Built in')}</span><input type="checkbox" class="switch" data-pl-enable="${p.id}"${p.enabled ? ' checked' : ''} title="${t('On / off')}">`;
     if (p.busy) return `<button class="s-btn" disabled><span class="spin"></span></button>`;
     if (!p.installed) return `<button class="s-btn primary" data-pl-install="${p.id}">${icon('download', 13)}${t('Install')}</button>`;
     if (p.update) return `<button class="s-btn primary" data-pl-install="${p.id}">${icon('download', 13)}${t('Update')}</button>`;
@@ -71,15 +72,29 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       <div class="pl-side">${on ? `<span class="pl-new on">${icon('check', 11)}${t('Installed')}</span>` : ''}${btn}</div>
     </div>`;
   }
+  let bundled = [];
+  const bundledCard = (p) => `<div class="pl-card builtin" data-pl-open="${p.id}">
+      ${iconImg(p)}
+      <div class="pl-txt"><b>${esc(p.name)}</b><small>Flux${verified(p)} · v${esc(p.version)}</small><p>${esc(p.description)}</p></div>
+      <div class="pl-side"><input type="checkbox" class="switch" data-pl-enable="${p.id}"${p.enabled ? ' checked' : ''} title="${t('On / off')}"></div>
+    </div>`;
   function renderBuiltins() {
     const el = box?.querySelector('#pl-builtin');
-    if (el) el.innerHTML = builtins.map(builtinCard).join('');
+    if (el) el.innerHTML = builtins.map(builtinCard).join('') + bundled.map(bundledCard).join('');
+  }
+  async function loadBundled() {
+    try {
+      bundled = await flux.pluginsBuiltin();
+    } catch {
+      bundled = [];
+    }
+    renderBuiltins();
   }
 
   async function renderHome(force = false) {
     box.innerHTML = `
       <p class="s-lead">${t('Plugins add new features to Flux. Plugins from the Flux team are checked; community plugins are made by other people – install only what you trust.')}</p>
-      ${builtins.length ? `<h3>${t('Built into Flux')}</h3><div class="pl-list" id="pl-builtin"></div><h3>${t('Store')}</h3>` : ''}
+      ${builtins.length || true ? `<h3>${t('Built into Flux')}</h3><div class="pl-list" id="pl-builtin"></div><h3>${t('Store')}</h3>` : ''}
       <div class="pl-bar">
         <input class="s-search" id="pl-q" placeholder="${t('Search plugins…')}" value="${esc(query)}" spellcheck="false">
         <div class="pl-filters">${[['all', t('All')], ['installed', t('Installed')], ['flux', 'Flux'], ['community', t('Community')]]
@@ -95,6 +110,7 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       </div>
       <div id="pl-local"></div>`;
     renderBuiltins();
+    loadBundled();
     box.querySelector('#pl-q').oninput = (e) => {
       query = e.target.value;
       renderList();
@@ -130,14 +146,14 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       box.querySelector('.s-loading').textContent = errText(err);
       return;
     }
-    const full = { ...p, ...d, installed: p.installed, enabled: p.enabled, update: p.update };
+    const full = { ...p, ...d, installed: p.installed || bundled.some((x) => x.id === id), builtin: p.builtin || bundled.some((x) => x.id === id), enabled: p.enabled ?? bundled.find((x) => x.id === id)?.enabled, update: p.update };
     box.innerHTML = `
       <button class="pl-back" data-pl-back>${icon('chevron', 13)}${t('All plugins')}</button>
       <div class="pl-head">
         ${iconImg(full, 64)}
         <div class="pl-txt"><h2>${esc(full.name)}</h2><small>${esc(full.publisher)}${verified(full)} · v${esc(full.version)}${full.license ? ` · ${esc(full.license)}` : ''}</small><p>${esc(full.description)}</p>
           <div class="pl-tags">${(full.tags || []).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
-        <div class="pl-side">${actionBtn(full)}${full.installed ? `<button class="s-btn" data-pl-uninstall="${full.id}">${t('Uninstall')}</button>` : ''}</div>
+        <div class="pl-side">${actionBtn(full)}${full.installed && !full.builtin ? `<button class="s-btn" data-pl-uninstall="${full.id}">${t('Uninstall')}</button>` : ''}</div>
       </div>
       <div class="pl-rate">${stars(full)}${
         full.issue
@@ -202,6 +218,7 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       await flux.pluginEnable(b.dataset.plEnable, b.checked);
       await host.refresh(b.dataset.plEnable);
       list = await flux.pluginRegistry();
+      bundled = await flux.pluginsBuiltin().catch(() => bundled);
       return;
     }
     if (b.dataset.plUninstall) {

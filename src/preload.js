@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('flux', {
   gitCommitPush: (message) => ipcRenderer.invoke('git:commit-push', message),
   gitPull: () => ipcRenderer.invoke('git:pull'),
   gitSync: () => ipcRenderer.invoke('git:sync'),
+  pluginsBuiltin: () => ipcRenderer.invoke('plugins:builtin'),
   pluginRegistry: (force) => ipcRenderer.invoke('plugins:registry', force),
   pluginDetails: (id) => ipcRenderer.invoke('plugins:details', id),
   pluginInstall: (id) => ipcRenderer.invoke('plugins:install', id),
@@ -150,6 +151,7 @@ contextBridge.exposeInMainWorld('flux', {
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 
   lspStart: () => ipcRenderer.invoke('lsp:start'),
+  lspStop: () => ipcRenderer.send('lsp:stop'),
   lspSend: (msg) => ipcRenderer.send('lsp:send', msg),
   onLspMessage: on('lsp:message'),
   onLspExit: on('lsp:exit'),

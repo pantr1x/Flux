@@ -27,6 +27,7 @@ function createUpdater({ getSettings, send }) {
     autoUpdater.allowPrerelease = false;
     autoUpdater.on('checking-for-update', () => emit({ status: 'checking', error: '' }));
     autoUpdater.on('update-available', (info) => emit({ status: autoUpdater.autoDownload ? 'downloading' : 'available', latest: info.version, progress: 0 }));
+    // Pri inštalácii pri zatvorení sa vždy použije posledná stiahnutá (najnovšia) verzia.
     autoUpdater.on('update-not-available', (info) => emit({ status: 'latest', latest: info?.version || state.version }));
     autoUpdater.on('download-progress', (p) => emit({ status: 'downloading', progress: Math.round(p.percent || 0) }));
     autoUpdater.on('update-downloaded', (info) => emit({ status: 'ready', latest: info.version, progress: 100 }));
@@ -97,9 +98,22 @@ function createUpdater({ getSettings, send }) {
   }
 
   // „Reštartovať teraz“: tichá inštalácia a Flux sa sám znova otvorí.
+  // Najprv sa ešte pozrie, či medzitým nevyšla novšia verzia – inak by si musel aktualizovať dvakrát.
   // Značka v TEMP je poistka – inštalátor podľa nej Flux spustí, aj keby --force-run nezabral.
-  function install() {
-    if (!(state.canUpdate && state.status === 'ready')) return;
+  let installing = false;
+  async function install() {
+    if (!(state.canUpdate && state.status === 'ready') || installing) return;
+    installing = true;
+    try {
+      const ready = state.latest;
+      autoUpdater.autoDownload = true;
+      const r = await autoUpdater.checkForUpdates().catch(() => null);
+      const newest = r?.updateInfo?.version;
+      if (newest && newer(newest, ready)) {
+        emit({ status: 'downloading', latest: newest, progress: 0 });
+        await r.downloadPromise;
+      }
+    } catch {}
     try {
       fs.writeFileSync(path.join(require('node:os').tmpdir(), 'flux-relaunch-after-update'), String(Date.now()));
     } catch {}

@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,
@@ -22,7 +22,15 @@
       "dist/renderer/**/*",
       "build/icon.png",
       "package.json",
-      "CHANGELOG.md"
+      "CHANGELOG.md",
+      "plugins/flux.error-lens/**/*",
+      "plugins/flux.auto-rename-tag/**/*",
+      "plugins/flux.bookmarks/**/*",
+      "plugins/flux.color-highlight/**/*",
+      "plugins/flux.word-count/**/*",
+      "plugins/flux.snippet-pack/**/*",
+      "plugins/flux.theme-pack/**/*",
+      "!plugins/**/screenshot.png"
     ],
     "asarUnpack": [
       "node_modules/basedpyright/**/*",

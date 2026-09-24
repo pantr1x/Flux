@@ -13,6 +13,10 @@ const ID = /^[a-z0-9][a-z0-9.-]{1,60}$/;
 
 const pluginsDir = () => path.join(app.getPath('userData'), 'plugins');
 
+// Pluginy pribalené vo Fluxe (zapnuté od začiatku, dajú sa vypnúť v Nastaveniach → Plugins).
+const BUILTIN_IDS = ['flux.error-lens', 'flux.auto-rename-tag', 'flux.bookmarks', 'flux.color-highlight', 'flux.word-count', 'flux.snippet-pack', 'flux.theme-pack'];
+const BUILTIN_DIR = path.join(__dirname, '..', '..', 'plugins');
+
 function createPlugins({ getSettings, saveSettings, githubApi }) {
   let branch = null; // vetva, na ktorej katalóg existuje
   let cache = { at: 0, data: null };
@@ -88,11 +92,27 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
 
   const enabledMap = () => getSettings().plugins?.enabled || {};
 
+  function builtinList() {
+    const out = [];
+    for (const id of BUILTIN_IDS) {
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(BUILTIN_DIR, id, 'plugin.json'), 'utf8'));
+        out.push({ ...m, builtin: true, dir: path.join(BUILTIN_DIR, id) });
+      } catch {}
+    }
+    return out;
+  }
+  function builtins() {
+    const en = enabledMap();
+    return builtinList().map((m) => ({ ...m, iconUrl: `app://flux/builtin/${m.id}/${m.icon || 'icon.svg'}`, enabled: en[m.id] !== false }));
+  }
+
   function withState(list) {
     const inst = installedList();
     const en = enabledMap();
     return list.map((p) => {
       const i = inst.find((x) => x.id === p.id);
+      if (BUILTIN_IDS.includes(p.id) && !i) return { ...p, installed: true, builtin: true, installedVersion: p.version, enabled: en[p.id] !== false, update: false };
       return { ...p, installed: !!i, installedVersion: i?.version || '', enabled: i ? en[p.id] !== false : false, update: !!i && i.version !== p.version };
     });
   }
@@ -159,9 +179,13 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
   // Čo sa má pri štarte načítať.
   function active() {
     const en = enabledMap();
-    return installedList()
-      .filter((m) => en[m.id] !== false)
-      .map((m) => ({ id: m.id, name: m.name, version: m.version, main: m.main || 'plugin.js', url: `app://flux/plugins/${m.id}/${m.main || 'plugin.js'}?v=${encodeURIComponent(m.version || '0')}-${Date.now()}` }));
+    const inst = installedList();
+    const own = inst.map((m) => ({ id: m.id, name: m.name, version: m.version, main: m.main || 'plugin.js', url: `app://flux/plugins/${m.id}/${m.main || 'plugin.js'}?v=${encodeURIComponent(m.version || '0')}-${Date.now()}` }));
+    // Vstavané – ak nie je nainštalovaná vlastná (novšia) kópia z obchodu.
+    const built = builtinList()
+      .filter((m) => !inst.some((x) => x.id === m.id))
+      .map((m) => ({ id: m.id, name: m.name, version: m.version, main: m.main || 'plugin.js', url: `app://flux/builtin/${m.id}/${m.main || 'plugin.js'}?v=${encodeURIComponent(m.version || '0')}` }));
+    return [...own, ...built].filter((m) => en[m.id] !== false);
   }
 
   // 👍 / 👎 cez GitHub (treba pripojený GitHub účet).
@@ -235,7 +259,7 @@ The full guide is in docs/PLUGINS.md.
     return dir;
   }
 
-  return { registry, details, install, installFromFolder, uninstall, setEnabled, active, rate, scaffold, installedList, dir: pluginsDir };
+  return { builtins, builtinDir: BUILTIN_DIR, registry, details, install, installFromFolder, uninstall, setEnabled, active, rate, scaffold, installedList, dir: pluginsDir };
 }
 
 module.exports = { createPlugins, pluginsDir };

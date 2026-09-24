@@ -8,9 +8,10 @@ function pyrightPath() {
 }
 
 class LanguageServer {
-  constructor(onMessage, onExit) {
+  constructor(onMessage, onExit, memoryLimit = () => 2048) {
     this.onMessage = onMessage;
     this.onExit = onExit;
+    this.memoryLimit = memoryLimit;
     this.proc = null;
     this.buffer = Buffer.alloc(0);
   }
@@ -21,7 +22,8 @@ class LanguageServer {
     const proc = spawn(process.execPath, [pyrightPath(), '--stdio'], {
       cwd,
       windowsHide: true,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      // Strop pamäte – Pyright inak na veľkých projektoch zaberie aj niekoľko GB.
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', NODE_OPTIONS: `--max-old-space-size=${this.memoryLimit()}` },
     });
     this.proc = proc;
     proc.stdout.on('data', (chunk) => this.receive(chunk));

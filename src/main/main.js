@@ -58,7 +58,7 @@ function wallpaperPath() {
 
 function materialMode() {
   let m = settings.material || 'wallpaper';
-  if (settings.translucent === false) m = 'none';
+  if (settings.translucent === false || settings.lite) m = 'none';
   if (m === 'wallpaper' && !wallpaperPath()) m = mica ? 'acrylic' : 'none';
   if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
   return m;
@@ -74,7 +74,7 @@ function applyMaterial() {
 }
 
 function sendBounds() {
-  if (!win) return;
+  if (!win || materialMode() !== 'wallpaper') return;
   const b = win.getContentBounds();
   const d = screen.getDisplayMatching(b).bounds;
   send('win:bounds', { x: b.x - d.x, y: b.y - d.y, dw: d.width, dh: d.height });
@@ -274,6 +274,7 @@ const live = new LiveServer(
 const lsp = new LanguageServer(
   (msg) => send('lsp:message', msg),
   (code) => send('lsp:exit', code),
+  () => (settings.lite ? 768 : 2048), // strop pamäte pre Pyright (MB)
 );
 
 // Automatické aktualizácie jazykov (raz za deň, na pozadí, len ak sú zapnuté).
@@ -562,7 +563,7 @@ function registerIpc() {
       win.setTitleBarOverlay({ color: '#00000000', symbolColor: patch.theme === 'light' ? '#1d1d24' : '#e8e8ef', height: 44 });
     }
     if (patch.theme) nativeTheme.themeSource = patch.theme;
-    if ('material' in patch || 'translucent' in patch || 'theme' in patch) applyMaterial();
+    if ('material' in patch || 'translucent' in patch || 'theme' in patch || 'lite' in patch) applyMaterial();
     return settings;
   });
   ipcMain.on('app:dirty', (_e, count) => {
@@ -1001,6 +1002,7 @@ function registerIpc() {
   ipcMain.handle('plugins:active', () => plugins.active());
   ipcMain.handle('plugins:installed', () => plugins.installedList());
   ipcMain.handle('plugins:rate', (_e, issue, like) => plugins.rate(Number(issue), !!like));
+  ipcMain.handle('plugins:builtin', () => plugins.builtins());
   ipcMain.handle('plugins:load-folder', async () => {
     const r = await dialog.showOpenDialog(win, { title: t('Plugin folder (with plugin.json)'), properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths[0]) return null;
@@ -1210,6 +1212,7 @@ function registerIpc() {
     return true;
   });
   ipcMain.on('lsp:send', (_e, msg) => lsp.send(msg));
+  ipcMain.on('lsp:stop', () => lsp.stop());
 }
 
 // Neočakávaná chyba v pozadí (napr. ukončený podproces) nesmie ukázať chybové okno – len sa zapíše.
@@ -1344,6 +1347,20 @@ async function projectStats(dir) {
 // ---------- štart ----------
 // Iba jedno okno aplikácie – druhé spustenie len prenesie existujúce okno dopredu.
 if (!app.requestSingleInstanceLock()) app.quit();
+
+// Pamäť: Chromium si inak drží v zálohe ďalší prázdny proces stránky.
+loadSettings();
+// Slabší počítač (málo RAM) → úsporný režim zapnutý od začiatku (dá sa vypnúť v Nastaveniach).
+if (settings.lite === undefined) {
+  settings.lite = os.totalmem() <= 4.5 * 1024 ** 3;
+  saveSettings();
+}
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
+if (settings.lite) {
+  // Úsporný režim: menej pamäte pre JavaScript okna a bez plynulého posúvania.
+  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+  app.commandLine.appendSwitch('disable-smooth-scrolling');
+}
 app.on('second-instance', (_e, argv) => {
   if (!win) return;
   const files = filesFromArgv(argv).map(allowFile).filter(Boolean);
@@ -1362,6 +1379,13 @@ app.whenReady().then(() => {
     if (pathname.startsWith('/plugins/')) {
       const base = pluginsDir();
       const file = path.normalize(path.join(base, decodeURIComponent(pathname.slice('/plugins/'.length))));
+      if (!file.startsWith(base + path.sep)) return new Response('Forbidden', { status: 403 });
+      return net.fetch(pathToFileURL(file).toString());
+    }
+    // Pluginy pribalené vo Fluxe: app://flux/builtin/<id>/<súbor>
+    if (pathname.startsWith('/builtin/')) {
+      const base = plugins.builtinDir;
+      const file = path.normalize(path.join(base, decodeURIComponent(pathname.slice('/builtin/'.length))));
       if (!file.startsWith(base + path.sep)) return new Response('Forbidden', { status: 403 });
       return net.fetch(pathToFileURL(file).toString());
     }
