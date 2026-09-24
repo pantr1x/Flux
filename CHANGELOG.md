@@ -2,6 +2,13 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.11 – 2026-09-24
+
+### Fixes and small improvements
+- **Restart and update** no longer gets stuck when you have unsaved files and press **Cancel**. The progress window closes, and you can start the update again later.
+- The home screen now has the **☰ menu** next to the flux logo too, like the editor.
+- Plugin descriptions in **Settings → Plugins** now show two lines instead of being cut off after one.
+
 ## 1.4.10 – 2026-09-24
 
 ### Rename everywhere

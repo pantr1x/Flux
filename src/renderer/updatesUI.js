@@ -124,6 +124,12 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
   let overlay = null;
   function drawOverlay() {
     if (!overlay || !state) return;
+    // zatvorenie Fluxu sa zrušilo (neuložené súbory) – okno s priebehom preč
+    if (state.status === 'ready' && state.canceled > Number(overlay.dataset.t)) {
+      overlay.remove();
+      overlay = null;
+      return;
+    }
     const pct = state.status === 'downloading' ? Number(state.progress) || 0 : 100;
     overlay.querySelector('.up-ov-title').textContent = t('Updating Flux to {v}…', { v: showVer(state.latest) });
     overlay.querySelector('.up-ov-step').textContent =
@@ -136,6 +142,7 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     overlay?.remove();
     overlay = document.createElement('div');
     overlay.className = 'up-overlay';
+    overlay.dataset.t = String(Date.now());
     overlay.innerHTML = `<div class="up-ov-card"><div class="brand-mark big">${icon('code', 22)}</div><b class="up-ov-title"></b><small class="up-ov-step"></small><span class="up-bar busy"><i></i></span></div>`;
     document.body.append(overlay);
     drawOverlay();

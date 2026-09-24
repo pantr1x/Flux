@@ -129,7 +129,7 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
 
 ## Layout, menu and search
 
-- **Menu** (`src/renderer/menubar.js`, items in `appMenus()` in `app.js`): opens from `#btn-appmenu` (☰ next to the `.brand` logo – the logo itself opens the start screen) and from `#btn-menu` (☰ in the top bar, shown only when the sidebar is hidden). Submenus switch with a short delay so moving the mouse diagonally does not jump to another one. Items are `[label, action, shortcut, { checked, radio, disabled }]`, `'-'` = separator, a plain string = caption; a top-level entry with `run` (Home) is a direct action. `menuBar: true` also shows the classic `#menubar` row in the top bar (default off – it takes too much room).
+- **Menu** (`src/renderer/menubar.js`, items in `appMenus()` in `app.js`): opens from `#btn-appmenu` (☰ next to the `.brand` logo – the logo itself opens the start screen), from `#btn-menu` (☰ in the top bar, shown only when the sidebar is hidden) and from the home screen's ☰ (`data-act="menu"`, re-rendered each time, so it uses `menubar.openAt(el)`; `data-menu-trigger` keeps the outside-click handler from closing it). Submenus switch with a short delay so moving the mouse diagonally does not jump to another one. Items are `[label, action, shortcut, { checked, radio, disabled }]`, `'-'` = separator, a plain string = caption; a top-level entry with `run` (Home) is a direct action. `menuBar: true` also shows the classic `#menubar` row in the top bar (default off – it takes too much room).
 - **Search** is the `#topsearch` magnifier (opens `searchEverything()`); `showSearch: false` hides it, `searchWide: true` (`body.search-wide`) turns it into a wide search field (same button, text + shortcut shown).
 - **Panel position** `panelPos` = `bottom` | `right` | `left` (body classes `panel-side`, `panel-right`, `panel-left`; `#card` is a CSS grid). Width `panelWidth` / `--panel-w`, height `panelHeight`. **Sidebar** `sidePos` = `left` | `right` (`body.side-right`, `#app` row-reverse; on Windows the window buttons then sit above the sidebar, so `.side-top` gets the caption padding). Change them with `setLayout(patch)` – it re-lays out Monaco and xterm.
 - Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).
@@ -158,8 +158,9 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 - **How it works.**
   - `updater.js` sets `autoDownload = false` and `startDownload(v)` first tries `quick.fetch(v)`.
   - That reads `quick.json` from the release, downloads `Flux-<v>.asar.gz` (~5 MB), checks the sha512 and writes `resources/app.asar.new`.
-  - On *Restart and update*, `quick.apply(true)` starts a helper and Flux quits. The helper is `Flux.exe` run as Node (`ELECTRON_RUN_AS_NODE`), written to TEMP. It waits for Flux to exit, swaps `app.asar`, then starts Flux again, keeping `--user-data-dir`/`--no-sandbox`.
-  - On a normal quit the same swap happens without the restart (`will-quit`).
+  - The helper starts only in `will-quit`, when Flux really closes. `quick.apply(quitRelaunch)` writes it to TEMP; it is `Flux.exe` run as Node (`ELECTRON_RUN_AS_NODE`). It waits for Flux to exit, swaps `app.asar`, then starts Flux again, keeping `--user-data-dir`/`--no-sandbox`.
+  - *Restart and update* sets `quitRelaunch = true` and calls `app.quit()`. A normal quit swaps the file without the restart.
+  - Closing can be canceled: unsaved files → *Cancel*. `watchCancel()` handles this for both paths: if Flux is still running after 10 s, the state goes back to `ready` with `canceled`, and `updatesUI` closes its overlay.
 - **When it is used.** Only when the release's `base` equals the installed `resources/quick-base.txt` and the install folder is writable (per-user install, not Program Files).
   - `base` is a fingerprint of everything except `app.asar`, the main `.exe` and `app-update.yml`: Electron, the Pyright tar, native modules.
   - `scripts/after-pack.cjs` (electron-builder `afterPack`) computes it.

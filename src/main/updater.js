@@ -63,9 +63,10 @@ function createUpdater({ getSettings, send }) {
       if (auto()) startDownload(info.version);
       else emit({ status: 'available', latest: info.version, progress: 0 });
     });
-    // Rýchla aktualizácia sa pri bežnom zatvorení Fluxu tiež nainštaluje (bez opätovného spustenia).
+    // Rýchla aktualizácia sa vymení, až keď sa Flux naozaj zatvára (zrušené zatvorenie = nič sa nedeje).
+    // Po „Reštartovať a aktualizovať“ sa Flux potom sám znova otvorí, pri bežnom zatvorení nie.
     app.on('will-quit', () => {
-      if (!installing && state.quick && quick.ready()) quick.apply(false);
+      if (state.quick && quick.ready()) quick.apply(quitRelaunch);
     });
     // Pri inštalácii pri zatvorení sa vždy použije posledná stiahnutá (najnovšia) verzia.
     autoUpdater.on('update-not-available', (info) => emit({ status: 'latest', latest: info?.version || state.version }));
@@ -141,6 +142,16 @@ function createUpdater({ getSettings, send }) {
   // Najprv sa ešte pozrie, či medzitým nevyšla novšia verzia – inak by si musel aktualizovať dvakrát.
   // Značka v TEMP je poistka – inštalátor podľa nej Flux spustí, aj keby --force-run nezabral.
   let installing = false;
+  let quitRelaunch = false;
+  // Zatvorenie sa dá zrušiť (neuložené súbory → Zrušiť): ak Flux o chvíľu stále beží, vrátiť stav späť,
+  // nech sa okno s priebehom zavrie a aktualizácia sa dá spustiť znova.
+  function watchCancel() {
+    setTimeout(() => {
+      installing = false;
+      quitRelaunch = false;
+      emit({ status: 'ready', progress: 100, canceled: Date.now() });
+    }, 10000);
+  }
   async function install() {
     if (!(state.canUpdate && state.status === 'ready') || installing) return;
     installing = true;
@@ -154,9 +165,10 @@ function createUpdater({ getSettings, send }) {
     } catch {}
     // Rýchla aktualizácia: pomocník po zatvorení vymení app.asar a Flux hneď znova otvorí.
     if (state.status === 'ready' && state.quick && quick.ready() === state.latest) {
-      emit({ status: 'installing', progress: 100 });
-      quick.apply(true);
+      emit({ status: 'installing', progress: 100, canceled: 0 });
+      quitRelaunch = true;
       setTimeout(() => app.quit(), 300);
+      watchCancel();
       return;
     }
     if (state.status !== 'ready') {
@@ -166,10 +178,11 @@ function createUpdater({ getSettings, send }) {
     try {
       fs.writeFileSync(path.join(require('node:os').tmpdir(), 'flux-relaunch-after-update'), String(Date.now()));
     } catch {}
-    emit({ status: 'installing', progress: 100 });
+    emit({ status: 'installing', progress: 100, canceled: 0 });
     // Inštalátor beží viditeľne, ale len s pruhom priebehu (uvítanie, výber a koniec preskočí
     // – build/installer.nsh); po inštalácii Flux otvorí značka v TEMP (customInstall).
     setTimeout(() => autoUpdater.quitAndInstall(false, true), 400);
+    watchCancel();
   }
 
   // Pri štarte: skontrolovať (a pri automatických aktualizáciách aj stiahnuť).

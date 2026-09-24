@@ -4062,7 +4062,7 @@ async function openStart() {
   const noProjects = !pinned.length && !recent.length;
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
-    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span>${navButtons()}<div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
+    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span><button class="icon-btn no-drag" data-act="menu" data-menu-trigger title="${t('Menu')}">${icon('menu', 16)}</button>${navButtons()}<div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
     <div class="st-scroll"><div class="st-inner hm">
       <header class="hm-hero">
         <div><small class="hm-date">${escapeHtml(date)}</small><h1>${greet}</h1><p class="st-sub">${t('What do you want to work on?')}</p></div>
@@ -4149,6 +4149,7 @@ async function openStart() {
     if (!b) return;
     if (b.dataset.act === 'back') return closeStart();
     if (b.dataset.act === 'settings') return openSettings();
+    if (b.dataset.act === 'menu') return menubar?.openAt(b);
     if (b.dataset.dir) {
       closeStart();
       if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);

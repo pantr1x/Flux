@@ -134,7 +134,7 @@ export function createMenubar({ bar, triggers, icon, esc, getMenus }) {
     });
   }
   document.addEventListener('pointerdown', (e) => {
-    if (!state || e.target.closest('.mb-drop') || bar?.contains(e.target) || triggers.some((t) => t.contains(e.target))) return;
+    if (!state || e.target.closest('.mb-drop, [data-menu-trigger]') || bar?.contains(e.target) || triggers.some((t) => t.contains(e.target))) return;
     close();
   });
   window.addEventListener(
@@ -151,5 +151,11 @@ export function createMenubar({ bar, triggers, icon, esc, getMenus }) {
   window.addEventListener('blur', close);
   window.addEventListener('resize', close);
 
-  return { render, close, isOpen: () => !!state };
+  // Ponuka z ďalšieho tlačidla (napr. ☰ na domovskej obrazovke, ktorá sa kreslí znova a znova).
+  function openAt(el) {
+    state = state?.anchor === el ? null : { anchor: el, sub: null };
+    render();
+  }
+
+  return { render, close, openAt, isOpen: () => !!state };
 }
