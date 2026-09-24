@@ -38,7 +38,8 @@ jobs:
       - if: steps.check.outputs.exists == 'false'
         run: node scripts/release-notes.mjs
       - if: steps.check.outputs.exists == 'false'
-        run: npx electron-builder --win --publish always -c.releaseInfo.releaseNotesFile=build/release-notes.md
+        shell: bash
+        run: npx electron-builder --win --publish always --config.releaseInfo.releaseNotesFile=build/release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
