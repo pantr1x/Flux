@@ -7151,3 +7151,176 @@ input.fsel-native,
 select.fsel-native {
   display: none !important;
 }
+
+/* spodok bočného panela: Nastavenia vľavo s popisom */
+.side-bottom {
+  height: 34px;
+  padding: 0 2px 0 0;
+}
+.side-set {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: 600 12.5px var(--ui-font);
+  cursor: pointer;
+}
+.side-set:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* ---------- Flux Together (Wi-Fi) ---------- */
+.projects.together {
+  max-height: 34%;
+}
+.tg-code {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--card-2);
+  font: 700 10.5px var(--mono);
+  font-style: normal;
+  letter-spacing: 1px;
+  color: var(--text-2);
+}
+.tg-start {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.tg-start:hover {
+  background: var(--hover);
+}
+.tg-start span,
+.tg-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tg-start small,
+.tg-txt small {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.tg-peer {
+  display: flex;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: default;
+}
+.tg-peer.can {
+  cursor: pointer;
+}
+.tg-peer.can:hover {
+  background: var(--hover);
+}
+.tg-av {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--c);
+  color: #111;
+  font: 800 12px var(--ui-font);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
+}
+.tg-typing {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 2px solid var(--card-solid);
+  animation: tg-pulse 1s infinite;
+}
+@keyframes tg-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.tg-txt b {
+  font-size: 12.5px;
+}
+.tg-tw {
+  color: var(--c) !important;
+  font-weight: 600;
+}
+.tg-txt code {
+  margin-top: 3px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--card-2);
+  border-left: 2px solid var(--c);
+  font: 11px var(--mono);
+  color: var(--text-2);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tg-empty {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.tg-feed {
+  margin: 4px 0 0 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line-strong);
+}
+.tg-ev {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.tg-ev i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.tg-ev b {
+  color: var(--text-2);
+}
+.tg-ev u {
+  text-decoration: none;
+  color: var(--text-2);
+}
+.tg-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--c);
+  flex: none;
+}
+/* v editore: riadok a kurzor kolegu */
+.tg-line { background: color-mix(in srgb, var(--tgc) 10%, transparent); }
+.tg-caret { border-left: 2px solid var(--tgc); margin-left: -1px; }
+.tg-name { font: 600 11px var(--ui-font) !important; padding: 0 5px; margin-left: 4px; border-radius: 4px; background: var(--tgc); color: #111 !important; }
+.tg-c0 { --tgc: #ff7eb6; } .tg-c1 { --tgc: #4ade80; } .tg-c2 { --tgc: #60a5fa; } .tg-c3 { --tgc: #fbbf24; }
+.tg-c4 { --tgc: #c084fc; } .tg-c5 { --tgc: #2dd4bf; } .tg-c6 { --tgc: #fb923c; } .tg-c7 { --tgc: #f87171; }

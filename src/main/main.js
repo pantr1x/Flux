@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url');
 const { findPython, probe } = require('./python');
 const { Runner, commandFor, toolchainFor } = require('./runner');
 const { Shell } = require('./shell');
+const { createLan } = require('./lan');
 const toolchains = require('./toolchains');
 const { createAI } = require('./ai');
 const { createGitHub } = require('./github');
@@ -93,6 +94,8 @@ const send = (channel, payload) => {
 
 const runner = new Runner(send);
 const shellTerm = new Shell(send);
+// Flux Together cez Wi-Fi
+const lan = createLan({ send: (ch, d) => send(ch, d) });
 const knownTools = new Set(); // jazyky, o ktorých už vieme, že sú nainštalované
 // Čo AI smie vidieť a meniť v otvorenom projekte (len v rámci priečinka projektu).
 async function projectTool(name, input = {}) {
@@ -964,6 +967,9 @@ function registerIpc() {
   ipcMain.handle('update:install', () => updater.install());
   ipcMain.handle('update:notes', (_e, force) => updater.notes(!!force));
   ipcMain.handle('gh:info', () => github.info());
+  ipcMain.handle('lan:start', (_e, opts) => lan.start(opts || {}));
+  ipcMain.handle('lan:stop', () => lan.stop());
+  ipcMain.on('lan:update', (_e, state) => lan.update(state));
   ipcMain.handle('gh:connect', (_e, token) => github.connect(String(token || '')));
   ipcMain.handle('gh:disconnect', () => github.disconnect());
   ipcMain.handle('gh:signin-start', async (_e, inApp = true) => {
@@ -1407,6 +1413,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  lan.stop().catch(() => {});
   runner.stop();
   shellTerm.kill();
   lsp.stop();

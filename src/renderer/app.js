@@ -24,6 +24,7 @@ import { createPluginHost } from './pluginHost.js';
 import { createPluginsUI } from './pluginsUI.js';
 import { createThemeStudio } from './themeStudio.js';
 import { setupFancySelects } from './fselect.js';
+import { createTogether } from './together.js';
 import { createUpdatesUI } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
 
@@ -103,6 +104,12 @@ const DEFAULTS = {
   darkLift: 0,
   density: 'comfortable',
   lite: false,
+  uiText: '',
+  uiText2: '',
+  uiBase: '',
+  uiCard: '',
+  uiLine: '',
+  cardAlpha: 74,
   userName: '',
   clearOnRun: true,
   terminalFontSize: 13,
@@ -219,7 +226,7 @@ function setIcons() {
   $('#btn-compact').innerHTML = icon('sidebar');
   $('#btn-expand').innerHTML = icon('sidebar');
   $('#btn-palette').innerHTML = icon('command');
-  $('#btn-settings').innerHTML = icon('settings');
+  $('#btn-settings').innerHTML = `${icon('settings', 15)}<span>${t('Settings')}</span>`;
   $('#brand-mark').innerHTML = icon('code', 13);
   $('#btn-stop').innerHTML = icon('stop', 14);
   $('#btn-ai').innerHTML = `${icon('sparkle', 14)}<span>AI</span>`;
@@ -335,6 +342,31 @@ function pointerCss(kind, color) {
   return svg ? `url("data:image/svg+xml,${svg}") 12 12, crosshair` : 'text';
 }
 
+// Vlastné farby okna (text, pozadie, panely, čiary) – prepíšu farby témy.
+function applyAppColors() {
+  const b = document.body.style;
+  const rgba = (hex, a) => {
+    const n = parseInt(String(hex).slice(1), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+  const set = (name, v) => (v ? b.setProperty(name, v) : b.removeProperty(name));
+  const text = setting('uiText');
+  const text2 = setting('uiText2');
+  set('--text', text);
+  set('--text-2', text2);
+  set('--text-3', text2 ? rgba(text2, 0.78) : '');
+  const base = setting('uiBase');
+  set('--base', base);
+  set('--base-alpha', base ? rgba(base, 0.45) : '');
+  const card = setting('uiCard');
+  const alpha = Math.max(0.3, Math.min(1, (Number(setting('cardAlpha')) || 74) / 100));
+  set('--card-solid', card);
+  set('--card', card ? rgba(card, alpha) : alpha !== 0.74 ? (isDark() ? `rgba(46, 46, 54, ${alpha})` : `rgba(255, 255, 255, ${alpha})`) : '');
+  const line = setting('uiLine');
+  set('--line-strong', line ? rgba(line, 0.5) : '');
+  set('--line', line ? rgba(line, 0.28) : '');
+}
+
 function applyCustomization() {
   const root = document.documentElement;
   const caret = setting('caretColor');
@@ -350,6 +382,7 @@ function applyCustomization() {
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
   document.body.classList.toggle('density-compact', setting('density') === 'compact');
   document.body.classList.toggle('lite', !!setting('lite'));
+  applyAppColors();
   root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
@@ -426,6 +459,7 @@ let tools;
 let userKeys;
 let aiPanel;
 let gh;
+let together;
 // GitHub je voliteľný vstavaný plugin (Nastavenia → Plugins); potrebuje Git.
 const ghOn = () => setting('githubPlugin') === true;
 let keymap;
@@ -886,6 +920,7 @@ async function saveTab(tab) {
   }
   tab.savedVersion = version;
   lsp.didSave(tab.model);
+  together?.onSave(tab.path);
   pluginHost?.emitSave({ path: tab.path, name: basename(tab.path), language: tab.model.getLanguageId(), text: tab.model.getValue() });
   // Uložil si vlastné skratky alebo tému → hneď sa použijú.
   if (/[\\/]config[\\/]shortcuts\.json$/i.test(tab.path)) userKeys?.load(true);
@@ -1092,6 +1127,7 @@ function renderTree() {
   };
   walk(state.workspace, 0);
   el.innerHTML = html.join('') || `<div class="tree-empty">${t('This folder is empty.')}<br><button id="tree-new">${t('Create a file')}</button></div>`;
+  together?.markTree();
   const newBtn = $('#tree-new');
   if (newBtn) newBtn.onclick = () => newFile();
 }
@@ -1334,6 +1370,7 @@ async function setWorkspace(dir) {
   // Pyright (doplňovanie pre Python) beží len keď treba – šetrí stovky MB pamäte.
   if (state.tabs.some(isPythonTab)) ensureLsp(true);
   else lsp.stop();
+  together?.onProject();
 }
 
 // ---------- Python autocomplete len na požiadanie ----------
@@ -2748,6 +2785,23 @@ function openSettings() {
             <div class="s-group"><div class="accent-grid">${Object.keys(ACCENTS)
               .map((name) => `<button data-accent="${name}" style="--c:${accentHex(name)}" class="${accentHex(name) === accent ? 'active' : ''}" title="${name === 'mono' ? t('black & white (like Zen)') : name}"></button>`)
               .join('')}<label class="custom-color" title="${t('Custom color')}"><input type="color" value="${accent}" data-custom-accent></label></div></div>
+            <h3>${t('App colors')}</h3>
+            <div class="s-group">
+              ${[
+                ['uiText', 'Text', 'menus, file names and buttons'],
+                ['uiText2', 'Secondary text', 'hints and small text'],
+                ['uiBase', 'Background', 'behind the panels'],
+                ['uiCard', 'Panels', 'editor, sidebar and windows'],
+                ['uiLine', 'Borders', 'lines between parts'],
+              ]
+                .map(
+                  ([k, label, hint]) =>
+                    `<label class="s-row"><span><b>${t(label)}</b><small>${t(hint)}${setting(k) ? '' : ` · ${t('from the current theme')}`}</small></span><span class="s-inline"><input type="color" data-key="${k}" value="${setting(k) || getComputedStyle(document.body).getPropertyValue({ uiText: '--text', uiText2: '--text-2', uiBase: '--base', uiCard: '--card-solid', uiLine: '--line-strong' }[k]).trim().replace(/^rgba?\(.*$/, '#888888') || '#888888'}"><button class="s-btn" data-color-reset="${k}">${t('Reset')}</button></span></label>`,
+                )
+                .join('')}
+              <label class="s-row"><span><b>${t('Panel transparency')}</b><small>${t('how much the background shines through the panels')}</small></span><input type="range" min="30" max="100" data-key="cardAlpha" value="${setting('cardAlpha')}"></label>
+              <div class="s-row"><span><b>${t('Reset all colors')}</b><small>${t('back to the colors of your theme')}</small></span><button class="s-btn" data-action="colors-reset">${icon('refresh', 13)}${t('Reset')}</button></div>
+            </div>
             <h3>${t('Text cursor')}</h3>
             <div class="s-group">
               <label class="s-row"><span><b>${t('Cursor shape')}</b></span><select data-key="caretStyle">${[['line', t('line')], ['line-thin', t('thin line')], ['block', t('block')], ['block-outline', t('block outline')], ['underline', t('underline')], ['underline-thin', t('thin underline')]].map(([v, l]) => opt(v, l, setting('caretStyle'))).join('')}</select></label>
@@ -3149,6 +3203,17 @@ function openSettings() {
       await saveSettings({ pointer: ptr.dataset.pointer });
       return applyCustomization();
     }
+    const cr = e.target.closest('[data-color-reset]');
+    if (cr) {
+      await saveSettings({ [cr.dataset.colorReset]: '' });
+      applyCustomization();
+      return rerenderSettings();
+    }
+    if (e.target.closest('[data-action="colors-reset"]')) {
+      await saveSettings({ uiText: '', uiText2: '', uiBase: '', uiCard: '', uiLine: '', cardAlpha: 74 });
+      applyCustomization();
+      return rerenderSettings();
+    }
     if (e.target.closest('[data-action="caret-reset"]')) {
       await saveSettings({ caretColor: '' });
       return applyCustomization();
@@ -3172,7 +3237,7 @@ function openSettings() {
       return rerenderSettings();
     }
     if (e.target.closest('[data-action="look-reset"]')) {
-      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity', 'darkLift', 'density'];
+      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity', 'darkLift', 'density', 'uiText', 'uiText2', 'uiBase', 'uiCard', 'uiLine', 'cardAlpha'];
       await saveSettings(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])));
       applyEditorSettings();
       toast(t('Everything looks like new again.'), 'ok');
@@ -4377,6 +4442,21 @@ async function main() {
         enabled: ghOn,
         set: setGitHubPlugin,
       },
+      {
+        id: 'together',
+        name: 'Flux Together (Wi-Fi)',
+        icon: 'globe',
+        needs: t('same Wi-Fi'),
+        description: t('Work together with friends on the same Wi-Fi: see who has which file open, where their cursor is and what they are typing – live. Nothing goes to the internet.'),
+        enabled: () => setting('togetherPlugin') === true,
+        set: async (on) => {
+          if (!on) await together?.stop();
+          await saveSettings({ togetherPlugin: on });
+          together?.refresh();
+          toast(on ? t('Together is on – find it in the sidebar under your files.') : t('Together was removed.'), 'ok', 5000);
+          return true;
+        },
+      },
     ],
   });
 
@@ -4414,6 +4494,24 @@ async function main() {
     },
     onStatus: renderGitStatus,
   });
+  // Flux Together cez Wi-Fi (vstavaný plugin, zapína sa v Nastaveniach → Plugins)
+  together = createTogether({
+    monaco,
+    editor,
+    t,
+    icon,
+    esc: escapeHtml,
+    toast,
+    getWorkspace: () => state.workspace,
+    getName: () => String(setting('userName') || '').trim(),
+    isOn: () => setting('togetherPlugin') === true,
+    openFile,
+    relative,
+    join,
+    basename,
+    promptPalette,
+  });
+  together.refresh();
   aiPanel = createAIPanel({
     toast,
     getContext: () => {
