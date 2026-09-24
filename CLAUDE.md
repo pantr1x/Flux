@@ -135,6 +135,18 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
 - Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).
 - The intro (`onboarding.js`, step *extras*) asks about `autoUpdate` (*Automatically* / *Ask me first*).
 
+## Rename everywhere
+
+- **Editor offer**: `renameEverywhere()` in `editorExtras.js`.
+  - Edit an identifier, or the text inside quotes, after moving the cursor there yourself. When the cursor leaves it, the offer appears: *Rename all* (this file) and *Also in N other files*.
+  - Identifiers skip comments and strings; this uses Monaco tokens.
+  - Strings match the same content or longer paths that start with it (`old/…`).
+- **Sidebar rename**: `offerPathRefs()` in `app.js`, after `renameItem()`.
+  - It finds quoted paths that really resolve to the renamed file or folder: relative to the file, to the project, or `/…` as web root.
+  - It then offers to update them.
+- **Shared logic**: `src/renderer/refactor.js`, which contains `scanOthers`, `pathRefs` and `apply`.
+  - Open files are changed through their Monaco model, so Ctrl+Z works. Closed files are written to disk.
+
 ## Programming languages
 
 A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe` command, `winget` package id, sizes, `url`), how to run a file in `commandFor()` and the extension in `toolchainFor()` (`src/main/runner.js`), and in the UI: `LANGS`/`RUNNABLE`/`KIND_FILE`/`KIND_LANG_NAMES`/`PROJECT_KINDS`/`MAIN_EXT` (`app.js`), `TOOL_FILE` (`tools.js`), `CODE_LANGS` (`onboarding.js`), a template (`templates.js`), an icon + `EXT_ICON` (`icons.js`), `KIND_EXT` and `TEXT_EXT` (`main.js`), comment tokens (`editorExtras.js`) and the website `LANGS`. Only use winget ids the language's own docs name (Zig `zig.zig`, R `RProject.R`, Julia `9NJNWW8PVKMN` = Juliaup from the Store). R does not add itself to PATH – `addRPath()` in `toolchains.js` does it.

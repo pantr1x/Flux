@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.8 – 2026-09-24
+
+### Rename everywhere
+- When you change a name (a variable, a function…), Flux still offers to rename it everywhere in the file. There is now also a button to rename it **in the other files of the project**.
+- This also works for **text in quotes**, like a folder path: change `"data/images"` to `"data/pics"` and Flux offers to change the same path everywhere, including longer paths like `"data/images/cat.png"`.
+- When you **rename a file or folder** in the sidebar, Flux finds the paths in your code that point to it and asks whether to update them. It works for Python, HTML, CSS, JavaScript and other languages.
+- Names inside comments and plain text are left alone.
+
 ## 1.4.7 – 2026-09-24
 
 ### Faster updates

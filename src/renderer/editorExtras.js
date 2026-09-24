@@ -1,10 +1,13 @@
 // Drobnosti v editore, ktoré šetria čas:
 //  - HTML: po napísaní <h1> sa hneď doplní </h1>,
 //  - komentár nad riadkom (pravý klik alebo Ctrl+Alt+/),
-//  - po premenovaní premennej ponuka „premenovať všade“,
+//  - po premenovaní premennej alebo textu v úvodzovkách ponuka „premenovať všade“ (aj v ostatných súboroch),
 //  - v úvodzovkách napovedá súbory a priečinky projektu,
 //  - hover nad obrázkom v HTML/CSS ukáže náhľad, nad odkazom odkaz.
 import { t } from './i18n.js';
+import { createRefactor, stringsIn } from './refactor.js';
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype']);
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|ico|bmp|avif)$/i;
@@ -27,12 +30,14 @@ const COMMENT = {
   bat: ['REM ', ''],
 };
 
-export function setupEditorExtras({ monaco, editor, flux, getWorkspace, getFilePath, onFsChanged }) {
+export function setupEditorExtras({ monaco, editor, flux, getWorkspace, getFilePath, onFsChanged, langFor, toast }) {
+  const refactor = createRefactor({ monaco, flux, getWorkspace, langFor });
   autoCloseTags(monaco, editor);
   addCommentAction(monaco, editor);
-  renameEverywhere(monaco, editor);
+  renameEverywhere(monaco, editor, { refactor, getFilePath, toast });
   pathSuggestions(monaco, { flux, getWorkspace, getFilePath, onFsChanged });
   imageHover(monaco, { flux, getFilePath });
+  return { refactor };
 }
 
 // ---------- HTML: automatické ukončenie tagu ----------
@@ -107,88 +112,138 @@ function addCommentAction(monaco, editor) {
 }
 
 // ---------- „Premenovať všade?“ ----------
-function renameEverywhere(monaco, editor) {
-  const IDENT = /^[A-Za-z_$][\w$]*$/;
-  let snap = null; // slovo pod kurzorom pred úpravou
-  let session = null; // { model, line, start, old }
+// Prepíšeš názov (premenná, funkcia…) alebo text v úvodzovkách (napr. cestu "data/images") a Flux ponúkne
+// zmenu aj na ostatných miestach – v tomto súbore a aj v ďalších súboroch projektu (refactor.js).
+function renameEverywhere(monaco, editor, { refactor, getFilePath, toast }) {
+  const IDENT = /^[\p{L}_$][\p{L}\p{N}_$]*$/u;
+  let snap = null; // čo bolo pod kurzorom pred úpravou: { model, line, word?, str? }
+  let session = null; // { kind: 'ident' | 'string', model, line, start, old, q? }
   let widget = null;
   let hideTimer = null;
+  let offerId = 0;
 
   const wordAt = (model, line, col) => model.getWordAtPosition({ lineNumber: line, column: col });
+  // reťazec, v ktorom je kurzor (stĺpce od 1; start = prvý znak obsahu)
+  const stringAt = (model, line, col) => stringsIn(model.getLineContent(line)).find((s) => col - 1 >= s.start && col - 1 <= s.end);
 
-  const occurrences = (model, word) =>
-    model.findMatches(`\\b${word.replace(/[$]/g, '\\$')}\\b`, false, true, true, null, false).filter((m) => {
-      // Vynechať výskyty v komentároch a reťazcoch (podľa farebného zvýraznenia).
-      try {
-        const tokens = monaco.editor.tokenize(model.getLineContent(m.range.startLineNumber), model.getLanguageId())[0] || [];
-        let type = '';
-        for (const tk of tokens) if (tk.offset <= m.range.startColumn - 1) type = tk.type;
-        return !/comment|string/.test(type);
-      } catch {
-        return true;
-      }
-    });
+  const identMatches = (model, name) => refactor.identRanges(model.getValue(), model.getLanguageId(), name);
+  // bez samotného upraveného reťazca („data“ → „data/sub“ by sa inak zmenil znova)
+  const stringMatches = (model, old, neu, self) => refactor.stringRanges(model.getValue(), old, neu).filter((r) => !(self && r.line === self.line && r.start === self.start));
 
   function hide() {
     clearTimeout(hideTimer);
+    offerId++;
     if (widget) editor.removeContentWidget(widget);
     widget = null;
   }
 
-  function offer(model, line, start, oldName, newName, matches) {
+  function offer(s, neu) {
     hide();
+    const id = offerId;
+    const { model, line, start, old, kind } = s;
+    const here = kind === 'ident' ? identMatches(model, old) : stringMatches(model, old, neu, s);
+    let others = [];
     const node = document.createElement('div');
     node.className = 'rn-offer';
-    node.innerHTML = `<span>${t('Rename {old} → {new} everywhere?', { old: `<code>${oldName}</code>`, new: `<code>${newName}</code>` })} <small>${t('{n} more', { n: matches.length })}</small></span><button class="rn-yes">${t('Rename all')}</button><button class="rn-no" title="${t('Close (Esc)')}">✕</button>`;
+    const draw = () => {
+      const files = others.length;
+      node.innerHTML = `<span>${t('Rename {old} → {new} everywhere?', { old: `<code>${esc(old)}</code>`, new: `<code>${esc(neu)}</code>` })}${here.length ? ` <small>${t('{n} more', { n: here.length })}</small>` : ''}</span>${here.length ? `<button class="rn-yes" data-scope="file">${t('Rename all')}</button>` : ''}${files ? `<button class="rn-yes rn-all" data-scope="all">${files === 1 ? t('Also in 1 other file') : t('Also in {n} other files', { n: files })}</button>` : ''}<button class="rn-no" title="${t('Close (Esc)')}">✕</button>`;
+    };
+    const show = () => {
+      if (id !== offerId) return;
+      draw();
+      if (widget) return editor.layoutContentWidget(widget);
+      widget = {
+        getId: () => 'flux.renameOffer',
+        getDomNode: () => node,
+        getPosition: () => ({ position: { lineNumber: line, column: start }, preference: [monaco.editor.ContentWidgetPositionPreference.BELOW, monaco.editor.ContentWidgetPositionPreference.ABOVE] }),
+      };
+      editor.addContentWidget(widget);
+    };
     node.onmousedown = (e) => e.preventDefault();
-    node.querySelector('.rn-yes').onclick = () => {
-      if (editor.getModel() === model) {
-        // Znova nájsť (medzitým sa mohlo niečo zmeniť) a nahradiť naraz – jedno Ctrl+Z to vráti.
-        const edits = occurrences(model, oldName).map((m) => ({ range: m.range, text: newName }));
+    node.onclick = async (e) => {
+      if (e.target.closest('.rn-no')) {
+        hide();
+        return editor.focus();
+      }
+      const b = e.target.closest('[data-scope]');
+      if (!b) return;
+      hide();
+      // Znova nájsť (medzitým sa mohlo niečo zmeniť) a nahradiť naraz – jedno Ctrl+Z to vráti.
+      const now = kind === 'ident' ? identMatches(model, old) : stringMatches(model, old, neu, s);
+      if (now.length) {
         editor.pushUndoStop();
-        editor.executeEdits('flux-rename', edits);
+        editor.executeEdits('flux-rename', now.map((r) => ({ range: new monaco.Range(r.line, r.start, r.line, r.end), text: r.text ?? neu })));
         editor.pushUndoStop();
       }
-      hide();
+      if (b.dataset.scope === 'all' && others.length) {
+        try {
+          const n = await refactor.apply(others, neu);
+          toast(others.length === 1 ? t('Changed {n} places in 1 other file.', { n }) : t('Changed {n} places in {f} other files.', { n, f: others.length }), 'ok');
+        } catch (err) {
+          toast(String(err?.message || err), 'error');
+        }
+      }
       editor.focus();
     };
-    node.querySelector('.rn-no').onclick = () => {
-      hide();
-      editor.focus();
-    };
-    widget = {
-      getId: () => 'flux.renameOffer',
-      getDomNode: () => node,
-      getPosition: () => ({ position: { lineNumber: line, column: start }, preference: [monaco.editor.ContentWidgetPositionPreference.BELOW, monaco.editor.ContentWidgetPositionPreference.ABOVE] }),
-    };
-    editor.addContentWidget(widget);
-    hideTimer = setTimeout(hide, 9000);
+    if (here.length) show();
+    hideTimer = setTimeout(hide, 15000);
+    // ostatné súbory projektu – dohľadá sa na pozadí a tlačidlo pribudne
+    const path = getFilePath(model);
+    if (path)
+      refactor
+        .scanOthers(kind, old, neu, { skip: path, lang: model.getLanguageId() })
+        .then((list) => {
+          others = list;
+          if (list.length) show();
+        })
+        .catch(() => {});
   }
 
   function finish() {
     const s = session;
     session = null;
     if (!s || editor.getModel() !== s.model) return;
-    const now = wordAt(s.model, s.line, s.start);
-    const newName = now && now.startColumn === s.start ? now.word : null;
-    if (!newName || newName === s.old || !IDENT.test(newName) || !IDENT.test(s.old)) return;
-    const matches = occurrences(s.model, s.old);
-    if (matches.length) offer(s.model, s.line, s.start, s.old, newName, matches);
+    if (s.kind === 'ident') {
+      const now = wordAt(s.model, s.line, s.start);
+      const neu = now && now.startColumn === s.start ? now.word : null;
+      if (!neu || neu === s.old || !IDENT.test(neu) || !IDENT.test(s.old)) return;
+      return offer(s, neu);
+    }
+    // text v úvodzovkách: obsah medzi tou istou otváracou a zatváracou úvodzovkou
+    const line = s.model.getLineContent(s.line);
+    if (line[s.start - 2] !== s.q) return;
+    const close = line.indexOf(s.q, s.start - 1);
+    if (close < 0) return;
+    const neu = line.slice(s.start - 1, close);
+    if (!neu || neu === s.old || s.old.length < 2) return;
+    offer(s, neu);
   }
+
+  // koniec „úpravy“: kurzor opustil slovo / reťazec
+  const outside = (model, pos) => {
+    if (pos.lineNumber !== session.line) return true;
+    if (session.kind === 'ident') {
+      const w = wordAt(model, session.line, session.start);
+      const end = w && w.startColumn === session.start ? w.endColumn : session.start;
+      return pos.column < session.start || pos.column > end;
+    }
+    const line = model.getLineContent(session.line);
+    const close = line.indexOf(session.q, session.start - 1);
+    return pos.column < session.start || close < 0 || pos.column > close + 1;
+  };
 
   editor.onDidChangeCursorPosition((e) => {
     const model = editor.getModel();
     if (!model) return;
     const { lineNumber, column } = e.position;
     if (session) {
-      const w = wordAt(model, session.line, session.start);
-      const end = w && w.startColumn === session.start ? w.endColumn : session.start;
-      if (lineNumber !== session.line || column < session.start || column > end) finish();
+      if (outside(model, e.position)) finish();
       else return;
     }
     // Len keď kurzor presunieš ty (klik, šípky) – nie počas písania nového slova.
     if (e.reason === monaco.editor.CursorChangeReason.Explicit || e.source === 'mouse') {
-      snap = { model, line: lineNumber, word: wordAt(model, lineNumber, column) };
+      snap = { model, line: lineNumber, word: wordAt(model, lineNumber, column), str: stringAt(model, lineNumber, column) };
     }
   });
 
@@ -199,12 +254,18 @@ function renameEverywhere(monaco, editor) {
     if (session) return;
     const sn = snap;
     snap = null;
-    if (!sn?.word || sn.model !== model) return;
+    if (!sn || sn.model !== model) return;
     const ch = e.changes[0];
-    if (e.changes.length !== 1 || ch.range.startLineNumber !== sn.line || ch.range.endLineNumber !== sn.line || /[^\w$]/.test(ch.text)) return;
+    if (e.changes.length !== 1 || ch.range.startLineNumber !== sn.line || ch.range.endLineNumber !== sn.line || ch.text.includes('\n')) return;
+    // v reťazci: úprava vnútri úvodzoviek (bez samotných úvodzoviek)
+    if (sn.str && ch.range.startColumn - 1 >= sn.str.start && ch.range.endColumn - 1 <= sn.str.end && !ch.text.includes(sn.str.q)) {
+      session = { kind: 'string', model, line: sn.line, start: sn.str.start + 1, old: sn.str.text, q: sn.str.q };
+      return;
+    }
     const w = sn.word;
+    if (!w || /[^\p{L}\p{N}_$]/u.test(ch.text)) return;
     if (ch.range.startColumn < w.startColumn || ch.range.endColumn > w.endColumn) return;
-    session = { model, line: sn.line, start: w.startColumn, old: w.word };
+    session = { kind: 'ident', model, line: sn.line, start: w.startColumn, old: w.word };
   });
 
   editor.onDidBlurEditorText(() => session && finish());

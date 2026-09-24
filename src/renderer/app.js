@@ -572,14 +572,16 @@ function createEditor() {
     },
   });
 
-  setupEditorExtras({
+  ({ refactor } = setupEditorExtras({
     monaco,
     editor,
     flux,
     getWorkspace: () => state.workspace,
     getFilePath: (model) => state.tabs.find((x) => x.model === model)?.path || null,
     onFsChanged: flux.onFsChanged,
-  });
+    langFor,
+    toast,
+  }));
 
   // HTML / CSS: Emmet (napr. „div.card>p*3“ + Tab).
   emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
@@ -1394,6 +1396,27 @@ async function newFolder(dir = targetDir()) {
   }
 }
 
+// Po premenovaní súboru/priečinka: ponúknuť opravu ciest, ktoré naň v kóde ukazujú (refactor.js).
+let refactor = null;
+async function offerPathRefs(oldPath, newPath) {
+  const refs = await refactor?.pathRefs(oldPath, newPath).catch(() => []);
+  if (!refs?.length) return;
+  const n = refs.reduce((a, f) => a + f.ranges.length, 0);
+  const name = basename(oldPath);
+  const msg = refs.length === 1 ? t('Update {n} paths to {name} in 1 file?', { n, name }) : t('Update {n} paths to {name} in {f} files?', { n, name, f: refs.length });
+  toast(msg, 'info', 20000, {
+    label: t('Update'),
+    run: async () => {
+      try {
+        await refactor.apply(refs);
+        toast(t('Updated {n} paths.', { n }), 'ok');
+      } catch (err) {
+        toast(errorText(err), 'error');
+      }
+    },
+  });
+}
+
 async function renameItem(item) {
   const old = basename(item.path);
   const dot = item.dir ? -1 : old.lastIndexOf('.');
@@ -1422,6 +1445,7 @@ async function renameItem(item) {
   state.selected = target;
   await refreshTree();
   renderTabs();
+  offerPathRefs(item.path, target);
 }
 
 async function deleteItem(item) {
