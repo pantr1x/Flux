@@ -97,7 +97,7 @@ function createUpdater({ getSettings, send }) {
     return true;
   }
 
-  // „Reštartovať teraz“: tichá inštalácia a Flux sa sám znova otvorí.
+  // „Reštartovať teraz“: inštalácia s pruhom priebehu a Flux sa sám znova otvorí.
   // Najprv sa ešte pozrie, či medzitým nevyšla novšia verzia – inak by si musel aktualizovať dvakrát.
   // Značka v TEMP je poistka – inštalátor podľa nej Flux spustí, aj keby --force-run nezabral.
   let installing = false;
@@ -107,7 +107,8 @@ function createUpdater({ getSettings, send }) {
     try {
       const ready = state.latest;
       autoUpdater.autoDownload = true;
-      const r = await autoUpdater.checkForUpdates().catch(() => null);
+      // najviac 4 s – pomalé pripojenie nesmie zdržať reštart
+      const r = await Promise.race([autoUpdater.checkForUpdates().catch(() => null), new Promise((ok) => setTimeout(() => ok(null), 4000))]);
       const newest = r?.updateInfo?.version;
       if (newest && newer(newest, ready)) {
         emit({ status: 'downloading', latest: newest, progress: 0 });
@@ -118,93 +119,9 @@ function createUpdater({ getSettings, send }) {
       fs.writeFileSync(path.join(require('node:os').tmpdir(), 'flux-relaunch-after-update'), String(Date.now()));
     } catch {}
     emit({ status: 'installing', progress: 100 });
-    showInstallWindow(state.latest);
-    setTimeout(() => autoUpdater.quitAndInstall(true, true), 900);
-  }
-
-  // Veľkosť nainštalovaného Fluxu – podľa nej okno počíta, koľko percent inštalátor už zapísal.
-  function dirSize(dir) {
-    let total = 0;
-    const walk = (d) => {
-      let list = [];
-      try {
-        list = fs.readdirSync(d, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of list) {
-        const p = path.join(d, e.name);
-        if (e.isDirectory()) walk(p);
-        else
-          try {
-            total += fs.statSync(p).size;
-          } catch {}
-      }
-    };
-    walk(dir);
-    return total;
-  }
-
-  // Kým je Flux zatvorený a inštalátor beží potichu, malé okno Windows ukazuje priebeh v percentách:
-  // inštalátor najprv zmaže starú verziu a potom zapisuje novú – okno sleduje, koľko z nej je už na disku.
-  // Samostatný proces PowerShellu (Flux sa počas inštalácie nesmie spustiť) – zavrie sa,
-  // keď sa Flux znova otvorí, najneskôr po 3 minútach. Ak by sa nepodarilo, aktualizácia ide ďalej.
-  function showInstallWindow(version) {
-    if (process.platform !== 'win32') return;
-    const installDir = path.dirname(process.execPath);
-    const expected = Math.max(1, dirSize(installDir));
-    const preparing = t('Preparing…');
-    const installing = t('Installing… {p} %');
-    const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
-    const title = t('Updating Flux to {v}…', { v: version });
-    const note = t('Flux closes, installs the update and opens again by itself.');
-    const ps = `
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-[System.Windows.Forms.Application]::EnableVisualStyles()
-$f = New-Object System.Windows.Forms.Form
-$f.FormBorderStyle = 'None'; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object System.Drawing.Size(420, 136)
-$f.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 30); $f.TopMost = $true; $f.ShowInTaskbar = $true; $f.Text = 'Flux'
-$a = New-Object System.Windows.Forms.Label; $a.Text = ${q(title)}; $a.ForeColor = 'White'
-$a.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 12); $a.AutoSize = $true; $a.Location = New-Object System.Drawing.Point(24, 20)
-$b = New-Object System.Windows.Forms.Label; $b.Text = ${q(note)}; $b.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 176)
-$b.Font = New-Object System.Drawing.Font('Segoe UI', 9); $b.AutoSize = $true; $b.Location = New-Object System.Drawing.Point(25, 50)
-$c = New-Object System.Windows.Forms.Label; $c.Text = ${q(preparing)}; $c.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 176)
-$c.Font = New-Object System.Drawing.Font('Segoe UI', 9); $c.AutoSize = $true; $c.Location = New-Object System.Drawing.Point(25, 100)
-$p = New-Object System.Windows.Forms.ProgressBar; $p.Style = 'Continuous'; $p.Minimum = 0; $p.Maximum = 100; $p.Value = 0
-$p.Location = New-Object System.Drawing.Point(24, 80); $p.Size = New-Object System.Drawing.Size(372, 12)
-$f.Controls.AddRange(@($a, $b, $p, $c))
-$dir = ${q(installDir)}; $expected = [double]${expected}; $low = [double]::MaxValue; $growing = $false; $best = 0
-# proces je spustený skrytý – okno treba ukázať výslovne
-Add-Type -Name W -Namespace FluxUpd -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);'
-$f.Add_Shown({ [FluxUpd.W]::ShowWindow($f.Handle, 5) | Out-Null; $f.Activate() })
-$start = Get-Date
-$t = New-Object System.Windows.Forms.Timer; $t.Interval = 700
-$t.Add_Tick({
-  # koľko novej verzie je už na disku (po zmazaní starej veľkosť klesne a potom rastie)
-  $size = [double](Get-ChildItem -LiteralPath $dir -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-  if ($size -lt $global:low) { $global:low = $size }
-  if ($size -gt $global:low + 1MB) { $global:growing = $true }
-  if ($global:growing) {
-    $pct = [int][Math]::Min(99, [Math]::Max(1, 100 * ($size - $global:low) / [Math]::Max(1, $expected - $global:low)))
-    if ($pct -gt $global:best) { $global:best = $pct }
-    $p.Value = $global:best; $c.Text = (${q(installing)} -replace '\{p\}', $global:best)
-  }
-  # nový Flux (spustený inštalátorom po aktualizácii) = hotovo
-  $flux = Get-Process -Name 'Flux' -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $start.AddSeconds(3) }
-  if ($flux) { $p.Value = 100; $c.Text = (${q(installing)} -replace '\{p\}', 100); $f.Refresh(); Start-Sleep -Milliseconds 400; $f.Close() }
-  elseif (((Get-Date) - $start).TotalSeconds -gt 180) { $f.Close() }
-})
-$t.Start(); [void]$f.ShowDialog()
-`;
-    try {
-      const { spawn } = require('node:child_process');
-      const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      });
-      child.unref();
-    } catch {}
+    // Inštalátor beží viditeľne, ale len s pruhom priebehu (uvítanie, výber a koniec preskočí
+    // – build/installer.nsh); po inštalácii Flux otvorí značka v TEMP (customInstall).
+    setTimeout(() => autoUpdater.quitAndInstall(false, true), 400);
   }
 
   // Pri štarte: skontrolovať (a pri automatických aktualizáciách aj stiahnuť).

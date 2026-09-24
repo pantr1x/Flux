@@ -1,7 +1,5 @@
 # Flux 1.4: plynulé posúvanie všade, prechodové animácie, priebeh aktualizácie (sk, de, es, fr, it, pl, pt, uk).
 _V15 = {
-    'Installing… {p} %': ('Inštalujem… {p} %', 'Installation … {p} %', 'Instalando… {p} %', 'Installation… {p} %', 'Installazione… {p} %', 'Instalowanie… {p} %', 'Instalando… {p} %', 'Встановлення… {p} %'),
-    'Preparing…': ('Pripravujem…', 'Wird vorbereitet …', 'Preparando…', 'Préparation…', 'Preparazione…', 'Przygotowywanie…', 'Preparando…', 'Підготовка…'),
     'Restart to update': ('Reštartuj a aktualizuj', 'Neu starten zum Aktualisieren', 'Reinicia para actualizar', 'Redémarrer pour mettre à jour', 'Riavvia per aggiornare', 'Uruchom ponownie, aby zaktualizować', 'Reinicie para atualizar', 'Перезапусти для оновлення'),
     'Updating {p} %': ('Aktualizujem {p} %', 'Aktualisierung {p} %', 'Actualizando {p} %', 'Mise à jour {p} %', 'Aggiornamento {p} %', 'Aktualizacja {p} %', 'Atualizando {p} %', 'Оновлення {p} %'),
     'Transition animations': ('Prechodové animácie', 'Übergangsanimationen', 'Animaciones de transición', 'Animations de transition', 'Animazioni di transizione', 'Animacje przejść', 'Animações de transição', 'Анімації переходів'),

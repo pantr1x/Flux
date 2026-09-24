@@ -25,3 +25,22 @@ jobs:
           name: Flux-Windows
           path: release/*.exe
           if-no-files-found: error
+      # Test aktualizácie: rovnako ako Flux (--updated --force-run, viditeľný inštalátor) –
+      # inštalátor smie ukázať len priebeh, nesmie čakať na kliknutie a Flux sa má potom otvoriť.
+      - name: Update test (installer shows only progress)
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem release\Flux-Setup-*.exe | Select-Object -First 1).FullName
+          $p = Start-Process $exe -ArgumentList '/S' -PassThru
+          if (-not $p.WaitForExit(300000)) { throw 'First install timed out' }
+          Start-Sleep 3
+          Get-Process Flux -ErrorAction SilentlyContinue | Stop-Process -Force
+          New-Item -ItemType File "$env:TEMP\flux-relaunch-after-update" -Force | Out-Null
+          $p = Start-Process $exe -ArgumentList '--updated', '--force-run' -PassThru
+          if (-not $p.WaitForExit(300000)) { Stop-Process $p -Force; throw 'The update installer waited for a click - it must only show progress.' }
+          Write-Host "Installer exit code: $($p.ExitCode)"
+          $flux = $null
+          for ($i = 0; $i -lt 20 -and -not $flux; $i++) { Start-Sleep 1; $flux = Get-Process Flux -ErrorAction SilentlyContinue }
+          if (-not $flux) { throw 'Flux did not open again after the update.' }
+          $flux | Stop-Process -Force
+          Write-Host 'Update test passed'
