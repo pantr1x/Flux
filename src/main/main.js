@@ -267,7 +267,10 @@ const plugins = createPlugins({
   },
   githubApi: (p, opts) => github.api(p, opts),
 });
-const live = new LiveServer((entry) => send('live:log', entry));
+const live = new LiveServer(
+  (entry) => send('live:log', entry),
+  (target) => send('live:open', target),
+);
 const lsp = new LanguageServer(
   (msg) => send('lsp:message', msg),
   (code) => send('lsp:exit', code),
@@ -1067,6 +1070,7 @@ function registerIpc() {
   });
   ipcMain.on('run:input', (_e, text) => runner.input(text));
   ipcMain.on('run:stop', () => runner.stop());
+  ipcMain.on('win:fullscreen', (_e, on) => win?.setFullScreen(!!on));
   ipcMain.on('run:resize', (_e, cols, rows) => runner.resize(cols, rows));
   // Terminál (príkazový riadok) v paneli dole
   ipcMain.handle('shell:start', (_e, fresh) => (fresh ? shellTerm.restart(workspace) : shellTerm.start(workspace)));
@@ -1077,7 +1081,35 @@ function registerIpc() {
   // Live Server
   ipcMain.handle('live:start', async () => {
     if (!workspace) throw new Error(t('Open a folder first.'));
-    return live.start(workspace);
+    return live.start(workspace, { lan: !!settings.liveLan });
+  });
+  // Otvorenie v mobile cez Wi-Fi: server počúva aj v domácej sieti + QR kód s adresou.
+  ipcMain.handle('live:lan', async (_e, on) => {
+    settings.liveLan = !!on;
+    saveSettings();
+    if (!live.running || !workspace) return null;
+    return live.start(workspace, { lan: !!on });
+  });
+  ipcMain.handle('live:qr', (_e, text) => require('qrcode').toDataURL(String(text), { margin: 1, width: 220, color: { dark: '#16161dff', light: '#ffffffff' } }));
+  // Snímka náhľadu: uloží PNG do projektu (priečinok screenshots) a skopíruje do schránky.
+  ipcMain.handle('live:screenshot', async (_e, rect) => {
+    if (!win || !workspace) return null;
+    const r = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) };
+    const img = await win.webContents.capturePage(r);
+    const dir = path.join(workspace, 'screenshots');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const file = path.join(dir, `screenshot-${stamp}.png`);
+    fs.writeFileSync(file, img.toPNG());
+    let copied = false;
+    try {
+      const { clipboard } = require('electron');
+      if (typeof clipboard?.writeImage === 'function') {
+        clipboard.writeImage(img);
+        copied = true;
+      }
+    } catch {}
+    return { file, copied };
   });
   ipcMain.handle('live:stop', async () => {
     await live.stop();

@@ -1,0 +1,26 @@
+{
+  "id": "flux.glass-ui",
+  "name": "Glass UI",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "See-through glass panels, a soft glow in your accent color and deeper shadows – three strengths to pick from.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "appearance",
+    "ui",
+    "glass"
+  ],
+  "license": "MIT",
+  "issue": 12
+}

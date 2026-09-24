@@ -30,6 +30,13 @@ function commandFor(file, python, lang) {
     case '.mjs':
     case '.cjs':
       return { cmd: 'node', args: [file] };
+    case '.ts':
+    case '.mts':
+    case '.cts':
+      // Node.js 22.6+ spustí TypeScript priamo (typy len odstráni, nič netreba inštalovať).
+      return { cmd: 'node', args: ['--experimental-strip-types', '--no-warnings', file] };
+    case '.pl':
+      return { cmd: 'perl', args: [file] };
     case '.java':
       // Java 11+ spustí jeden .java súbor priamo (bez javac).
       return { cmd: 'java', args: [path.basename(file)] };
@@ -56,11 +63,24 @@ function commandFor(file, python, lang) {
       return isWin ? { cmd: 'cmd.exe', args: ['/d', '/c', file] } : null;
     case '.ps1':
       return { cmd: isWin ? 'powershell.exe' : 'pwsh', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', file] };
-    case '.sh':
-      return isWin ? null : { cmd: 'bash', args: [file] };
+    case '.sh': {
+      if (!isWin) return { cmd: 'bash', args: [file] };
+      // Na Windows cez Git Bash (príde s Gitom).
+      const bash = gitBash();
+      return bash ? { cmd: bash, args: [file] } : null;
+    }
     default:
       return null;
   }
+}
+
+function gitBash() {
+  const roots = [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs')].filter(Boolean);
+  for (const r of roots) {
+    const p = path.join(r, 'Git', 'bin', 'bash.exe');
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
 }
 
 // C/C++: najprv preložiť, potom spustiť (ako Code Runner vo VS Code).
@@ -81,7 +101,7 @@ function compileAndRun(file, compiler) {
 // Ktorý jazyk (na stiahnutie) treba pre súbor.
 function toolchainFor(file) {
   const ext = path.extname(file).toLowerCase();
-  return { '.py': 'python', '.pyw': 'python', '.js': 'node', '.mjs': 'node', '.cjs': 'node', '.java': 'java', '.go': 'go', '.cs': 'csharp', '.c': 'cpp', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.rs': 'rust', '.rb': 'ruby', '.php': 'php', '.lua': 'lua' }[ext] || null;
+  return { '.py': 'python', '.pyw': 'python', '.js': 'node', '.mjs': 'node', '.cjs': 'node', '.java': 'java', '.go': 'go', '.cs': 'csharp', '.c': 'cpp', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.rs': 'rust', '.rb': 'ruby', '.php': 'php', '.lua': 'lua', '.ts': 'node', '.mts': 'node', '.cts': 'node', '.pl': 'perl', '.sh': isWin ? 'git' : null }[ext] || null;
 }
 
 // Nájde napr. „node“ → C:\Program Files\nodejs\node.exe (pseudoterminál na Windows potrebuje celú cestu).

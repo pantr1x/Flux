@@ -22,6 +22,7 @@ export const BINDINGS = [
   ['home', 'view', 'Home screen', ''],
   ['projectPage', 'view', 'Project page', ''],
   ['sidebar', 'view', 'Toggle sidebar (compact mode)', 'Ctrl+B'],
+  ['focus', 'view', 'Focus mode (only the code)', 'F11'],
   ['panel', 'view', 'Toggle output panel', 'Ctrl+J'],
   ['ai', 'view', 'AI assistant', 'Ctrl+I'],
   ['zoomIn', 'view', 'Increase font size', 'Ctrl+='],

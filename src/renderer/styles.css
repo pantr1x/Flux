@@ -5633,7 +5633,6 @@ body.md-open .md-toggle {
   color: var(--text-3);
   font-size: 12.5px;
   font-weight: 600;
-  text-transform: capitalize;
 }
 .hm-hero h1 {
   margin: 0 0 4px;
@@ -6807,4 +6806,135 @@ body.theme-dark.no-mica #onboard::before {
   .ob-ex-plugins {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- náhľad 2.0: zariadenia s mierkou, popover pre mobil ---------- */
+#pv-dev {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+.preview-stage.framed {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 14px 14px 6px;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%);
+}
+.preview-stage.framed #pv-dev {
+  flex: none;
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 0 0 6px #0c0c10, 0 0 0 7px var(--line-strong), 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.preview-stage.framed #preview-frame {
+  flex: none;
+  transform-origin: 0 0;
+  border-radius: 0;
+  box-shadow: none;
+  transition: none;
+}
+.pv-hint {
+  flex: none;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.preview-stage:not(.framed) .pv-hint {
+  display: none;
+}
+.pv-pop {
+  position: fixed;
+  z-index: 160;
+  width: 290px;
+  padding: 14px 16px 16px;
+  border-radius: 16px;
+  background: var(--card-solid);
+  box-shadow: var(--shadow), 0 20px 50px rgba(0, 0, 0, 0.35);
+  text-align: center;
+  animation: fade 0.12s;
+}
+.pv-pop h4 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.pv-pop p {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-align: left;
+}
+.pv-pop img {
+  display: block;
+  margin: 6px auto 10px;
+  border-radius: 12px;
+  background: #fff;
+  padding: 6px;
+}
+.pv-pop code {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--card-2);
+  font: 12px var(--mono);
+  word-break: break-all;
+  user-select: text;
+}
+.pv-warn {
+  color: var(--warn) !important;
+}
+.preview-bar .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+/* ---------- hustota: kompaktné – viac súborov, kariet a riadkov na obrazovke ---------- */
+body.density-compact {
+  --topbar-h: 38px;
+  --gap: 6px;
+  --side-w: 228px;
+}
+body.density-compact .row {
+  height: 24px;
+  font-size: 12.5px;
+}
+body.density-compact .pr-row {
+  min-height: 28px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+body.density-compact .pr-sub {
+  display: none;
+}
+body.density-compact .panel-bar {
+  min-height: 32px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+body.density-compact #statusbar {
+  min-height: 24px;
+  font-size: 11.5px;
+}
+body.density-compact .tab {
+  height: 28px;
+}
+body.density-compact #essentials {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* ---------- režim sústredenia (F11) ---------- */
+body.focus-mode #panel,
+body.focus-mode #panel-resizer,
+body.focus-mode #statusbar,
+body.focus-mode #topbar .actions,
+body.focus-mode #topnav,
+body.focus-mode #btn-expand {
+  display: none !important;
 }

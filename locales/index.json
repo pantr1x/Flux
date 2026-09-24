@@ -33,5 +33,15 @@
   "code": "pl",
   "name": "Polish",
   "native": "Polski"
+ },
+ {
+  "code": "pt",
+  "name": "Portuguese",
+  "native": "Português"
+ },
+ {
+  "code": "uk",
+  "name": "Ukrainian",
+  "native": "Українська"
  }
 ]

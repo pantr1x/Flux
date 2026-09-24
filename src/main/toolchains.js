@@ -103,6 +103,16 @@ const TOOLCHAINS = [
     url: 'https://windows.php.net/download/',
   },
   {
+    id: 'perl',
+    name: 'Perl',
+    detail: 'Strawberry Perl',
+    probe: [['perl', ['-v']]],
+    winget: 'StrawberryPerl.StrawberryPerl',
+    download: 170,
+    disk: 600,
+    url: 'https://strawberryperl.com/',
+  },
+  {
     id: 'lua',
     name: 'Lua',
     probe: [['lua', ['-v']]],

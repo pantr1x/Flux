@@ -30,15 +30,19 @@ Programming languages are not bundled, so the installer stays small. Flux downlo
 
 | | |
 |---|---|
-| <img src="docs/icons/play.svg" width="20"> **One-click Run** | Press **F5** to run Python, JavaScript, Java, C/C++, C#, Go, Rust, Ruby, PHP or Lua. `input()`, colors and windows (tkinter, turtle, pygame) work. Missing languages are installed for you. |
-| <img src="docs/icons/globe.svg" width="20"> **Live Server** | A preview of your website right next to the code that reloads on save – also as a phone or tablet. |
+| <img src="docs/icons/play.svg" width="20"> **One-click Run** | Press **F5** to run Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl or shell scripts. `input()`, colors and windows (tkinter, turtle, pygame) work. Missing languages are installed for you. |
+| <img src="docs/icons/globe.svg" width="20"> **Live Server** | A preview of your website right next to the code that reloads on save. **Alt+click** any element to jump to its line in the HTML, JavaScript errors show up on the page with a *Show in Flux* button, preview as laptop, tablet or phone (and rotate it), take a screenshot, or scan a QR code to open the page on your real phone. |
 | <img src="docs/icons/code.svg" width="20"> **Smart editor** | Autocomplete and error checking for Python (Pyright), HTML, CSS and JavaScript, Emmet, snippets, rename everywhere, auto-closing HTML tags, image previews on hover, Markdown preview. |
 | <img src="docs/icons/sparkle.svg" width="20"> **Claude AI** | Ask Claude about your code (Ctrl+I) with your own API key. It can read your project and plan your to-do list. Flux also works the other way round: Claude Desktop, Claude Code and Cursor can use your Flux projects through MCP. |
 | <img src="docs/icons/git.svg" width="20"> **GitHub** | Sign in with GitHub, open any of your repositories as a project, commit and push, or publish a new project with one click. |
 | <img src="docs/icons/file.svg" width="20"> **Projects and files** | Projects with a description, to-do list and statistics (coding time, runs, lines). Open single files like `.md` or `.txt` without a project, or drop them onto the window. |
-| <img src="docs/icons/palette.svg" width="20"> **Make it yours** | Code themes and a theme studio with live preview, accent colors, text and mouse cursor (also your own picture), fonts, app size, corners, background image. 7 app languages. |
-| <img src="docs/icons/command.svg" width="20"> **Keyboard first** | Every shortcut can be changed. Search everything with Ctrl+Shift+A, run your own scripts from `shortcuts.json`. |
-| <img src="docs/icons/download.svg" width="20"> **Plugins** | A plugin store with ratings and screenshots: Error Lens, Auto Rename Tag, Python Docstring, Indent Rainbow, Better Comments, CSS Class Completion, Bookmarks, Color Highlight, Snippet Pack and Word Count. Writing your own takes a few lines of JavaScript. |
+| <img src="docs/icons/palette.svg" width="20"> **Make it yours** | Code themes and a theme studio with live preview, accent colors, text and mouse cursor (also your own picture), fonts, app size, corners, background image, density (compact shows more) and focus mode (F11). 9 app languages: English, Slovak, German, Spanish, French, Italian, Polish, Portuguese and Ukrainian. |
+| <img src="docs/icons/command.svg" width="20"> **Keyboard first** | Every shortcut can be changed. Search everything with Ctrl+Shift+A, go back and forward with the mouse side buttons or Alt+←/→, run your own scripts from `shortcuts.json`. There is a real terminal next to the program output. |
+| <img src="docs/icons/download.svg" width="20"> **Plugins** | A plugin store with ratings and screenshots: Error Lens, Auto Rename Tag, Python Docstring, Indent Rainbow, Better Comments, CSS Class Completion, Bookmarks, Color Highlight, Snippet Pack, Word Count, **Theme Pack** (8 more color themes) and **Glass UI**. Plugins can add commands, snippets, styles and color themes – writing your own takes a few lines of JavaScript. GitHub is a built-in plugin you install when you need it. |
+
+<p align="center">
+  <img src="docs/images/live.png" width="860" alt="Live Server with Alt+click to code and an error on the page">
+</p>
 
 <p align="center">
   <img src="docs/images/editor.png" width="420" alt="Editor with program output">
@@ -57,6 +61,10 @@ Programming languages are not bundled, so the installer stays small. Flux downlo
 | `Ctrl+Alt+O` | Open any file |
 | `Ctrl+I` | Claude AI |
 | `Ctrl+Shift+V` | Markdown preview |
+| `F11` | Focus mode – only the code |
+| ``Ctrl+Shift+` `` | Terminal |
+| `Alt+←` / `Alt+→` | Back / forward |
+| `Alt+click` in the preview | Jump to that element in the HTML |
 | `Ctrl+,` | Settings |
 
 All of them can be changed in Settings → Shortcuts.

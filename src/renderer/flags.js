@@ -15,6 +15,8 @@ const FLAGS = {
   fr: stripesV(['#0055a4', '#fff', '#ef4135']),
   it: stripesV(['#009246', '#fff', '#ce2b37']),
   pl: stripesH(['#fff', '#dc143c']),
+  pt: '<rect width="30" height="20" fill="#da291c"/><rect width="12" height="20" fill="#046a38"/><circle cx="12" cy="10" r="4.2" fill="#ffe900" stroke="#fff" stroke-width=".6"/><path d="M10 8h4v3.4c0 1.2-1 1.8-2 2.2-1-.4-2-1-2-2.2z" fill="#da291c" stroke="#fff" stroke-width=".5"/>',
+  uk: stripesH(['#0057b7', '#ffd700']),
 };
 
 // Neznámy jazyk: sivý obdĺžnik s kódom.

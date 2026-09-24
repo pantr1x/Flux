@@ -20,6 +20,10 @@ const paths = {
   collapse: '<path d="m7 20 5-5 5 5M7 4l5 5 5-5"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
   eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c5 0 9 4.5 10 7a13 13 0 0 1-3.2 4.3M6.6 6.6C4.3 8 2.7 10.2 2 12c1 2.5 5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  rotate: '<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+  laptop: '<path d="M5 6h14v10H5zM2 19h20"/>',
+  qr: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2M14 18h2v2M18 18h2v2h-2"/>',
   arrowLeft: '<path d="M19 12H5m6-6-6 6 6 6"/>',
   arrowRight: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
@@ -102,6 +106,7 @@ const FILE_ICONS = {
   git: svg16('<rect x="2.6" y="2.6" width="10.8" height="10.8" rx="2" transform="rotate(45 8 8)" fill="#F05033"/><path d="M6.2 5.2 8 7v3.6M8 7l2 2" stroke="#fff" stroke-width="1.1" fill="none" stroke-linecap="round"/><circle cx="8" cy="10.8" r=".9" fill="#fff"/><circle cx="10.1" cy="9.1" r=".9" fill="#fff"/>'),
   ruby: svg16('<path d="M4 2.5h8l2.5 3.5L8 14 1.5 6Z" fill="#CC342D"/><path d="M1.5 6h13M5.5 6 8 14l2.5-8M4 2.5 5.5 6 8 2.5l2.5 3.5L12 2.5" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width=".7"/>'),
   php: svg16('<ellipse cx="8" cy="8" rx="7" ry="4.6" fill="#777BB4"/>' + txt(8, 10.2, 'php', '#fff', 5.6)),
+  perl: svg16('<rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="#39457E"/>' + txt(8, 11.4, 'pl', '#fff', 6.6)),
   lua: svg16('<circle cx="8" cy="8.5" r="5.5" fill="#000080"/><circle cx="10.2" cy="6.3" r="1.5" fill="#fff"/><circle cx="13.3" cy="2.8" r="1.5" fill="#000080"/>'),
   csv: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1.8" fill="#1F9D55"/><path d="M1.5 6h13M1.5 10h13M6 2v12M10.5 2v12" stroke="#E6F7EE" stroke-width=".9"/>'),
   file: svg16('<path d="M3.5 1.5h6l3 3v10h-9Z" fill="none" stroke="#8A8A96" stroke-width="1.1" stroke-linejoin="round"/><path d="M9.5 1.5v3h3" fill="none" stroke="#8A8A96" stroke-width="1.1"/>'),
@@ -116,7 +121,7 @@ const EXT_ICON = {
   sh: 'shell', bash: 'shell', bat: 'shell', cmd: 'shell', ps1: 'powershell',
   txt: 'text', log: 'text', csv: 'csv', tsv: 'csv',
   toml: 'config', ini: 'config', cfg: 'config', yml: 'config', yaml: 'config', env: 'config', gitignore: 'config', lock: 'config',
-  c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', lua: 'lua', git: 'git',
+  c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', lua: 'lua', pl: 'perl', pm: 'perl', cts: 'typescript', git: 'git',
 };
 
 const LANG_ICON = { python: 'python', html: 'html', css: 'css', javascript: 'javascript', typescript: 'typescript', json: 'json', markdown: 'markdown', shell: 'shell' };

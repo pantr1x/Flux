@@ -12,14 +12,16 @@ from locales_v7 import V7
 from locales_v8 import V8
 from locales_fip_a import FIP_A
 from locales_fip_b import FIP_B
+from locales_ptuk import PT, UK
+from locales_v9 import V9
 FIP = {**FIP_A, **FIP_B}
 FR, IT, PL = ({k: v[i] for k, v in FIP.items()} for i in range(3))
 keys = json.load(open('locales/en.keys.json'))
-langs = {'sk': ('Slovak', 'Slovenčina', SK), 'de': ('German', 'Deutsch', DE), 'es': ('Spanish', 'Español', ES), 'fr': ('French', 'Français', FR), 'it': ('Italian', 'Italiano', IT), 'pl': ('Polish', 'Polski', PL)}
+langs = {'sk': ('Slovak', 'Slovenčina', SK), 'de': ('German', 'Deutsch', DE), 'es': ('Spanish', 'Español', ES), 'fr': ('French', 'Français', FR), 'it': ('Italian', 'Italiano', IT), 'pl': ('Polish', 'Polski', PL), 'pt': ('Portuguese', 'Português', PT), 'uk': ('Ukrainian', 'Українська', UK)}
 ph = lambda s: sorted(re.findall(r'\{\w+\}', s))
 index = [{'code': 'en', 'name': 'English', 'native': 'English'}]
 for code, (name, native, d) in langs.items():
-    d = {**d, **V3.get(code, {}), **V4.get(code, {}), **V5[code], **V6[code], **V7[code], **V8[code]}
+    d = {**d, **V3.get(code, {}), **V4.get(code, {}), **V5.get(code, {}), **V6.get(code, {}), **V7.get(code, {}), **V8.get(code, {}), **V9.get(code, {})}
     out = {}
     for k, v in d.items():
         if ph(k) != ph(v):

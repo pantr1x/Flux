@@ -112,7 +112,9 @@ export function defineMonacoTheme(monaco, id, accent) {
     { token: 'enumMember', foreground: t.constant },
     { token: 'builtinConstant', foreground: t.storage },
   ];
-  monaco.editor.defineTheme(`flux-${id}`, {
+  // Monaco berie len písmená, čísla a pomlčky (témy z pluginov majú v id bodky).
+  const monacoName = `flux-${String(id).replace(/[^a-z0-9-]/gi, '-')}`;
+  monaco.editor.defineTheme(monacoName, {
     base: dark ? 'vs-dark' : 'vs',
     inherit: true,
     rules,
@@ -176,7 +178,7 @@ export function defineMonacoTheme(monaco, id, accent) {
           'minimap.background': '#f4f4f7',
         },
   });
-  return `flux-${id}`;
+  return monacoName;
 }
 
 // Malý náhľad témy do nastavení (farebné pásiky).

@@ -26,6 +26,8 @@ const CODE_LANGS = [
   { id: 'ruby', label: 'Ruby', icon: 'a.rb', tool: 'ruby', more: true },
   { id: 'php', label: 'PHP', icon: 'a.php', tool: 'php', more: true },
   { id: 'lua', label: 'Lua', icon: 'a.lua', tool: 'lua', more: true },
+  { id: 'ts', label: 'TypeScript', icon: 'a.ts', tool: 'node', more: true },
+  { id: 'perl', label: 'Perl', icon: 'a.pl', tool: 'perl', more: true },
   { id: 'explore', label: 'Just exploring', icon: null, more: true },
 ];
 
@@ -195,7 +197,7 @@ export function createOnboarding(app) {
                 c.icon ? app.fileIcon(c.icon).replace(/width="16" height="16"/, 'width="34" height="34"') : app.icon('sparkle', 30)
               }</span><b>${t(c.label)}</b>${cardStatus(c)}<i class="ob-check">${app.icon('check', 14)}</i></button>`,
           )
-          .join('')}${showMore ? '' : `<button class="ob-card ob-more" data-more-langs><span class="ob-ic">${app.icon('plus', 28)}</span><b>${t('More languages')}</b><small class="ob-st">Rust, Ruby, PHP, Lua…</small></button>`}</div></div>${nav()}`;
+          .join('')}${showMore ? '' : `<button class="ob-card ob-more" data-more-langs><span class="ob-ic">${app.icon('plus', 28)}</span><b>${t('More languages')}</b><small class="ob-st">Rust, TypeScript, PHP, Lua…</small></button>`}</div></div>${nav()}`;
     }
     if (step === S('look')) {
       return `<div class="ob-step ob-look"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>

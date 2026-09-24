@@ -1,4 +1,4 @@
-// Snippet Pack – hotové kúsky kódu pre Rust, Go, Java, C++, C# a JavaScript (napíš skratku a stlač Tab).
+// Snippet Pack – hotové kúsky kódu pre Rust, Go, Java, C++, C#, JavaScript, TypeScript a Perl (napíš skratku a stlač Tab).
 const S = {
   rust: [
     ['fn', 'function', 'fn ${1:name}(${2}) -> ${3:()} {\n\t$0\n}'],
@@ -42,6 +42,21 @@ const S = {
     ['class', 'class', 'public class ${1:Name}\n{\n\t$0\n}'],
     ['prop', 'property', 'public ${1:int} ${2:Name} { get; set; }'],
     ['foreach', 'foreach', 'foreach (var ${1:item} in ${2:list})\n{\n\t$0\n}'],
+  ],
+  typescript: [
+    ['fn', 'typed function', 'function ${1:name}(${2:value}: ${3:string}): ${4:void} {\n\t$0\n}'],
+    ['iface', 'interface', 'interface ${1:Name} {\n\t${2:id}: ${3:number};\n}'],
+    ['type', 'type alias', 'type ${1:Name} = ${2:string | number};'],
+    ['class', 'class', 'class ${1:Name} {\n\tconstructor(private ${2:value}: ${3:string}) {}\n\n\t$0\n}'],
+    ['afn', 'async function', 'async function ${1:load}(): Promise<${2:void}> {\n\t$0\n}'],
+    ['log', 'console.log', 'console.log(${1});'],
+  ],
+  perl: [
+    ['strict', 'use strict / warnings', 'use strict;\nuse warnings;\n$0'],
+    ['sub', 'subroutine', 'sub ${1:name} {\n\tmy (${2:\\$arg}) = @_;\n\t$0\n}'],
+    ['for', 'foreach loop', 'foreach my \\$${1:item} (@${2:list}) {\n\t$0\n}'],
+    ['input', 'read a line from the user', 'print "${1:Your name: }";\nmy \\$${2:answer} = <STDIN>;\nchomp \\$${2:answer};'],
+    ['say', 'print a line', 'print "${1}\\n";'],
   ],
   javascript: [
     ['clg', 'console.log', 'console.log(${1});'],

@@ -127,6 +127,7 @@ contextBridge.exposeInMainWorld('flux', {
   input: (text) => ipcRenderer.send('run:input', text),
   stop: () => ipcRenderer.send('run:stop'),
   resize: (cols, rows) => ipcRenderer.send('run:resize', cols, rows),
+  setFullScreen: (on) => ipcRenderer.send('win:fullscreen', on),
   shellStart: (fresh) => ipcRenderer.invoke('shell:start', fresh),
   shellInput: (text) => ipcRenderer.send('shell:input', text),
   shellResize: (cols, rows) => ipcRenderer.send('shell:resize', cols, rows),
@@ -139,6 +140,10 @@ contextBridge.exposeInMainWorld('flux', {
 
   liveStart: () => ipcRenderer.invoke('live:start'),
   liveStop: () => ipcRenderer.invoke('live:stop'),
+  liveLan: (on) => ipcRenderer.invoke('live:lan', on),
+  liveQr: (text) => ipcRenderer.invoke('live:qr', text),
+  liveScreenshot: (rect) => ipcRenderer.invoke('live:screenshot', rect),
+  onLiveOpen: on('live:open'),
   onLiveLog: on('live:log'),
   onLiveStopped: on('live:stopped'),
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),

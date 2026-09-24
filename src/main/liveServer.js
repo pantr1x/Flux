@@ -4,6 +4,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -63,13 +64,91 @@ const CLIENT = `(() => {
     const orig = console[level].bind(console);
     console[level] = (...args) => { send(level, args); orig(...args); };
   }
-  addEventListener('error', (e) => send('error', [e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')']));
+  addEventListener('error', (e) => {
+    send('error', [e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')']);
+    overlay(e.message, e.filename, e.lineno);
+  });
   addEventListener('unhandledrejection', (e) => send('error', ['Unhandled promise: ', e.reason]));
+
+  // Skok do kódu: súbor (cesta na serveri) a riadok sa otvoria vo Fluxe.
+  const open = (file, line) => navigator.sendBeacon('/__flux/open', JSON.stringify({ file, line }));
+  const sameOrigin = (u) => { try { return new URL(u, location.href).origin === location.origin; } catch { return false; } };
+
+  // Chyba v JavaScripte: malá karta v rohu stránky s tlačidlom „Ukázať vo Fluxe“.
+  let box = null;
+  function overlay(message, file, line) {
+    if (!document.body) return addEventListener('DOMContentLoaded', () => overlay(message, file, line), { once: true });
+    if (!box) {
+      const host = document.createElement('flux-overlay');
+      host.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483647;';
+      box = host.attachShadow({ mode: 'open' });
+      box.innerHTML = '<style>.c{font:13px/1.45 system-ui,sans-serif;background:#1c1c24;color:#f1f1f5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35),0 0 0 1px rgba(255,90,110,.5);padding:12px 14px;max-width:380px;margin-top:8px}.h{display:flex;gap:8px;align-items:center;font-weight:700;color:#ff6b7a}.m{margin:6px 0 10px;word-break:break-word;font-family:Consolas,monospace;font-size:12px}.r{display:flex;gap:8px}button{font:600 12px system-ui;border:0;border-radius:8px;padding:6px 10px;cursor:pointer}.o{background:#8b7bff;color:#fff}.x{background:rgba(255,255,255,.1);color:#ddd}</style><div id=l></div>';
+      document.documentElement.append(host);
+    }
+    const list = box.getElementById('l');
+    if (list.children.length >= 3) list.firstElementChild.remove();
+    const c = document.createElement('div');
+    c.className = 'c';
+    const where = file && sameOrigin(file) ? new URL(file, location.href).pathname : '';
+    c.innerHTML = '<div class=h>⚠ JavaScript error</div><div class=m></div><div class=r></div>';
+    c.querySelector('.m').textContent = message + (where ? ' — ' + where.split('/').pop() + ':' + line : '');
+    const r = c.querySelector('.r');
+    if (where) {
+      const b = document.createElement('button');
+      b.className = 'o';
+      b.textContent = 'Show in Flux';
+      b.onclick = () => open(where, line);
+      r.append(b);
+    }
+    const x = document.createElement('button');
+    x.className = 'x';
+    x.textContent = 'Dismiss';
+    x.onclick = () => c.remove();
+    r.append(x);
+    list.append(c);
+  }
+
+  // Alt + klik na prvok stránky → Flux otvorí HTML na riadku, kde je prvok napísaný.
+  let hl = null;
+  let tip = null;
+  const clear = () => { hl && hl.remove(); tip && tip.remove(); hl = tip = null; };
+  const target = (el) => el && el.closest && el.closest('[data-flux-line]');
+  addEventListener('mousemove', (e) => {
+    if (!e.altKey) return clear();
+    const el = target(e.target);
+    if (!el) return clear();
+    const r = el.getBoundingClientRect();
+    if (!hl) {
+      hl = document.createElement('div');
+      hl.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;border:2px solid #8b7bff;background:rgba(139,123,255,.12);border-radius:4px;transition:all .06s';
+      tip = document.createElement('div');
+      tip.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;background:#8b7bff;color:#fff;font:600 11px system-ui;padding:2px 7px;border-radius:5px';
+      document.documentElement.append(hl, tip);
+    }
+    Object.assign(hl.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+    tip.textContent = '<' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.classList.length ? '.' + [...el.classList].join('.') : '') + '>  line ' + el.dataset.fluxLine;
+    Object.assign(tip.style, { left: Math.max(4, r.left) + 'px', top: Math.max(4, r.top - 22) + 'px' });
+  }, true);
+  addEventListener('keyup', (e) => { if (e.key === 'Alt') clear(); });
+  addEventListener('blur', clear);
+  addEventListener('click', (e) => {
+    if (!e.altKey) return;
+    const el = target(e.target);
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    clear();
+    let file = el.dataset.fluxFile || location.pathname;
+    if (file.endsWith('/')) file += 'index.html';
+    open(file, Number(el.dataset.fluxLine));
+  }, true);
 })();`;
 
 class LiveServer {
-  constructor(onLog) {
+  constructor(onLog, onOpen = () => {}) {
     this.onLog = onLog; // ({level, text}) => void
+    this.onOpen = onOpen; // ({file, line}) => void – skok do kódu z náhľadu
+    this.lan = false;
     this.server = null;
     this.watcher = null;
     this.clients = new Set();
@@ -83,12 +162,14 @@ class LiveServer {
     return !!this.server;
   }
 
-  async start(root) {
-    if (this.server && this.root === root) return this.info();
+  // lan: server počúva aj na Wi-Fi, aby sa stránka dala otvoriť v mobile.
+  async start(root, { lan = false } = {}) {
+    if (this.server && this.root === root && this.lan === !!lan) return this.info();
     await this.stop();
     this.root = root;
+    this.lan = !!lan;
     this.server = http.createServer((req, res) => this.handle(req, res));
-    this.port = await listenOnFreePort(this.server, 5500);
+    this.port = await listenOnFreePort(this.server, 5500, this.lan ? '0.0.0.0' : '127.0.0.1');
     try {
       this.watcher = fs.watch(root, { recursive: true }, (_event, file) => this.changed(file));
       this.watcher.on('error', () => {});
@@ -97,7 +178,8 @@ class LiveServer {
   }
 
   info() {
-    return { url: `http://127.0.0.1:${this.port}`, port: this.port, root: this.root };
+    const ip = this.lan ? lanAddress() : null;
+    return { url: `http://127.0.0.1:${this.port}`, port: this.port, root: this.root, lan: this.lan, lanUrl: ip ? `http://${ip}:${this.port}` : null };
   }
 
   async stop() {
@@ -139,6 +221,19 @@ class LiveServer {
     if (url.pathname === '/__flux/client.js') {
       res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-store' });
       return res.end(CLIENT);
+    }
+    if (url.pathname === '/__flux/open' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (c) => (body += c).length > 1e4 && req.destroy());
+      req.on('end', () => {
+        try {
+          const { file, line } = JSON.parse(body);
+          const abs = path.join(this.root, decodeURIComponent(String(file)));
+          if (abs.startsWith(this.root + path.sep) && fs.existsSync(abs)) this.onOpen({ file: abs, line: Math.max(1, Number(line) || 1) });
+        } catch {}
+        res.writeHead(204).end();
+      });
+      return;
     }
     if (url.pathname === '/__flux/log' && req.method === 'POST') {
       let body = '';
@@ -186,7 +281,7 @@ class LiveServer {
       fs.readFile(file, 'utf8', (err, html) => {
         if (err) return res.writeHead(500).end(String(err));
         res.writeHead(200, headers);
-        res.end(injectClient(html));
+        res.end(injectClient(annotate(html)));
       });
       return;
     }
@@ -227,6 +322,50 @@ class LiveServer {
   }
 }
 
+// Každej značke v HTML pridá data-flux-line (riadok v súbore) – na Alt + klik v náhľade.
+// Obsah <script>, <style>, <textarea> a komentáre ostanú nedotknuté.
+function annotate(html) {
+  if (html.length > 2e6) return html;
+  let out = '';
+  let line = 1;
+  let i = 0;
+  const count = (a, b) => {
+    for (let k = a; k < b; k++) if (html.charCodeAt(k) === 10) line++;
+  };
+  const re = /<!--[\s\S]*?-->|<(script|style|textarea|pre)\b[^>]*>[\s\S]*?<\/\1\s*>|<([a-zA-Z][\w-]*)(?=[\s/>])/g;
+  let m;
+  while ((m = re.exec(html))) {
+    count(i, m.index);
+    if (m[2] && !/^(html|head|meta|link|title|base)$/i.test(m[2])) {
+      out += html.slice(i, m.index) + m[0] + ` data-flux-line="${line}"`;
+      i = m.index + m[0].length;
+    } else if (m[1]) {
+      // <script>/<style> samotná značka dostane riadok, obsah nie
+      const tagEnd = m[0].indexOf('>');
+      const open = m[0].slice(0, tagEnd);
+      const name = open.match(/^<(\w+)/)[0];
+      out += html.slice(i, m.index) + name + ` data-flux-line="${line}"` + m[0].slice(name.length);
+      count(m.index, m.index + m[0].length);
+      i = m.index + m[0].length;
+    } else {
+      out += html.slice(i, m.index + m[0].length);
+      count(m.index, m.index + m[0].length);
+      i = m.index + m[0].length;
+    }
+  }
+  return out + html.slice(i);
+}
+
+// Adresa počítača v domácej sieti (Wi-Fi / kábel) pre mobil.
+function lanAddress() {
+  const nets = os.networkInterfaces();
+  const all = [];
+  for (const [name, list] of Object.entries(nets)) for (const n of list || []) if (n.family === 'IPv4' && !n.internal) all.push({ name, address: n.address });
+  // Súkromné siete majú prednosť (192.168…, 10…, 172.16–31…), virtuálne adaptéry nie.
+  const good = all.filter((n) => /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(n.address) && !/vEthernet|VirtualBox|VMware|WSL|Hyper-V|docker/i.test(n.name));
+  return (good[0] || all[0])?.address || null;
+}
+
 function injectClient(html) {
   // Čo najskôr (hneď za <head>), aby sa zachytil aj console.log z ostatných skriptov stránky.
   const tag = '<script src="/__flux/client.js"></script>';
@@ -241,17 +380,17 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
 
-function listenOnFreePort(server, port) {
+function listenOnFreePort(server, port, host = '127.0.0.1') {
   return new Promise((resolve, reject) => {
     const tryPort = (p) => {
       server.once('error', (err) => {
         if (err.code === 'EADDRINUSE' && p < port + 100) tryPort(p + 1);
         else reject(err);
       });
-      server.listen(p, '127.0.0.1', () => resolve(p));
+      server.listen(p, host, () => resolve(p));
     };
     tryPort(port);
   });
 }
 
-module.exports = { LiveServer };
+module.exports = { LiveServer, annotate };

@@ -75,15 +75,19 @@
                 <span class="preview-url" id="preview-url"></span>
                 <div class="grow"></div>
                 <div class="seg" id="devices">
-                  <button data-w="" class="active" title="Full width"></button>
-                  <button data-w="820" title="Tablet (820 px)"></button>
-                  <button data-w="390" title="Phone (390 px)"></button>
+                  <button data-dev="full" class="active" title="Full width"></button>
+                  <button data-dev="laptop" title="Laptop (1280 × 800)"></button>
+                  <button data-dev="tablet" title="Tablet (820 × 1180)"></button>
+                  <button data-dev="phone" title="Phone (390 × 844)"></button>
                 </div>
+                <button class="icon-btn" id="btn-preview-rotate" title="Rotate" hidden></button>
+                <button class="icon-btn" id="btn-preview-shot" title="Screenshot (saved to the project and copied)"></button>
+                <button class="icon-btn" id="btn-preview-phone" title="Open on your phone"></button>
                 <button class="icon-btn" id="btn-preview-reload" title="Refresh"></button>
                 <button class="icon-btn" id="btn-preview-external" title="Open in browser"></button>
                 <button class="icon-btn" id="btn-preview-close" title="Close preview"></button>
               </div>
-              <div class="preview-stage"><iframe id="preview-frame" title="Preview"></iframe></div>
+              <div class="preview-stage"><div id="pv-dev"><iframe id="preview-frame" title="Preview"></iframe></div><div class="pv-hint" id="pv-hint"></div></div>
             </div>
             <div class="resizer rz-col" id="ai-resizer" hidden></div>
             <aside id="ai" hidden></aside>

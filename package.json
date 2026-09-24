@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.3.8",
+  "version": "1.0.0",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,
@@ -73,7 +73,8 @@
     "@anthropic-ai/sdk": "^0.128.0",
     "@lydell/node-pty": "^1.2.0-beta.15",
     "basedpyright": "^1.40.1",
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@xterm/addon-fit": "^0.11.0",

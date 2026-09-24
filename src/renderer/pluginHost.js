@@ -4,7 +4,7 @@ import { parseKey } from './userShortcuts.js';
 
 const bridge = window.flux;
 
-export function createPluginHost({ monaco, editor, toast, getActiveFile, getSettings, saveSettings, runCommand, isOverridden = () => false, getWorkspace = () => null }) {
+export function createPluginHost({ monaco, editor, toast, getActiveFile, getSettings, saveSettings, runCommand, isOverridden = () => false, getWorkspace = () => null, addTheme = () => () => {} }) {
   const loaded = new Map(); // id → { module, disposables, commands, name }
   const saveListeners = new Set();
   const openListeners = new Set();
@@ -103,7 +103,22 @@ export function createPluginHost({ monaco, editor, toast, getActiveFile, getSett
           return d;
         },
       },
+      // Farebné témy kódu: objavia sa v zozname tém (Nastavenia → Vzhľad, Ctrl+Shift+P → téma).
+      themes: {
+        add(key, def = {}) {
+          const remove = addTheme(`${id}.${key}`, { ...def, plugin: name });
+          own(remove);
+          return { remove };
+        },
+      },
       ui: {
+        // CSS premenné okna, napr. setVar('--radius', '20px').
+        setVar(name, value) {
+          const root = document.documentElement;
+          const before = root.style.getPropertyValue(name);
+          root.style.setProperty(name, String(value));
+          own(() => (before ? root.style.setProperty(name, before) : root.style.removeProperty(name)));
+        },
         addStyle(css) {
           const style = document.createElement('style');
           style.dataset.plugin = id;

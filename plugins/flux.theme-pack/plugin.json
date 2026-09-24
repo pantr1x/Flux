@@ -1,0 +1,26 @@
+{
+  "id": "flux.theme-pack",
+  "name": "Theme Pack",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "8 popular code themes: Gruvbox, Solarized Dark & Light, Rosé Pine & Dawn, Ayu Mirage, Night Owl and Everforest.",
+  "main": "plugin.js",
+  "icon": "icon.svg",
+  "screenshots": [
+    "screenshot.png"
+  ],
+  "readme": "README.md",
+  "files": [
+    "plugin.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "themes",
+    "colors",
+    "appearance"
+  ],
+  "license": "MIT",
+  "issue": 11
+}

@@ -3,8 +3,8 @@
   "name": "Snippet Pack",
   "publisher": "Flux",
   "verified": true,
-  "version": "1.0.0",
-  "description": "Ready-made code for Rust, Go, Java, C++, C# and JavaScript – type a short word and press Tab.",
+  "version": "1.1.0",
+  "description": "Ready-made code for Rust, Go, Java, C++, C#, JavaScript, TypeScript and Perl – type a short word and press Tab.",
   "main": "plugin.js",
   "icon": "icon.svg",
   "screenshots": [

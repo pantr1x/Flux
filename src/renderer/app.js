@@ -75,6 +75,7 @@ const DEFAULTS = {
   lineHeight: 1.45,
   ligatures: false,
   minimap: true,
+  stickyScroll: true,
   wordWrap: false,
   autosave: true,
   autoUpdateLangs: true,
@@ -100,6 +101,7 @@ const DEFAULTS = {
   wallBlur: 40,
   wallOpacity: 55,
   darkLift: 0,
+  density: 'comfortable',
   userName: '',
   clearOnRun: true,
   terminalFontSize: 13,
@@ -167,7 +169,7 @@ function guessLang(text) {
 }
 const langOf = (path, text) => (extOf(path) ? langFor(path) : guessLang(text));
 
-const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua']);
+const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua', 'ts', 'mts', 'cts', 'pl']);
 const WEB = new Set(['html', 'htm', 'css']);
 
 // ---------- drobnosti UI ----------
@@ -221,14 +223,19 @@ function setIcons() {
   $('#btn-stop').innerHTML = icon('stop', 14);
   $('#btn-ai').innerHTML = `${icon('sparkle', 14)}<span>AI</span>`;
   $('#btn-clear').innerHTML = icon('trash', 15);
+  document.querySelector('[data-ptab="shell"]').textContent = t('Terminal');
   $('#btn-panel').innerHTML = icon('panel', 15);
   $('#btn-preview-reload').innerHTML = icon('refresh', 15);
   $('#btn-preview-external').innerHTML = icon('external', 15);
   $('#btn-preview-close').innerHTML = icon('x', 15);
   const devices = $('#devices').children;
   devices[0].innerHTML = icon('monitor', 14);
-  devices[1].innerHTML = icon('tablet', 14);
-  devices[2].innerHTML = icon('phone', 14);
+  devices[1].innerHTML = icon('laptop', 14);
+  devices[2].innerHTML = icon('tablet', 14);
+  devices[3].innerHTML = icon('phone', 14);
+  $('#btn-preview-rotate').innerHTML = icon('rotate', 15);
+  $('#btn-preview-shot').innerHTML = icon('camera', 15);
+  $('#btn-preview-phone').innerHTML = icon('qr', 15);
 }
 
 // ---------- téma ----------
@@ -278,6 +285,7 @@ function applyEditorSettings() {
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
     minimap: { enabled: false },
+    stickyScroll: { enabled: setting('stickyScroll') !== false, maxLineCount: 4 },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
     cursorStyle: setting('caretStyle'),
     cursorBlinking: setting('caretBlink'),
@@ -335,6 +343,7 @@ function applyCustomization() {
   else root.style.removeProperty('--ui-font');
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
+  document.body.classList.toggle('density-compact', setting('density') === 'compact');
   root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
@@ -1384,6 +1393,8 @@ const PROJECT_KINDS = [
   { id: 'ruby', title: 'Ruby', icon: 'a.rb', tpl: 'rb-main', tool: 'ruby', more: true },
   { id: 'php', title: 'PHP', icon: 'a.php', tpl: 'php-main', tool: 'php', more: true },
   { id: 'lua', title: 'Lua', icon: 'a.lua', tpl: 'lua-main', tool: 'lua', more: true },
+  { id: 'ts', title: 'TypeScript', icon: 'a.ts', tpl: 'ts-main', tool: 'node', more: true },
+  { id: 'perl', title: 'Perl', icon: 'a.pl', tpl: 'pl-main', tool: 'perl', more: true },
 ];
 
 // Popis a zoznam úloh projektu (ukladá sa v nastaveniach podľa priečinka).
@@ -1743,6 +1754,12 @@ function createTerminal() {
       };
       for (const m of line.matchAll(/File "([^"]+)", line (\d+)/g)) add(m.index, m[0], m[1], Number(m[2]));
       for (const m of line.matchAll(/((?:[A-Za-z]:\\|\/)[^\s:()'"]+\.\w+):(\d+)(?::(\d+))?/g)) add(m.index, m[0], m[1], Number(m[2]), m[3] ? Number(m[3]) : undefined);
+      // Relatívne cesty (Java „Main.java:5“, Go, Rust „src/main.rs:3:5“, gcc…) – voči priečinku spusteného súboru.
+      if (state.runDir)
+        for (const m of line.matchAll(/(?<![\w\\/:.])((?:[\w.-]+[\\/])*[\w.-]+\.(?:java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|lua|ts|pl|py|js|kt|dart)):(\d+)(?::(\d+))?/g)) {
+          const p = join(state.runDir, m[1]);
+          if (!links.some((l) => l.range.start.x === m.index + 1)) add(m.index, m[0], p, Number(m[2]), m[3] ? Number(m[3]) : undefined);
+        }
       callback(links);
     },
   });
@@ -1887,6 +1904,7 @@ async function run() {
     return toast(t('Python not found. Install it from python.org (tick “Add python.exe to PATH”).'), 'error', 7000);
   }
   await saveAll();
+  state.runDir = dirname(tab.path);
   const res = await flux.runFile(tab.path, state.python?.path, lang).catch((err) => ({ ok: false, error: errorText(err) }));
   // Jazyk nie je nainštalovaný → okno s veľkosťou a tlačidlom Inštalovať; po inštalácii hneď spustí.
   if (res.missing) {
@@ -2090,6 +2108,108 @@ function renderLive() {
   }
 }
 
+// ---------- náhľad: zariadenia, otočenie, snímka, mobil ----------
+const DEVICES = { laptop: [1280, 800], tablet: [820, 1180], phone: [390, 844] };
+const previewDevice = { id: 'full', landscape: false };
+function layoutPreview() {
+  const stage = document.querySelector('.preview-stage');
+  const box = $('#pv-dev');
+  const frame = $('#preview-frame');
+  if (!stage || !box) return;
+  const dev = DEVICES[previewDevice.id];
+  $('#btn-preview-rotate').hidden = !dev;
+  stage.classList.toggle('framed', !!dev);
+  if (!dev) {
+    box.style.cssText = '';
+    frame.style.cssText = '';
+    $('#pv-hint').textContent = '';
+    return;
+  }
+  const [w, h] = previewDevice.landscape ? [dev[1], dev[0]] : dev;
+  const sw = stage.clientWidth - 28;
+  const sh = stage.clientHeight - 40;
+  const k = Math.min(1, sw / w, sh / h);
+  box.style.cssText = `width:${Math.round(w * k)}px;height:${Math.round(h * k)}px`;
+  frame.style.cssText = `width:${w}px;height:${h}px;transform:scale(${k})`;
+  $('#pv-hint').textContent = `${w} × ${h}${k < 1 ? ` · ${Math.round(k * 100)} %` : ''}`;
+}
+
+async function previewScreenshot() {
+  const r = $('#preview-frame').getBoundingClientRect();
+  const z = (Number(setting('uiZoom')) || 100) / 100;
+  try {
+    const res = await flux.liveScreenshot({ x: r.left * z, y: r.top * z, width: r.width * z, height: r.height * z });
+    if (!res?.file) return;
+    await refreshTree();
+    const msg = res.copied ? t('Screenshot saved to {file} and copied.', { file: relative(res.file) }) : t('Screenshot saved to {file}.', { file: relative(res.file) });
+    toast(msg, 'ok', 6000, { label: t('Open'), run: () => openFile(res.file) });
+  } catch (err) {
+    toast(errorText(err), 'error');
+  }
+}
+
+// Karta „Otvoriť v mobile“: povolí prístup z Wi-Fi a ukáže QR kód.
+async function togglePhonePopover() {
+  const old = document.querySelector('.pv-pop');
+  if (old) return old.remove();
+  const pop = document.createElement('div');
+  pop.className = 'pv-pop';
+  document.body.append(pop);
+  const place = () => {
+    const r = $('#btn-preview-phone').getBoundingClientRect();
+    pop.style.top = `${r.bottom + 8}px`;
+    pop.style.left = `${Math.max(8, Math.min(innerWidth - 300, r.right - 290))}px`;
+  };
+  const draw = async () => {
+    const lanUrl = state.live?.lanUrl;
+    if (!state.live?.lan || !lanUrl) {
+      pop.innerHTML = `<h4>${icon('phone', 15)}${t('Open on your phone')}</h4>
+        <p>${t('Your phone must be on the same Wi-Fi. While this is on, anyone on that Wi-Fi can open the files of this project.')}</p>
+        <button class="s-btn primary" data-lan-on>${t('Allow on my Wi-Fi')}</button>
+        ${state.live?.lan && !lanUrl ? `<p class="pv-warn">${t('No Wi-Fi or network connection found.')}</p>` : ''}`;
+    } else {
+      const page = $('#preview-frame').src ? new URL($('#preview-frame').src).pathname : '/';
+      const url = lanUrl + page;
+      let qr = '';
+      try {
+        qr = await flux.liveQr(url);
+      } catch {}
+      pop.innerHTML = `<h4>${icon('phone', 15)}${t('Scan with your phone camera')}</h4>
+        ${qr ? `<img src="${qr}" width="190" height="190" alt="QR">` : ''}
+        <code>${escapeHtml(url)}</code>
+        <p>${t('If it does not open, allow Flux in the Windows firewall message.')}</p>
+        <button class="s-btn" data-lan-off>${t('Stop sharing on Wi-Fi')}</button>`;
+    }
+    place();
+  };
+  pop.onclick = async (e) => {
+    e.stopPropagation();
+    const on = e.target.closest('[data-lan-on]');
+    const off = e.target.closest('[data-lan-off]');
+    if (!on && !off) return;
+    try {
+      const info = await flux.liveLan(!!on);
+      if (info) {
+        state.live = info;
+        const f = $('#preview-frame');
+        if (f.src) f.src = f.src.replace(/:\d+\//, `:${info.port}/`);
+        renderLive();
+      }
+    } catch (err) {
+      toast(errorText(err), 'error');
+    }
+    draw();
+  };
+  const close = (e) => {
+    if (!pop.contains(e.target) && !e.target.closest('#btn-preview-phone')) {
+      pop.remove();
+      document.removeEventListener('pointerdown', close, true);
+    }
+  };
+  document.addEventListener('pointerdown', close, true);
+  await draw();
+}
+
 function onLiveLog({ level, text }) {
   const color = { error: '31', warn: '33', info: '36', log: '36' }[level] || '36';
   term.writeln(`\x1b[${color}m[web]\x1b[0m ${text}`);
@@ -2288,6 +2408,7 @@ function commands() {
     c(t('Close file'), () => state.active && closeTab(state.active), 'Ctrl+W', 'x'),
     c(t('Format document'), () => editor.getAction('editor.action.formatDocument')?.run(), 'Shift+Alt+F', 'sparkle'),
     c(t('Toggle sidebar (compact mode)'), toggleCompact, 'Ctrl+B', 'sidebar'),
+    c(t('Focus mode (only the code)'), toggleFocus, 'F11', 'monitor', 'zen fullscreen distraction free'),
     c(t('Toggle output panel'), () => showPanel($('#panel').classList.contains('collapsed')), 'Ctrl+J', 'panel'),
     c(t('Toggle light / dark theme'), toggleTheme, '', isDark() ? 'sun' : 'moon', 'theme dark light colors appearance'),
     c(t('Color theme…'), chooseTheme, '', 'palette', 'theme colors vs code dracula one dark'),
@@ -2389,6 +2510,17 @@ async function setFontSize(delta) {
   await saveSettings({ fontSize: size });
 }
 
+// Režim sústredenia: len kód na celej obrazovke (bez bočného panela, výstupu a stavového riadku).
+async function toggleFocus() {
+  const on = !document.body.classList.contains('focus-mode');
+  document.body.classList.toggle('focus-mode', on);
+  document.body.classList.toggle('compact', on || !!setting('compact'));
+  document.body.classList.remove('peek');
+  flux.setFullScreen?.(on);
+  if (on) toast(t('Focus mode – press F11 to go back.'), 'info', 2500);
+  requestAnimationFrame(() => editor?.layout());
+}
+
 async function toggleCompact() {
   const compact = !document.body.classList.contains('compact');
   document.body.classList.toggle('compact', compact);
@@ -2407,6 +2539,17 @@ function parseTheme(data, fallbackName) {
   const colors = {};
   for (const [k, v] of Object.entries(data.colors || {})) if (typeof v === 'string' && /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v)) colors[k] = v.replace('#', '').toUpperCase();
   return { name: data.name || fallbackName, type, custom: true, t: { ...base.t, ...colors, italicComments: data.italicComments ?? base.t.italicComments } };
+}
+
+// Téma z pluginu (flux.themes.add). Ak je práve vybraná, hneď sa použije.
+function addPluginTheme(id, def) {
+  const th = parseTheme({ name: def.name, type: def.type, basedOn: def.basedOn, colors: def.colors || {}, italicComments: def.italicComments }, id);
+  THEMES[id] = { ...th, custom: false, plugin: def.plugin };
+  if (setting('codeTheme') === id) applyTheme();
+  return () => {
+    delete THEMES[id];
+    if (setting('codeTheme') === id) setCodeTheme(isDark() ? DEFAULT_THEME : 'vscode-light');
+  };
 }
 
 async function loadCustomThemes(announce = false) {
@@ -2602,6 +2745,7 @@ function openSettings() {
             <div class="s-group">
               ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
+              <label class="s-row"><span><b>${t('Density')}</b><small>${t('Compact fits more files, tabs and lines on the screen.')}</small></span><select data-key="density">${opt('comfortable', t('comfortable'), setting('density'))}${opt('compact', t('compact'), setting('density'))}</select></label>
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
@@ -2626,6 +2770,7 @@ function openSettings() {
             <h3>${t('Behaviour')}</h3>
             <div class="s-group">
               ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
+              ${toggle('stickyScroll', 'Sticky headers', 'the function or class you are in stays at the top while you scroll')}
               ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
               ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
               ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
@@ -2968,7 +3113,7 @@ function openSettings() {
       return rerenderSettings();
     }
     if (e.target.closest('[data-action="look-reset"]')) {
-      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity', 'darkLift'];
+      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity', 'darkLift', 'density'];
       await saveSettings(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])));
       applyEditorSettings();
       toast(t('Everything looks like new again.'), 'ok');
@@ -3386,7 +3531,8 @@ async function openStart() {
     `<button class="hm-line${cur(p)}" data-dir="${escapeAttr(p.dir)}" data-find="${escapeAttr(`${p.name} ${desc(p) || ''}`.toLowerCase())}"><span class="hm-ic sm">${kindIcon(p.kind, 18, p.github)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || shortPath(p.dir))}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
   const fileLine = (f) =>
     `<button class="hm-line" data-file="${escapeAttr(f)}"><span class="hm-ic sm">${fileIcon(basename(f)).replace(/width="16" height="16"/, 'width="18" height="18"')}</span><span class="hm-text"><b>${escapeHtml(basename(f))}</b><small>${escapeHtml(shortPath(f.slice(0, f.length - basename(f).length - 1)))}</small></span></button>`;
-  const date = new Date().toLocaleDateString(setting('language') || 'en', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dateRaw = new Date().toLocaleDateString(setting('language') || 'en', { weekday: 'long', day: 'numeric', month: 'long' });
+  const date = dateRaw.charAt(0).toUpperCase() + dateRaw.slice(1);
   const tips = [
     t('Press Ctrl+Shift+A to search everything – commands, settings, files and projects.'),
     t('Drop a file or a folder onto Flux to open it.'),
@@ -3880,6 +4026,7 @@ function keybindings() {
       else if (ctrl && key === 'n') newFile();
       else if (ctrl && key === 'w') state.active && closeTab(state.active);
       else if (ctrl && key === 'b') toggleCompact();
+      else if (e.key === 'F11' && !ctrl && !e.shiftKey && !e.altKey) toggleFocus();
       else if (ctrl && !e.shiftKey && key === 'i') aiPanel.toggle();
       else if (ctrl && e.shiftKey && e.code === 'Backquote') showPanelTab('shell');
       else if (ctrl && (key === 'j' || e.key === '`' || e.key === ';')) showPanel($('#panel').classList.contains('collapsed'));
@@ -4015,11 +4162,20 @@ function layoutEvents() {
     const b = e.target.closest('button');
     if (!b) return;
     for (const x of $('#devices').children) x.classList.toggle('active', x === b);
-    const w = b.dataset.w;
-    $('#preview-frame').style.width = w ? `${w}px` : '100%';
-    $('#preview-frame').style.flex = 'none';
-    document.querySelector('.preview-stage').classList.toggle('framed', !!w);
+    previewDevice.id = b.dataset.dev;
+    previewDevice.landscape = false;
+    layoutPreview();
   };
+  $('#btn-preview-rotate').onclick = () => {
+    previewDevice.landscape = !previewDevice.landscape;
+    layoutPreview();
+  };
+  $('#btn-preview-shot').onclick = previewScreenshot;
+  $('#btn-preview-phone').onclick = (e) => {
+    e.stopPropagation();
+    togglePhonePopover();
+  };
+  new ResizeObserver(() => layoutPreview()).observe(document.querySelector('.preview-stage'));
   $('#essentials').onclick = (e) => {
     const cmd = e.target.closest('button')?.dataset.cmd;
     if (cmd === 'new-file') newFile();
@@ -4113,6 +4269,7 @@ async function main() {
       home: openStart,
       format: () => editor.getAction('editor.action.formatDocument')?.run(),
       sidebar: toggleCompact,
+      focus: toggleFocus,
       panel: () => showPanel($('#panel').classList.contains('collapsed')),
       theme: toggleTheme,
       projectPage: showProjectPage,
@@ -4144,6 +4301,7 @@ async function main() {
     runCommand: (id) => userKeysCommands[id]?.(),
     isOverridden: (full) => !!keymap?.overridden(`plugin:${full}`),
     getWorkspace: () => state.workspace,
+    addTheme: addPluginTheme,
   });
   updatesUI = createUpdatesUI({ toast, getSetting: setting, saveSettings });
   pluginsUI = createPluginsUI({
@@ -4181,6 +4339,7 @@ async function main() {
         ai: () => aiPanel.toggle(),
         zoomIn: () => setFontSize(1),
         zoomOut: () => setFontSize(-1),
+        focus: toggleFocus,
       };
       return (extra[b.id] || userKeysCommands[b.id])?.();
     },
@@ -4254,6 +4413,14 @@ async function main() {
   flux.onRunData(onRunData);
   flux.onRunExit(onRunExit);
   flux.onLiveLog(onLiveLog);
+  // Alt + klik v náhľade / „Show in Flux“ pri chybe → súbor na správnom riadku.
+  flux.onLiveOpen(async ({ file, line }) => {
+    const tab = await openFile(file, { line });
+    if (tab) {
+      editor.revealLineInCenter(line);
+      editor.setSelection(new monaco.Selection(line, 1, line, editor.getModel().getLineMaxColumn(line)));
+    }
+  });
   let gitTimer = 0;
   flux.onFsChanged(async () => {
     await refreshTree();

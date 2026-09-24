@@ -207,6 +207,20 @@ export const TEMPLATES = [
     name: 'main.lua',
     files: [{ name: '{{name}}', content: 'print("Hello from Lua!")\n$0\n' }],
   },
+  {
+    id: 'ts-main',
+    label: 'TypeScript program',
+    detail: 'main.ts (runs with Node.js)',
+    name: 'main.ts',
+    files: [{ name: '{{name}}', content: 'function greet(name: string): string {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet("TypeScript"));\n$0\n' }],
+  },
+  {
+    id: 'pl-main',
+    label: 'Perl script',
+    detail: 'main.pl',
+    name: 'main.pl',
+    files: [{ name: '{{name}}', content: 'use strict;\nuse warnings;\n\nprint "Hello from Perl!\\n";\n$0\n' }],
+  },
 ];
 
 // Python snippets – type the shortcut and press Tab / Enter.

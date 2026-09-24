@@ -167,8 +167,8 @@
       "name": "Snippet Pack",
       "publisher": "Flux",
       "verified": true,
-      "version": "1.0.0",
-      "description": "Ready-made code for Rust, Go, Java, C++, C# and JavaScript – type a short word and press Tab.",
+      "version": "1.1.0",
+      "description": "Ready-made code for Rust, Go, Java, C++, C#, JavaScript, TypeScript and Perl – type a short word and press Tab.",
       "icon": "icon.svg",
       "screenshots": [
         "screenshot.png"
@@ -178,9 +178,47 @@
         "rust",
         "java",
         "cpp",
-        "go"
+        "go",
+        "typescript",
+        "perl"
       ],
       "issue": 10
+    },
+    {
+      "id": "flux.theme-pack",
+      "name": "Theme Pack",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "8 popular code themes: Gruvbox, Solarized Dark & Light, Rosé Pine & Dawn, Ayu Mirage, Night Owl and Everforest.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "themes",
+        "colors",
+        "appearance"
+      ],
+      "issue": 11
+    },
+    {
+      "id": "flux.glass-ui",
+      "name": "Glass UI",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "See-through glass panels, a soft glow in your accent color and deeper shadows – three strengths to pick from.",
+      "icon": "icon.svg",
+      "screenshots": [
+        "screenshot.png"
+      ],
+      "tags": [
+        "appearance",
+        "ui",
+        "glass"
+      ],
+      "issue": 12
     }
   ]
 }

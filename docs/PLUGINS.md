@@ -74,6 +74,8 @@ Everything a plugin adds through `flux` is removed automatically when the plugin
 | `flux.statusBar.add({ text, title, onClick })` | Adds a button to the status bar. Returns `{ set(text), setTitle(text), show(bool), remove(), element }`. |
 | `flux.snippets.add(language, prefix, body, description?)` | Adds a snippet, e.g. `('html', 'card', '<div class="card">$0</div>')`. |
 | `flux.ui.addStyle(css)` | Adds CSS to Flux. Returns `{ remove() }`. |
+| `flux.ui.setVar(name, value)` | Sets a CSS variable of the window, e.g. `setVar('--radius', '20px')`. Undone when the plugin is turned off. |
+| `flux.themes.add(key, { name, type, colors, basedOn?, italicComments? })` | Adds a code color theme to the theme list. `type` is `'dark'` or `'light'`; `colors` uses the keys `fg, comment, keyword, storage, string, number, type, function, variable, parameter, property, constant, tag, attr, delimiter, regexp` (hex, with or without `#`). Missing keys come from `basedOn` or the default theme. See the Theme Pack plugin. |
 | `flux.ui.toggleClass(name, on)` | Toggles a class on `<body>`. |
 | `flux.decorations(list)` | Monaco decorations in the editor. Returns a collection with `.set(list)` and `.clear()`. |
 | `flux.onSave(cb)`, `flux.onOpen(cb)` | Called with the file (`{ path, name, language, text }`). |
