@@ -2,6 +2,19 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.2 – 2026-09-24
+
+### New home screen
+- Two columns: your projects on the left with a search box, *Start something new*, recent files and a daily tip on the right.
+- Each project shows its languages, how many files it has and when it was last changed (e.g. *13 h ago*); paths are shorter.
+
+### Settings
+- A bigger window, quick jumps inside the long *Appearance* page and smaller theme cards.
+- More space between headings and texts; the version is shown in the corner.
+
+### Installer
+- The *Start Flux now* box on the last page uses the normal Windows check box with readable text.
+
 ## 0.3.1 – 2026-09-24
 
 ### Edit any file, no project needed

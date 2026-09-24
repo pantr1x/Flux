@@ -523,6 +523,7 @@ function registerIpc() {
     hasWallpaper: !!wallpaperPath(),
     settings,
     version: app.getVersion(),
+    home: os.homedir(),
     lastFolder: settings.lastFolder && fs.existsSync(settings.lastFolder) ? settings.lastFolder : null,
   }));
   ipcMain.handle('app:set-settings', (_e, patch) => {

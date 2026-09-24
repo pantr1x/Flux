@@ -3636,14 +3636,6 @@ body.theme-light .ob-aurora i:nth-child(2) {
   justify-self: end;
 }
 
-.hm-quick {
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)) !important;
-  gap: 8px !important;
-}
-
-.hm-quick .st-card {
-  padding: 12px !important;
-}
 
 /* ======================================================================
    Stránka projektu: popis, štatistiky v riadku, súbory, úlohy
@@ -5619,4 +5611,395 @@ body.md-open .md-toggle {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: var(--accent);
   flex: none;
+}
+
+/* ---------- Domov (v2): dva stĺpce ---------- */
+.st-inner.hm {
+  width: min(1120px, 92vw);
+  padding-top: 5vh;
+}
+.hm-top-btn {
+  margin-right: 4px;
+}
+.hm-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.hm-date {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.hm-hero h1 {
+  margin: 0 0 4px;
+}
+.hm-hero .st-sub {
+  margin: 0;
+}
+.hm .hm-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 30px;
+}
+.hm .hm-act {
+  padding: 12px 14px;
+  min-width: 0;
+}
+.hm .hm-act span:last-child {
+  min-width: 0;
+}
+.hm .hm-act b,
+.hm .hm-act small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hm-act-ic {
+  display: grid !important;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--hover);
+}
+.hm-act.primary .hm-act-ic {
+  background: color-mix(in srgb, var(--base) 12%, transparent);
+}
+.hm-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.hm-main,
+.hm-side {
+  padding: 18px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card-solid) 38%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.hm-h-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.hm-h-row .hm-h {
+  margin: 0;
+}
+.hm-side .hm-h {
+  justify-content: space-between;
+}
+.hm-side .hm-h:not(:first-child) {
+  margin-top: 20px;
+}
+.hm-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--hover);
+  color: var(--text-3);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.hm-search input {
+  width: 170px;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.hm-search:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.hm-sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.hm .hm-cards {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.hm .hm-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+}
+.hm .hm-card .hm-text {
+  gap: 1px;
+}
+.hm .hm-card .hm-stat {
+  position: static;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.hm .hm-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.hm .hm-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  text-align: left;
+  background: none;
+  box-shadow: none;
+}
+.hm .hm-line:hover,
+.hm .hm-q:hover {
+  background: var(--hover);
+}
+.hm .hm-line.current {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.hm .hm-line .hm-text {
+  flex: 1;
+  min-width: 0;
+}
+.hm .hm-line .hm-stat {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.hm .hm-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hm .hm-text b,
+.hm .hm-text small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hm .hm-text small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.hm-ic.sm {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+.hm-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-q {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 11px;
+  text-align: left;
+  transition: background 0.15s;
+}
+.hm-tip {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.hm-tip > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-tip small {
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.hm-tip-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.hm-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 34px 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+.hm-empty b {
+  color: var(--text);
+}
+.hm-none {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-3);
+}
+@media (max-width: 900px) {
+  .hm-cols {
+    grid-template-columns: 1fr;
+  }
+  .hm .hm-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.hm-ic { flex: none; }
+
+/* ---------- Nastavenia: väčšie okno, skoky, kompaktné témy, rozostupy ---------- */
+.s-card {
+  width: min(1000px, 94vw);
+  height: min(740px, 90vh);
+}
+.s-body h3 + .s-lead {
+  margin-top: -2px;
+}
+.s-lead {
+  line-height: 1.5;
+}
+.s-jump {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px -4px 6px;
+  padding: 8px 4px 10px;
+  background: linear-gradient(var(--card-solid) 80%, transparent);
+}
+.s-jump button {
+  padding: 5px 11px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.s-jump button:hover {
+  color: var(--text);
+  background: var(--active);
+}
+.s-body h3 {
+  scroll-margin-top: 52px;
+}
+.theme-grid {
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 6px;
+}
+.theme-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 1px;
+  padding: 9px 10px;
+}
+.theme-card .swatch {
+  grid-row: 1 / 3;
+}
+.theme-card > span:nth-child(2) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 18px;
+}
+.theme-card small {
+  font-weight: 500;
+  font-size: 11px;
+}
+.theme-new {
+  display: grid;
+}
+.theme-new > svg {
+  grid-row: 1 / 3;
+}
+.s-ver {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+/* domov: rýchly štart kompaktne v dvoch stĺpcoch */
+.hm .hm-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.hm .hm-q {
+  padding: 7px 8px;
+  gap: 9px;
+}
+.hm .hm-q .hm-ic.sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.hm .hm-q .hm-text b {
+  font-size: 13px;
+}
+.hm .hm-q .hm-text small {
+  font-size: 11px;
+}
+/* nastavenia: širšie karty tém, skoky v jednom riadku */
+.theme-grid {
+  grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+}
+.s-jump {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.s-jump::-webkit-scrollbar {
+  display: none;
+}
+.s-jump button {
+  flex: none;
+}
+/* domov v2: zoznamy bez starého rámika */
+.hm .hm-lines {
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.hm .hm-text b {
+  font-size: 13.5px;
+}
+.hm .hm-card .hm-text b {
+  font-size: 14px;
 }

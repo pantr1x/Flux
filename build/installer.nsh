@@ -39,8 +39,34 @@
   !ifndef HIDE_RUN_AFTER_FINISH
     ; až po MUI_PAGE_FINISH existuje premenná s políčkom
     Function FluxFinishShow
-      System::Call "UxTheme::SetWindowTheme(p $mui.FinishPage.Run, w ' ', w ' ')"
+      ; Políčko ostane moderné (kreslí ho Windows), text vedľa neho je samostatný biely popis.
+      Push $0
+      Push $1
+      Push $2
+      Push $3
+      Push $4
+      Push $5
+      System::Call "*(i 0, i 0, i 0, i 0) p .r1"
+      System::Call "user32::GetWindowRect(p $mui.FinishPage.Run, p r1)"
+      System::Call "user32::MapWindowPoints(p 0, p $mui.FinishPage, p r1, i 2)"
+      System::Call "*$1(i .r2, i .r3, i .r4, i .r5)"
+      System::Free $1
+      IntOp $5 $5 - $3
       SetCtlColors $mui.FinishPage.Run "FFFFFF" "101016"
+      SendMessage $mui.FinishPage.Run 0x000C 0 "STR:"
+      System::Call "user32::SetWindowPos(p $mui.FinishPage.Run, p 0, i r2, i r3, i 18, i r5, i 0x14)"
+      IntOp $0 $2 + 24
+      IntOp $4 $4 - $0
+      System::Call "user32::CreateWindowEx(i 0, t 'STATIC', t 'Start Flux now', i 0x50000200, i r0, i r3, i r4, i r5, p $mui.FinishPage, p 0, p 0, p 0) p .r1"
+      SendMessage $mui.FinishPage.Run 0x0031 0 0 $2
+      SendMessage $1 0x0030 $2 1
+      SetCtlColors $1 "FFFFFF" "101016"
+      Pop $5
+      Pop $4
+      Pop $3
+      Pop $2
+      Pop $1
+      Pop $0
     FunctionEnd
   !endif
 !macroend

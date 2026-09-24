@@ -2349,10 +2349,10 @@ function openSettings() {
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
       <nav class="s-nav">
         <div class="s-nav-title">${t('Settings')}</div>
-        <label class="s-find">${icon('command', 13)}<input id="s-find" placeholder="${t('Search settings…')}" spellcheck="false" autocomplete="off"></label>
+        <label class="s-find">${icon('search', 14)}<input id="s-find" placeholder="${t('Search settings…')}" spellcheck="false" autocomplete="off"></label>
         ${tabs.map(([id, ic, label]) => `<button class="s-tab${id === tab ? ' on' : ''}" data-tab="${id}">${icon(ic, 16)}<span>${label}</span></button>`).join('')}
         <div class="grow"></div>
-        <div class="s-ver">flux</div>
+        <div class="s-ver">Flux ${escapeHtml(state.version || '')}</div>
       </nav>
       <div class="s-main">
         <header class="s-head"><h2 id="s-title"></h2><button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
@@ -2605,13 +2605,26 @@ function openSettings() {
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
+  // Dlhé karty (Vzhľad): rýchle skoky na časti
+  for (const pane of panel.querySelectorAll('[data-pane="appearance"]')) {
+    const heads = [...pane.querySelectorAll(':scope > h3')];
+    if (heads.length < 4) continue;
+    const nav = document.createElement('nav');
+    nav.className = 's-jump';
+    nav.innerHTML = heads.map((h, i) => `<button type="button" data-jump="${i}">${escapeHtml(h.childNodes[0]?.textContent?.trim() || h.textContent.trim())}</button>`).join('');
+    pane.prepend(nav);
+    nav.onclick = (e) => {
+      const b = e.target.closest('[data-jump]');
+      if (b) heads[Number(b.dataset.jump)].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  }
   showTab(tab);
   // Hľadanie naprieč všetkými záložkami: ukáže len riadky, ktoré sedia.
   const ROWS = '.s-row, .theme-card, .tc-row, .ob-row';
   $('#s-find').oninput = (e) => {
     const q = e.target.value.toLowerCase().trim();
     const sections = panel.querySelectorAll('[data-pane]');
-    for (const el of panel.querySelectorAll(ROWS + ', .s-group, .s-body h3, .s-lead, .s-keycat')) el.style.display = '';
+    for (const el of panel.querySelectorAll(ROWS + ', .s-group, .s-body h3, .s-lead, .s-keycat, .s-jump')) el.style.display = '';
     if (!q) return showTab(state.settingsTab || 'appearance');
     $('#s-title').textContent = t('Search results');
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('on'));
@@ -2628,7 +2641,7 @@ function openSettings() {
         const vis = [...g.querySelectorAll(ROWS)].some((r) => r.style.display !== 'none');
         g.style.display = vis || !g.querySelector(ROWS) ? '' : 'none';
       }
-      for (const h of sec.querySelectorAll('h3, .s-lead')) h.style.display = 'none';
+      for (const h of sec.querySelectorAll('h3, .s-lead, .s-jump')) h.style.display = 'none';
       sec.hidden = !hits;
       any ||= !!hits;
     }
@@ -3002,6 +3015,25 @@ function setupDrop() {
 }
 
 // Domov Fluxu (klik na logo): pripnuté a nedávne projekty, nový/otvoriť a rýchly štart zo šablóny.
+// Kratšia cesta: C:\\Users\\meno\\Documents\\x → ~\\Documents\\x
+function shortPath(p) {
+  const home = state.home || '';
+  let out = home && keyOf(p).startsWith(keyOf(home)) ? `~${p.slice(home.length)}` : p;
+  const parts = out.split(/[\\/]/);
+  if (parts.length > 4) out = [parts[0], '…', ...parts.slice(-2)].join(state.platform === 'win32' ? '\\' : '/');
+  return out;
+}
+// „pred 2 h“, „včera“…
+function timeAgo(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return t('just now');
+  if (s < 3600) return t('{n} min ago', { n: Math.round(s / 60) });
+  if (s < 86400) return t('{n} h ago', { n: Math.round(s / 3600) });
+  if (s < 2 * 86400) return t('yesterday');
+  if (s < 30 * 86400) return t('{n} days ago', { n: Math.round(s / 86400) });
+  return new Date(ms).toLocaleDateString();
+}
+
 async function openStart() {
   const el = $('#start');
   const prefs = setting('codeLangs') || [];
@@ -3024,39 +3056,75 @@ async function openStart() {
   const greetBase = h < 5 ? t('Good night') : h < 12 ? t('Good morning') : h < 18 ? t('Good afternoon') : t('Good evening');
   const greet = name ? `${greetBase}, ${escapeHtml(name)}` : greetBase;
   const desc = (p) => projectMeta(p.dir).description;
+  const cur = (p) => (keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : '');
   const card = (p) =>
-    `<button class="hm-card${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}"><span class="hm-ic">${kindIcon(p.kind, 26, p.github)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
+    `<button class="hm-card${cur(p)}" data-dir="${escapeAttr(p.dir)}" data-find="${escapeAttr(`${p.name} ${desc(p) || ''}`.toLowerCase())}"><span class="hm-ic">${kindIcon(p.kind, 24, p.github)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || shortPath(p.dir))}</small><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></span></button>`;
   const line = (p) =>
-    `<button class="hm-line${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}">${kindIcon(p.kind, 18, p.github)}<b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
+    `<button class="hm-line${cur(p)}" data-dir="${escapeAttr(p.dir)}" data-find="${escapeAttr(`${p.name} ${desc(p) || ''}`.toLowerCase())}"><span class="hm-ic sm">${kindIcon(p.kind, 18, p.github)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || shortPath(p.dir))}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
+  const fileLine = (f) =>
+    `<button class="hm-line" data-file="${escapeAttr(f)}"><span class="hm-ic sm">${fileIcon(basename(f)).replace(/width="16" height="16"/, 'width="18" height="18"')}</span><span class="hm-text"><b>${escapeHtml(basename(f))}</b><small>${escapeHtml(shortPath(f.slice(0, f.length - basename(f).length - 1)))}</small></span></button>`;
+  const date = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const tips = [
+    t('Press Ctrl+Shift+A to search everything – commands, settings, files and projects.'),
+    t('Drop a file or a folder onto Flux to open it.'),
+    t('Ctrl+I opens Claude, your coding assistant.'),
+    t('Plugins like Error Lens and Bookmarks are in Settings → Plugins.'),
+    t('Every shortcut can be changed in Settings → Shortcuts.'),
+    t('Open a .md file and press Ctrl+Shift+V to see the preview.'),
+  ];
+  const tip = tips[new Date().getDate() % tips.length];
+  const noProjects = !pinned.length && !recent.length;
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
-    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span></div>
+    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span><div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
     <div class="st-scroll"><div class="st-inner hm">
-      <h1>${greet}</h1>
-      <p class="st-sub">${t('What do you want to work on?')}</p>
+      <header class="hm-hero">
+        <div><small class="hm-date">${escapeHtml(date)}</small><h1>${greet}</h1><p class="st-sub">${t('What do you want to work on?')}</p></div>
+      </header>
       <div class="hm-actions">
-        <button class="hm-act primary" data-act="newproject">${icon('plus', 18)}<span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
-        <button class="hm-act" data-act="open">${icon('folderOpen', 18)}<span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
-        <button class="hm-act" data-act="openfile">${icon('file', 18)}<span><b>${t('Open file')}</b><small>${t('.md, .txt, any file')}</small></span></button>
-        <button class="hm-act" data-act="github">${icon('git', 18)}<span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>
-        ${state.workspace ? `<button class="hm-act" data-act="newfile">${icon('filePlus', 18)}<span><b>${t('New file')}</b><small>${escapeHtml(basename(state.workspace))}</small></span></button>` : ''}
+        <button class="hm-act primary" data-act="newproject"><span class="hm-act-ic">${icon('plus', 17)}</span><span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
+        <button class="hm-act" data-act="open"><span class="hm-act-ic">${icon('folderOpen', 17)}</span><span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
+        <button class="hm-act" data-act="openfile"><span class="hm-act-ic">${icon('file', 17)}</span><span><b>${t('Open file')}</b><small>${t('.md, .txt, any file')}</small></span></button>
+        <button class="hm-act" data-act="github"><span class="hm-act-ic">${icon('git', 17)}</span><span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>
       </div>
-      ${pinned.length ? `<h3 class="hm-h">${icon('pin', 12)}${t('Pinned')}</h3><div class="hm-cards">${pinned.map(card).join('')}</div>` : ''}
-      ${recent.length ? `<h3 class="hm-h">${t('Recent')}</h3><div class="hm-lines">${recent.map(line).join('')}</div>` : ''}
-      ${recentFiles.length ? `<h3 class="hm-h">${t('Recent files')}</h3><div class="hm-lines">${recentFiles.map((f) => `<button class="hm-line" data-file="${escapeAttr(f)}">${fileIcon(basename(f)).replace(/width="16" height="16"/, 'width="18" height="18"')}<b>${escapeHtml(basename(f))}</b><small>${escapeHtml(f)}</small></button>`).join('')}</div>` : ''}
-      <h3 class="hm-h">${t('Quick start')} <small>${state.workspace ? t('new file in {dir}', { dir: escapeHtml(basename(state.workspace)) }) : t('creates a new project')}</small></h3>
-      <div class="st-grid hm-quick">${choices
-        .map(
-          (c) =>
-            `<button class="st-card" data-tpl="${c.id}"><span class="st-ic">${fileIcon(c.icon).replace(/width="16" height="16"/, 'width="24" height="24"')}</span><b>${t(c.title)}</b><small>${t(c.sub)}</small></button>`,
-        )
-        .join('')}</div>
+      <div class="hm-cols">
+        <section class="hm-main">
+          <div class="hm-h-row"><h3 class="hm-h">${t('Projects')}</h3>${noProjects ? '' : `<label class="hm-search">${icon('search', 14)}<input id="hm-q" placeholder="${t('Find a project…')}" spellcheck="false" autocomplete="off"></label>`}</div>
+          ${
+            noProjects
+              ? `<div class="hm-empty">${icon('folder', 22)}<b>${t('No projects yet')}</b><small>${t('Start a new project, open a folder or get one from GitHub.')}</small></div>`
+              : `${pinned.length ? `<div class="hm-sub">${icon('pin', 11)}${t('Pinned')}</div><div class="hm-cards">${pinned.map(card).join('')}</div>` : ''}
+                 ${recent.length ? `<div class="hm-sub">${t('Recent')}</div><div class="hm-lines">${recent.map(line).join('')}</div>` : ''}
+                 <div class="hm-none" hidden>${t('Nothing found')}</div>`
+          }
+        </section>
+        <aside class="hm-side">
+          <h3 class="hm-h">${t('Start something new')}<small>${state.workspace ? t('new file in {dir}', { dir: escapeHtml(basename(state.workspace)) }) : t('creates a new project')}</small></h3>
+          <div class="hm-quick">${choices
+            .map((c) => `<button class="hm-q" data-tpl="${c.id}"><span class="hm-ic sm">${fileIcon(c.icon).replace(/width="16" height="16"/, 'width="18" height="18"')}</span><span class="hm-text"><b>${t(c.title)}</b><small>${t(c.sub)}</small></span></button>`)
+            .join('')}</div>
+          ${recentFiles.length ? `<h3 class="hm-h">${t('Recent files')}</h3><div class="hm-lines">${recentFiles.map(fileLine).join('')}</div>` : ''}
+          <div class="hm-tip"><span class="hm-tip-ic">${icon('sparkle', 14)}</span><span><b>${t('Tip')}</b><small>${escapeHtml(tip)}</small></span></div>
+        </aside>
+      </div>
       ${state.workspace ? `<button class="st-back" data-act="back">${t('Back to editor')} <kbd>Esc</kbd></button>` : ''}
     </div></div>`;
+  const q = el.querySelector('#hm-q');
+  if (q)
+    q.oninput = () => {
+      const v = q.value.trim().toLowerCase();
+      let any = false;
+      for (const x of el.querySelectorAll('.hm-main [data-find]')) {
+        const show = !v || x.dataset.find.includes(v);
+        x.style.display = show ? '' : 'none';
+        any ||= show;
+      }
+      el.querySelector('.hm-none').hidden = any;
+    };
   for (const p of [...pinned, ...recent]) {
     flux.projectStats(p.dir).then((st) => {
       for (const x of el.querySelectorAll('.hm-stat')) {
-        if (x.dataset.stats === p.dir) x.textContent = [langLine(p), `${st.files} ${st.files === 1 ? t('file') : t('files')}`, st.time >= 60 ? formatTime(st.time) : ''].filter(Boolean).join(' · ');
+        if (x.dataset.stats === p.dir) x.textContent = [langLine(p), `${st.files} ${st.files === 1 ? t('file') : t('files')}`, st.lastModified ? timeAgo(st.lastModified) : ''].filter(Boolean).join(' · ');
       }
     });
   }
@@ -3066,6 +3134,7 @@ async function openStart() {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.act === 'back') return closeStart();
+    if (b.dataset.act === 'settings') return openSettings();
     if (b.dataset.dir) {
       closeStart();
       if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
@@ -3562,6 +3631,8 @@ function layoutEvents() {
 async function main() {
   const init = await flux.init();
   state.platform = init.platform;
+  state.home = init.home || '';
+  state.version = init.version || '';
   state.mica = !!init.mica;
   state.material = init.material;
   state.hasWallpaper = !!init.hasWallpaper;
