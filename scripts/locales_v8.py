@@ -51,6 +51,20 @@ _V8 = {
     'last change': ('posledná zmena', 'letzte Änderung', 'último cambio', 'dernière modification', 'ultima modifica', 'ostatnia zmiana'),
     'lines of code': ('riadkov kódu', 'Codezeilen', 'líneas de código', 'lignes de code', 'righe di codice', 'linii kodu'),
     'projects': ('projektov', 'Projekte', 'proyectos', 'projets', 'progetti', 'projektów'),
+    '.txt, .md, .py… saved anywhere': ('.txt, .md, .py… uložený kdekoľvek', '.txt, .md, .py… überall speichern', '.txt, .md, .py… donde quieras', '.txt, .md, .py… où vous voulez', '.txt, .md, .py… dove vuoi', '.txt, .md, .py… gdziekolwiek'),
+    'Brightness of dark areas': ('Svetlosť tmavých plôch', 'Helligkeit dunkler Flächen', 'Brillo de las zonas oscuras', 'Luminosité des zones sombres', 'Luminosità delle aree scure', 'Jasność ciemnych obszarów'),
+    'Forward': ('Dopredu', 'Vorwärts', 'Adelante', 'Suivant', 'Avanti', 'Dalej'),
+    'Back': ('Späť', 'Zurück', 'Atrás', 'Retour', 'Indietro', 'Wstecz'),
+    'The file is not part of a project – you choose where to save it.': ('Súbor nebude v projekte – sám vyberieš, kam ho uložiť.', 'Die Datei gehört zu keinem Projekt – du wählst, wo sie gespeichert wird.', 'El archivo no forma parte de un proyecto: tú eliges dónde guardarlo.', 'Le fichier ne fait partie d’aucun projet – vous choisissez où l’enregistrer.', 'Il file non fa parte di un progetto: scegli tu dove salvarlo.', 'Plik nie należy do projektu – sam wybierasz, gdzie go zapisać.'),
+    'Turn it up if your wallpaper is very dark.': ('Zvýš, ak máš veľmi tmavú tapetu.', 'Erhöhen, wenn dein Hintergrund sehr dunkel ist.', 'Súbelo si tu fondo de pantalla es muy oscuro.', 'Augmentez-la si votre fond d’écran est très sombre.', 'Aumentala se il tuo sfondo è molto scuro.', 'Zwiększ, jeśli masz bardzo ciemną tapetę.'),
+    'What kind of file?': ('Aký súbor?', 'Welche Art von Datei?', '¿Qué tipo de archivo?', 'Quel type de fichier ?', 'Che tipo di file?', 'Jaki plik?'),
+    'notes, plain text': ('poznámky, obyčajný text', 'Notizen, reiner Text', 'notas, texto plano', 'notes, texte brut', 'note, testo semplice', 'notatki, zwykły tekst'),
+    'notes with headings and lists': ('poznámky s nadpismi a zoznamami', 'Notizen mit Überschriften und Listen', 'notas con títulos y listas', 'notes avec titres et listes', 'note con titoli ed elenchi', 'notatki z nagłówkami i listami'),
+    'script': ('skript', 'Skript', 'script', 'script', 'script', 'skrypt'),
+    'web page': ('webová stránka', 'Webseite', 'página web', 'page web', 'pagina web', 'strona internetowa'),
+    'styles': ('štýly', 'Stile', 'estilos', 'styles', 'stili', 'style'),
+    'data': ('dáta', 'Daten', 'datos', 'données', 'dati', 'dane'),
+    'table': ('tabuľka', 'Tabelle', 'tabla', 'tableau', 'tabella', 'tabela'),
 }
 _V8 = {k: v for k, v in _V8.items() if v[0]}
 V8 = {code: {k: v[i] for k, v in _V8.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl'])}

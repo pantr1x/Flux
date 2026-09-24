@@ -99,6 +99,7 @@ const DEFAULTS = {
   cornerRadius: 14,
   wallBlur: 40,
   wallOpacity: 55,
+  darkLift: 0,
   userName: '',
   clearOnRun: true,
   terminalFontSize: 13,
@@ -333,9 +334,11 @@ function applyCustomization() {
   else root.style.removeProperty('--ui-font');
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
+  root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0022));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
 
+let liftTimer = null;
 async function saveSettings(patch) {
   state.settings = await flux.setSettings(patch);
 }
@@ -799,6 +802,7 @@ function activate(tab) {
   renderStatus();
   followPreview(tab);
   document.title = `${basename(tab.path)} — Flux`;
+  navNote();
   pluginHost?.emitOpen({ path: tab.path, name: basename(tab.path), language: tab.model.getLanguageId() });
 }
 
@@ -813,6 +817,7 @@ function showProjectPage() {
   renderStatus();
   renderWelcome();
   document.title = 'Flux';
+  navNote();
 }
 
 async function closeTab(tab, { force = false } = {}) {
@@ -2358,7 +2363,7 @@ function openSettings() {
         <div class="s-ver">Flux ${escapeHtml(state.version || '')}</div>
       </nav>
       <div class="s-main">
-        <header class="s-head"><h2 id="s-title"></h2><button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
+        <header class="s-head">${navButtons()}<h2 id="s-title"></h2><button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
         <div class="s-body">
           <section data-pane="appearance">
             <h3>${t('Code theme')}</h3>
@@ -2408,6 +2413,7 @@ function openSettings() {
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
+              <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
               <div class="s-row"><span><b>${t('Background image')}</b><small>${t('your own picture instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${t('Choose…')}</button><button class="s-btn" data-action="bg-reset">${t('Reset')}</button></span></div>
             </div>
             <h3>${t('Home screen')}</h3>
@@ -2602,6 +2608,7 @@ function openSettings() {
   renderGitHubSettings();
   const showTab = (id) => {
     state.settingsTab = id;
+    navNote();
     $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
     if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
     if (id === 'about') updatesUI.render($('#s-about'));
@@ -2769,7 +2776,7 @@ function openSettings() {
       return rerenderSettings();
     }
     if (e.target.closest('[data-action="look-reset"]')) {
-      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity'];
+      const keys = ['caretStyle', 'caretBlink', 'caretWidth', 'caretSmooth', 'caretColor', 'pointer', 'pointerColor', 'pointerEverywhere', 'pointerHotspot', 'fontCustom', 'uiFont', 'uiZoom', 'letterSpacing', 'lineNumbers', 'whitespace', 'bracketColors', 'cornerRadius', 'wallBlur', 'wallOpacity', 'darkLift'];
       await saveSettings(Object.fromEntries(keys.map((k) => [k, DEFAULTS[k]])));
       applyEditorSettings();
       toast(t('Everything looks like new again.'), 'ok');
@@ -2964,6 +2971,7 @@ function rerenderSettings() {
 
 function closeSettings() {
   $('#settings').hidden = true;
+  navNote();
   if (state.active) editor.focus();
 }
 
@@ -2976,6 +2984,96 @@ async function setAccent(value) {
   applyTheme();
 }
 
+// ---------- späť / dopredu (šípky, bočné tlačidlá myši, Alt+←/→) ----------
+// Miesto = domov, stránka projektu, súbor alebo karta nastavení.
+const nav = { back: [], fwd: [], cur: null, busy: false, timer: null };
+function currentPlace() {
+  if (!$('#settings').hidden) return { type: 'settings', id: state.settingsTab || 'appearance' };
+  if (!$('#start').hidden) return { type: 'home', id: '' };
+  if (state.active) return { type: 'file', id: state.active.path, ws: state.workspace };
+  if (state.workspace) return { type: 'project', id: state.workspace };
+  return { type: 'home', id: '' };
+}
+const samePlace = (a, b) => !!a && !!b && a.type === b.type && keyOf(a.id || '') === keyOf(b.id || '');
+// Volá sa po každej zmene obrazovky; krátke prechodné stavy sa zlúčia.
+function navNote() {
+  clearTimeout(nav.timer);
+  nav.timer = setTimeout(() => {
+    if (nav.busy) return;
+    const p = currentPlace();
+    if (samePlace(p, nav.cur)) return;
+    if (nav.cur) nav.back.push(nav.cur);
+    if (nav.back.length > 60) nav.back.shift();
+    nav.fwd = [];
+    nav.cur = p;
+    renderNavButtons();
+  }, 60);
+}
+function renderNavButtons() {
+  document.querySelectorAll('.nav-back').forEach((b) => (b.disabled = !nav.back.length));
+  document.querySelectorAll('.nav-fwd').forEach((b) => (b.disabled = !nav.fwd.length));
+}
+const navButtons = () =>
+  `<span class="nav-btns no-drag"><button class="icon-btn nav-back" title="${t('Back')} (Alt+←)"${nav.back.length ? '' : ' disabled'}>${icon('arrowLeft', 15)}</button><button class="icon-btn nav-fwd" title="${t('Forward')} (Alt+→)"${nav.fwd.length ? '' : ' disabled'}>${icon('arrowRight', 15)}</button></span>`;
+async function goPlace(p) {
+  nav.busy = true;
+  try {
+    if (p.type === 'settings') {
+      if ($('#settings').hidden) {
+        state.settingsTab = p.id;
+        openSettings();
+      } else $(`#settings [data-tab="${p.id}"]`)?.click();
+      return;
+    }
+    if (!$('#settings').hidden) closeSettings();
+    if (p.type === 'home') return await openStart();
+    closeStart();
+    const ws = p.type === 'project' ? p.id : p.ws;
+    if (ws && keyOf(ws) !== keyOf(state.workspace || '')) await setWorkspace(ws);
+    if (p.type === 'project') showProjectPage();
+    else await openFile(p.id);
+  } catch (err) {
+    toast(errorText(err), 'error');
+  } finally {
+    clearTimeout(nav.timer);
+    setTimeout(() => {
+      nav.cur = currentPlace();
+      nav.busy = false;
+      renderNavButtons();
+    }, 120);
+  }
+}
+function goBack() {
+  if (nav.busy || !nav.back.length) return;
+  nav.fwd.push(nav.cur);
+  goPlace(nav.back.pop());
+}
+function goForward() {
+  if (nav.busy || !nav.fwd.length) return;
+  nav.back.push(nav.cur);
+  goPlace(nav.fwd.pop());
+}
+function setupNav() {
+  // Bočné tlačidlá myši (4 = späť, 5 = dopredu); Chromium by inak skúsil ísť späť v stránke.
+  const aux = (e) => {
+    if (e.button !== 3 && e.button !== 4) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'mouseup') e.button === 3 ? goBack() : goForward();
+  };
+  window.addEventListener('mousedown', aux, true);
+  window.addEventListener('mouseup', aux, true);
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest?.('.nav-back, .nav-fwd');
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    b.classList.contains('nav-back') ? goBack() : goForward();
+  }, true);
+  $('#topnav').outerHTML = navButtons().replace('class="nav-btns no-drag"', 'class="nav-btns no-drag" id="topnav"');
+  navNote();
+}
+
 // ---------- úvodná obrazovka na celé okno (klik na logo) ----------
 const START_CHOICES = [
   { id: 'py', lang: 'python', title: 'Python', sub: 'script – print, input, maths', icon: 'main.py' },
@@ -2984,7 +3082,7 @@ const START_CHOICES = [
   { id: 'html', lang: 'web', title: 'HTML page', sub: 'one page with a skeleton', icon: 'index.html' },
   { id: 'web', lang: 'web', title: 'Web project', sub: 'HTML + CSS + JavaScript', icon: 'style.css' },
   { id: 'js', lang: 'js', title: 'JavaScript', sub: 'script that runs with Node.js', icon: 'script.js' },
-  { id: 'empty', lang: '', title: 'Empty file', sub: 'your own name and extension', icon: 'file.txt' },
+  { id: 'empty', lang: '', title: 'Empty file', sub: '.txt, .md, .py… saved anywhere', icon: 'file.txt' },
 ];
 
 // ---------- samostatné súbory (aj bez projektu) ----------
@@ -2995,6 +3093,35 @@ async function openStandalone(files) {
 }
 async function openFileDialog() {
   openStandalone(await flux.openFileDialog());
+}
+// Prázdny súbor mimo projektu: typ → kam uložiť → otvorí sa.
+const NEW_FILE_TYPES = () => [
+  ['txt', 'Text', t('notes, plain text')],
+  ['md', 'Markdown', t('notes with headings and lists')],
+  ['py', 'Python', t('script')],
+  ['js', 'JavaScript', t('script')],
+  ['html', 'HTML', t('web page')],
+  ['css', 'CSS', t('styles')],
+  ['json', 'JSON', t('data')],
+  ['csv', 'CSV', t('table')],
+];
+async function newStandaloneFile() {
+  const ext = await new Promise((resolve) =>
+    openPalette({
+      placeholder: t('What kind of file?'),
+      note: t('The file is not part of a project – you choose where to save it.'),
+      items: NEW_FILE_TYPES().map(([e, label, detail]) => ({ label: `${label}  .${e}`, detail, icon: fileIcon(`a.${e}`), ext: e })),
+      onPick: (it) => resolve(it.ext),
+      onCancel: () => resolve(null),
+    }),
+  );
+  if (!ext) return;
+  try {
+    const f = await flux.newFileDialog(ext);
+    if (f) openStandalone([f]);
+  } catch (err) {
+    toast(errorText(err), 'error');
+  }
 }
 // Pretiahnutie súborov alebo priečinka do okna.
 function setupDrop() {
@@ -3066,7 +3193,7 @@ async function openStart() {
     `<button class="hm-line${cur(p)}" data-dir="${escapeAttr(p.dir)}" data-find="${escapeAttr(`${p.name} ${desc(p) || ''}`.toLowerCase())}"><span class="hm-ic sm">${kindIcon(p.kind, 18, p.github)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || shortPath(p.dir))}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
   const fileLine = (f) =>
     `<button class="hm-line" data-file="${escapeAttr(f)}"><span class="hm-ic sm">${fileIcon(basename(f)).replace(/width="16" height="16"/, 'width="18" height="18"')}</span><span class="hm-text"><b>${escapeHtml(basename(f))}</b><small>${escapeHtml(shortPath(f.slice(0, f.length - basename(f).length - 1)))}</small></span></button>`;
-  const date = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const date = new Date().toLocaleDateString(setting('language') || 'en', { weekday: 'long', day: 'numeric', month: 'long' });
   const tips = [
     t('Press Ctrl+Shift+A to search everything – commands, settings, files and projects.'),
     t('Drop a file or a folder onto Flux to open it.'),
@@ -3079,7 +3206,7 @@ async function openStart() {
   const noProjects = !pinned.length && !recent.length;
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
-    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span><div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
+    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span>${navButtons()}<div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
     <div class="st-scroll"><div class="st-inner hm">
       <header class="hm-hero">
         <div><small class="hm-date">${escapeHtml(date)}</small><h1>${greet}</h1><p class="st-sub">${t('What do you want to work on?')}</p></div>
@@ -3153,6 +3280,7 @@ async function openStart() {
   }
   el.hidden = false;
   document.body.classList.add('start-open');
+  navNote();
   el.onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -3188,6 +3316,7 @@ async function openStart() {
       if (state.workspace) openStart();
       return;
     }
+    if (b.dataset.tpl === 'empty') return newStandaloneFile();
     const tpl = TEMPLATES.find((x) => x.id === b.dataset.tpl);
     if (!tpl) return;
     closeStart();
@@ -3202,6 +3331,7 @@ async function openStart() {
 
 function closeStart() {
   $('#start').hidden = true;
+  navNote();
   document.body.classList.remove('start-open');
   if (state.active) editor.focus();
 }
@@ -3221,6 +3351,7 @@ function countUp(el, to, format = fmtNum) {
 
 function renderWelcome() {
   if (state.active) return;
+  navNote();
   updateProblems();
   const w = $('#welcome');
   w.hidden = false;
@@ -3448,6 +3579,11 @@ function keybindings() {
     'keydown',
     (e) => {
       if (window.fluxRecordingKeys) return;
+      if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !palette && $('#onboard').hidden) {
+        e.preventDefault();
+        e.stopPropagation();
+        return e.key === 'ArrowLeft' ? goBack() : goForward();
+      }
       if (palette) {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -3696,6 +3832,12 @@ async function main() {
     icon,
     setCodeTheme,
     setAccent,
+    setDarkLift: (v) => {
+      state.settings = { ...state.settings, darkLift: v };
+      applyCustomization();
+      clearTimeout(liftTimer);
+      liftTimer = setTimeout(() => saveSettings({ darkLift: v }), 300);
+    },
     accents: Object.keys(ACCENTS).slice(0, 8),
     accentHex,
     currentAccent,
@@ -3871,6 +4013,7 @@ async function main() {
   });
   // Súbory otvorené cez „Otvoriť v programe → Flux“ alebo pretiahnuté do okna.
   setupDrop();
+  setupNav();
   flux.onOpenFiles((files) => openStandalone(files));
   flux.startupFiles().then((files) => files.length && setTimeout(() => openStandalone(files), 600));
   flux.onSaveAllAndClose(async () => {

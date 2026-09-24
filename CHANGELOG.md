@@ -2,6 +2,23 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.4 – 2026-09-24
+
+### Back and forward
+- Arrows next to the tabs, on the home screen and in Settings take you back to where you were – a file, the project page, home or a settings page.
+- The back and forward buttons on your mouse work too, and so do Alt+← and Alt+→.
+
+### Open with Flux
+- After installing, Flux shows up in Windows under *Open with* for text and code files (.txt, .md, .py, .html, .js and many more). Your default programs stay the same.
+
+### New file without a project
+- *Empty file* on the home screen asks what kind of file you want (.txt, .md, .py, .js, .html…) and where to save it. It is no longer added to the open project.
+
+### Looks
+- New sliders with a colored track.
+- *Brightness of dark areas* in Settings → Appearance and in the first-start setup – turn it up if your wallpaper is very dark.
+- The date on the home screen is in the app language.
+
 ## 0.3.3 – 2026-09-24
 
 ### Project page

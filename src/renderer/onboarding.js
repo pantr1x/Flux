@@ -55,7 +55,7 @@ const installedHere = new Set();
 const LOOK_THEMES = ['vscode-dark', 'flux', 'tokyo-night', 'catppuccin', 'vscode-light', 'github-light'];
 
 export function createOnboarding(app) {
-  // app: { fileIcon, icon, setCodeTheme, setAccent, accents, accentHex, currentAccent, getSettings, saveSettings, toast }
+  // app: { fileIcon, icon, setCodeTheme, setAccent, setDarkLift, accents, accentHex, currentAccent, getSettings, saveSettings, toast }
   const el = document.getElementById('onboard');
   app.tools.bind(el);
   let step = 0;
@@ -123,7 +123,8 @@ export function createOnboarding(app) {
         ).join('')}</div>
         <div class="ob-accents">${app.accents
           .map((a) => `<button data-accent="${a}" style="--c:${app.accentHex(a)}" class="${app.accentHex(a) === app.currentAccent() ? 'on' : ''}"></button>`)
-          .join('')}</div></div>
+          .join('')}</div>
+        <label class="ob-lift"><span><b>${t('Brightness of dark areas')}</b><small>${t('Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-lift value="${Number(s.darkLift) || 0}"></label></div>
         <div class="ob-preview" aria-hidden="true">
           <div class="obp-bar"><i></i><i></i><i></i><span class="obp-tab">${app.fileIcon('main.py')}main.py</span><span class="obp-run">${app.icon('play', 11)}${t('Run')}</span></div>
           <pre class="obp-code"></pre>
@@ -289,6 +290,10 @@ export function createOnboarding(app) {
     if (b.dataset.tour !== undefined) return finish(true);
     if (b.dataset.finish !== undefined) return finish(false);
   };
+
+  el.addEventListener('input', (e) => {
+    if (e.target.matches?.('[data-lift]')) app.setDarkLift(Number(e.target.value));
+  });
 
   function open() {
     step = 0;

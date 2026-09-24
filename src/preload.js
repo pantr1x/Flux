@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('flux', {
   chooseCursor: () => ipcRenderer.invoke('app:choose-cursor'),
   openFileDialog: () => ipcRenderer.invoke('file:open-dialog'),
   allowFile: (p) => ipcRenderer.invoke('file:allow', p),
+  newFileDialog: (ext) => ipcRenderer.invoke('file:new-dialog', ext),
   recentFiles: () => ipcRenderer.invoke('file:recent'),
   openRecentFile: (p) => ipcRenderer.invoke('file:open-recent', p),
   forgetRecentFile: (p) => ipcRenderer.invoke('file:forget-recent', p),

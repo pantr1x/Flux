@@ -70,3 +70,74 @@
     FunctionEnd
   !endif
 !macroend
+
+; Flux v ponuke „Otvoriť v programe“ pre textové a zdrojové súbory.
+; Predvolený program sa nemení – Flux sa len pridá do zoznamu.
+!macro FluxTypes M
+  !insertmacro ${M} txt
+  !insertmacro ${M} md
+  !insertmacro ${M} markdown
+  !insertmacro ${M} log
+  !insertmacro ${M} csv
+  !insertmacro ${M} json
+  !insertmacro ${M} xml
+  !insertmacro ${M} yml
+  !insertmacro ${M} yaml
+  !insertmacro ${M} toml
+  !insertmacro ${M} ini
+  !insertmacro ${M} cfg
+  !insertmacro ${M} py
+  !insertmacro ${M} pyw
+  !insertmacro ${M} js
+  !insertmacro ${M} mjs
+  !insertmacro ${M} cjs
+  !insertmacro ${M} ts
+  !insertmacro ${M} jsx
+  !insertmacro ${M} tsx
+  !insertmacro ${M} html
+  !insertmacro ${M} htm
+  !insertmacro ${M} css
+  !insertmacro ${M} scss
+  !insertmacro ${M} java
+  !insertmacro ${M} c
+  !insertmacro ${M} h
+  !insertmacro ${M} cpp
+  !insertmacro ${M} hpp
+  !insertmacro ${M} cs
+  !insertmacro ${M} go
+  !insertmacro ${M} rs
+  !insertmacro ${M} rb
+  !insertmacro ${M} php
+  !insertmacro ${M} lua
+  !insertmacro ${M} sh
+  !insertmacro ${M} bat
+  !insertmacro ${M} ps1
+  !insertmacro ${M} sql
+!macroend
+
+!macro FluxAddType EXT
+  WriteRegStr SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "Flux.File" ""
+  WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\SupportedTypes" ".${EXT}" ""
+!macroend
+
+!macro FluxRemoveType EXT
+  DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "Flux.File"
+!macroend
+
+!macro customInstall
+  WriteRegStr SHCTX "Software\Classes\Flux.File" "" "Flux file"
+  WriteRegStr SHCTX "Software\Classes\Flux.File\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr SHCTX "Software\Classes\Flux.File\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+  WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}" "FriendlyAppName" "Flux"
+  WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+  !insertmacro FluxTypes FluxAddType
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
+
+!macro customUnInstall
+  !insertmacro FluxTypes FluxRemoveType
+  DeleteRegKey SHCTX "Software\Classes\Flux.File"
+  DeleteRegKey SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend

@@ -784,6 +784,19 @@ function registerIpc() {
     if (r.canceled) return [];
     return r.filePaths.map(allowFile).filter(Boolean);
   });
+  // Nový samostatný súbor (bez projektu) – kam ho uložiť, vyberie používateľ.
+  ipcMain.handle('file:new-dialog', async (_e, ext) => {
+    const e = String(ext || 'txt').replace(/[^\w]/g, '') || 'txt';
+    const dir = path.join(app.getPath('documents'), 'Flux Files');
+    fs.mkdirSync(dir, { recursive: true });
+    let n = 1;
+    let name = `untitled.${e}`;
+    while (fs.existsSync(path.join(dir, name))) name = `untitled-${++n}.${e}`;
+    const r = await dialog.showSaveDialog(win, { title: t('New file'), defaultPath: path.join(dir, name) });
+    if (r.canceled || !r.filePath) return null;
+    if (!fs.existsSync(r.filePath)) fs.writeFileSync(r.filePath, '');
+    return allowFile(r.filePath);
+  });
   ipcMain.handle('file:allow', (_e, p) => {
     const abs = path.resolve(String(p || ''));
     try {

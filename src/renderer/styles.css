@@ -1054,7 +1054,7 @@ button.status-item:hover {
 #overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 125;
   background: rgba(0, 0, 0, 0.18);
   display: flex;
   justify-content: center;
@@ -6432,4 +6432,129 @@ select.fsel-native {
     align-items: flex-start;
     gap: 16px;
   }
+}
+
+/* ---------- posuvníky: vyplnená dráha v akcentovej farbe, okrúhly jazdec ---------- */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  --fill: 50%;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--accent) 0 var(--fill), var(--line-strong) var(--fill) 100%);
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--card-solid);
+  border: 4px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s var(--ease), border-width 0.12s var(--ease);
+}
+input[type='range']:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+input[type='range']:active::-webkit-slider-thumb {
+  border-width: 5px;
+  transform: scale(1.18);
+}
+input[type='range']:focus-visible {
+  outline: none;
+}
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.s-row input[type='range'] {
+  width: 190px;
+}
+.range-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.range-val {
+  min-width: 34px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: var(--card-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* ---------- svetlosť tmavých plôch (pri čiernej tapete) ---------- */
+body.theme-dark::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: rgba(255, 255, 255, var(--dark-lift, 0));
+}
+body.theme-dark #start::before,
+body.theme-dark #onboard::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: rgba(255, 255, 255, var(--dark-lift, 0));
+}
+
+/* onboarding: posuvník svetlosti */
+.ob-lift {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+}
+.ob-lift span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ob-lift small {
+  color: var(--text-3);
+}
+.ob-lift input {
+  width: 100%;
+}
+
+/* ---------- späť / dopredu ---------- */
+.nav-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.nav-btns .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.nav-btns .icon-btn:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+#topnav {
+  margin-right: 6px;
+}
+.st-top .nav-btns {
+  margin-left: 14px;
+}
+.s-head .nav-btns {
+  margin-left: -8px;
+}
+.s-head .nav-btns + h2 {
+  flex: 1;
 }

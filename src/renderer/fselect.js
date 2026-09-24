@@ -109,15 +109,28 @@ function enhance(select) {
   };
 }
 
+// Posuvník: dráha vyplnená po jazdca (CSS premenná --fill).
+function fillRange(r) {
+  const min = Number(r.min || 0);
+  const max = Number(r.max || 100);
+  r.style.setProperty('--fill', `${((Number(r.value) - min) / (max - min || 1)) * 100}%`);
+}
+
 // Všetky <select> v aplikácii – aj tie, ktoré pribudnú neskôr.
 export function setupFancySelects(root = document.body) {
   root.querySelectorAll('select').forEach(enhance);
+  root.querySelectorAll('input[type=range]').forEach(fillRange);
+  document.addEventListener('input', (e) => {
+    if (e.target.type === 'range') fillRange(e.target);
+  }, true);
   new MutationObserver((list) => {
     for (const m of list)
       for (const n of m.addedNodes) {
         if (n.nodeType !== 1) continue;
         if (n.tagName === 'SELECT') enhance(n);
         else n.querySelectorAll?.('select').forEach(enhance);
+        if (n.type === 'range') fillRange(n);
+        else n.querySelectorAll?.('input[type=range]').forEach(fillRange);
       }
   }).observe(root, { childList: true, subtree: true });
   document.addEventListener('pointerdown', (e) => {
