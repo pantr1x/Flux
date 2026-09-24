@@ -15,7 +15,7 @@
   !insertmacro MUI_UNPAGE_WELCOME
 !macroend
 
-; Posledná stránka: vlastná, aby bol text „Run Flux“ pri zaškrtávacom políčku biely (Windows ho inak kreslí čiernou).
+; Posledná stránka: vlastná, aby bol text „Start Flux now“ pri zaškrtávacom políčku biely (Windows ho inak kreslí čiernou).
 !macro customFinishPage
   !ifndef HIDE_RUN_AFTER_FINISH
     Function StartApp
@@ -27,12 +27,6 @@
       ${StdUtils.ExecShellAsUser} $0 "$launchLink" "open" "$1"
     FunctionEnd
 
-    Function FluxFinishShow
-      ; bez témy Windows sa dá nastaviť farba textu políčka
-      System::Call 'UxTheme::SetWindowTheme(p $mui.FinishPage.Run, w " ", w " ")'
-      SetCtlColors $mui.FinishPage.Run "FFFFFF" "101016"
-    FunctionEnd
-
     !define MUI_FINISHPAGE_RUN
     !define MUI_FINISHPAGE_RUN_FUNCTION "StartApp"
     !define MUI_FINISHPAGE_RUN_TEXT "Start Flux now"
@@ -41,4 +35,12 @@
   !define MUI_FINISHPAGE_TITLE "Flux is ready"
   !define MUI_FINISHPAGE_TEXT "Flux has been installed on your computer. It keeps itself up to date – new versions install when you close it."
   !insertmacro MUI_PAGE_FINISH
+
+  !ifndef HIDE_RUN_AFTER_FINISH
+    ; až po MUI_PAGE_FINISH existuje premenná s políčkom
+    Function FluxFinishShow
+      System::Call "UxTheme::SetWindowTheme(p $mui.FinishPage.Run, w ' ', w ' ')"
+      SetCtlColors $mui.FinishPage.Run "FFFFFF" "101016"
+    FunctionEnd
+  !endif
 !macroend
