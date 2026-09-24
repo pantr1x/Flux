@@ -3,8 +3,10 @@
 import { flag } from './flags.js';
 import { t, setLocale } from './i18n.js';
 import { THEMES, themeSwatch } from './themes.js';
+import { BINDINGS } from './keymap.js';
 
 const flux = window.flux;
+const esc = (x) => String(x ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const LOGO = `<svg class="ob-logo" viewBox="0 0 120 120" aria-hidden="true">
   <rect class="ob-logo-bg" x="6" y="6" width="108" height="108" rx="28"/>
@@ -52,6 +54,14 @@ function missingTools(app, includeFinished = false) {
 }
 const installedHere = new Set();
 
+// Kroky úvodu v poradí. Doplnky a vzhľad sa dajú preskočiť.
+const STEPS = ['splash', 'uilang', 'name', 'code', 'extras', 'look', 'tools', 'done'];
+const S = (name) => STEPS.indexOf(name);
+// Pluginy odporúčané v úvode (ak sú v obchode).
+const PICK_PLUGINS = ['flux.error-lens', 'flux.auto-rename-tag', 'flux.bookmarks', 'flux.color-highlight', 'flux.indent-rainbow', 'flux.word-count'];
+// Hlavné skratky, ktoré si vieš zmeniť hneď v úvode.
+const PICK_KEYS = ['run', 'searchAll', 'quickOpen', 'ai', 'live', 'panel'];
+
 const LOOK_THEMES = ['vscode-dark', 'flux', 'tokyo-night', 'catppuccin', 'vscode-light', 'github-light'];
 
 export function createOnboarding(app) {
@@ -64,11 +74,80 @@ export function createOnboarding(app) {
   let moreLangs = false;
 
   function dots() {
-    return `<div class="ob-dots">${[1, 2, 3, 4, 5].map((i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>`;
+    return `<div class="ob-dots">${STEPS.slice(1, -1).map((_, j) => j + 1).map((i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>`;
   }
 
-  function nav(nextLabel = t('Continue')) {
-    return `<div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}<button class="ob-primary" data-next>${nextLabel}</button></div>`;
+  function nav(nextLabel = t('Continue'), skip = false) {
+    const next = `<button class="ob-primary" data-next>${nextLabel}</button>`;
+    return `<div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}${skip ? `<span class="ob-nav-r"><button class="ob-ghost" data-skip-step>${t('Skip')}</button>${next}</span>` : next}</div>`;
+  }
+
+  // ---------- doplnky: pluginy, GitHub, skratky ----------
+  let registry = null; // null = načítava sa, [] = nedostupné
+  const picked = new Set();
+  let ghState = ''; // '', 'busy', 'on', 'signing', 'signed'
+  let ghUser = '';
+  function pluginsHtml() {
+    if (registry === null) return `<div class="ob-ex-note"><span class="spin"></span>${t('Loading…')}</div>`;
+    const list = registry.filter((p) => PICK_PLUGINS.includes(p.id));
+    if (!list.length) return `<div class="ob-ex-note">${t('Plugins could not be loaded. You can add them later in Settings → Plugins.')}</div>`;
+    return `<div class="ob-ex-plugins">${list
+      .map((p) => {
+        const on = p.installed || picked.has(p.id);
+        return `<button class="ob-plug${on ? ' on' : ''}" data-plug="${esc(p.id)}"${p.installed ? ' disabled' : ''} title="${esc(p.description)}">${p.iconUrl ? `<img src="${esc(p.iconUrl)}" width="22" height="22" alt="">` : app.icon('sparkle', 16)}<span><b>${esc(p.name)}</b><small>${p.installed ? t('Installed') : esc(p.description)}</small></span><i class="ob-check">${app.icon('check', 12)}</i></button>`;
+      })
+      .join('')}</div>`;
+  }
+  function ghHtml() {
+    if (ghState === 'signed') return `<div class="ob-ex-ok">${app.icon('check', 14)}${t('Signed in as {user}', { user: esc(ghUser) })}</div>`;
+    if (ghState === 'busy') return `<button class="s-btn" disabled><span class="spin"></span>${t('Installing…')}</button>`;
+    if (ghState === 'signing') return `<button class="s-btn" disabled><span class="spin"></span>${t('Waiting for GitHub…')}</button> <button class="ob-ghost" data-gh-cancel>${t('Cancel')}</button>`;
+    if (ghState === 'on' || app.githubOn()) return `<button class="s-btn primary" data-gh-signin>${app.icon('git', 13)}${t('Sign in with GitHub')}</button>`;
+    return `<button class="s-btn primary" data-gh-install>${app.icon('download', 13)}${t('Install GitHub')}</button>`;
+  }
+  function keysHtml() {
+    const km = app.keymap?.();
+    return `<div class="ob-keys">${PICK_KEYS.map((id) => BINDINGS.find((b) => b.id === id))
+      .filter(Boolean)
+      .map((b) => `<div class="ob-key"><span>${t(b.label)}</span><button class="ob-kbd" data-rekey="${b.id}" title="${t('Click and press a new shortcut')}">${(km ? km.current(b) : b.key) || '—'}</button></div>`)
+      .join('')}</div>`;
+  }
+  function extrasBody() {
+    return `<div class="ob-step ob-extras"><h2>${t('Set up extras')}</h2><p>${t('All optional – you can skip this and do it later in Settings.')}</p>
+      <div class="ob-ex-grid">
+        <section class="ob-ex ob-ex-wide"><h3>${app.icon('sparkle', 15)}${t('Plugins')}</h3><div id="ob-plugins">${pluginsHtml()}</div></section>
+        <section class="ob-ex"><h3>${app.icon('git', 15)}GitHub</h3><p>${t('Open your repositories and save your work online. Installs Git if it is missing.')}</p><div id="ob-gh">${ghHtml()}</div></section>
+        <section class="ob-ex"><h3>${app.icon('command', 15)}${t('Shortcuts')}</h3><div id="ob-keys">${keysHtml()}</div></section>
+      </div></div>${nav(t('Continue'), true)}`;
+  }
+  const redraw = (id, html) => {
+    const x = el.querySelector(`.ob-body:not(.leaving) #${id}`);
+    if (x) x.innerHTML = html;
+  };
+  async function loadRegistry() {
+    if (registry && registry.length) return;
+    try {
+      registry = await flux.pluginRegistry();
+    } catch {
+      registry = [];
+    }
+    redraw('ob-plugins', pluginsHtml());
+  }
+  // Vybrané pluginy sa nainštalujú na pozadí po pokračovaní.
+  function installPicked() {
+    const ids = [...picked];
+    picked.clear();
+    if (!ids.length) return;
+    (async () => {
+      let ok = 0;
+      for (const id of ids) {
+        try {
+          await app.installPlugin(id);
+          ok++;
+        } catch {}
+      }
+      if (ok) app.toast(t('{n} plugin(s) installed.', { n: ok }), 'ok');
+    })();
   }
 
   function cardStatus(c) {
@@ -88,21 +167,22 @@ export function createOnboarding(app) {
 
   function body() {
     const s = app.getSettings();
-    if (step === 0) {
+    if (step === S('splash')) {
       return `<div class="ob-splash">${LOGO}<h1 class="ob-title">flux</h1>
         <p class="ob-tag">${t('Code. Run. Create.')}</p>
         <button class="ob-primary ob-start" data-next>${t('Get started')}</button></div>`;
     }
-    if (step === 1) {
+    if (step === S('uilang')) {
       return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('More languages are downloaded from GitHub, so Flux stays small.')}</p>
         ${langList()}</div>${nav()}`;
     }
-    if (step === 2) {
+    if (step === S('name')) {
       return `<div class="ob-step ob-name"><h2>${t('What should Flux call you?')}</h2><p>${t('Just for the greeting on the home screen. You can skip this or change it later.')}</p>
         <input class="ob-input" id="ob-name" maxlength="40" spellcheck="false" autocomplete="off" placeholder="${t('Your name')}" value="${(s.userName || '').replace(/"/g, '&quot;')}"></div>
         <div class="ob-nav"><button class="ob-ghost" data-back>${t('Back')}</button>${dots()}<span class="ob-nav-r"><button class="ob-ghost" data-skipname>${t('Skip')}</button><button class="ob-primary" data-next>${t('Continue')}</button></span></div>`;
     }
-    if (step === 3) {
+    if (step === S('extras')) return extrasBody();
+    if (step === S('code')) {
       const chosen = s.codeLangs || [];
       // Ďalšie jazyky sa ukážu po kliknutí na „More languages“ (alebo keď už nejaký z nich vybral).
       const showMore = moreLangs || CODE_LANGS.some((c) => c.more && c.id !== 'explore' && chosen.includes(c.id));
@@ -117,7 +197,7 @@ export function createOnboarding(app) {
           )
           .join('')}${showMore ? '' : `<button class="ob-card ob-more" data-more-langs><span class="ob-ic">${app.icon('plus', 28)}</span><b>${t('More languages')}</b><small class="ob-st">Rust, Ruby, PHP, Lua…</small></button>`}</div></div>${nav()}`;
     }
-    if (step === 4) {
+    if (step === S('look')) {
       return `<div class="ob-step ob-look"><h2>${t('Make it yours')}</h2><p>${t('You can change all of this later in Settings.')}</p>
         <div class="ob-look-cols"><div class="ob-look-pick">
         <div class="ob-themes">${LOOK_THEMES.map(
@@ -133,9 +213,9 @@ export function createOnboarding(app) {
         <div class="ob-preview" aria-hidden="true">
           <div class="obp-bar"><i></i><i></i><i></i><span class="obp-tab">${app.fileIcon('main.py')}main.py</span><span class="obp-run">${app.icon('play', 11)}${t('Run')}</span></div>
           <pre class="obp-code"></pre>
-        </div></div></div>${nav()}`;
+        </div></div></div>${nav(t('Continue'), true)}`;
     }
-    if (step === 5) {
+    if (step === S('tools')) {
       // Inštalácia vybraných jazykov – beží na pozadí, dá sa preskočiť.
       const miss = missingTools(app, true);
       const total = miss.reduce((a, tc) => a + tc.download, 0);
@@ -208,6 +288,43 @@ export function createOnboarding(app) {
     }, 450);
   }
 
+  // Prechod na krok: pri jazykoch načíta zoznam, pri inštalácii spustí sťahovanie (alebo krok preskočí).
+  async function goTools() {
+    // Krok „inštalácia“ len ak niečo z vybraných jazykov chýba.
+    if (step === S('tools')) {
+      await app.tools.status();
+      const miss = missingTools(app);
+      if (!miss.length && !app.tools.busy()) step = S('done');
+      else if (app.tools.canInstall()) {
+        miss.forEach((tc) => installedHere.add(tc.id));
+        app.tools.installAll(miss.map((tc) => tc.id));
+        // Keď je všetko hotové, úvod sám pokračuje.
+        const off = app.tools.onChange(() => {
+          if (step === S('tools') && !app.tools.busy()) {
+            off();
+            setTimeout(() => {
+              if (step !== S('tools')) return;
+              dir = 1;
+              step = S('done');
+              render();
+            }, 900);
+          }
+        });
+      }
+    }
+    if (step === S('uilang')) {
+      flux.i18nList().then((list) => {
+        if (Array.isArray(list) && list.length > languages.length) {
+          languages = list;
+          // Obnoviť len zoznam – celý krok by sa prekreslil počas animácie.
+          const list2 = el.querySelector('.ob-body:not(.leaving) .ob-list');
+          if (step === S('uilang') && list2) list2.outerHTML = langList();
+        }
+      });
+    }
+    return render();
+  }
+
   el.onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b || b.disabled || b.closest('.leaving')) return;
@@ -216,51 +333,66 @@ export function createOnboarding(app) {
     if (b.dataset.skipname !== undefined) {
       await app.saveSettings({ userName: '' });
       dir = 1;
-      step = 3;
+      step = S('code');
       return render();
     }
-    if (b.dataset.next !== undefined) {
-      if (step === 2) await app.saveSettings({ userName: (el.querySelector('.ob-body:not(.leaving) #ob-name')?.value || '').trim() });
+    if (b.dataset.skipStep !== undefined) {
+      if (performance.now() < busyUntil) return;
+      if (step === S('extras')) picked.clear();
       dir = 1;
-      step = Math.min(6, step + 1);
-      // Krok „inštalácia“ len ak niečo z vybraných jazykov chýba.
-      if (step === 5) {
-        await app.tools.status();
-        const miss = missingTools(app);
-        if (!miss.length && !app.tools.busy()) step = 6;
-        else if (app.tools.canInstall()) {
-          miss.forEach((tc) => installedHere.add(tc.id));
-          app.tools.installAll(miss.map((tc) => tc.id));
-          // Keď je všetko hotové, úvod sám pokračuje.
-          const off = app.tools.onChange(() => {
-            if (step === 5 && !app.tools.busy()) {
-              off();
-              setTimeout(() => {
-                if (step !== 5) return;
-                dir = 1;
-                step = 6;
-                render();
-              }, 900);
-            }
-          });
-        }
+      step = step === S('extras') ? S('look') : S('tools');
+      return goTools();
+    }
+    if (b.dataset.plug) {
+      picked.has(b.dataset.plug) ? picked.delete(b.dataset.plug) : picked.add(b.dataset.plug);
+      b.classList.toggle('on', picked.has(b.dataset.plug));
+      return;
+    }
+    if (b.dataset.ghInstall !== undefined) {
+      ghState = 'busy';
+      redraw('ob-gh', ghHtml());
+      const ok = await app.setGitHubPlugin(true);
+      ghState = ok ? 'on' : '';
+      return redraw('ob-gh', ghHtml());
+    }
+    if (b.dataset.ghSignin !== undefined) {
+      ghState = 'signing';
+      redraw('ob-gh', ghHtml());
+      try {
+        await flux.ghSignInStart(true);
+        const r = await flux.ghSignInWait();
+        ghUser = r?.user?.login || r?.user || (await flux.ghInfo()).user?.login || '';
+        ghState = 'signed';
+      } catch (err) {
+        ghState = 'on';
+        if (!/cancel/i.test(String(err?.message))) app.toast(String(err?.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
       }
-      if (step === 1) {
-        flux.i18nList().then((list) => {
-          if (Array.isArray(list) && list.length > languages.length) {
-            languages = list;
-            // Obnoviť len zoznam – celý krok by sa prekreslil počas animácie.
-            const list2 = el.querySelector('.ob-body:not(.leaving) .ob-list');
-            if (step === 1 && list2) list2.outerHTML = langList();
-          }
-        });
-      }
-      return render();
+      return redraw('ob-gh', ghHtml());
+    }
+    if (b.dataset.ghCancel !== undefined) {
+      flux.ghSignInCancel();
+      ghState = 'on';
+      return redraw('ob-gh', ghHtml());
+    }
+    if (b.dataset.rekey) {
+      const km = app.keymap?.();
+      const bind = BINDINGS.find((x) => x.id === b.dataset.rekey);
+      if (km && bind) km.record(b, bind, () => redraw('ob-keys', keysHtml()));
+      return;
+    }
+    if (b.dataset.next !== undefined) {
+      if (step === S('name')) await app.saveSettings({ userName: (el.querySelector('.ob-body:not(.leaving) #ob-name')?.value || '').trim() });
+      if (step === S('extras')) installPicked();
+      dir = 1;
+      step = Math.min(S('done'), step + 1);
+      if (step === S('extras')) loadRegistry();
+      return goTools();
     }
     if (b.dataset.back !== undefined) {
       dir = -1;
       step = Math.max(0, step - 1);
-      if (step === 5 && !missingTools(app, true).length) step = 4;
+      if (step === S('tools') && !missingTools(app, true).length) step = S('look');
+      if (step === S('extras')) loadRegistry();
       return render();
     }
     if (b.dataset.lang) {

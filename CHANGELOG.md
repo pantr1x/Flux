@@ -2,6 +2,15 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.8 – 2026-09-24
+
+### First start: extras
+- A new step, *Set up extras*, comes before choosing the look. It has three parts:
+  - **Plugins** – pick useful ones like Error Lens or Bookmarks. They install in the background.
+  - **GitHub** – install it (with Git) and sign in right away.
+  - **Shortcuts** – change the most important ones by clicking them and pressing new keys.
+- Both *Set up extras* and *Make it yours* have a *Skip* button.
+
 ## 0.3.7 – 2026-09-24
 
 ### Updates

@@ -4081,6 +4081,13 @@ async function main() {
     saveSettings,
     toast,
     tools,
+    keymap: () => keymap,
+    githubOn: ghOn,
+    setGitHubPlugin,
+    installPlugin: async (id) => {
+      await flux.pluginInstall(id);
+      await pluginHost?.refresh(id);
+    },
   });
   await loadCustomThemes();
   createEditor();
