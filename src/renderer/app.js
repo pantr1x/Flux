@@ -2771,13 +2771,14 @@ function openSettings() {
     ['editor', 'code', t('Editor')],
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
-    ['keys', 'command', t('Shortcuts')],
     ['plugins', 'sparkle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
     ghOn() && ['github', 'github', 'GitHub'],
-    ['about', 'refresh', t('About & updates')],
   ].filter(Boolean);
   if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
+  // Skratky a aktualizácie sú teraz časti Všeobecných – staré odkazy skočia na ne.
+  const jumpTo = { keys: 'g-keys', about: 'g-updates' }[state.settingsTab];
+  if (jumpTo) state.settingsTab = 'general';
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'general';
   panel.innerHTML = `
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
@@ -2899,13 +2900,6 @@ function openSettings() {
             </div>
             <div class="tc-list" id="s-tools"><div class="s-loading">${t('Checking what is installed…')}</div></div>
           </section>
-          <section data-pane="keys">
-            <div class="s-group s-mb">
-              <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
-            </div>
-            <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
-            <div id="s-keys">${shortcutRows()}</div>
-          </section>
           <section data-pane="ai">
             <p class="s-lead">${t('Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.')}</p>
             <h3>${t('API key')}</h3>
@@ -2928,13 +2922,9 @@ function openSettings() {
           </section>
           ${ghOn() ? '<section data-pane="github" id="s-github"></section>' : ''}
           <section data-pane="plugins" id="s-plugins"></section>
-          <section data-pane="about" id="s-about"></section>
           <section data-pane="general">
-            <div class="s-hero">
-              <div class="s-hero-logo">${icon('code', 22)}</div>
-              <div><b>Flux ${escapeHtml(state.version || '')}</b><small>${t('Code. Run. Create.')}</small></div>
-              <button class="s-btn" data-action="goto-about">${icon('refresh', 13)}${t('Check for updates')}</button>
-            </div>
+            <h3 id="g-updates">${t('About & updates')}</h3>
+            <div id="s-about" class="s-about-inline"></div>
             <h3>${t('You')}</h3>
             <div class="s-group">
               <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
@@ -2952,6 +2942,12 @@ function openSettings() {
             <div class="s-group">
               <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
             </div>
+            <h3 id="g-keys">${t('Shortcuts')}</h3>
+            <div class="s-group s-mb">
+              <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
+            </div>
+            <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
+            <div id="s-keys">${shortcutRows()}</div>
           </section>
         </div>
       </div>
@@ -3075,15 +3071,17 @@ function openSettings() {
     navNote();
     $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
     if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
-    if (id === 'about') updatesUI.render($('#s-about'));
-    if (id === 'general') showMemory();
+    if (id === 'general') {
+      showMemory();
+      if (!$('#s-about').childElementCount) updatesUI.render($('#s-about'), { compact: true });
+    }
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
-  // Dlhý Vzhľad: časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
-  for (const pane of panel.querySelectorAll('[data-pane="appearance"]')) {
+  // Dlhé karty (Vzhľad, Všeobecné): časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
+  for (const pane of panel.querySelectorAll('[data-pane="appearance"], [data-pane="general"]')) {
     const heads = [...pane.querySelectorAll(':scope > h3')];
-    const tabBtn = panel.querySelector('.s-tab[data-tab="appearance"]');
+    const tabBtn = panel.querySelector(`.s-tab[data-tab="${pane.dataset.pane}"]`);
     if (heads.length < 4 || !tabBtn) continue;
     const sub = document.createElement('div');
     sub.className = 's-sub';
@@ -3093,11 +3091,12 @@ function openSettings() {
       const b = e.target.closest('[data-jump]');
       if (!b) return;
       e.stopPropagation();
-      if (state.settingsTab !== 'appearance') tabBtn.click();
+      if (state.settingsTab !== pane.dataset.pane) tabBtn.click();
       heads[Number(b.dataset.jump)].scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
     };
     const scroller = pane.closest('.s-body') || pane.parentElement;
     const spy = () => {
+      if (pane.hidden) return;
       const top = scroller.getBoundingClientRect().top + 40;
       let cur = 0;
       heads.forEach((h, i) => {
@@ -3106,9 +3105,11 @@ function openSettings() {
       sub.querySelectorAll('[data-jump]').forEach((b, i) => b.classList.toggle('on', i === cur));
     };
     scroller.addEventListener('scroll', spy, { passive: true });
+    tabBtn.addEventListener('click', () => requestAnimationFrame(spy));
     requestAnimationFrame(spy);
   }
   showTab(tab);
+  if (jumpTo) requestAnimationFrame(() => $(`#${jumpTo}`)?.scrollIntoView({ block: 'start' }));
   // Hľadanie naprieč všetkými záložkami: ukáže len riadky, ktoré sedia.
   const ROWS = '.s-row, .theme-card, .tc-row, .ob-row';
   $('#s-find').oninput = (e) => {
@@ -3233,7 +3234,6 @@ function openSettings() {
       await saveSettings({ pointer: ptr.dataset.pointer });
       return applyCustomization();
     }
-    if (e.target.closest('[data-action="goto-about"]')) return panel.querySelector('[data-tab="about"]')?.click();
     if (e.target.closest('[data-action="mem-free"]')) {
       if (!state.tabs.some(isPythonTab)) lsp.stop();
       await flux.freeMemory?.();
@@ -3372,7 +3372,7 @@ async function searchEverything() {
   const cmds = [...commands(), ...pluginCommands()].map((c) => ({ ...c, group: t('Command') }));
   const cmdLabels = new Set(cmds.map((c) => c.label));
   // Riadky zo Skratiek sú už medzi príkazmi.
-  const sets = settingsIndex().filter((x) => x.tab !== 'keys' || !cmdLabels.has(x.label)).map((x) => ({
+  const sets = settingsIndex().filter((x) => !cmdLabels.has(x.label)).map((x) => ({
     label: x.label,
     icon: icon('settings', 15),
     detail: t('Setting'),

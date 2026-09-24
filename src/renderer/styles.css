@@ -7374,3 +7374,51 @@ select.fsel-native {
   background: #111;
   color: #fff;
 }
+
+/* Nastavenia → Všeobecné: verzia a aktualizácie vložené ako prvá časť */
+.s-about-inline .up-hero {
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), var(--card-2));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.s-about-inline .up-hero h2 {
+  font-size: 17px;
+}
+.s-about-inline .brand-mark.big {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.up-notes-fold {
+  margin: 8px 0 4px;
+}
+.up-notes-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font: 500 12.5px var(--ui-font);
+}
+.up-notes-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.up-notes-fold > summary:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.up-notes-fold > summary svg {
+  transition: transform 0.15s;
+}
+.up-notes-fold[open] > summary svg {
+  transform: rotate(90deg);
+}
+.up-notes-fold > #up-notes {
+  margin-top: 8px;
+}

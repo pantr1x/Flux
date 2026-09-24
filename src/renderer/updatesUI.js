@@ -61,19 +61,22 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     }
   }
 
-  async function render(el) {
+  // compact: vložené do Všeobecných – poznámky k vydaniam sú zbalené a načítajú sa až po otvorení.
+  async function render(el, { compact = false } = {}) {
     box = el;
     state = await flux.updateState();
+    const notes = `<div id="up-notes"><div class="s-loading"><span class="spin"></span> ${t('Loading…')}</div></div>`;
     box.innerHTML = `
       <div class="up-hero"><div class="brand-mark big">${icon('code', 26)}</div><div><h2>Flux</h2><small>${t('Version {v}', { v: esc(state.version) })}</small></div></div>
       <div class="s-group">
         <div class="s-row" id="up-status"></div>
         <label class="s-row"><span><b>${t('Update automatically')}</b><small>${t('downloads new versions in the background and installs them when you close Flux')}</small></span><input type="checkbox" class="switch" id="up-auto"${getSetting('autoUpdate') !== false ? ' checked' : ''}></label>
       </div>
-      <h3>${t('Release notes')}</h3>
-      <div id="up-notes"><div class="s-loading"><span class="spin"></span> ${t('Loading…')}</div></div>`;
+      ${compact ? `<details class="up-notes-fold"><summary>${icon('chevron', 12)}${t('Release notes')}</summary>${notes}</details>` : `<h3>${t('Release notes')}</h3>${notes}`}`;
     drawStatus();
-    drawNotes();
+    const fold = box.querySelector('.up-notes-fold');
+    if (fold) fold.addEventListener('toggle', () => fold.open && !fold.dataset.loaded && ((fold.dataset.loaded = '1'), drawNotes()));
+    else drawNotes();
     if (state.status === 'idle') flux.updateCheck();
     box.onchange = async (e) => {
       if (e.target.id === 'up-auto') {
