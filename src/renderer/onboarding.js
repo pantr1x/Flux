@@ -104,7 +104,7 @@ export function createOnboarding(app) {
     if (ghState === 'signed') return `<div class="ob-ex-ok">${app.icon('check', 14)}${t('Signed in as {user}', { user: esc(ghUser) })}</div>`;
     if (ghState === 'busy') return `<button class="s-btn" disabled><span class="spin"></span>${t('Installing…')}</button>`;
     if (ghState === 'signing') return `<button class="s-btn" disabled><span class="spin"></span>${t('Waiting for GitHub…')}</button> <button class="ob-ghost" data-gh-cancel>${t('Cancel')}</button>`;
-    if (ghState === 'on' || app.githubOn()) return `<button class="s-btn primary" data-gh-signin>${app.icon('git', 13)}${t('Sign in with GitHub')}</button>`;
+    if (ghState === 'on' || app.githubOn()) return `<button class="s-btn primary" data-gh-signin>${app.icon('github', 13)}${t('Sign in with GitHub')}</button>`;
     return `<button class="s-btn primary" data-gh-install>${app.icon('download', 13)}${t('Install GitHub')}</button>`;
   }
   function keysHtml() {
@@ -118,7 +118,7 @@ export function createOnboarding(app) {
     return `<div class="ob-step ob-extras"><h2>${t('Set up extras')}</h2><p>${t('All optional – you can skip this and do it later in Settings.')}</p>
       <div class="ob-ex-grid">
         <section class="ob-ex ob-ex-wide"><h3>${app.icon('sparkle', 15)}${t('Plugins')}</h3><div id="ob-plugins">${pluginsHtml()}</div></section>
-        <section class="ob-ex"><h3>${app.icon('git', 15)}GitHub</h3><p>${t('Open your repositories and save your work online. Installs Git if it is missing.')}</p><div id="ob-gh">${ghHtml()}</div></section>
+        <section class="ob-ex"><h3>${app.icon('github', 15)}GitHub</h3><p>${t('Open your repositories and save your work online. Installs Git if it is missing.')}</p><div id="ob-gh">${ghHtml()}</div></section>
         <section class="ob-ex"><h3>${app.icon('command', 15)}${t('Shortcuts')}</h3><div id="ob-keys">${keysHtml()}</div></section>
       </div></div>${nav(t('Continue'), true)}`;
   }

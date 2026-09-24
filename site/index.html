@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flux – a small, modern code editor for Windows</title>
+  <meta name="description" content="Run your code with one click, see websites live, get help from AI. Free code editor for Windows 11.">
+  <link rel="icon" href="icon.png">
+  <meta property="og:title" content="Flux – code editor for Windows">
+  <meta property="og:description" content="Run your code with one click, see websites live, get help from AI.">
+  <meta property="og:image" content="images/home.png">
+  <style>
+    :root { --bg: #0b0b11; --card: #15151d; --line: rgba(255,255,255,.08); --text: #ececf3; --muted: #9a9aab; --accent: #8b7bff; --accent2: #3ecfcf; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    .glow { position: fixed; inset: -20% -10% auto; height: 80vh; pointer-events: none; background: radial-gradient(40% 50% at 30% 20%, rgba(139,123,255,.28), transparent 70%), radial-gradient(35% 45% at 75% 10%, rgba(62,207,207,.16), transparent 70%); filter: blur(10px); z-index: -1; }
+    .wrap { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+    nav { display: flex; align-items: center; gap: 12px; padding: 20px 0; }
+    nav .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -.3px; }
+    nav .logo img { width: 30px; height: 30px; border-radius: 8px; }
+    nav .grow { flex: 1; }
+    nav a.link { color: var(--muted); font-size: 14.5px; padding: 6px 12px; border-radius: 8px; }
+    nav a.link:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .hero { text-align: center; padding: 70px 0 40px; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 99px; background: rgba(139,123,255,.12); color: #c4bbff; font-size: 13.5px; box-shadow: inset 0 0 0 1px rgba(139,123,255,.3); }
+    .pill i { width: 7px; height: 7px; border-radius: 50%; background: #3ecf8e; }
+    h1 { font-size: clamp(40px, 7vw, 72px); line-height: 1.05; letter-spacing: -2px; margin: 22px 0 16px; }
+    h1 span { background: linear-gradient(90deg, #b3a8ff, #8b7bff 40%, #3ecfcf); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .lead { max-width: 640px; margin: 0 auto; color: var(--muted); font-size: 19px; }
+    .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 34px 0 14px; }
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 14px; font-weight: 700; font-size: 16px; transition: transform .15s, box-shadow .15s; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.primary { background: #fff; color: #111; box-shadow: 0 10px 40px rgba(139,123,255,.35); }
+    .btn.ghost { background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px var(--line); }
+    .btn svg { width: 18px; height: 18px; }
+    .meta { color: var(--muted); font-size: 13.5px; }
+    .shot { margin: 50px auto 0; border-radius: 18px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 40px 120px rgba(0,0,0,.6), 0 0 80px rgba(139,123,255,.15); }
+    .shot img { display: block; width: 100%; }
+    section { padding: 90px 0 0; }
+    h2 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -1px; margin: 0 0 10px; text-align: center; }
+    .sub { text-align: center; color: var(--muted); margin: 0 auto 40px; max-width: 620px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .card { padding: 22px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .card .ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: rgba(139,123,255,.14); color: #b3a8ff; margin-bottom: 14px; }
+    .card .ic svg { width: 20px; height: 20px; }
+    .card h3 { margin: 0 0 6px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+    .split { display: grid; grid-template-columns: 1fr 1.3fr; gap: 40px; align-items: center; }
+    .split h2, .split .sub { text-align: left; margin-left: 0; }
+    .split ul { padding: 0; margin: 0; list-style: none; }
+    .split li { display: flex; gap: 10px; margin: 10px 0; color: var(--muted); }
+    .split li b { color: var(--text); font-weight: 600; }
+    .split li::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 9px; border-radius: 50%; background: var(--accent); }
+    .split img { width: 100%; border-radius: 14px; box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0,0,0,.5); }
+    .langs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .langs span { padding: 7px 14px; border-radius: 99px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; color: #cfcfe0; }
+    .final { text-align: center; padding: 110px 0 60px; }
+    footer { padding: 30px 0 50px; color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--line); display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+    footer a:hover { color: var(--text); }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr 1fr; } .split { grid-template-columns: 1fr; } nav a.link.hide { display: none; } }
+    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } .hero { padding-top: 40px; } }
+  </style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="#"><img src="icon.png" alt="">Flux</a>
+      <div class="grow"></div>
+      <a class="link hide" href="#features">Features</a>
+      <a class="link hide" href="#live">Live Server</a>
+      <a class="link" href="https://github.com/pantr1x/Flux/blob/HEAD/CHANGELOG.md">What's new</a>
+      <a class="link" href="https://github.com/pantr1x/Flux">GitHub</a>
+    </nav>
+
+    <header class="hero">
+      <span class="pill"><i></i><span id="ver">Free for Windows 10 and 11</span></span>
+      <h1>Code. Run. <span>Create.</span></h1>
+      <p class="lead">A small, modern code editor. Run your code with one click, see your website live while you type, and get help from AI – without setting anything up.</p>
+      <div class="cta">
+        <a class="btn primary" id="dl" href="https://github.com/pantr1x/Flux/releases/latest">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>
+          <span id="dl-text">Download for Windows</span>
+        </a>
+        <a class="btn ghost" href="https://github.com/pantr1x/Flux">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          Source on GitHub
+        </a>
+      </div>
+      <div class="meta" id="meta">Updates itself · 9 languages · no account needed</div>
+      <div class="shot"><img src="images/home.png" alt="Flux home screen"></div>
+    </header>
+
+    <section id="features">
+      <h2>Everything you need, nothing you don't</h2>
+      <p class="sub">Flux is made for learning and building – from your first print() to a full website.</p>
+      <div class="grid">
+        <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16l13-8z"/></svg></div><h3>One-click Run</h3><p>Press F5 to run Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust and more. Missing languages install themselves.</p></div>
+        <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div><h3>Live Server</h3><p>Your website next to the code, reloading on save. Preview as phone or tablet, or open it on your real phone with a QR code.</p></div>
+        <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L19 9.7l-4.3 3.1L16 18l-4-2.8L8 18l1.3-5.2L5 9.7l5.2-1.8z"/></svg></div><h3>Claude AI built in</h3><p>Ask about your code, fix errors or plan your to-dos. Claude Desktop and Cursor can work with your projects too.</p></div>
+        <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></div><h3>Smart editor</h3><p>Autocomplete and error checking for Python, HTML, CSS and JavaScript, Emmet, snippets and errors right on the line.</p></div>
+        <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 19c0-2 1.5-4 4-4s3 1 3 3"/></svg></div><h3>Work together</h3><p>Friends on the same Wi-Fi see who has which file open and what they are typing – live, without the internet.</p></div>
+        <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><path d="M12 21a2.5 2.5 0 0 1 0-5h1.5a3 3 0 0 0 3-3"/></svg></div><h3>Make it yours</h3><p>Themes, colors, fonts, cursors, your own wallpaper, plugins – and a power saving mode for slower PCs.</p></div>
+      </div>
+    </section>
+
+    <section id="live">
+      <div class="split">
+        <div>
+          <h2>See your website change as you type</h2>
+          <p class="sub">Live Server shows your page right next to the code.</p>
+          <ul>
+            <li><span><b>Alt + click</b> any element and Flux jumps to its line in the HTML.</span></li>
+            <li><span><b>JavaScript errors</b> appear on the page with a <i>Show in Flux</i> button.</span></li>
+            <li><span><b>Phone, tablet or laptop</b> frames – rotate them, take a screenshot.</span></li>
+            <li><span><b>Scan a QR code</b> to open the page on your phone.</span></li>
+          </ul>
+        </div>
+        <img src="images/live.png" alt="Live Server in Flux">
+      </div>
+    </section>
+
+    <section>
+      <h2>Your languages, your way</h2>
+      <p class="sub">Flux keeps its installer small – programming languages download from their official sources only when you pick them.</p>
+      <div class="langs">
+        <span>Python</span><span>JavaScript</span><span>TypeScript</span><span>HTML &amp; CSS</span><span>Java</span><span>C / C++</span><span>C#</span><span>Go</span><span>Rust</span><span>Ruby</span><span>PHP</span><span>Lua</span><span>Perl</span>
+      </div>
+    </section>
+
+    <section class="final">
+      <h2>Start coding in a minute</h2>
+      <p class="sub">Download, run the installer, pick your languages – done.</p>
+      <div class="cta"><a class="btn primary" id="dl2" href="https://github.com/pantr1x/Flux/releases/latest">Download Flux for Windows</a></div>
+      <div class="meta">If Windows shows “Windows protected your PC”, click <b>More info → Run anyway</b>.</div>
+    </section>
+
+    <footer>
+      <span>© Flux · made with Electron and Monaco</span>
+      <span><a href="https://github.com/pantr1x/Flux/releases">All versions</a> · <a href="https://github.com/pantr1x/Flux/blob/HEAD/docs/PLUGINS.md">Make a plugin</a> · <a href="https://github.com/pantr1x/Flux">GitHub</a></span>
+    </footer>
+  </div>
+  <script>
+    // Najnovšia verzia priamo z GitHubu: tlačidlo stiahne rovno inštalátor.
+    fetch('https://api.github.com/repos/pantr1x/Flux/releases/latest')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((rel) => {
+        if (!rel) return;
+        const exe = (rel.assets || []).find((a) => /\.exe$/i.test(a.name));
+        const v = String(rel.tag_name || '').replace(/^v/, '');
+        if (exe) {
+          for (const id of ['dl', 'dl2']) document.getElementById(id).href = exe.browser_download_url;
+          document.getElementById('meta').textContent = `Version ${v} · ${Math.round(exe.size / 1048576)} MB · ${new Date(rel.published_at).toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        }
+        document.getElementById('dl-text').textContent = `Download Flux ${v}`;
+        document.getElementById('ver').textContent = `New: Flux ${v} is out`;
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

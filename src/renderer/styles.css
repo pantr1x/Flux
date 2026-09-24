@@ -7324,3 +7324,53 @@ select.fsel-native {
 .tg-name { font: 600 11px var(--ui-font) !important; padding: 0 5px; margin-left: 4px; border-radius: 4px; background: var(--tgc); color: #111 !important; }
 .tg-c0 { --tgc: #ff7eb6; } .tg-c1 { --tgc: #4ade80; } .tg-c2 { --tgc: #60a5fa; } .tg-c3 { --tgc: #fbbf24; }
 .tg-c4 { --tgc: #c084fc; } .tg-c5 { --tgc: #2dd4bf; } .tg-c6 { --tgc: #fb923c; } .tg-c7 { --tgc: #f87171; }
+
+/* skryté projekty: rozbaľovací zoznam s okom na vrátenie */
+.pr-hidden svg {
+  transition: transform 0.15s;
+}
+.pr-hidden.open svg {
+  transform: rotate(90deg);
+}
+.pr-hidden-list .pr-row {
+  opacity: 0.7;
+}
+.pr-hidden-list .pr-row:hover {
+  opacity: 1;
+}
+.pr-hidden-list .pr-hide {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* Nastavenia → Všeobecné: hlavička s verziou */
+.s-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), var(--card-2));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.s-hero > div:nth-child(2) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.s-hero b {
+  font-size: 16px;
+}
+.s-hero small {
+  color: var(--text-2);
+}
+.s-hero-logo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #111;
+  color: #fff;
+}

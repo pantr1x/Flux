@@ -1,7 +1,7 @@
 // Vytiahne všetky texty na preklad (t('…')) + texty zo zoznamov (šablóny, odznaky…) do locales/en.keys.json.
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const files = ['src/renderer/app.js', 'src/renderer/onboarding.js', 'src/renderer/activity.js', 'src/renderer/tools.js', 'src/renderer/editorExtras.js', 'src/main/toolchains.js', 'src/renderer/aiPanel.js', 'src/renderer/github.js', 'src/renderer/userShortcuts.js', 'src/main/ai.js', 'src/main/github.js', 'src/main/main.js', 'src/main/runner.js', 'src/renderer/keymap.js', 'src/renderer/pluginHost.js', 'src/renderer/pluginsUI.js', 'src/main/plugins.js', 'src/renderer/themeStudio.js', 'src/renderer/updatesUI.js', 'src/main/updater.js', 'src/main/mcpServer.js'];
+const files = ['src/renderer/app.js', 'src/renderer/onboarding.js', 'src/renderer/activity.js', 'src/renderer/tools.js', 'src/renderer/editorExtras.js', 'src/main/toolchains.js', 'src/renderer/aiPanel.js', 'src/renderer/github.js', 'src/renderer/userShortcuts.js', 'src/main/ai.js', 'src/main/github.js', 'src/main/main.js', 'src/main/runner.js', 'src/renderer/keymap.js', 'src/renderer/pluginHost.js', 'src/renderer/pluginsUI.js', 'src/main/plugins.js', 'src/renderer/themeStudio.js', 'src/renderer/updatesUI.js', 'src/main/updater.js', 'src/main/mcpServer.js', 'src/renderer/together.js'];
 const keys = new Set();
 const lit = (q, body) => body.replace(new RegExp(`\\\\${q}`, 'g'), q).replace(/\\n/g, '\n');
 for (const f of files) {

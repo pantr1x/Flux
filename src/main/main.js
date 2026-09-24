@@ -1219,6 +1219,27 @@ function registerIpc() {
   });
   ipcMain.on('lsp:send', (_e, msg) => lsp.send(msg));
   ipcMain.on('lsp:stop', () => lsp.stop());
+  // Pamäť: všetky procesy Fluxu (okno, GPU…) + Pyright
+  ipcMain.handle('app:memory', async () => {
+    const total = app.getAppMetrics().reduce((n, m) => n + (m.memory?.workingSetSize || 0), 0);
+    let lspKb = 0;
+    const pid = lsp.proc?.pid;
+    if (pid) {
+      try {
+        if (process.platform === 'win32') {
+          const out = require('node:child_process').execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true });
+          lspKb = Number((out.split('","')[4] || '').replace(/[^\d]/g, '')) || 0;
+        } else {
+          lspKb = Number((fs.readFileSync(`/proc/${pid}/status`, 'utf8').match(/VmRSS:\s+(\d+)/) || [])[1] || 0);
+        }
+      } catch {}
+    }
+    return { total: Math.round((total + lspKb) / 1024), lsp: Math.round(lspKb / 1024) };
+  });
+  ipcMain.handle('app:free-memory', async () => {
+    await win?.webContents.session.clearCache().catch(() => {});
+    return true;
+  });
 }
 
 // Neočakávaná chyba v pozadí (napr. ukončený podproces) nesmie ukázať chybové okno – len sa zapíše.

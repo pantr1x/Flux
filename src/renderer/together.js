@@ -92,7 +92,7 @@ export function createTogether({ monaco, editor, t, icon, esc, toast, getWorkspa
         const col = Math.min(p.state.col || 1, model.getLineMaxColumn(p.state.line));
         return [
           { range: new monaco.Range(p.state.line, 1, p.state.line, 1), options: { isWholeLine: true, className: `tg-line tg-c${i}`, overviewRuler: { color: COLORS[i], position: monaco.editor.OverviewRulerLane.Left } } },
-          { range: new monaco.Range(p.state.line, col, p.state.line, col), options: { beforeContentClassName: `tg-caret tg-c${i}`, after: { content: ` ${p.name}${p.state.typing ? ' ✎' : ''}`, inlineClassName: `tg-name tg-c${i}` } } },
+          { range: new monaco.Range(p.state.line, col, p.state.line, col), options: { showIfCollapsed: true, beforeContentClassName: `tg-caret tg-c${i}`, after: { content: ` ${p.name}${p.state.typing ? ' ✎' : ''}`, inlineClassName: `tg-name tg-c${i}` } } },
         ];
       }).flat(),
     );

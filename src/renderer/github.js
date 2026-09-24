@@ -21,8 +21,8 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
       <div class="s-group">${
         info.connected && info.user
           ? `<div class="s-row"><span class="gh-user">${info.user.avatar ? `<img src="${esc(info.user.avatar)}" alt="">` : ''}<span><b>${esc(info.user.name)}</b><small>@${esc(info.user.login)}</small></span></span><button class="s-btn" data-gh-disconnect>${t('Disconnect')}</button></div>
-             <div class="s-row"><span><b>${t('Open a repository')}</b><small>${t('Pick one of your repositories – Flux opens it as a project.')}</small></span><button class="s-btn primary" data-gh-pick>${icon('git', 13)}${t('Choose…')}</button></div>`
-          : `<div class="s-row"><span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in or create an account (also with Google) and press Authorize.')}</small></span><button class="s-btn primary" data-gh-signin>${icon('git', 13)}${t('Sign in')}</button></div>
+             <div class="s-row"><span><b>${t('Open a repository')}</b><small>${t('Pick one of your repositories – Flux opens it as a project.')}</small></span><button class="s-btn primary" data-gh-pick>${icon('github', 13)}${t('Choose…')}</button></div>`
+          : `<div class="s-row"><span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in or create an account (also with Google) and press Authorize.')}</small></span><button class="s-btn primary" data-gh-signin>${icon('github', 13)}${t('Sign in')}</button></div>
              <details class="gh-more s-row-details"><summary>${t('Advanced: use a token')}</summary><div class="s-row"><span><b>${t('Personal access token')}</b><small>${t('Create one on GitHub with the “repo” permission, then paste it here.')} <a href="#" data-gh-newtoken>${t('Create token')}</a></small></span><span class="s-inline"><input type="password" id="gh-token" class="s-text" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn" data-gh-connect>${t('Connect')}</button></span></div></details>`
       }</div>
       <h3>Git</h3>
@@ -117,7 +117,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
 
     const shell = (body) => {
       el.innerHTML = `<div class="np-card gh-card" role="dialog">
-        <header><h2>${icon('git', 18)}${t('Open a repository')}</h2><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>${body}</div>`;
+        <header><h2>${icon('github', 18)}${t('Open a repository')}</h2><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>${body}</div>`;
     };
 
     const info = await flux.ghInfo();
@@ -128,7 +128,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
           </ol>`;
       shell(`<div class="gh-connect">
           <p class="s-lead">${t('Connect your GitHub account once – then pick any of your repositories and Flux opens it as a project.')}</p>
-          <button class="gh-big" data-gh-signin>${icon('git', 20)}<span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in or create an account (also with Google) and press Authorize.')}</small></span></button>
+          <button class="gh-big" data-gh-signin>${icon('github', 20)}<span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in or create an account (also with Google) and press Authorize.')}</small></span></button>
           <details class="gh-more"><summary>${t('Advanced: use a token')}</summary>${tokenSteps}</details>
           <p class="gh-foot">${t('Your login is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.')}</p>
           <div class="gh-or"><span>${t('or open a public repository by link')}</span></div>
@@ -177,7 +177,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
           ? f
               .map(
                 (r) =>
-                  `<button class="gh-repo" data-full="${esc(r.full)}"><span class="gh-ic">${icon('git', 16)}</span><span class="gh-txt"><b>${esc(r.full)}</b><small>${esc(r.description || r.language || '')}</small></span>${r.private ? `<span class="gh-badge">${t('private')}</span>` : ''}</button>`,
+                  `<button class="gh-repo" data-full="${esc(r.full)}"><span class="gh-ic">${icon('github', 16)}</span><span class="gh-txt"><b>${esc(r.full)}</b><small>${esc(r.description || r.language || '')}</small></span>${r.private ? `<span class="gh-badge">${t('private')}</span>` : ''}</button>`,
               )
               .join('')
           : link
@@ -252,13 +252,13 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
     const info = await flux.ghInfo();
     if (!st.repo) {
       box.innerHTML = `<div class="pj-h"><span>GitHub</span></div>
-        <div class="gh-box"><span class="gh-ic big">${icon('git', 20)}</span><span class="gh-txt"><b>${t('Save this project on GitHub')}</b><small>${t('Keep a backup online and share it with a link.')}</small></span>
+        <div class="gh-box"><span class="gh-ic big">${icon('github', 20)}</span><span class="gh-txt"><b>${t('Save this project on GitHub')}</b><small>${t('Keep a backup online and share it with a link.')}</small></span>
         ${info.connected ? `<label class="gh-priv"><input type="checkbox" id="gh-private" checked> ${t('private')}</label><button class="s-btn" data-gh-publish>${icon('plus', 13)}${t('Publish')}</button>` : `<button class="s-btn" data-gh-settings>${t('Connect GitHub')}</button>`}</div>`;
     } else {
       const sync = [st.ahead ? `↑${st.ahead}` : '', st.behind ? `↓${st.behind}` : ''].filter(Boolean).join(' ');
       box.innerHTML = `<div class="pj-h"><span>${st.github ? 'GitHub' : 'Git'}</span><small>${esc(st.branch)}${sync ? ` · ${sync}` : ''}</small></div>
         <div class="gh-box col">
-          <div class="gh-row"><span class="gh-ic big">${icon('git', 20)}</span><span class="gh-txt"><b>${esc(st.github || st.remote || t('Local repository'))}</b><small>${
+          <div class="gh-row"><span class="gh-ic big">${icon('github', 20)}</span><span class="gh-txt"><b>${esc(st.github || st.remote || t('Local repository'))}</b><small>${
             st.changes ? t('{n} changed file(s) not saved to GitHub yet', { n: st.changes }) : t('Everything is saved.')
           }</small></span>${st.github ? `<button class="icon-btn" data-gh-open title="${t('Open on GitHub')}">${icon('external', 14)}</button>` : ''}</div>
           ${st.changes ? `<div class="gh-files">${st.files.map((f) => `<span class="gh-file"><i class="st-${esc(f.state[0] || 'M')}">${esc(f.state || 'M')}</i>${fileIcon(f.file.split('/').pop())}${esc(f.file)}</span>`).join('')}</div>` : ''}

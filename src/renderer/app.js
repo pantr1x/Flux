@@ -339,8 +339,22 @@ function pointerCss(kind, color) {
     const [x, y] = setting('pointerHotspot') === 'center' ? [Math.round(w / 2), Math.round(h / 2)] : [0, 0];
     return `url("${setting('pointerImage')}") ${x} ${y}, auto`;
   }
-  return svg ? `url("data:image/svg+xml,${svg}") 12 12, crosshair` : 'text';
+  if (!svg) return 'text';
+  // Windows spoľahlivo berie len bitmapové kurzory → SVG sa raz prekreslí do PNG.
+  const key = `${kind}|${color}`;
+  if (pngCursors[key]) return `url("${pngCursors[key]}") 12 12, crosshair`;
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 24;
+    cv.getContext('2d').drawImage(img, 0, 0, 24, 24);
+    pngCursors[key] = cv.toDataURL('image/png');
+    applyCustomization();
+  };
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(decodeURIComponent(svg))}`;
+  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(decodeURIComponent(svg))}") 12 12, crosshair`;
 }
+const pngCursors = {};
 
 // Vlastné farby okna (text, pozadie, panely, čiary) – prepíšu farby témy.
 function applyAppColors() {
@@ -1401,7 +1415,7 @@ function kindIcon(kind, size = 16, github = false) {
   const svg = KIND_FILE[kind] ? fileIcon(KIND_FILE[kind]) : icon('folder', 16);
   const out = size === 16 ? svg : svg.replace(/width="16" height="16"/, `width="${size}" height="${size}"`);
   // projekt z GitHubu: malý znak v rohu ikony
-  return github ? `<span class="kind-ic" title="GitHub">${out}<i class="kind-gh">${icon('git', Math.max(8, Math.round(size * 0.55)))}</i></span>` : out;
+  return github ? `<span class="kind-ic" title="GitHub">${out}<i class="kind-gh">${icon('github', Math.max(8, Math.round(size * 0.55)))}</i></span>` : out;
 }
 
 const KIND_LANG_NAMES = { python: 'Python', web: 'HTML/CSS', node: 'JavaScript', java: 'Java', cpp: 'C/C++', go: 'Go', csharp: 'C#', rust: 'Rust', ruby: 'Ruby', php: 'PHP', lua: 'Lua' };
@@ -1423,7 +1437,7 @@ async function renderProjects() {
   } catch {}
   state.projectList = list;
   const row = (p) =>
-    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click for more – rename, hide, delete')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin pr-hide" data-hide title="${p.hidden ? t('Show in the sidebar') : t('Hide from the sidebar')}">${icon('eyeOff', 13)}</button><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
+    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click for more – rename, hide, delete')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin pr-hide" data-hide title="${p.hidden ? t('Show in the sidebar') : t('Hide from the sidebar')}">${icon(p.hidden ? 'eye' : 'eyeOff', 13)}</button><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
   const shown = (p) => !p.hidden;
   const pinned = list.filter((p) => p.pinned && shown(p));
   const rest = list.filter((p) => !p.pinned && shown(p));
@@ -1433,7 +1447,10 @@ async function renderProjects() {
     `<div class="pr-head"><span>${t('Projects')}</span><button class="icon-btn" data-act="open" title="${t('Open an existing folder (Ctrl+O)')}">${icon('folderOpen', 15)}</button></div>` +
     rest.map(row).join('') +
     `<button class="pr-row pr-new" data-act="new">${icon('plus', 16)}<span>${t('New project')}</span></button>` +
-    (hiddenCount ? `<button class="pr-row pr-new pr-hidden" data-act="hidden">${icon('folder', 15)}<span>${t('{n} hidden', { n: hiddenCount })}</span></button>` : '');
+    (hiddenCount
+      ? `<button class="pr-row pr-new pr-hidden${state.showHidden ? ' open' : ''}" data-act="hidden">${icon('chevron', 13)}<span>${t('{n} hidden', { n: hiddenCount })}</span></button>` +
+        (state.showHidden ? `<div class="pr-hidden-list">${list.filter((p) => !shown(p)).map(row).join('')}</div>` : '')
+      : '');
   const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
   if (current && state.projectKind !== current.kind) {
     state.projectKind = current.kind;
@@ -1499,7 +1516,7 @@ async function newProject(opts = {}) {
       <label class="np-field"><span>${t('Name')}</span><input id="np-name" spellcheck="false" autocomplete="off"></label>
       <label class="np-field"><span>${t('Short description')} <small>${t('optional')}</small></span><input id="np-desc" spellcheck="false" autocomplete="off" maxlength="160" placeholder="${t('e.g. A game where you catch falling stars')}"></label>
       <div class="np-field"><span>${t('Location')}</span><div class="np-loc"><code id="np-root"></code><button class="s-btn" data-root>${t('Change…')}</button></div></div>
-      <footer>${ghOn() ? `<button class="ob-ghost np-gh" data-gh>${icon('git', 15)}${t('Open from GitHub…')}</button>` : ''}<div class="grow"></div><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
+      <footer>${ghOn() ? `<button class="ob-ghost np-gh" data-gh>${icon('github', 15)}${t('Open from GitHub…')}</button>` : ''}<div class="grow"></div><button class="ob-ghost" data-close>${t('Cancel')}</button><button class="ob-primary" data-create>${icon('plus', 15)}${t('Create project')}</button></footer>
     </div>`;
   const input = $('#np-name');
   tools.bind($('#np-tool'));
@@ -1635,7 +1652,10 @@ function projectEvents() {
     if (!b) return;
     if (b.dataset.act === 'open') return openFolderDialog();
     if (b.dataset.act === 'new') return newProject();
-    if (b.dataset.act === 'hidden') return pickHiddenProject();
+    if (b.dataset.act === 'hidden') {
+      state.showHidden = !state.showHidden;
+      return renderProjects();
+    }
     if (!b.dataset.dir) return;
     if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
     else showProjectPage(); // už otvorený projekt → jeho stránka (popis, úlohy, štatistiky)
@@ -2485,7 +2505,7 @@ function commands() {
     c(t('Color theme…'), chooseTheme, '', 'palette', 'theme colors vs code dracula one dark'),
     c(t('Settings'), openSettings, 'Ctrl+,', 'settings', 'settings preferences font'),
     c(t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A', 'command', 'search find all settings'),
-    ghOn() && c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'git', 'github clone repo'),
+    ghOn() && c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'github', 'github clone repo'),
     c(t('AI: open assistant'), () => aiPanel.show(), 'Ctrl+I', 'sparkle', 'ai claude chat assistant'),
     c(t('AI: explain this file'), () => aiPanel.ask(t('Explain this file.')), '', 'sparkle', 'ai claude explain'),
     c(t('AI: fix the errors in this file'), () => aiPanel.ask(t('Find and fix the errors in this file. Show the corrected code.')), '', 'sparkle', 'ai claude fix bug error'),
@@ -2746,6 +2766,7 @@ function openSettings() {
     ['none', t('Off')],
   ].filter(Boolean);
   const tabs = [
+    ['general', 'settings', t('General')],
     ['appearance', 'palette', t('Appearance')],
     ['editor', 'code', t('Editor')],
     ['running', 'play', t('Running')],
@@ -2753,12 +2774,11 @@ function openSettings() {
     ['keys', 'command', t('Shortcuts')],
     ['plugins', 'sparkle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
-    ghOn() && ['github', 'git', 'GitHub'],
-    ['general', 'globe', t('Language & intro')],
+    ghOn() && ['github', 'github', 'GitHub'],
     ['about', 'refresh', t('About & updates')],
   ].filter(Boolean);
   if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
-  const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
+  const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'general';
   panel.innerHTML = `
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
       <nav class="s-nav">
@@ -2788,15 +2808,15 @@ function openSettings() {
             <h3>${t('App colors')}</h3>
             <div class="s-group">
               ${[
-                ['uiText', 'Text', 'menus, file names and buttons'],
-                ['uiText2', 'Secondary text', 'hints and small text'],
-                ['uiBase', 'Background', 'behind the panels'],
-                ['uiCard', 'Panels', 'editor, sidebar and windows'],
-                ['uiLine', 'Borders', 'lines between parts'],
+                ['uiText', t('Text'), t('menus, file names and buttons')],
+                ['uiText2', t('Secondary text'), t('hints and small text')],
+                ['uiBase', t('Background'), t('behind the panels')],
+                ['uiCard', t('Panels'), t('editor, sidebar and windows')],
+                ['uiLine', t('Borders'), t('lines between parts')],
               ]
                 .map(
                   ([k, label, hint]) =>
-                    `<label class="s-row"><span><b>${t(label)}</b><small>${t(hint)}${setting(k) ? '' : ` · ${t('from the current theme')}`}</small></span><span class="s-inline"><input type="color" data-key="${k}" value="${setting(k) || getComputedStyle(document.body).getPropertyValue({ uiText: '--text', uiText2: '--text-2', uiBase: '--base', uiCard: '--card-solid', uiLine: '--line-strong' }[k]).trim().replace(/^rgba?\(.*$/, '#888888') || '#888888'}"><button class="s-btn" data-color-reset="${k}">${t('Reset')}</button></span></label>`,
+                    `<label class="s-row"><span><b>${label}</b><small>${hint}${setting(k) ? '' : ` · ${t('from the current theme')}`}</small></span><span class="s-inline"><input type="color" data-key="${k}" value="${setting(k) || getComputedStyle(document.body).getPropertyValue({ uiText: '--text', uiText2: '--text-2', uiBase: '--base', uiCard: '--card-solid', uiLine: '--line-strong' }[k]).trim().replace(/^rgba?\(.*$/, '#888888') || '#888888'}"><button class="s-btn" data-color-reset="${k}">${t('Reset')}</button></span></label>`,
                 )
                 .join('')}
               <label class="s-row"><span><b>${t('Panel transparency')}</b><small>${t('how much the background shines through the panels')}</small></span><input type="range" min="30" max="100" data-key="cardAlpha" value="${setting('cardAlpha')}"></label>
@@ -2833,17 +2853,12 @@ function openSettings() {
             <div class="s-group">
               ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
-              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
               <label class="s-row"><span><b>${t('Density')}</b><small>${t('Compact fits more files, tabs and lines on the screen.')}</small></span><select data-key="density">${opt('comfortable', t('comfortable'), setting('density'))}${opt('compact', t('compact'), setting('density'))}</select></label>
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
               <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
               <div class="s-row"><span><b>${t('Background image')}</b><small>${t('your own picture instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${t('Choose…')}</button><button class="s-btn" data-action="bg-reset">${t('Reset')}</button></span></div>
-            </div>
-            <h3>${t('Home screen')}</h3>
-            <div class="s-group">
-              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
             </div>
             <div class="s-group s-reset-all"><div class="s-row"><span><b>${t('Reset the look')}</b><small>${t('cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay')}</small></span><button class="s-btn" data-action="look-reset">${icon('refresh', 13)}${t('Reset all')}</button></div></div>
           </section>
@@ -2915,6 +2930,20 @@ function openSettings() {
           <section data-pane="plugins" id="s-plugins"></section>
           <section data-pane="about" id="s-about"></section>
           <section data-pane="general">
+            <div class="s-hero">
+              <div class="s-hero-logo">${icon('code', 22)}</div>
+              <div><b>Flux ${escapeHtml(state.version || '')}</b><small>${t('Code. Run. Create.')}</small></div>
+              <button class="s-btn" data-action="goto-about">${icon('refresh', 13)}${t('Check for updates')}</button>
+            </div>
+            <h3>${t('You')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
+            </div>
+            <h3>${t('Performance')}</h3>
+            <div class="s-group">
+              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
+              <div class="s-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
+            </div>
             <h3>${t('Language')}</h3>
             <div class="s-group">
               <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
@@ -3047,6 +3076,7 @@ function openSettings() {
     $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
     if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
     if (id === 'about') updatesUI.render($('#s-about'));
+    if (id === 'general') showMemory();
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
@@ -3202,6 +3232,12 @@ function openSettings() {
       panel.querySelectorAll('[data-pointer]').forEach((b) => b.classList.toggle('on', b === ptr));
       await saveSettings({ pointer: ptr.dataset.pointer });
       return applyCustomization();
+    }
+    if (e.target.closest('[data-action="goto-about"]')) return panel.querySelector('[data-tab="about"]')?.click();
+    if (e.target.closest('[data-action="mem-free"]')) {
+      if (!state.tabs.some(isPythonTab)) lsp.stop();
+      await flux.freeMemory?.();
+      return showMemory();
     }
     const cr = e.target.closest('[data-color-reset]');
     if (cr) {
@@ -3423,6 +3459,18 @@ function shortcutRows() {
 }
 
 // Nastavenia nakresliť znova (napr. po nahratí kurzora) – bez skoku na začiatok.
+// Koľko pamäte práve používa Flux (všetky jeho procesy).
+async function showMemory() {
+  const el = $('#s-mem');
+  if (!el) return;
+  try {
+    const m = await flux.memory();
+    el.textContent = `${m.total} MB${m.lsp ? ` · ${t('Python autocomplete: {mb} MB', { mb: m.lsp })}` : ` · ${t('Python autocomplete is off')}`}`;
+  } catch {
+    el.textContent = '';
+  }
+}
+
 function rerenderSettings() {
   const top = $('#settings .s-body')?.scrollTop || 0;
   openSettings();
@@ -3688,7 +3736,7 @@ async function openStart() {
         <button class="hm-act primary" data-act="newproject"><span class="hm-act-ic">${icon('plus', 17)}</span><span><b>${t('New project')}</b><small>Ctrl+Shift+N</small></span></button>
         <button class="hm-act" data-act="open"><span class="hm-act-ic">${icon('folderOpen', 17)}</span><span><b>${t('Open folder')}</b><small>Ctrl+O</small></span></button>
         <button class="hm-act" data-act="openfile"><span class="hm-act-ic">${icon('file', 17)}</span><span><b>${t('Open file')}</b><small>${t('.md, .txt, any file')}</small></span></button>
-        ${ghOn() ? `<button class="hm-act" data-act="github"><span class="hm-act-ic">${icon('git', 17)}</span><span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>` : ''}
+        ${ghOn() ? `<button class="hm-act" data-act="github"><span class="hm-act-ic">${icon('github', 17)}</span><span><b>${t('From GitHub')}</b><small>${t('open a repository')}</small></span></button>` : ''}
       </div>
       <div class="hm-cols">
         <section class="hm-main">
@@ -4436,7 +4484,7 @@ async function main() {
       {
         id: 'github',
         name: 'GitHub',
-        icon: 'git',
+        icon: 'github',
         needs: t('needs Git'),
         description: t('Sign in with GitHub, open your repositories as projects, save changes with commit & push and publish new projects. Installs Git if it is missing.'),
         enabled: ghOn,

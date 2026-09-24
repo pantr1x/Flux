@@ -7,6 +7,8 @@
 <p align="center">
   A small, modern code editor for Windows 11 – run your code with one click, see websites live, get help from AI.
   <br><br>
+  <a href="https://pantr1x.github.io/Flux/"><b>Website</b></a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/pantr1x/Flux/releases/latest"><b>Download for Windows</b></a>
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">What's new</a>
@@ -86,5 +88,7 @@ npm run dist       # build the Windows installer into release/
 ```
 
 Flux is built with Electron, Monaco (the editor of VS Code), xterm.js and basedpyright.
+
+The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`).
 
 A new version is released by raising `version` in `package.json` and adding its notes to `CHANGELOG.md` – GitHub Actions builds the installer and publishes the release, and installed copies update themselves.

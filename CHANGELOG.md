@@ -2,6 +2,41 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 1.2.0 – 2026-09-24
+
+### Flux Together (Wi-Fi)
+- A new built-in plugin: work together with friends on the **same Wi-Fi**. Turn it on in **Settings → Plugins → Built into Flux**.
+- Everyone enters the same **room code**, and then you see each other in the sidebar under *Together*:
+  - who has which file open and on which line,
+  - **what they are typing, live**,
+  - what they recently opened, edited and saved.
+- In the editor you see your friend's line and cursor with their name. A dot in the file list shows which files others have open.
+- Click a friend to jump to their file and line.
+- It connects directly inside your network – nothing goes to the internet or GitHub, and there are no limits. If Windows asks, allow Flux on private networks.
+
+### More colors
+- New section **Settings → Appearance → App colors**. Pick your own colors for text, secondary text, background, panels and borders.
+- Choose how see-through the panels are.
+- Every color has its own *Reset*, and *Reset all colors* goes back to your theme.
+
+### Sidebar
+- **Settings** is now at the bottom left, with its name next to the icon.
+- **Hidden projects:** click *N hidden* to unfold them. The eye icon puts a project back into the sidebar.
+
+### Settings → General
+- A new first page with your version and *Check for updates*.
+- It also holds your name, the language, the intro and tour, and **Performance**:
+  - power saving,
+  - how much memory Flux uses right now,
+  - a *Free memory* button.
+
+### Fixes
+- **Mouse pointer:** the crosshair, dot and ring pointers work again, also with *Use it in the whole app*. They are now drawn as images that Windows accepts.
+- **GitHub** has its real logo everywhere in Flux.
+
+### Website
+- Flux has its own page with a download button for the newest version: https://pantr1x.github.io/Flux/
+
 ## 1.1.0 – 2026-09-24
 
 ### Useful plugins are built in

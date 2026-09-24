@@ -156,6 +156,8 @@ contextBridge.exposeInMainWorld('flux', {
 
   lspStart: () => ipcRenderer.invoke('lsp:start'),
   lspStop: () => ipcRenderer.send('lsp:stop'),
+  memory: () => ipcRenderer.invoke('app:memory'),
+  freeMemory: () => ipcRenderer.invoke('app:free-memory'),
   lspSend: (msg) => ipcRenderer.send('lsp:send', msg),
   onLspMessage: on('lsp:message'),
   onLspExit: on('lsp:exit'),
