@@ -125,6 +125,16 @@ The same release notes appear in the app (Settings → General → About & updat
 
 See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed in `plugins/index.json`. **Nothing is bundled or turned on by itself**: `BUILTIN_IDS` in `src/main/plugins.js` is empty and `package.json` → `build.files` does not ship `plugins/`. A plugin is downloaded from GitHub (same branches as translations) only when the user presses **Install** in Settings → Plugins. For local testing, `FLUX_PLUGIN_REGISTRY=/path/to/plugins` makes the store read that folder instead of GitHub.
 
+**Ratings and comments**: 1–5 stars plus text.
+- **Storage.** Each plugin has a GitHub issue in `pantr1x/Flux` (`issue` in `index.json`). A review is a comment on that issue, starting with `<!-- flux-review stars=N -->` and ★★★★☆.
+- **Rules.** One rating per user: the latest counts, and `review()` PATCHes your own comment. A comment without stars is a plain comment.
+- **Access.** Reading works without a login (60 requests/h, so the catalog is cached for 10 min); writing needs GitHub sign-in (`githubApi`).
+- **Code.**
+  - `plugins.js`: `reviews` / `review` / `deleteComment` / `summary`.
+  - `pluginsUI.js`: `renderReviews`, `rateSum`, `starRow` (half stars via `--f`).
+- **Screenshots.** They open in `openShots()`, a lightbox: ← → / wheel to switch, click to zoom and drag to pan, Esc to close. The global key handler in `app.js` returns early while `.pl-lightbox` is open, so Esc does not close the settings.
+- **New plugins.** Add a new issue titled `Plugin reviews: <name> (<id>)` and put its number in `index.json`.
+
 *Built into Flux* in the store are features that live in the app code, not in `plugins/`: **GitHub** and **Flux Together** (list in `app.js`, `createPluginsUI({ builtins })`). Each has `description` (card) and `details` (bullets on its own page, `renderBuiltinDetail` in `pluginsUI.js`).
 
 ## Layout, menu and search

@@ -4472,6 +4472,8 @@ function keybindings() {
     'keydown',
     (e) => {
       if (window.fluxRecordingKeys) return;
+      // náhľad screenshotu pluginu má vlastné klávesy (Esc, šípky) – nastavenia pod ním ostanú otvorené
+      if (document.querySelector('.pl-lightbox')) return;
       if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !palette && $('#onboard').hidden) {
         e.preventDefault();
         e.stopPropagation();

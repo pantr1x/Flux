@@ -1,6 +1,7 @@
 // Pluginy: katalóg je na GitHube (priečinok plugins/ v repozitári Flux), nainštalované sú v userData/plugins.
 // Každý plugin má plugin.json (manifest), README.md, obrázky a JS súbor s funkciou activate(flux).
-// Hodnotenie = reakcie 👍 / 👎 na GitHub issue pluginu.
+// Recenzie (1–5 hviezdičiek + komentár) = komentáre pod GitHub issue pluginu so značkou <!-- flux-review stars=N -->.
+// Používateľ issues nevidí – vo Fluxe sú to hodnotenia a komentáre; čítať môže každý, písať po prihlásení cez GitHub.
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
@@ -47,20 +48,83 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
       ? `app://flux/registry/${id}/${file}`
       : `https://raw.githubusercontent.com/${REPO}/${branch || BRANCHES[0]}/plugins/${id}/${file}`;
 
-  // Hodnotenie z GitHub issue (počet 👍 a 👎).
+  // ---------- recenzie a komentáre ----------
+  const MARK = /<!--\s*flux-review stars=(\d)\s*-->/;
+  function parseComment(c) {
+    const m = MARK.exec(c.body || '');
+    return {
+      id: c.id,
+      user: c.user?.login || '',
+      avatar: c.user?.avatar_url || '',
+      date: c.created_at,
+      edited: !!c.updated_at && c.updated_at !== c.created_at,
+      stars: m ? Math.min(5, Math.max(1, Number(m[1]))) : 0,
+      body: (c.body || '').replace(MARK, '').replace(/^\s*[★☆]{5}\s*/, '').trim(),
+      url: c.html_url,
+    };
+  }
+  // S prihlásením cez GitHub (5000 dopytov/h), inak bez neho (60/h – katalóg sa preto drží 10 min).
+  async function getJson(pathname) {
+    try {
+      return await githubApi(pathname);
+    } catch {}
+    const res = await net.fetch(`https://api.github.com${pathname}`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Flux' } });
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+    return res.json();
+  }
+  async function comments(issue) {
+    return (await getJson(`/repos/${REPO}/issues/${issue}/comments?per_page=100`)).map(parseComment);
+  }
+  // Každý má jedno hodnotenie – platí jeho posledná recenzia.
+  function summary(items) {
+    const byUser = new Map();
+    for (const c of items) if (c.stars) byUser.set(c.user, c.stars);
+    const all = [...byUser.values()];
+    return { rating: all.length ? all.reduce((a, b) => a + b, 0) / all.length : 0, ratingCount: all.length, commentCount: items.filter((c) => c.body).length };
+  }
   async function ratings(list) {
     await Promise.all(
       list.map(async (p) => {
         if (!p.issue) return;
         try {
-          const res = await net.fetch(`https://api.github.com/repos/${REPO}/issues/${p.issue}`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Flux' } });
-          if (!res.ok) return;
-          const issue = await res.json();
-          p.likes = issue.reactions?.['+1'] || 0;
-          p.dislikes = issue.reactions?.['-1'] || 0;
+          Object.assign(p, summary(await comments(p.issue)));
         } catch {}
       }),
     );
+  }
+  async function issueOf(id) {
+    if (!cache.data) await registry().catch(() => {});
+    return cache.data?.find((p) => p.id === id)?.issue;
+  }
+  const me = () => getSettings().github?.user?.login || '';
+
+  // Detail pluginu: všetky recenzie a komentáre (najnovšie hore).
+  async function reviews(id) {
+    const issue = await issueOf(id);
+    if (!issue) return { items: [], me: me(), ...summary([]) };
+    const items = await comments(issue);
+    return { items: items.reverse(), me: me(), ...summary(items) };
+  }
+
+  // Hodnotenie (stars 1–5, jedno na človeka – upraví sa) alebo obyčajný komentár (stars 0).
+  async function review(id, stars, text) {
+    const issue = await issueOf(id);
+    if (!issue) throw new Error(t('This plugin has no reviews yet.'));
+    const n = Math.max(0, Math.min(5, Math.round(Number(stars) || 0)));
+    text = String(text || '').trim().slice(0, 4000);
+    if (!n && !text) throw new Error(t('Pick stars or write a comment.'));
+    const body = n ? `<!-- flux-review stars=${n} -->\n${'★'.repeat(n)}${'☆'.repeat(5 - n)}${text ? `\n\n${text}` : ''}` : text;
+    const mine = n ? (await comments(issue)).filter((c) => c.stars && c.user === me()).pop() : null;
+    if (mine) await githubApi(`/repos/${REPO}/issues/comments/${mine.id}`, { method: 'PATCH', body: { body } });
+    else await githubApi(`/repos/${REPO}/issues/${issue}/comments`, { method: 'POST', body: { body } });
+    cache.at = 0;
+    return true;
+  }
+
+  async function deleteComment(commentId) {
+    await githubApi(`/repos/${REPO}/issues/comments/${Number(commentId)}`, { method: 'DELETE' });
+    cache.at = 0;
+    return true;
   }
 
   async function registry(force = false) {
@@ -189,13 +253,6 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
     return [...own, ...built].filter((m) => en[m.id] !== false);
   }
 
-  // 👍 / 👎 cez GitHub (treba pripojený GitHub účet).
-  async function rate(issue, like) {
-    await githubApi(`/repos/${REPO}/issues/${issue}/reactions`, { method: 'POST', body: { content: like ? '+1' : '-1' } });
-    cache.at = 0;
-    return true;
-  }
-
   // Nová šablóna pluginu – rovno ako projekt vo Fluxe.
   async function scaffold(root, name) {
     const slug = (name || 'my-plugin').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-plugin';
@@ -260,7 +317,7 @@ The full guide is in docs/PLUGINS.md.
     return dir;
   }
 
-  return { builtins, builtinDir: BUILTIN_DIR, registry, details, install, installFromFolder, uninstall, setEnabled, active, rate, scaffold, installedList, dir: pluginsDir };
+  return { builtins, builtinDir: BUILTIN_DIR, registry, details, install, installFromFolder, uninstall, setEnabled, active, reviews, review, deleteComment, scaffold, installedList, dir: pluginsDir };
 }
 
 module.exports = { createPlugins, pluginsDir };

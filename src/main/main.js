@@ -1030,7 +1030,9 @@ function registerIpc() {
   ipcMain.handle('plugins:enable', (_e, id, on) => plugins.setEnabled(id, on));
   ipcMain.handle('plugins:active', () => plugins.active());
   ipcMain.handle('plugins:installed', () => plugins.installedList());
-  ipcMain.handle('plugins:rate', (_e, issue, like) => plugins.rate(Number(issue), !!like));
+  ipcMain.handle('plugins:reviews', (_e, id) => plugins.reviews(String(id)));
+  ipcMain.handle('plugins:review', (_e, id, stars, text) => plugins.review(String(id), stars, text));
+  ipcMain.handle('plugins:delete-comment', (_e, commentId) => plugins.deleteComment(commentId));
   ipcMain.handle('plugins:builtin', () => plugins.builtins());
   ipcMain.handle('plugins:load-folder', async () => {
     const r = await dialog.showOpenDialog(win, { title: t('Plugin folder (with plugin.json)'), properties: ['openDirectory'] });

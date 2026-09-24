@@ -7,12 +7,110 @@ const flux = window.flux;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const errText = (err) => String(err?.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
-// 👍 / 👎 → hviezdičky (1 až 5).
+// Priemer hviezdičiek z recenzií (plugins.js → summary).
 function stars(p) {
-  const total = (p.likes || 0) + (p.dislikes || 0);
-  if (!total) return `<span class="pl-new">${t('New')}</span>`;
-  const score = 1 + (4 * p.likes) / total;
-  return `<span class="pl-stars" title="${p.likes} 👍 · ${p.dislikes} 👎">★ ${score.toFixed(1)} <small>(${total})</small></span>`;
+  if (!p.ratingCount) return `<span class="pl-new">${t('New')}</span>`;
+  return `<span class="pl-stars" title="${t('{n} ratings', { n: p.ratingCount })}">★ ${p.rating.toFixed(1)} <small>(${p.ratingCount})</small></span>`;
+}
+// súhrn hore v detaile: „4.5 ★★★★½ 12 ratings · 5 comments“
+function rateSum(p) {
+  return p.ratingCount
+    ? `<b class="rv-big">${p.rating.toFixed(1)}</b>${starRow(p.rating, 16)}<small>${t('{n} ratings', { n: p.ratingCount })}${p.commentCount ? ` · ${t('{n} comments', { n: p.commentCount })}` : ''}</small>`
+    : `<small>${t('No ratings yet')}</small>`;
+}
+// rad hviezdičiek, aj s polovičnými (4.5 → ★★★★½)
+function starRow(value, size = 14) {
+  let html = '';
+  for (let i = 1; i <= 5; i++) {
+    const fill = Math.max(0, Math.min(1, value - i + 1));
+    html += `<span class="rv-star" style="--f:${Math.round(fill * 100)}%;font-size:${size}px">★</span>`;
+  }
+  return `<span class="rv-row" aria-label="${value.toFixed(1)} / 5">${html}</span>`;
+}
+function ago(date) {
+  const s = (Date.now() - new Date(date)) / 1000;
+  if (s < 60) return t('just now');
+  if (s < 3600) return t('{n} min ago', { n: Math.floor(s / 60) });
+  if (s < 86400) return t('{n} h ago', { n: Math.floor(s / 3600) });
+  if (s < 86400 * 30) return t('{n} days ago', { n: Math.floor(s / 86400) });
+  return new Date(date).toLocaleDateString();
+}
+
+// Screenshoty na celú obrazovku: šípky/koliesko prepínajú, klik priblíži (a ťahaním posúvaš), Esc zavrie.
+function openShots(urls, start = 0) {
+  let i = start;
+  let zoom = false;
+  const el = document.createElement('div');
+  el.className = 'pl-lightbox';
+  el.innerHTML = `<button class="lb-close" title="${t('Close (Esc)')}">${icon('x', 18)}</button>
+    ${urls.length > 1 ? `<button class="lb-nav lb-prev" title="←">${icon('arrowLeft', 20)}</button><button class="lb-nav lb-next" title="→">${icon('arrowRight', 20)}</button>` : ''}
+    <div class="lb-stage"><img alt=""></div>
+    <div class="lb-bar"><span class="lb-count"></span><span>${t('Click to zoom')}</span></div>`;
+  const img = el.querySelector('img');
+  const stage = el.querySelector('.lb-stage');
+  const show = () => {
+    zoom = false;
+    el.classList.remove('zoomed');
+    img.src = urls[i];
+    el.querySelector('.lb-count').textContent = urls.length > 1 ? `${i + 1} / ${urls.length}` : '';
+  };
+  const go = (d) => {
+    i = (i + d + urls.length) % urls.length;
+    show();
+  };
+  const close = () => {
+    el.remove();
+    window.removeEventListener('keydown', onKey, true);
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') go(-1);
+    else if (e.key === 'ArrowRight') go(1);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  // priblíženie na miesto kliknutia
+  img.onclick = (e) => {
+    e.stopPropagation();
+    zoom = !zoom;
+    el.classList.toggle('zoomed', zoom);
+    if (zoom) {
+      const r = img.getBoundingClientRect();
+      const fx = (e.clientX - r.left) / r.width;
+      const fy = (e.clientY - r.top) / r.height;
+      requestAnimationFrame(() => {
+        stage.scrollLeft = fx * stage.scrollWidth - stage.clientWidth / 2;
+        stage.scrollTop = fy * stage.scrollHeight - stage.clientHeight / 2;
+      });
+    }
+  };
+  let drag = null;
+  stage.onpointerdown = (e) => {
+    if (!zoom) return;
+    drag = { x: e.clientX, y: e.clientY, l: stage.scrollLeft, t: stage.scrollTop, moved: false };
+  };
+  stage.onpointermove = (e) => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
+    stage.scrollLeft = drag.l - (e.clientX - drag.x);
+    stage.scrollTop = drag.t - (e.clientY - drag.y);
+  };
+  stage.onpointerup = () => setTimeout(() => (drag = null), 0);
+  img.addEventListener('click', (e) => drag?.moved && e.stopImmediatePropagation(), true);
+  el.onclick = (e) => {
+    if (e.target.closest('.lb-prev')) return go(-1);
+    if (e.target.closest('.lb-next')) return go(1);
+    if (e.target === el || e.target === stage || e.target.closest('.lb-close')) close();
+  };
+  el.onwheel = (e) => {
+    if (zoom || urls.length < 2) return;
+    e.preventDefault();
+    go(e.deltaY > 0 ? 1 : -1);
+  };
+  window.addEventListener('keydown', onKey, true);
+  document.body.append(el);
+  show();
 }
 
 export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
@@ -173,13 +271,76 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
           <div class="pl-tags">${(full.tags || []).map((x) => `<span>${esc(x)}</span>`).join('')}</div></div>
         <div class="pl-side">${actionBtn(full)}${full.installed && !full.builtin ? `<button class="s-btn" data-pl-uninstall="${full.id}">${t('Uninstall')}</button>` : ''}</div>
       </div>
-      <div class="pl-rate">${stars(full)}${
-        full.issue
-          ? `<button class="s-btn" data-pl-like="${full.issue}">👍 ${full.likes || 0}</button><button class="s-btn" data-pl-dislike="${full.issue}">👎 ${full.dislikes || 0}</button><button class="s-btn" data-pl-discuss="${full.issue}">${icon('external', 12)}${t('Reviews on GitHub')}</button>`
-          : ''
-      }</div>
-      ${full.screenshotUrls?.length ? `<div class="pl-shots">${full.screenshotUrls.map((u) => `<img src="${esc(u)}" alt="" data-pl-zoom>`).join('')}</div>` : ''}
-      <div class="pl-readme ai-body">${markdown(full.readme || full.description || '')}</div>`;
+      <div class="pl-rate"><span class="pl-rate-sum">${rateSum(full)}</span>${full.issue ? `<button class="s-btn" data-rv-jump>${icon('star', 13)}${t('Rate')}</button>` : ''}</div>
+      ${full.screenshotUrls?.length ? `<div class="pl-shots">${full.screenshotUrls.map((u, i) => `<button class="pl-shot" data-pl-zoom="${i}" title="${t('Click to enlarge')}"><img src="${esc(u)}" alt=""><span>${icon('search', 14)}</span></button>`).join('')}</div>` : ''}
+      <div class="pl-readme ai-body">${markdown(full.readme || full.description || '')}</div>
+      ${full.issue ? `<h3 id="rv-title">${t('Ratings and comments')}</h3><div id="pl-reviews"><div class="s-loading"><span class="spin"></span></div></div>` : ''}`;
+    detailShots = full.screenshotUrls || [];
+    if (full.issue) renderReviews(id);
+  }
+
+  // ---------- hodnotenia a komentáre ----------
+  let detailShots = [];
+  let rv = { id: null, data: null, stars: 0, busy: false };
+  async function renderReviews(id, reload = true) {
+    const el = box?.querySelector('#pl-reviews');
+    if (!el) return;
+    if (reload || rv.id !== id) {
+      try {
+        const data = await flux.pluginReviews(id);
+        const mine = data.items.find((c) => c.stars && c.user === data.me);
+        rv = { id, data, stars: mine?.stars || 0, text: mine?.body || '', mine, busy: false };
+      } catch (err) {
+        el.innerHTML = `<div class="s-loading">${t('Could not load comments: {msg}', { msg: esc(errText(err)) })}</div>`;
+        return;
+      }
+    }
+    if (detailId !== id || !box.contains(el)) return;
+    const { data, mine } = rv;
+    const sum = box.querySelector('.pl-rate-sum');
+    if (sum) sum.innerHTML = rateSum(data);
+    const pick = [1, 2, 3, 4, 5].map((n) => `<button class="rv-pick${n <= rv.stars ? ' on' : ''}" data-rv-star="${n}" title="${n} / 5">★</button>`).join('');
+    const form = data.me
+      ? `<div class="rv-form">
+          <div class="rv-form-top"><span class="rv-picker">${pick}</span><small>${rv.stars ? [t('Bad'), t('Not great'), t('OK'), t('Good'), t('Excellent')][rv.stars - 1] : t('Tap a star to rate')}</small></div>
+          <textarea id="rv-text" rows="3" maxlength="4000" placeholder="${t('Write a comment – what do you like, what is missing? (optional)')}">${esc(rv.text || '')}</textarea>
+          <div class="rv-form-bar"><small>${t('Posted as {user} on GitHub', { user: `<b>${esc(data.me)}</b>` })}</small><span class="grow"></span>${mine ? `<button class="s-btn" data-rv-del="${mine.id}">${icon('trash', 13)}${t('Delete my review')}</button>` : ''}<button class="s-btn primary" data-rv-send${rv.busy ? ' disabled' : ''}>${rv.busy ? '<span class="spin"></span>' : icon('check', 13)}${mine ? t('Update review') : t('Post')}</button></div>
+        </div>`
+      : `<div class="rv-signin">${icon('github', 18)}<span><b>${t('Sign in with GitHub to rate and comment')}</b><small>${t('Everyone can read the comments. Your GitHub name is shown next to yours.')}</small></span><button class="s-btn primary" data-rv-signin>${t('Sign in')}</button></div>`;
+    const items = data.items.filter((c) => c.stars || c.body);
+    const list = items.length
+      ? items
+          .map(
+            (c) => `<div class="rv-item${c.user === data.me ? ' mine' : ''}">
+              ${c.avatar ? `<img class="rv-avatar" src="${esc(c.avatar)}&s=64" alt="">` : `<span class="rv-avatar ph">${esc(c.user.slice(0, 1).toUpperCase())}</span>`}
+              <div class="rv-main">
+                <div class="rv-meta"><b>${esc(c.user)}</b>${c.stars ? starRow(c.stars, 12) : ''}<small>${ago(c.date)}${c.edited ? ` · ${t('edited')}` : ''}</small>${c.user === data.me && !c.stars ? `<button class="icon-btn rv-x" data-rv-del="${c.id}" title="${t('Delete')}">${icon('trash', 12)}</button>` : ''}</div>
+                ${c.body ? `<div class="rv-body ai-body">${markdown(c.body, { preview: true })}</div>` : ''}
+              </div>
+            </div>`,
+          )
+          .join('')
+      : `<div class="rv-empty">${icon('sparkle', 16)}${t('No reviews yet – be the first!')}</div>`;
+    el.innerHTML = form + `<div class="rv-list">${list}</div>`;
+    const ta = el.querySelector('#rv-text');
+    if (ta) ta.oninput = () => (rv.text = ta.value);
+  }
+
+  async function sendReview() {
+    const text = box.querySelector('#rv-text')?.value || '';
+    if (!rv.stars && !text.trim()) return toast(t('Pick stars or write a comment.'), 'info');
+    rv.busy = true;
+    renderReviews(rv.id, false);
+    try {
+      await flux.pluginReview(rv.id, rv.stars, text);
+      toast(rv.stars ? t('Thanks for rating!') : t('Comment posted.'), 'ok');
+      list = await flux.pluginRegistry(true).catch(() => list);
+      await renderDetail(rv.id);
+    } catch (err) {
+      rv.busy = false;
+      renderReviews(rv.id, false);
+      toast(errText(err), 'error', 7000);
+    }
   }
 
   async function install(id) {
@@ -204,11 +365,34 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
   }
 
   async function onClick(e) {
-    const b = e.target.closest('button, input, [data-pl-open], [data-bi-open], img[data-pl-zoom]');
+    const b = e.target.closest('button, input, [data-pl-open], [data-bi-open]');
     if (!b) return;
-    if (b.matches('img[data-pl-zoom]')) {
-      b.classList.toggle('zoom');
+    if (b.dataset.plZoom !== undefined) return openShots(detailShots, Number(b.dataset.plZoom) || 0);
+    if (b.dataset.rvStar) {
+      const n = Number(b.dataset.rvStar);
+      rv.stars = rv.stars === n ? 0 : n;
+      return renderReviews(rv.id, false);
+    }
+    if (b.dataset.rvSend !== undefined) return sendReview();
+    if (b.dataset.rvJump !== undefined) {
+      box.querySelector('#rv-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => box.querySelector('#rv-text')?.focus(), 400);
       return;
+    }
+    if (b.dataset.rvDel) {
+      try {
+        await flux.pluginDeleteComment(b.dataset.rvDel);
+        toast(t('Deleted.'), 'ok');
+        list = await flux.pluginRegistry(true).catch(() => list);
+        return renderDetail(rv.id);
+      } catch (err) {
+        return toast(errText(err), 'error', 7000);
+      }
+    }
+    if (b.dataset.rvSignin !== undefined) {
+      const tab = document.querySelector('#settings [data-tab="github"]');
+      if (tab) return tab.click();
+      return toast(t('Turn on GitHub in Settings → Plugins → Built into Flux first.'), 'info', 6000);
     }
     if (b.dataset.biOn || b.dataset.biOff) {
       const bi = builtins.find((x) => x.id === (b.dataset.biOn || b.dataset.biOff));
@@ -248,17 +432,6 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
       toast(t('Plugin removed.'), 'ok');
       return renderDetail(b.dataset.plUninstall);
     }
-    if (b.dataset.plLike || b.dataset.plDislike) {
-      try {
-        await flux.pluginRate(b.dataset.plLike || b.dataset.plDislike, !!b.dataset.plLike);
-        toast(t('Thanks for rating!'), 'ok');
-        list = await flux.pluginRegistry(true);
-        return renderDetail(detailId);
-      } catch (err) {
-        return toast(errText(err), 'error', 7000);
-      }
-    }
-    if (b.dataset.plDiscuss) return flux.openExternal(`https://github.com/pantr1x/Flux/issues/${b.dataset.plDiscuss}`);
     if (b.dataset.plBack !== undefined) {
       detailId = null;
       return renderHome();

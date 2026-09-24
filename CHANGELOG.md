@@ -2,6 +2,18 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.12 – 2026-09-24
+
+### Plugins
+- **Ratings and comments:**
+  - Give a plugin **1 to 5 stars** and write what you think. Open a plugin in **Settings → Plugins** and press **Rate**.
+  - You can change or delete your rating later.
+  - Everyone can read the comments. To write, sign in with GitHub.
+- The average rating is shown on every plugin card and at the top of the plugin page, for example ★ 4.5 (12).
+- **Screenshots open full screen:**
+  - Click a screenshot to see it big. Use ← → or the mouse wheel to go through them.
+  - Click again to zoom in, drag to move around, and press Esc to close.
+
 ## 1.4.11 – 2026-09-24
 
 ### Fixes and small improvements
