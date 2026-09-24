@@ -7899,3 +7899,51 @@ body.compact.side-right #main {
   max-width: none;
   margin-top: 12px;
 }
+
+/* ---------- prechodové animácie (Nastavenia → Appearance → Window → Transition animations) ---------- */
+@keyframes fx-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes fx-fade {
+  from {
+    opacity: 0;
+  }
+}
+body.fx-trans .fx-in {
+  animation: fx-fade 0.2s var(--ease);
+}
+body.fx-trans .s-body > section:not([hidden]) {
+  animation: fx-in 0.22s var(--ease);
+}
+body.fx-trans #terminal:not([hidden]),
+body.fx-trans #shell:not([hidden]) {
+  animation: fx-fade 0.18s var(--ease);
+}
+body.fx-trans #welcome:not([hidden]) > * {
+  animation: fx-in 0.24s var(--ease);
+}
+body.fx-trans .pl-head,
+body.fx-trans .bi-feats {
+  animation: fx-in 0.22s var(--ease);
+}
+
+/* stavový riadok: sťahovanie aktualizácie */
+#st-update .st-upbar {
+  display: inline-block;
+  width: 54px;
+  height: 4px;
+  margin-left: 6px;
+  border-radius: 99px;
+  background: var(--active);
+  overflow: hidden;
+  vertical-align: middle;
+}
+#st-update .st-upbar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s;
+}

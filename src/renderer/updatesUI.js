@@ -132,8 +132,24 @@ export function createUpdatesUI({ toast, getSetting, saveSettings }) {
     announced[key] = true;
     fn();
   };
+  // Stavový riadok: „Updating 42 %“ s malým pruhom, kým sa nová verzia sťahuje na pozadí.
+  function drawStatusbar() {
+    const el = document.getElementById('st-update');
+    if (!el || !state) return;
+    const on = state.status === 'downloading' || state.status === 'ready';
+    el.hidden = !on;
+    if (!on) return;
+    el.title = state.status === 'ready' ? t('Flux {v} is ready – it installs when you restart.', { v: state.latest }) : t('Downloading Flux {v} in the background…', { v: state.latest });
+    el.innerHTML =
+      state.status === 'ready'
+        ? `${icon('refresh', 12)}<span>${t('Restart to update')}</span>`
+        : `${icon('download', 12)}<span>${t('Updating {p} %', { p: Number(state.progress) || 0 })}</span><span class="st-upbar"><i style="width:${Number(state.progress) || 0}%"></i></span>`;
+    el.onclick = () => (state.status === 'ready' ? startInstall() : null);
+  }
+
   flux.onUpdateState((s) => {
     state = s;
+    drawStatusbar();
     if (box?.isConnected) drawStatus();
     else drawOverlay();
     // počas inštalácie ukazuje priebeh okno – bez ďalších správ

@@ -122,7 +122,12 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 
 ## Updates
 
-`updater.js` → `install()`: re-checks for a newer version, emits `status: 'installing'`, starts `showInstallWindow()` (a detached PowerShell WinForms window with a progress bar that closes when the new Flux process starts, max 3 min) and then `quitAndInstall(true, true)` (silent install + relaunch). In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` while downloading.
+`updater.js` → `install()`: re-checks for a newer version, emits `status: 'installing'`, starts `showInstallWindow()` (a detached PowerShell WinForms window; its progress bar compares the size of the install folder with the size before the update – the installer first removes the old files, then writes the new ones – and it closes when the new Flux process starts, max 3 min) and then `quitAndInstall(true, true)` (silent install + relaunch). In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` and the status bar `#st-update` (Updating N % / Restart to update) while a version downloads.
+
+## Smooth scrolling and transitions
+
+- `inertia` (*Smooth scrolling with inertia*, Appearance → Window) controls both the editor (`inertiaScroll()` in `app.js`, a capture wheel listener on `#editor`) and every other scrollable element (`src/renderer/smoothScroll.js` – a global wheel listener that moves the nearest scrollable parent with velocity + friction). Elements that must keep native scrolling: add class `no-smooth` (Monaco, xterm, iframes, selects and range inputs are skipped already).
+- `transitions` (*Transition animations*) sets `body.fx-trans`; CSS plays `fx-in`/`fx-fade` when settings panes, Output/Terminal or the project page appear, and `playTransition(el)` restarts the animation (used when switching files in `activate()`). `body.no-anim` (Memory & speed) wins over it.
 
 ## Memory & speed
 

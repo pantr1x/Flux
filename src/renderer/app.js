@@ -28,6 +28,7 @@ import { createTogether } from './together.js';
 import { createUpdatesUI } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
 import { createMenubar } from './menubar.js';
+import { setupSmoothScroll } from './smoothScroll.js';
 
 const flux = window.flux;
 const $ = (sel) => document.querySelector(sel);
@@ -116,6 +117,7 @@ const DEFAULTS = {
   terminalFontSize: 13,
   suggestDetails: true,
   inertia: true,
+  transitions: true,
   menuBar: false,
   showSearch: true,
   panelPos: 'bottom',
@@ -412,6 +414,7 @@ function applyCustomization() {
   document.body.classList.toggle('panel-side', setting('panelPos') !== 'bottom');
   document.body.classList.toggle('side-right', setting('sidePos') === 'right');
   menubar?.render();
+  document.body.classList.toggle('fx-trans', !!setting('transitions'));
   document.body.classList.toggle('no-fx', !optOn('optFx'));
   document.body.classList.toggle('no-anim', !optOn('optAnim'));
   applyAppColors();
@@ -541,6 +544,7 @@ function createEditor() {
   codemap.setVisible(setting('minimap'));
 
   inertiaScroll();
+  setupSmoothScroll(() => !!setting('inertia'));
   monaco.editor.onDidChangeMarkers((uris) => {
     const m = editor.getModel();
     if (m && uris.some((u) => u.toString() === m.uri.toString())) updateProblems();
@@ -665,6 +669,14 @@ function announceProblems() {
       },
     });
   }, 700);
+}
+
+// Prechodová animácia (jemné objavenie) – pri prepnutí súboru, záložky panela a pod.; dá sa vypnúť.
+function playTransition(el) {
+  if (!el || !setting('transitions')) return;
+  el.classList.remove('fx-in');
+  void el.offsetWidth; // znova spustiť animáciu
+  el.classList.add('fx-in');
 }
 
 // ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
@@ -869,6 +881,7 @@ function placeholderFor(tab) {
 function activate(tab) {
   const prev = activeTab();
   if (prev && prev !== tab) prev.viewState = editor.saveViewState();
+  if (prev !== tab) playTransition($('#editor'));
   state.active = tab;
   editor.setModel(tab.model);
   editor.updateOptions({ readOnly: tab.readonly, placeholder: placeholderFor(tab) });
@@ -2889,6 +2902,8 @@ function openSettings() {
             <h3>${t('Window')}</h3>
             <div class="s-group">
               ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
+              ${toggle('inertia', 'Smooth scrolling with inertia', 'the editor, settings, lists and panels keep gliding a bit after you stop the wheel')}
+              ${toggle('transitions', 'Transition animations', 'a soft fade when you switch files, settings pages and screens')}
               ${toggle('menuBar', 'Menu bar', 'File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo')}
               ${toggle('showSearch', 'Search button', 'a magnifier at the top that finds files, commands and settings')}
               <label class="s-row"><span><b>${t('Panel position')}</b><small>${t('where output and the terminal are')}</small></span><select data-key="panelPos">${[['bottom', t('Bottom')], ['right', t('Right')], ['left', t('Left')]].map(([v, l]) => opt(v, l, setting('panelPos'))).join('')}</select></label>
@@ -2916,7 +2931,6 @@ function openSettings() {
             <div class="s-group">
               ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
               ${toggle('stickyScroll', 'Sticky headers', 'the function or class you are in stays at the top while you scroll')}
-              ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
               ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
               ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
             </div>

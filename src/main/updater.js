@@ -122,11 +122,39 @@ function createUpdater({ getSettings, send }) {
     setTimeout(() => autoUpdater.quitAndInstall(true, true), 900);
   }
 
-  // Kým je Flux zatvorený a inštalátor beží potichu, malé okno Windows ukazuje priebeh.
+  // Veľkosť nainštalovaného Fluxu – podľa nej okno počíta, koľko percent inštalátor už zapísal.
+  function dirSize(dir) {
+    let total = 0;
+    const walk = (d) => {
+      let list = [];
+      try {
+        list = fs.readdirSync(d, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of list) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else
+          try {
+            total += fs.statSync(p).size;
+          } catch {}
+      }
+    };
+    walk(dir);
+    return total;
+  }
+
+  // Kým je Flux zatvorený a inštalátor beží potichu, malé okno Windows ukazuje priebeh v percentách:
+  // inštalátor najprv zmaže starú verziu a potom zapisuje novú – okno sleduje, koľko z nej je už na disku.
   // Samostatný proces PowerShellu (Flux sa počas inštalácie nesmie spustiť) – zavrie sa,
   // keď sa Flux znova otvorí, najneskôr po 3 minútach. Ak by sa nepodarilo, aktualizácia ide ďalej.
   function showInstallWindow(version) {
     if (process.platform !== 'win32') return;
+    const installDir = path.dirname(process.execPath);
+    const expected = Math.max(1, dirSize(installDir));
+    const preparing = t('Preparing…');
+    const installing = t('Installing… {p} %');
     const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
     const title = t('Updating Flux to {v}…', { v: version });
     const note = t('Flux closes, installs the update and opens again by itself.');
@@ -134,24 +162,37 @@ function createUpdater({ getSettings, send }) {
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $f = New-Object System.Windows.Forms.Form
-$f.FormBorderStyle = 'None'; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object System.Drawing.Size(420, 132)
+$f.FormBorderStyle = 'None'; $f.StartPosition = 'CenterScreen'; $f.Size = New-Object System.Drawing.Size(420, 136)
 $f.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 30); $f.TopMost = $true; $f.ShowInTaskbar = $true; $f.Text = 'Flux'
 $a = New-Object System.Windows.Forms.Label; $a.Text = ${q(title)}; $a.ForeColor = 'White'
 $a.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 12); $a.AutoSize = $true; $a.Location = New-Object System.Drawing.Point(24, 20)
 $b = New-Object System.Windows.Forms.Label; $b.Text = ${q(note)}; $b.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 176)
 $b.Font = New-Object System.Drawing.Font('Segoe UI', 9); $b.AutoSize = $true; $b.Location = New-Object System.Drawing.Point(25, 50)
-$p = New-Object System.Windows.Forms.ProgressBar; $p.Style = 'Marquee'; $p.MarqueeAnimationSpeed = 25
-$p.Location = New-Object System.Drawing.Point(24, 86); $p.Size = New-Object System.Drawing.Size(372, 8)
-$f.Controls.AddRange(@($a, $b, $p))
+$c = New-Object System.Windows.Forms.Label; $c.Text = ${q(preparing)}; $c.ForeColor = [System.Drawing.Color]::FromArgb(160, 160, 176)
+$c.Font = New-Object System.Drawing.Font('Segoe UI', 9); $c.AutoSize = $true; $c.Location = New-Object System.Drawing.Point(25, 100)
+$p = New-Object System.Windows.Forms.ProgressBar; $p.Style = 'Continuous'; $p.Minimum = 0; $p.Maximum = 100; $p.Value = 0
+$p.Location = New-Object System.Drawing.Point(24, 80); $p.Size = New-Object System.Drawing.Size(372, 12)
+$f.Controls.AddRange(@($a, $b, $p, $c))
+$dir = ${q(installDir)}; $expected = [double]${expected}; $low = [double]::MaxValue; $growing = $false; $best = 0
 # proces je spustený skrytý – okno treba ukázať výslovne
 Add-Type -Name W -Namespace FluxUpd -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);'
 $f.Add_Shown({ [FluxUpd.W]::ShowWindow($f.Handle, 5) | Out-Null; $f.Activate() })
 $start = Get-Date
 $t = New-Object System.Windows.Forms.Timer; $t.Interval = 700
 $t.Add_Tick({
+  # koľko novej verzie je už na disku (po zmazaní starej veľkosť klesne a potom rastie)
+  $size = [double](Get-ChildItem -LiteralPath $dir -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+  if ($size -lt $global:low) { $global:low = $size }
+  if ($size -gt $global:low + 1MB) { $global:growing = $true }
+  if ($global:growing) {
+    $pct = [int][Math]::Min(99, [Math]::Max(1, 100 * ($size - $global:low) / [Math]::Max(1, $expected - $global:low)))
+    if ($pct -gt $global:best) { $global:best = $pct }
+    $p.Value = $global:best; $c.Text = (${q(installing)} -replace '\{p\}', $global:best)
+  }
   # nový Flux (spustený inštalátorom po aktualizácii) = hotovo
   $flux = Get-Process -Name 'Flux' -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $start.AddSeconds(3) }
-  if ($flux -or ((Get-Date) - $start).TotalSeconds -gt 180) { $f.Close() }
+  if ($flux) { $p.Value = 100; $c.Text = (${q(installing)} -replace '\{p\}', 100); $f.Refresh(); Start-Sleep -Milliseconds 400; $f.Close() }
+  elseif (((Get-Date) - $start).TotalSeconds -gt 180) { $f.Close() }
 })
 $t.Start(); [void]$f.ShowDialog()
 `;

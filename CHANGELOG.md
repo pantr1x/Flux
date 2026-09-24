@@ -2,6 +2,20 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.0 – 2026-09-24
+
+### Update progress
+- While a new version **installs in the background**, the small update window shows a **real progress bar with percent** – how much of the new version is already installed.
+- While a new version **downloads**, the status bar at the bottom shows **Updating 42 %** with a small bar. When it is ready it says **Restart to update** – click it to install.
+
+### Smooth scrolling everywhere
+- Not just the editor: **Settings, lists, the sidebar, the project page, AI and every other panel** now glide a little after you stop the mouse wheel.
+- Turn it off with **Smooth scrolling with inertia** in *Settings → Appearance → Window* (it moved there from *Editor*).
+
+### Transition animations
+- A soft fade when you **switch files**, **Settings pages**, **Output / Terminal** and screens like the project page.
+- Turn them off with **Transition animations** in *Settings → Appearance → Window*. *Animations off* in *Memory & speed* turns them off too.
+
 ## 1.3.2 – 2026-09-24
 
 ### Updating with progress
