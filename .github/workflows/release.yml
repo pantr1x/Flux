@@ -1,0 +1,27 @@
+# Vydanie novej verzie: zvýš "version" v package.json, napíš build/release-notes.md
+# a pošli tag, napr.:  git tag v0.3.0 && git push origin v0.3.0
+# Akcia zostaví inštalátor a pridá ho do GitHub Releases – Flux si ho potom sám stiahne.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/build.mjs
+      - run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false

@@ -17,7 +17,17 @@ const dec = (value) => {
   }
 };
 
+// Prihlásenie cez prehliadač (GitHub „device flow“) – treba Client ID OAuth aplikácie Flux.
+// Client ID nie je tajný, môže byť v kóde; tajný kľúč (client secret) sa pri tomto spôsobe nepoužíva.
+let CLIENT_ID = process.env.FLUX_GITHUB_CLIENT_ID || '';
+try {
+  CLIENT_ID ||= require('../../package.json').flux?.githubClientId || '';
+} catch {}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function createGitHub({ getSettings, saveSettings }) {
+  let device = null;
   const token = () => dec(getSettings().github?.token);
 
   async function api(pathname, { method = 'GET', body } = {}) {
@@ -77,7 +87,47 @@ function createGitHub({ getSettings, saveSettings }) {
     return true;
   }
 
-  const info = () => ({ connected: !!token(), user: getSettings().github?.user || null });
+  const info = () => ({ connected: !!token(), user: getSettings().github?.user || null, canSignIn: !!CLIENT_ID });
+
+  async function postForm(url, body) {
+    const res = await net.fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Flux' }, body: JSON.stringify(body) });
+    return res.json().catch(() => ({}));
+  }
+
+  // 1. Flux dostane krátky kód, ktorý používateľ potvrdí na github.com/login/device.
+  async function signInStart() {
+    if (!CLIENT_ID) throw new Error(t('Sign-in with GitHub is not set up in this version of Flux. Use a token instead.'));
+    const d = await postForm('https://github.com/login/device/code', { client_id: CLIENT_ID, scope: 'repo read:user' });
+    if (!d.device_code) throw new Error(d.error_description || t('GitHub did not answer. Check your internet connection.'));
+    device = { code: d.device_code, interval: (d.interval || 5) * 1000, expires: Date.now() + (d.expires_in || 900) * 1000, cancelled: false };
+    return { userCode: d.user_code, url: d.verification_uri || 'https://github.com/login/device' };
+  }
+
+  // 2. Čaká, kým to používateľ v prehliadači povolí; potom uloží token a vráti účet.
+  async function signInWait() {
+    const cur = device;
+    if (!cur) throw new Error('No sign-in in progress');
+    while (!cur.cancelled && Date.now() < cur.expires) {
+      await sleep(cur.interval);
+      if (cur.cancelled) break;
+      const r = await postForm('https://github.com/login/oauth/access_token', { client_id: CLIENT_ID, device_code: cur.code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
+      if (r.access_token) {
+        device = null;
+        return connect(r.access_token);
+      }
+      if (r.error === 'slow_down') cur.interval += 5000;
+      else if (r.error === 'access_denied') throw new Error(t('You cancelled the sign-in on GitHub.'));
+      else if (r.error && r.error !== 'authorization_pending') throw new Error(r.error_description || r.error);
+    }
+    if (cur.cancelled) return null;
+    throw new Error(t('The code expired. Try signing in again.'));
+  }
+
+  function signInCancel() {
+    if (device) device.cancelled = true;
+    device = null;
+    return true;
+  }
 
   async function repos() {
     const list = await api('/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member');
@@ -173,7 +223,7 @@ function createGitHub({ getSettings, saveSettings }) {
     return { url: repo.html_url, full: repo.full_name };
   }
 
-  return { info, connect, disconnect, repos, clone, status, commitPush, pull, sync, publish, api };
+  return { info, connect, disconnect, signInStart, signInWait, signInCancel, repos, clone, status, commitPush, pull, sync, publish, api };
 }
 
 module.exports = { createGitHub };

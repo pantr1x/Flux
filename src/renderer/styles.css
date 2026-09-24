@@ -5300,3 +5300,134 @@ body.pointer-everywhere * {
 .s-reset-all {
   margin-top: 18px;
 }
+
+/* Prihlásenie cez GitHub v prehliadači */
+.gh-big {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  text-align: left;
+  transition: transform 0.15s var(--ease), filter 0.15s;
+}
+.gh-big:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.gh-big span {
+  display: flex;
+  flex-direction: column;
+}
+.gh-big small {
+  opacity: 0.75;
+}
+.gh-more summary {
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin: 2px 0 8px;
+}
+.gh-signin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 6px;
+  text-align: center;
+}
+.gh-code {
+  font: 700 30px/1 'Cascadia Code', Consolas, monospace;
+  letter-spacing: 0.12em;
+  padding: 14px 22px;
+  border-radius: 14px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  cursor: copy;
+  user-select: all;
+}
+.gh-signin small {
+  color: var(--text-3);
+}
+.gh-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+
+/* O aplikácii a aktualizácie */
+.up-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.up-hero h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.up-hero small {
+  color: var(--text-3);
+}
+.brand-mark.big {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+}
+.s-row small.up-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.up-rel {
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.up-rel summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.up-rel summary small {
+  margin-left: auto;
+  color: var(--text-3);
+}
+.up-rel .ai-body {
+  margin-top: 8px;
+}
+.up-badge {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--active);
+  color: var(--text-2);
+}
+.up-badge.new {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.up-whatsnew {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade 0.15s;
+}
+.up-whatsnew .np-card {
+  width: min(560px, calc(100vw - 32px));
+}
+.up-wn-body {
+  max-height: 55vh;
+  overflow: auto;
+  padding: 4px 2px 10px;
+}

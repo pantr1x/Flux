@@ -23,6 +23,7 @@ import { BINDINGS, CATEGORIES, createKeymap, kbdHtml } from './keymap.js';
 import { createPluginHost } from './pluginHost.js';
 import { createPluginsUI } from './pluginsUI.js';
 import { createThemeStudio } from './themeStudio.js';
+import { createUpdatesUI } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
 
 const flux = window.flux;
@@ -403,6 +404,7 @@ let gh;
 let keymap;
 let pluginHost;
 let pluginsUI;
+let updatesUI;
 let userKeysCommands = {};
 let onboarding;
 function createEditor() {
@@ -2282,6 +2284,7 @@ function openSettings() {
     ['ai', 'sparkle', t('AI')],
     ['github', 'git', 'GitHub'],
     ['general', 'globe', t('Language & intro')],
+    ['about', 'refresh', t('About & updates')],
   ];
   if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'appearance';
@@ -2415,6 +2418,7 @@ function openSettings() {
           </section>
           <section data-pane="github" id="s-github"></section>
           <section data-pane="plugins" id="s-plugins"></section>
+          <section data-pane="about" id="s-about"></section>
           <section data-pane="general">
             <h3>${t('Language')}</h3>
             <div class="s-group">
@@ -2482,6 +2486,7 @@ function openSettings() {
     state.settingsTab = id;
     $('#s-title').textContent = tabs.find(([x]) => x === id)?.[2] || '';
     if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
+    if (id === 'about') updatesUI.render($('#s-about'));
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
@@ -3459,6 +3464,7 @@ async function main() {
     isOverridden: (full) => !!keymap?.overridden(`plugin:${full}`),
     getWorkspace: () => state.workspace,
   });
+  updatesUI = createUpdatesUI({ toast, getSetting: setting, saveSettings });
   pluginsUI = createPluginsUI({ host: pluginHost, toast, openProject: (dir) => (closeSettings(), setWorkspace(dir)) });
 
   // Zmenené vstavané skratky (Nastavenia → Skratky).
@@ -3567,6 +3573,7 @@ async function main() {
 
   if (!state.settings.onboarded) onboarding.open();
   pluginHost.start(); // nainštalované pluginy
+  updatesUI.whatsNew();
   if (init.lastFolder) await setWorkspace(init.lastFolder);
   else {
     detectPython();

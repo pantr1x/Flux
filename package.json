@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,
@@ -49,16 +49,33 @@
       "installerLanguages": [
         "en_US"
       ],
-      "language": "1033"
+      "language": "1033",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "include": "build/installer.nsh",
+      "displayLanguageSelector": false
     },
     "linux": {
       "target": "dir"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "pantr1x",
+        "repo": "Flux",
+        "releaseType": "release"
+      }
+    ],
+    "releaseInfo": {
+      "releaseNotesFile": "build/release-notes.md"
     }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "@lydell/node-pty": "^1.2.0-beta.15",
-    "basedpyright": "^1.40.1"
+    "basedpyright": "^1.40.1",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@xterm/addon-fit": "^0.11.0",
@@ -69,5 +86,8 @@
     "esbuild": "^0.28.2",
     "monaco-editor": "^0.56.0"
   },
-  "author": "pantr1x"
+  "author": "pantr1x",
+  "flux": {
+    "githubClientId": ""
+  }
 }

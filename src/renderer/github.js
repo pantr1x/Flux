@@ -22,12 +22,13 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
         info.connected && info.user
           ? `<div class="s-row"><span class="gh-user">${info.user.avatar ? `<img src="${esc(info.user.avatar)}" alt="">` : ''}<span><b>${esc(info.user.name)}</b><small>@${esc(info.user.login)}</small></span></span><button class="s-btn" data-gh-disconnect>${t('Disconnect')}</button></div>
              <div class="s-row"><span><b>${t('Open a repository')}</b><small>${t('Pick one of your repositories – Flux opens it as a project.')}</small></span><button class="s-btn primary" data-gh-pick>${icon('git', 13)}${t('Choose…')}</button></div>`
-          : `<div class="s-row"><span><b>${t('Personal access token')}</b><small>${t('Create one on GitHub with the “repo” permission, then paste it here.')} <a href="#" data-gh-newtoken>${t('Create token')}</a></small></span><span class="s-inline"><input type="password" id="gh-token" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn" data-gh-connect>${t('Connect')}</button></span></div>`
+          : `${info.canSignIn ? `<div class="s-row"><span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in and press Authorize.')}</small></span><button class="s-btn primary" data-gh-signin>${icon('git', 13)}${t('Sign in')}</button></div>` : ''}<div class="s-row"><span><b>${t('Personal access token')}</b><small>${t('Create one on GitHub with the “repo” permission, then paste it here.')} <a href="#" data-gh-newtoken>${t('Create token')}</a></small></span><span class="s-inline"><input type="password" id="gh-token" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn" data-gh-connect>${t('Connect')}</button></span></div>`
       }</div>
       <h3>Git</h3>
       <div class="tc-list">${gitTc ? tools.row(gitTc) : ''}</div>`;
     tools.bind(box);
     box.onclick = async (e) => {
+      if (e.target.closest('[data-gh-signin]')) return signIn(box.querySelector('.s-group'), () => renderSettings(box));
       if (e.target.closest('[data-gh-newtoken]')) {
         e.preventDefault();
         return flux.openExternal('https://github.com/settings/tokens/new?scopes=repo&description=Flux');
@@ -53,6 +54,50 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
     };
   }
 
+  // ---------- prihlásenie cez prehliadač ----------
+  // Zobrazí kód, skopíruje ho, otvorí GitHub a čaká na potvrdenie. onDone(user) po úspechu.
+  async function signIn(box, onDone) {
+    const back = box.innerHTML;
+    let started;
+    try {
+      started = await flux.ghSignInStart();
+    } catch (err) {
+      return toast(errText(err), 'error', 8000);
+    }
+    try {
+      await navigator.clipboard.writeText(started.userCode);
+    } catch {}
+    flux.openExternal(started.url);
+    box.innerHTML = `<div class="gh-signin">
+      <p>${t('Your browser opened GitHub. Paste this code there and press “Authorize”:')}</p>
+      <div class="gh-code" title="${t('Click to copy')}">${esc(started.userCode)}</div>
+      <small>${t('The code is already copied – just press Ctrl+V on the GitHub page.')}</small>
+      <div class="gh-wait"><span class="spin"></span>${t('Waiting for GitHub…')}</div>
+      <div class="s-inline"><button class="s-btn" data-gh-reopen>${icon('external', 13)}${t('Open GitHub again')}</button><button class="s-btn" data-gh-cancel>${t('Cancel')}</button></div>
+    </div>`;
+    const onClick = (e) => {
+      if (e.target.closest('.gh-code')) navigator.clipboard.writeText(started.userCode).then(() => toast(t('Copied.'), 'ok', 1500));
+      if (e.target.closest('[data-gh-reopen]')) flux.openExternal(started.url);
+      if (e.target.closest('[data-gh-cancel]')) flux.ghSignInCancel();
+    };
+    box.addEventListener('click', onClick);
+    try {
+      const user = await flux.ghSignInWait();
+      box.removeEventListener('click', onClick);
+      if (!user) {
+        box.innerHTML = back;
+        return null;
+      }
+      toast(t('Connected as {user}.', { user: user.login }), 'ok');
+      return onDone(user);
+    } catch (err) {
+      box.removeEventListener('click', onClick);
+      box.innerHTML = back;
+      toast(errText(err), 'error', 8000);
+      return null;
+    }
+  }
+
   // ---------- výber repozitára (nový projekt z GitHubu) ----------
   // Bez pripojenia sa účet pripojí priamo v tomto okne, potom sa hneď ukážu repozitáre.
   async function pickRepo() {
@@ -68,12 +113,18 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
 
     const info = await flux.ghInfo();
     if (!info.connected) {
-      shell(`<div class="gh-connect">
-          <p class="s-lead">${t('Connect your GitHub account once – then pick any of your repositories and Flux opens it as a project.')}</p>
-          <ol class="gh-steps">
+      const tokenSteps = `<ol class="gh-steps">
             <li><span><b>${t('Create a token on GitHub')}</b><small>${t('The page opens with everything filled in – just press “Generate token” at the bottom and copy it.')}</small></span><button class="s-btn" data-gh-newtoken>${icon('external', 13)}${t('Open GitHub')}</button></li>
             <li><span><b>${t('Paste it here')}</b></span><span class="s-inline"><input type="password" id="gh-token" placeholder="ghp_… / github_pat_…" autocomplete="off" spellcheck="false"><button class="s-btn primary" data-gh-connect>${t('Connect')}</button></span></li>
-          </ol>
+          </ol>`;
+      shell(`<div class="gh-connect">
+          <p class="s-lead">${t('Connect your GitHub account once – then pick any of your repositories and Flux opens it as a project.')}</p>
+          ${
+            info.canSignIn
+              ? `<button class="gh-big" data-gh-signin>${icon('git', 20)}<span><b>${t('Sign in with GitHub')}</b><small>${t('Opens your browser – log in and press Authorize.')}</small></span></button>
+                 <details class="gh-more"><summary>${t('Use a token instead')}</summary>${tokenSteps}</details>`
+              : tokenSteps
+          }
           <p class="gh-foot">${t('The token is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.')}</p>
           <div class="gh-or"><span>${t('or open a public repository by link')}</span></div>
           <form class="gh-link" id="gh-link"><input id="gh-url" placeholder="https://github.com/owner/repo" spellcheck="false" autocomplete="off"><button class="s-btn">${t('Open')}</button></form>
@@ -81,6 +132,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
       el.onclick = async (e) => {
         if (e.target === el || e.target.closest('[data-close]')) return close();
         if (e.target.closest('[data-gh-newtoken]')) return flux.openExternal('https://github.com/settings/tokens/new?scopes=repo&description=Flux');
+        if (e.target.closest('[data-gh-signin]')) return signIn(el.querySelector('.gh-connect'), () => pickRepo());
         const c = e.target.closest('[data-gh-connect]');
         if (c) {
           const token = el.querySelector('#gh-token').value.trim();
@@ -101,7 +153,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
         const url = el.querySelector('#gh-url').value.trim();
         if (url) open(url);
       };
-      el.querySelector('#gh-token').focus();
+      (el.querySelector('[data-gh-signin]') || el.querySelector('#gh-token')).focus();
       return;
     }
 

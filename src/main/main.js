@@ -10,6 +10,7 @@ const toolchains = require('./toolchains');
 const { createAI } = require('./ai');
 const { createGitHub } = require('./github');
 const { createPlugins, pluginsDir } = require('./plugins');
+const { createUpdater } = require('./updater');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
 const i18n = require('./i18n');
@@ -200,6 +201,8 @@ const lsp = new LanguageServer(
 );
 
 // Automatické aktualizácie jazykov (raz za deň, na pozadí, len ak sú zapnuté).
+const updater = createUpdater({ getSettings: () => settings, send });
+
 async function autoUpdateToolchains() {
   if (!isWin || settings.autoUpdateLangs === false) return;
   if (Date.now() - (settings.lastLangUpdate || 0) < 24 * 3600 * 1000) return;
@@ -620,9 +623,18 @@ function registerIpc() {
 
   // Jazyky na stiahnutie (Java, C++, Go…)
   // GitHub / Git – operácie len nad otvoreným projektom
+  // Verzia a aktualizácie Fluxu
+  ipcMain.handle('update:state', () => updater.state());
+  ipcMain.handle('update:check', () => updater.check());
+  ipcMain.handle('update:download', () => updater.download());
+  ipcMain.handle('update:install', () => updater.install());
+  ipcMain.handle('update:notes', (_e, force) => updater.notes(!!force));
   ipcMain.handle('gh:info', () => github.info());
   ipcMain.handle('gh:connect', (_e, token) => github.connect(String(token || '')));
   ipcMain.handle('gh:disconnect', () => github.disconnect());
+  ipcMain.handle('gh:signin-start', () => github.signInStart());
+  ipcMain.handle('gh:signin-wait', () => github.signInWait());
+  ipcMain.handle('gh:signin-cancel', () => github.signInCancel());
   ipcMain.handle('gh:repos', () => github.repos());
   ipcMain.handle('gh:clone', (_e, full, root) => {
     // aj celý odkaz: https://github.com/owner/repo(.git)
@@ -966,6 +978,7 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   setTimeout(() => autoUpdateToolchains().catch(() => {}), 20000);
+  updater.start();
 });
 
 app.on('window-all-closed', () => {
