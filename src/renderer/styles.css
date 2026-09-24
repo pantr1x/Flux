@@ -6978,6 +6978,8 @@ body.focus-mode #panel,
 body.focus-mode #panel-resizer,
 body.focus-mode #statusbar,
 body.focus-mode #topbar .actions,
+body.focus-mode #menubar,
+body.focus-mode #topsearch,
 body.focus-mode #topnav,
 body.focus-mode #btn-expand {
   display: none !important;
@@ -7552,4 +7554,250 @@ body.no-anim .tg-dot.live {
   flex: none;
   margin-top: 3px;
   color: #3ecf8e;
+}
+
+/* ---------- ponuka (File, Edit, View…) a hľadanie v hornej lište ---------- */
+#menubar {
+  display: flex;
+  flex: none;
+  gap: 1px;
+}
+.mb-top {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font: 500 13px var(--ui-font);
+  cursor: pointer;
+}
+.mb-top:hover,
+.mb-top.on {
+  background: var(--hover);
+  color: var(--text);
+}
+.mb-drop {
+  position: fixed;
+  z-index: 180;
+  min-width: 250px;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--card-solid);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 18px 50px rgba(0, 0, 0, 0.45);
+  animation: card-in 0.12s var(--ease);
+}
+.mb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px 6px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font: 13px var(--ui-font);
+  text-align: left;
+  cursor: pointer;
+}
+.mb-item:hover {
+  background: var(--hover);
+}
+.mb-item.off {
+  opacity: 0.45;
+  cursor: default;
+}
+.mb-item.off:hover {
+  background: none;
+}
+.mb-mark {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  flex: none;
+  color: var(--accent);
+}
+.mb-label {
+  flex: 1;
+}
+.mb-item kbd {
+  margin-left: 18px;
+  font-size: 11px;
+  color: var(--text-3);
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+.mb-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+.mb-cap {
+  padding: 6px 10px 2px 30px;
+  color: var(--text-3);
+  font: 700 10.5px var(--ui-font);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+/* hľadanie: len lupa vedľa AI */
+#topsearch {
+  flex: none;
+}
+/* ☰ v hornej lište iba keď je bočný panel (a v ňom logo s menu) skrytý */
+#btn-menu {
+  display: none;
+}
+body.compact.no-menubar #btn-menu {
+  display: grid;
+}
+.brand-chev {
+  display: grid;
+  margin-left: -3px;
+  color: var(--text-3);
+  transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+.brand.on {
+  background: var(--hover);
+}
+.brand.on .brand-chev {
+  transform: rotate(-90deg);
+}
+.mb-root .mb-parent svg {
+  color: var(--text-3);
+}
+.mb-root .mb-parent.on {
+  background: var(--hover);
+}
+body.no-menubar #menubar,
+body.no-topsearch #topsearch {
+  display: none;
+}
+
+/* ---------- panel s výstupom a terminálom: dole, vpravo alebo vľavo ---------- */
+#card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+}
+body.panel-side #card {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: 'work rz panel' 'status status status';
+}
+body.panel-left #card {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas: 'panel rz work' 'status status status';
+}
+body.panel-side #workarea {
+  grid-area: work;
+}
+body.panel-side #panel-resizer {
+  grid-area: rz;
+  width: 6px;
+  height: auto;
+  margin: 0 -3px;
+  cursor: col-resize;
+}
+body.panel-side #panel {
+  grid-area: panel;
+  width: var(--panel-w, 380px);
+  height: auto !important;
+  min-height: 0;
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+body.panel-left #panel {
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
+body.panel-side #statusbar {
+  grid-area: status;
+}
+body.panel-side #panel.collapsed,
+body.panel-side #card:has(#panel.collapsed) #panel-resizer {
+  display: none;
+}
+
+/* ---------- bočný panel vpravo ---------- */
+body.side-right #app {
+  flex-direction: row-reverse;
+  padding: 0 0 var(--gap) var(--gap);
+}
+body.side-right #sidebar {
+  padding: 0 var(--gap) 0 6px;
+}
+/* tlačidlá okna (Windows) sú vpravo hore – nad bočným panelom */
+body.side-right .caption-space {
+  display: none;
+}
+body.side-right .side-top {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+}
+body.platform-darwin.side-right .side-top {
+  padding-left: 6px;
+}
+body.platform-darwin.side-right #topbar {
+  padding-left: 74px;
+}
+body.compact.side-right #sidebar {
+  left: auto;
+  right: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+  transform: translateX(105%);
+}
+body.compact.side-right.peek #sidebar {
+  transform: none;
+}
+body.compact.side-right #peek-zone {
+  left: auto;
+  right: 0;
+}
+body.compact.side-right #main {
+  padding-left: 0;
+  padding-right: var(--gap);
+}
+
+/* Úvod → Set up extras: automatické aktualizácie */
+.ob-up {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ob-up-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ob-up-opt span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ob-up-opt small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ob-up-opt.on {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.ob-up-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.ob-up-opt.on .ob-up-dot {
+  box-shadow: inset 0 0 0 4px var(--accent);
 }

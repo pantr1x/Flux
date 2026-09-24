@@ -17,6 +17,7 @@ from locales_v9 import V9
 from locales_v10 import V10
 from locales_v11 import V11
 from locales_v12 import V12
+from locales_v13 import V13
 FIP = {**FIP_A, **FIP_B}
 FR, IT, PL = ({k: v[i] for k, v in FIP.items()} for i in range(3))
 keys = json.load(open('locales/en.keys.json'))
@@ -24,7 +25,7 @@ langs = {'sk': ('Slovak', 'Slovenčina', SK), 'de': ('German', 'Deutsch', DE), '
 ph = lambda s: sorted(re.findall(r'\{\w+\}', s))
 index = [{'code': 'en', 'name': 'English', 'native': 'English'}]
 for code, (name, native, d) in langs.items():
-    d = {**d, **V3.get(code, {}), **V4.get(code, {}), **V5.get(code, {}), **V6.get(code, {}), **V7.get(code, {}), **V8.get(code, {}), **V9.get(code, {}), **V10.get(code, {}), **V11.get(code, {}), **V12.get(code, {})}
+    d = {**d, **V3.get(code, {}), **V4.get(code, {}), **V5.get(code, {}), **V6.get(code, {}), **V7.get(code, {}), **V8.get(code, {}), **V9.get(code, {}), **V10.get(code, {}), **V11.get(code, {}), **V12.get(code, {}), **V13.get(code, {})}
     out = {}
     for k, v in d.items():
         if ph(k) != ph(v):

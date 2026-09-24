@@ -108,6 +108,14 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
 
 *Built into Flux* in the store are features that live in the app code, not in `plugins/`: **GitHub** and **Flux Together** (list in `app.js`, `createPluginsUI({ builtins })`). Each has `description` (card) and `details` (bullets on its own page, `renderBuiltinDetail` in `pluginsUI.js`).
 
+## Layout, menu and search
+
+- **Menu** (`src/renderer/menubar.js`, items in `appMenus()` in `app.js`): opens from the `.brand` logo in the sidebar and from `#btn-menu` (☰, shown only when the sidebar is hidden). Items are `[label, action, shortcut, { checked, radio, disabled }]`, `'-'` = separator, a plain string = caption; a top-level entry with `run` (Home) is a direct action. `menuBar: true` also shows the classic `#menubar` row in the top bar (default off – it takes too much room).
+- **Search** is the `#topsearch` magnifier (opens `searchEverything()`); `showSearch: false` hides it.
+- **Panel position** `panelPos` = `bottom` | `right` | `left` (body classes `panel-side`, `panel-right`, `panel-left`; `#card` is a CSS grid). Width `panelWidth` / `--panel-w`, height `panelHeight`. **Sidebar** `sidePos` = `left` | `right` (`body.side-right`, `#app` row-reverse; on Windows the window buttons then sit above the sidebar, so `.side-top` gets the caption padding). Change them with `setLayout(patch)` – it re-lays out Monaco and xterm.
+- Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).
+- The intro (`onboarding.js`, step *extras*) asks about `autoUpdate` (*Automatically* / *Ask me first*).
+
 ## Memory & speed
 
 Settings → General → *Memory & speed*. `lite` (*Save memory*) is the master switch. Each part in *Advanced* has its own key and, while unset, follows `lite`: `optOn(key)` = `settings[key] ?? !lite` (same helper in `app.js` and `main.js`).

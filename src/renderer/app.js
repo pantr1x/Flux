@@ -27,6 +27,7 @@ import { setupFancySelects } from './fselect.js';
 import { createTogether } from './together.js';
 import { createUpdatesUI } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
+import { createMenubar } from './menubar.js';
 
 const flux = window.flux;
 const $ = (sel) => document.querySelector(sel);
@@ -115,6 +116,10 @@ const DEFAULTS = {
   terminalFontSize: 13,
   suggestDetails: true,
   inertia: true,
+  menuBar: false,
+  showSearch: true,
+  panelPos: 'bottom',
+  sidePos: 'left',
 };
 const setting = (key) => state.settings[key] ?? DEFAULTS[key];
 // Pamäť a rýchlosť: každú časť si dá zapnúť/vypnúť v Nastaveniach → Všeobecné → Advanced.
@@ -400,6 +405,13 @@ function applyCustomization() {
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
   document.body.classList.toggle('density-compact', setting('density') === 'compact');
+  // Rozloženie: menu a hľadanie hore, kde je panel s terminálom a bočný panel.
+  document.body.classList.toggle('no-menubar', !setting('menuBar'));
+  document.body.classList.toggle('no-topsearch', !setting('showSearch'));
+  for (const pos of ['right', 'left']) document.body.classList.toggle(`panel-${pos}`, setting('panelPos') === pos);
+  document.body.classList.toggle('panel-side', setting('panelPos') !== 'bottom');
+  document.body.classList.toggle('side-right', setting('sidePos') === 'right');
+  menubar?.render();
   document.body.classList.toggle('no-fx', !optOn('optFx'));
   document.body.classList.toggle('no-anim', !optOn('optAnim'));
   applyAppColors();
@@ -480,6 +492,7 @@ let userKeys;
 let aiPanel;
 let gh;
 let together;
+let menubar = null;
 // GitHub je voliteľný vstavaný plugin (Nastavenia → Plugins); potrebuje Git.
 const ghOn = () => setting('githubPlugin') === true;
 let keymap;
@@ -2554,7 +2567,7 @@ function commands() {
 }
 
 function pluginCommands() {
-  return (pluginHost?.commands() || []).map((c) => ({ label: `${c.plugin}: ${c.label}`, run: c.run, kbd: c.key, icon: icon('sparkle', 15), keywords: 'plugin' }));
+  return (pluginHost?.commands() || []).map((c) => ({ label: `${c.plugin}: ${c.label}`, run: c.run, kbd: c.key, icon: icon('puzzle', 15), keywords: 'plugin' }));
 }
 
 function openCommandPalette() {
@@ -2792,7 +2805,7 @@ function openSettings() {
     ['editor', 'code', t('Editor')],
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
-    ['plugins', 'sparkle', t('Plugins')],
+    ['plugins', 'puzzle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
     ghOn() && ['github', 'github', 'GitHub'],
   ].filter(Boolean);
@@ -2874,6 +2887,10 @@ function openSettings() {
             <h3>${t('Window')}</h3>
             <div class="s-group">
               ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
+              ${toggle('menuBar', 'Menu bar', 'File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo')}
+              ${toggle('showSearch', 'Search button', 'a magnifier at the top that finds files, commands and settings')}
+              <label class="s-row"><span><b>${t('Panel position')}</b><small>${t('where output and the terminal are')}</small></span><select data-key="panelPos">${[['bottom', t('Bottom')], ['right', t('Right')], ['left', t('Left')]].map(([v, l]) => opt(v, l, setting('panelPos'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Sidebar position')}</b><small>${t('projects and files')}</small></span><select data-key="sidePos">${[['left', t('Left')], ['right', t('Right')]].map(([v, l]) => opt(v, l, setting('sidePos'))).join('')}</select></label>
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
               <label class="s-row"><span><b>${t('Density')}</b><small>${t('Compact fits more files, tabs and lines on the screen.')}</small></span><select data-key="density">${opt('comfortable', t('comfortable'), setting('density'))}${opt('compact', t('compact'), setting('density'))}</select></label>
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
@@ -3394,6 +3411,7 @@ function openSettings() {
       rerenderSettings();
     }
     if (OPT_KEYS.includes(key)) applyPerformance();
+    if (['menuBar', 'showSearch', 'panelPos', 'sidePos'].includes(key)) setLayout({});
     if (key === 'suggestDetails') showSuggestDetails(value);
     if (key === 'material') await saveSettings({ translucent: true });
     applyEditorSettings();
@@ -4300,6 +4318,121 @@ function keybindings() {
   });
 }
 
+// ---------- ponuka a hľadanie v hornej lište ----------
+async function setLayout(patch) {
+  await saveSettings(patch);
+  applyCustomization();
+  // editor, terminál a náhľad sa prispôsobia novému miestu
+  requestAnimationFrame(() => {
+    editor?.layout();
+    showPanel(!$('#panel').classList.contains('collapsed'));
+  });
+}
+function appMenus() {
+  const panelOpen = !$('#panel').classList.contains('collapsed');
+  const ed = (id) => () => {
+    editor.focus();
+    editor.getAction(id)?.run();
+  };
+  return [
+    { id: 'home', label: t('Home'), icon: 'template', run: () => openStart() },
+    {
+      id: 'file',
+      label: t('File'),
+      items: [
+        [t('New file…'), () => newFile(), 'Ctrl+N'],
+        [t('New project…'), () => (closeStart(), newProject()), 'Ctrl+Shift+N'],
+        [t('New folder…'), () => newFolder()],
+        '-',
+        [t('Open folder…'), openFolderDialog, 'Ctrl+O'],
+        [t('Open file…'), openFileDialog, 'Ctrl+Alt+O'],
+        [t('Quick open file…'), quickOpen, 'Ctrl+P'],
+        '-',
+        [t('Save'), () => saveTab(activeTab()), 'Ctrl+S', { disabled: !state.active }],
+        [t('Save all'), saveAll, 'Ctrl+Shift+S'],
+        [t('Close file'), () => state.active && closeTab(state.active), 'Ctrl+W', { disabled: !state.active }],
+        '-',
+        [t('Home'), () => openStart()],
+        [t('Settings'), openSettings, 'Ctrl+,'],
+      ],
+    },
+    {
+      id: 'edit',
+      label: t('Edit'),
+      items: [
+        [t('Undo'), ed('undo'), 'Ctrl+Z', { disabled: !state.active }],
+        [t('Redo'), ed('redo'), 'Ctrl+Y', { disabled: !state.active }],
+        '-',
+        [t('Find'), ed('actions.find'), 'Ctrl+F', { disabled: !state.active }],
+        [t('Replace'), ed('editor.action.startFindReplaceAction'), 'Ctrl+H', { disabled: !state.active }],
+        '-',
+        [t('Toggle comment'), ed('editor.action.commentLine'), 'Ctrl+/', { disabled: !state.active }],
+        [t('Format document'), ed('editor.action.formatDocument'), 'Shift+Alt+F', { disabled: !state.active }],
+      ],
+    },
+    {
+      id: 'view',
+      label: t('View'),
+      items: [
+        [t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A'],
+        [t('Commands'), openCommandPalette, 'Ctrl+Shift+P'],
+        '-',
+        [t('Sidebar'), toggleCompact, 'Ctrl+B', { checked: !document.body.classList.contains('compact') }],
+        [t('Panel'), () => showPanel(!panelOpen), 'Ctrl+J', { checked: panelOpen }],
+        [t('AI assistant'), () => aiPanel.toggle(), 'Ctrl+I', { checked: !$('#ai').hidden }],
+        [t('Focus mode (only the code)'), toggleFocus, 'F11'],
+        '-',
+        t('Panel position'),
+        ...[['bottom', t('Bottom')], ['right', t('Right')], ['left', t('Left')]].map(([v, l]) => [l, () => setLayout({ panelPos: v }), '', { checked: setting('panelPos') === v, radio: true }]),
+        t('Sidebar position'),
+        ...[['left', t('Left')], ['right', t('Right')]].map(([v, l]) => [l, () => setLayout({ sidePos: v }), '', { checked: setting('sidePos') === v, radio: true }]),
+        '-',
+        [t('Menu bar'), () => setLayout({ menuBar: !setting('menuBar') }), '', { checked: !!setting('menuBar') }],
+        [t('Search button'), () => setLayout({ showSearch: !setting('showSearch') }), '', { checked: !!setting('showSearch') }],
+        '-',
+        [t('Toggle light / dark theme'), toggleTheme],
+      ],
+    },
+    {
+      id: 'run',
+      label: t('Run'),
+      items: [
+        [t('Run current file'), run, 'F5', { disabled: !state.active }],
+        [t('Stop program'), stop, 'Shift+F5'],
+        '-',
+        [t('Live Server'), toggleLive, 'Alt+L'],
+        [t('Terminal'), () => showPanelTab('shell')],
+      ],
+    },
+    {
+      id: 'help',
+      label: t('Help'),
+      items: [
+        [t('Feature tour'), () => onboarding.startTour()],
+        [t('Shortcuts'), () => ((state.settingsTab = 'keys'), openSettings())],
+        [t('Release notes'), () => ((state.settingsTab = 'about'), openSettings())],
+        '-',
+        [t('Website'), () => flux.openExternal('https://pantr1x.github.io/Flux/')],
+        [t('Report a problem'), () => flux.openExternal('https://github.com/pantr1x/Flux/issues/new')],
+      ],
+    },
+  ];
+}
+function setupMenubar() {
+  // Menu je v logu „flux“ (a v ☰, keď je bočný panel skrytý); riadok File/Edit/View… je voliteľný.
+  const brand = $('.brand');
+  brand.insertAdjacentHTML('beforeend', `<span class="brand-chev">${icon('chevron', 11)}</span>`);
+  brand.title = t('Menu');
+  $('#btn-menu').innerHTML = icon('menu', 16);
+  $('#btn-menu').title = t('Menu');
+  menubar = createMenubar({ bar: $('#menubar'), triggers: [brand, $('#btn-menu')], icon, esc: escapeHtml, getMenus: appMenus });
+  menubar.render();
+  const s = $('#topsearch');
+  s.innerHTML = icon('search', 16);
+  s.title = `${t('Search files, commands, settings and projects')} (Ctrl+Shift+A)`;
+  s.onclick = () => searchEverything();
+}
+
 // ---------- zmena veľkosti panelov ----------
 function resizer(handle, onMove, onEnd) {
   handle.addEventListener('pointerdown', (e) => {
@@ -4323,7 +4456,7 @@ function layoutEvents() {
   if (state.settings.sideWidth) root.style.setProperty('--side-w', `${state.settings.sideWidth}px`);
   resizer(
     $('#side-resizer'),
-    (e) => root.style.setProperty('--side-w', `${Math.min(480, Math.max(180, e.clientX))}px`),
+    (e) => root.style.setProperty('--side-w', `${Math.min(480, Math.max(180, setting('sidePos') === 'right' ? innerWidth - e.clientX : e.clientX))}px`),
     () => saveSettings({ sideWidth: parseInt(getComputedStyle(root).getPropertyValue('--side-w')) }),
   );
   resizer($('#preview-resizer'), (e) => {
@@ -4359,11 +4492,18 @@ function layoutEvents() {
   if (state.settings.aiWidth) $('#ai').style.width = `${state.settings.aiWidth}px`;
   resizer($('#panel-resizer'), (e) => {
     const rect = $('#card').getBoundingClientRect();
-    const h = Math.min(rect.height - 120, Math.max(90, rect.bottom - 28 - e.clientY));
     showPanel(true);
+    // Panel vpravo / vľavo: mení sa šírka, dole výška.
+    if (setting('panelPos') !== 'bottom') {
+      const w = Math.min(rect.width - 320, Math.max(240, setting('panelPos') === 'right' ? rect.right - e.clientX : e.clientX - rect.left));
+      return document.documentElement.style.setProperty('--panel-w', `${w}px`);
+    }
+    const h = Math.min(rect.height - 120, Math.max(90, rect.bottom - 28 - e.clientY));
     $('#panel').style.height = `${h}px`;
-  }, () => saveSettings({ panelHeight: parseInt($('#panel').style.height) }));
+  }, () => (setting('panelPos') !== 'bottom' ? saveSettings({ panelWidth: parseInt(getComputedStyle(root).getPropertyValue('--panel-w')) }) : saveSettings({ panelHeight: parseInt($('#panel').style.height) })));
   if (state.settings.panelHeight) $('#panel').style.height = `${state.settings.panelHeight}px`;
+  if (state.settings.panelWidth) root.style.setProperty('--panel-w', `${state.settings.panelWidth}px`);
+  setupMenubar();
 
   // Kompaktný režim: panel sa vysunie pri nabehnutí k ľavému okraju.
   $('#peek-zone').addEventListener('mouseenter', () => document.body.classList.add('peek'));
@@ -4375,8 +4515,6 @@ function layoutEvents() {
   $('#btn-theme').onclick = toggleTheme;
   $('#btn-palette').onclick = openCommandPalette;
   $('#btn-settings').onclick = openSettings;
-  $('.brand').onclick = openStart;
-  $('.brand').title = t('Start screen');
   $('#btn-run').onclick = run;
   $('#btn-stop').onclick = stop;
   $('#btn-live').onclick = toggleLive;
@@ -4698,6 +4836,8 @@ async function main() {
   trackTime();
   keybindings();
   layoutEvents();
+  // Hneď pri štarte: rozloženie (menu, panel, bočný panel) a úspory pamäte – nielen po zmene nastavení.
+  applyCustomization();
   renderRunButton();
   renderLive();
   renderStatus();

@@ -2,6 +2,28 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.3.0 – 2026-09-24
+
+### Menu
+- **Click the flux logo** (top left) for the menu: *Home*, **File**, **Edit**, **View**, **Run** and **Help** – every menu opens next to it when you point at it.
+- When the sidebar is hidden, the menu is the small **☰** button at the top.
+- Prefer a classic menu row? Turn on **Menu bar** in *View* or in *Settings → Appearance → Window*.
+
+### Search
+- A **magnifier** at the top next to *AI* searches files, commands, settings and projects (like *Ctrl+Shift+A*). Hide it with **Search button** in *View* or in Settings.
+
+### Move things around
+- **Panel position:** put *Output* and the **Terminal** at the **bottom**, on the **right** or on the **left**. Drag its edge to make it wider.
+- **Sidebar position:** projects and files on the **left** or on the **right**.
+- Both are in the **View** menu and in *Settings → Appearance → Window*.
+
+### Updates in the intro
+- The intro now asks if Flux should **update itself automatically** or **ask you first**.
+
+### Fixes
+- **Plugins** has its own puzzle icon – it looked the same as **AI**.
+- Memory savings (*Save memory*, *Advanced*) now apply right when Flux starts, not only after you change a setting.
+
 ## 1.2.3 – 2026-09-24
 
 ### Memory & speed
