@@ -25,7 +25,15 @@ jobs:
         run: |
           v=$(node -p "require('./package.json').version")
           echo "version=$v" >> "$GITHUB_OUTPUT"
-          if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+          # Hotové vydanie = má inštalátor aj latest.yml (podľa neho sa Flux aktualizuje).
+          assets=$(gh release view "v$v" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+          if echo "$assets" | grep -q '^latest.yml$' && echo "$assets" | grep -q '\.exe$'; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            # neúplné vydanie (napr. po chybe) zmazať, tag ostane
+            if [ -n "$assets" ] || gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then gh release delete "v$v" --repo "$GITHUB_REPOSITORY" --yes; fi
+          fi
       - name: Create the version tag
         if: steps.check.outputs.exists == 'false'
         shell: bash
