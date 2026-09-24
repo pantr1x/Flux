@@ -2,6 +2,13 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 1.0.2 – 2026-09-24
+
+### Flux as a Claude extension
+- New button **Claude extension (.mcpb)** in Settings → AI → *Use Flux from other AI apps*. It saves *Flux for Claude.mcpb* to your Downloads and opens it. Claude Desktop then offers to install Flux as an extension – just press **Install**.
+- This works even when *Add to Claude Desktop* can't find Claude's settings.
+- claude.ai in the browser can't connect to apps on your computer, so use Claude Desktop, Claude Code or Cursor.
+
 ## 1.0.1 – 2026-09-24
 
 ### Claude Desktop

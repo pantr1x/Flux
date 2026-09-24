@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('flux', {
   mcpEnable: (on) => ipcRenderer.invoke('mcp:enable', on),
   mcpNewKey: () => ipcRenderer.invoke('mcp:new-key'),
   mcpAddToClaude: () => ipcRenderer.invoke('mcp:add-to-claude'),
+  mcpExtension: () => ipcRenderer.invoke('mcp:extension'),
   onMcpOpenProject: (cb) => ipcRenderer.on('mcp:open-project', (_e, dir) => cb(dir)),
   onMcpOpenFile: (cb) => ipcRenderer.on('mcp:open-file', (_e, file) => cb(file)),
   onMcpFileWritten: (cb) => ipcRenderer.on('mcp:file-written', (_e, file) => cb(file)),

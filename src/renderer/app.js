@@ -2885,7 +2885,7 @@ function openSettings() {
           on
             ? `<div class="s-row"><span><b>${t('Link')}</b><small class="mono">${escapeHtml(m.url)}</small></span><button class="s-btn" data-copy-mcp="url">${icon('file', 13)}${t('Copy')}</button></div>
                <div class="s-row"><span><b>${t('Secret key')}</b><small>${t('Anyone with the key can change your projects – do not share it.')}</small></span><span class="s-inline"><button class="s-btn" data-copy-mcp="key">${icon('file', 13)}${t('Copy')}</button><button class="s-btn" data-action="mcp-new-key">${icon('refresh', 13)}${t('New key')}</button></span></div>
-               <div class="s-row s-mcp-apps"><span><b>${t('Connect an app')}</b><small>${t('One click for Claude Desktop (restart it afterwards); the others get a ready command to paste.')}</small></span><span class="s-inline wrap"><button class="s-btn primary" data-action="mcp-claude">${icon('sparkle', 13)}${t('Add to Claude Desktop')}</button><button class="s-btn" data-copy-mcp="claude-code">${t('Claude Code')}</button><button class="s-btn" data-copy-mcp="cursor">${t('Cursor / VS Code')}</button></span></div>`
+               <div class="s-row s-mcp-apps"><span><b>${t('Connect an app')}</b><small>${t('One click for Claude Desktop (restart it afterwards); the others get a ready command to paste.')}</small></span><span class="s-inline wrap"><button class="s-btn primary" data-action="mcp-claude">${icon('sparkle', 13)}${t('Add to Claude Desktop')}</button><button class="s-btn" data-action="mcp-ext" title="${t('A file you double-click – Claude Desktop installs Flux as an extension.')}">${icon('download', 13)}${t('Claude extension (.mcpb)')}</button><button class="s-btn" data-copy-mcp="claude-code">${t('Claude Code')}</button><button class="s-btn" data-copy-mcp="cursor">${t('Cursor / VS Code')}</button></span></div>`
             : ''
         }
       </div>
@@ -2916,6 +2916,15 @@ function openSettings() {
         await flux.mcpNewKey();
         toast(t('New key made. Connect your AI apps again.'), 'ok', 6000);
         return renderFluxMcp();
+      }
+      if (e.target.closest('[data-action="mcp-ext"]')) {
+        try {
+          const r = await flux.mcpExtension();
+          toast(r.opened ? t('Claude Desktop opens the extension – press Install.') : t('Saved to {file}. Double-click it to install it in Claude Desktop.', { file: r.file }), 'ok', 10000);
+        } catch (err) {
+          toast(errorText(err), 'error', 8000);
+        }
+        return;
       }
       if (e.target.closest('[data-action="mcp-claude"]')) {
         try {

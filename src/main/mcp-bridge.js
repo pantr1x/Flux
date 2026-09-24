@@ -5,6 +5,8 @@ const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 
 const [url, key] = process.argv.slice(2).filter((a) => !a.endsWith('mcp-bridge.js'));
+// Aplikácia zavrela spojenie → koniec (bez chyby).
+process.stdout.on('error', () => process.exit(0));
 const out = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
 
 // Keď Flux nebeží, most ho sám spustí a chvíľu počká, kým server naštartuje.
@@ -16,7 +18,9 @@ function launchFlux() {
   try {
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    spawn(process.execPath, [], { detached: true, stdio: 'ignore', env, windowsHide: false }).unref();
+    // V rozšírení pre Claude Desktop beží most v Node od Claude – cestu k Fluxu dostane v FLUX_EXE.
+    const exe = process.env.FLUX_EXE || process.execPath;
+    spawn(exe, [], { detached: true, stdio: 'ignore', env, windowsHide: false }).unref();
   } catch {}
 }
 async function send(body) {

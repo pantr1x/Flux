@@ -881,6 +881,50 @@ function registerIpc() {
     return mcp.info();
   });
   ipcMain.handle('mcp:new-key', () => mcp.newKey());
+  // Rozšírenie pre Claude Desktop (.mcpb): dvojklik ho nainštaluje, nič sa nemusí prepisovať ručne.
+  ipcMain.handle('mcp:extension', async () => {
+    if (!settings.mcpServer?.enabled) {
+      settings.mcpServer = { ...(settings.mcpServer || {}), enabled: true };
+      saveSettings();
+    }
+    await mcp.start();
+    const i = mcp.info();
+    const url = `http://127.0.0.1:${i.port || settings.mcpServer?.port || 39217}/mcp`;
+    const manifest = {
+      manifest_version: '0.2',
+      name: 'flux',
+      display_name: 'Flux',
+      version: app.getVersion(),
+      description: 'Your Flux projects in Claude: list and open projects, read and write files, add to-dos.',
+      author: { name: 'Flux' },
+      icon: 'icon.png',
+      server: {
+        type: 'node',
+        entry_point: 'server/index.js',
+        mcp_config: { command: 'node', args: ['${__dirname}/server/index.js', url, i.token], env: { FLUX_EXE: process.execPath } },
+      },
+      tools: [
+        { name: 'flux_list_projects', description: 'List your Flux projects' },
+        { name: 'flux_read_file', description: 'Read a file of a project' },
+        { name: 'flux_write_file', description: 'Write a file of a project' },
+      ],
+      compatibility: { platforms: ['win32', 'darwin', 'linux'] },
+    };
+    let iconPng = null;
+    try {
+      iconPng = fs.readFileSync(path.join(__dirname, '../../build/icon.png'));
+    } catch {}
+    const files = [
+      { name: 'manifest.json', data: JSON.stringify(manifest, null, 2) },
+      { name: 'server/index.js', data: fs.readFileSync(path.join(__dirname, 'mcp-bridge.js')) },
+    ];
+    if (iconPng) files.push({ name: 'icon.png', data: iconPng });
+    else delete manifest.icon;
+    const out = path.join(app.getPath('downloads'), 'Flux for Claude.mcpb');
+    fs.writeFileSync(out, require('./zip').makeZip(files));
+    const err = await shell.openPath(out);
+    return { file: out, opened: !err };
+  });
   ipcMain.handle('mcp:add-to-claude', async () => {
     // Server pre AI aplikácie musí bežať (aj po ďalšom spustení Fluxu).
     if (!settings.mcpServer?.enabled) {
@@ -892,7 +936,7 @@ function registerIpc() {
     const entry = {
       command: process.execPath,
       args: [mcpBridgeFile(), `http://127.0.0.1:${i.port || settings.mcpServer?.port || 39217}/mcp`, i.token],
-      env: { ELECTRON_RUN_AS_NODE: '1' },
+      env: { ELECTRON_RUN_AS_NODE: '1', FLUX_EXE: process.execPath },
     };
     const written = [];
     for (const file of claudeDesktopConfigPaths()) {
