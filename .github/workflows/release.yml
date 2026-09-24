@@ -1,11 +1,13 @@
-# Vydanie novej verzie: zvýš "version" v package.json, pridaj sekciu do CHANGELOG.md
-# a pošli tag, napr.:  git tag v0.3.0 && git push origin v0.3.0
-# Akcia zostaví inštalátor a pridá ho do GitHub Releases – Flux si ho potom sám stiahne.
+# Vydanie novej verzie: zvýš "version" v package.json a pridaj jej sekciu do CHANGELOG.md.
+# Po pushnutí akcia zistí, či táto verzia už na GitHub Releases je; ak nie, zostaví inštalátor
+# a vydá ju (tag vX.Y.Z vytvorí sama). Flux si novú verziu potom stiahne sám.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main, 'claude/**']
+    paths: ['package.json', 'CHANGELOG.md']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,14 +17,28 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Is this version already released?
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v=$(node -p "require('./package.json').version")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: node scripts/build.mjs
-      - run: node scripts/release-notes.mjs
-      - run: npx electron-builder --win --publish always -c.releaseInfo.releaseNotesFile=build/release-notes.md
+      - if: steps.check.outputs.exists == 'false'
+        run: npm ci
+      - if: steps.check.outputs.exists == 'false'
+        run: node scripts/build.mjs
+      - if: steps.check.outputs.exists == 'false'
+        run: node scripts/release-notes.mjs
+      - if: steps.check.outputs.exists == 'false'
+        run: npx electron-builder --win --publish always -c.releaseInfo.releaseNotesFile=build/release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
