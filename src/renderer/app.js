@@ -684,12 +684,32 @@ function playTransition(el, dir = 0) {
 // pri zmene výberu sa plynulo presunie z pôvodného miesta na nové. Zoznamy sa prekresľujú celé,
 // preto si pamätáme poslednú polohu podľa kľúča.
 const slideMem = new Map();
+const slideObs = new Map();
+// poloha prvku vnútri zoznamu (aj keď je vo vnorenej skupine, napr. pripnuté projekty)
+// (z offsetLeft/offsetTop – nezávisí od práve bežiacej animácie položky)
+function slidePos(box, el) {
+  let x = 0;
+  let y = 0;
+  let n = el;
+  while (n && n !== box) {
+    x += n.offsetLeft;
+    y += n.offsetTop;
+    n = n.offsetParent;
+  }
+  if (n !== box) {
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return { x: r.left - b.left + box.scrollLeft, y: r.top - b.top + box.scrollTop, w: r.width, h: r.height };
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
 function slideIndicator(box, active, key) {
   if (!box) return;
   let ind = box.querySelector(':scope > .slide-ind');
   if (!setting('transitions') || !active || !active.offsetParent) {
     ind?.remove();
     box.classList.remove('has-ind');
+    slideObs.get(key)?.disconnect();
     if (!active) slideMem.delete(key);
     return;
   }
@@ -699,21 +719,36 @@ function slideIndicator(box, active, key) {
     box.prepend(ind);
   }
   box.classList.add('has-ind');
-  const to = { x: active.offsetLeft, y: active.offsetTop, w: active.offsetWidth, h: active.offsetHeight };
-  const from = slideMem.get(key);
-  slideMem.set(key, to);
   const put = (p) => {
     ind.style.transform = `translate(${p.x}px, ${p.y}px)`;
     ind.style.width = `${p.w}px`;
     ind.style.height = `${p.h}px`;
   };
+  const to = slidePos(box, active);
+  const from = slideMem.get(key);
+  slideMem.set(key, to);
   ind.style.transition = 'none';
-  if (from && (from.x !== to.x || from.y !== to.y || from.w !== to.w)) {
+  if (from && (Math.abs(from.x - to.x) > 1 || Math.abs(from.y - to.y) > 1 || Math.abs(from.w - to.w) > 1)) {
     put(from);
     void ind.offsetWidth;
     ind.style.transition = '';
   }
   put(to);
+  // Riadky sa môžu ešte zmeniť (štatistiky projektov sa dopĺňajú neskôr, zmena šírky okna) –
+  // podklad sa vtedy bez animácie zarovná k vybranej položke.
+  slideObs.get(key)?.disconnect();
+  const ro = new ResizeObserver(() => {
+    if (!active.isConnected) return ro.disconnect();
+    const now = slidePos(box, active);
+    const prev = slideMem.get(key);
+    if (prev && Math.abs(prev.x - now.x) < 1 && Math.abs(prev.y - now.y) < 1 && Math.abs(prev.w - now.w) < 1 && Math.abs(prev.h - now.h) < 1) return;
+    slideMem.set(key, now);
+    ind.style.transition = 'none';
+    put(now);
+  });
+  ro.observe(box);
+  for (const el of box.querySelectorAll('.pr-row, .row, .tab, .s-tab, .s-sub, .pr-head')) ro.observe(el);
+  slideObs.set(key, ro);
 }
 
 // ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
@@ -723,7 +758,8 @@ function inertiaScroll() {
   let frame = 0;
   let last = 0;
   const step = (t) => {
-    const dt = Math.min(34, t - last) / 16.67;
+    // čas snímky môže byť starší ako posledné koliesko – nikdy záporný krok
+    const dt = Math.min(34, Math.max(4, t - last)) / 16.67;
     last = t;
     editor.setScrollTop(editor.getScrollTop() + velocity * dt);
     velocity *= Math.pow(0.9, dt);

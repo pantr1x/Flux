@@ -680,31 +680,36 @@
       .catch(() => {});
 
     // ---------- plynulé skrolovanie so zotrvačnosťou (ako vo Fluxe) ----------
-    // Koliesko neposúva stránku skokom – cieľ sa posunie a stránka k nemu dokĺže; po pustení ešte chvíľu „slidne“.
+    // Koliesko myši pridá rýchlosť, stránka sa posúva a po pustení ešte chvíľu dokĺže (trenie).
+    // Touchpad a klávesnica ostávajú prirodzené – tie sú plynulé samy.
     (() => {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      let target = scrollY;
-      let current = scrollY;
-      let raf = 0;
-      let own = false;
+      let v = 0;
+      let pos = scrollY;
+      let frame = 0;
+      let last = 0;
       const max = () => document.documentElement.scrollHeight - innerHeight;
-      const clamp = (v) => Math.max(0, Math.min(max(), v));
-      const step = () => {
-        current += (target - current) * 0.085;
-        if (Math.abs(target - current) < 0.4) current = target;
-        own = true;
-        scrollTo(0, current);
-        raf = current === target ? 0 : requestAnimationFrame(step);
+      const stop = () => {
+        v = 0;
+        if (frame) cancelAnimationFrame(frame);
+        frame = 0;
       };
-      const go = (y) => {
-        target = clamp(y);
-        if (!raf) raf = requestAnimationFrame(step);
+      const step = (now) => {
+        // čas snímky môže byť starší ako posledné koliesko – nikdy záporný krok
+        const dt = Math.min(34, Math.max(4, now - last)) / 16.67;
+        last = now;
+        // posuvník, klávesnica a odkazy pohyb zastavia (pointerdown/keydown/click nižšie)
+        pos = Math.max(0, Math.min(max(), pos + v * dt));
+        scrollTo(0, pos);
+        v *= Math.pow(0.9, dt);
+        if (Math.abs(v) < 0.3 || pos <= 0 || pos >= max()) return stop();
+        frame = requestAnimationFrame(step);
       };
       // vnorené posuvné časti (kód, výstup v ukážke) sa posúvajú samé
       const innerScroller = (el, dy) => {
         for (let n = el; n && n !== document.body; n = n.parentElement) {
-          const s = getComputedStyle(n).overflowY;
-          if ((s === 'auto' || s === 'scroll') && n.scrollHeight > n.clientHeight + 1) {
+          const o = getComputedStyle(n).overflowY;
+          if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight + 1) {
             if ((dy > 0 && n.scrollTop + n.clientHeight < n.scrollHeight - 1) || (dy < 0 && n.scrollTop > 0)) return true;
           }
         }
@@ -713,30 +718,37 @@
       addEventListener(
         'wheel',
         (e) => {
-          if (e.ctrlKey || innerScroller(e.target, e.deltaY)) return;
+          if (e.ctrlKey || e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          // touchpad posiela veľa malých krokov – ten nechávame prehliadaču
+          if (e.deltaMode === 0 && Math.abs(e.deltaY) < 40) return stop();
+          if (innerScroller(e.target, e.deltaY)) return;
           e.preventDefault();
-          if (!raf) target = current = scrollY;
-          go(target + e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? innerHeight : 1));
+          const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+          if (!frame) {
+            pos = scrollY;
+            last = performance.now();
+            frame = requestAnimationFrame(step);
+          }
+          // zmena smeru zastaví pohyb hneď
+          if (Math.sign(dy) !== Math.sign(v)) v = 0;
+          v += dy * 0.12;
         },
         { passive: false },
       );
-      // skok na časť stránky (karty v lište, tlačidlá) tiež plynulo
+      // skok na časť stránky (karty v lište, tlačidlá): plynulo, prehliadačom
       document.addEventListener('click', (e) => {
         const a = e.target.closest('a[href^="#"]');
         if (!a) return;
-        const el = a.getAttribute('href') === '#top' ? document.body : document.querySelector(a.getAttribute('href'));
-        if (!el) return;
+        const href = a.getAttribute('href');
+        const el = href === '#top' ? null : document.querySelector(href);
+        if (href !== '#top' && !el) return;
         e.preventDefault();
-        if (!raf) target = current = scrollY;
-        go(el === document.body ? 0 : el.getBoundingClientRect().top + scrollY - 70);
-        history.replaceState(null, '', a.getAttribute('href'));
+        stop();
+        scrollTo({ top: el ? el.getBoundingClientRect().top + scrollY - 70 : 0, behavior: 'smooth' });
+        history.replaceState(null, '', href);
       });
-      // klávesnica / posuvník: plynulé skrolovanie sa zastaví a prevezme aktuálnu polohu
-      addEventListener('scroll', () => {
-        if (own) return (own = false);
-        if (raf) cancelAnimationFrame(raf), (raf = 0);
-        target = current = scrollY;
-      }, { passive: true });
+      addEventListener('keydown', stop);
+      addEventListener('pointerdown', stop);
     })();
 
     // ---------- animácie a aktívna karta v lište ----------

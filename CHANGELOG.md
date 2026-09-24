@@ -2,6 +2,19 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.2 – 2026-09-24
+
+### Fixes
+- **Project list:** the highlight sat a little above the selected project (the file counts below the projects load a moment later). It now always lines up – also for file tabs, the file list and the Settings menu.
+- **Smooth scrolling in the editor** no longer jumps back a tiny bit at the start.
+- **Intro:** the Flux logo was an empty square when animations are off. Now it shows right away.
+
+### Website
+- **Scrolling fixed:** the mouse wheel sometimes did nothing or stuttered. Now the page glides and stops right away when you change direction; touchpads scroll as usual.
+
+### Checked on Windows
+- Every build now installs Flux on a real Windows machine, runs an update like the app does and takes screenshots: the installer shows only **“Installing – Please wait…” with a progress bar**, then Flux opens again by itself.
+
 ## 1.4.1 – 2026-09-24
 
 ### Updating shows its progress

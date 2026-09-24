@@ -8010,3 +8010,8 @@ body.fx-trans .fx-in {
 .s-nav > .slide-ind {
   border-radius: 10px;
 }
+
+/* Bez animácií (Memory & speed) musí byť všetko, čo sa inak „nakreslí“ animáciou, hneď vidieť – napr. logo v úvode. */
+body.no-anim .ob-draw {
+  stroke-dashoffset: 0;
+}
