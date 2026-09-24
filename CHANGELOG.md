@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.6 – 2026-09-24
+
+### Settings
+- Clicking a suggestion in **Search settings** now jumps to that setting. Before, it closed the settings instead.
+
 ## 1.4.5 – 2026-09-24
 
 ### Search

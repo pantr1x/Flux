@@ -3424,11 +3424,13 @@ function openSettings() {
   };
   find.onfocus = drawSug;
   find.onblur = () => setTimeout(() => (sugBox.hidden = true), 120);
-  sugBox.onpointerdown = (e) => {
+  // pointerdown len podrží fokus v poli; skok až pri kliknutí – keby návrhy zmizli už pri stlačení,
+  // klik by dopadol na pozadie nastavení a zavrel ich
+  sugBox.onpointerdown = (e) => e.preventDefault();
+  sugBox.onclick = (e) => {
+    e.stopPropagation();
     const b = e.target.closest('[data-sug]');
-    if (!b) return;
-    e.preventDefault();
-    jump(sugs[Number(b.dataset.sug)]);
+    if (b) jump(sugs[Number(b.dataset.sug)]);
   };
   requestAnimationFrame(() => $('#s-find')?.focus());
   // Otvorené z domovskej obrazovky (koliesko, Ctrl+,): domov ide pod nastavenia, inak by ich zakryl.
