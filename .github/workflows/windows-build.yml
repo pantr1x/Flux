@@ -72,6 +72,7 @@ jobs:
           Write-Host 'Update test passed'
       - name: Publish update screenshots (branch ci-screens)
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           [ -d shots ] || exit 0
@@ -81,4 +82,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Update screenshots from ${GITHUB_SHA::7}"
-          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-screens
+          for i in 1 2 3 4; do git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-screens && exit 0; sleep $((i * 5)); done
+          exit 1
