@@ -68,26 +68,29 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
     try {
       await navigator.clipboard.writeText(started.userCode);
     } catch {}
-    flux.openExternal(started.url);
     box.innerHTML = `<div class="gh-signin">
-      <p>${t('Your browser opened GitHub and asks for this code:')}</p>
+      <p>${t('A GitHub window opened and Flux types this code into it for you:')}</p>
       <div class="gh-code" title="${t('Click to copy')}">${esc(started.userCode)}</div>
       <ol class="gh-howto">
-        <li>${t('On the GitHub page click the first box and press Ctrl+V – the code is already copied.')}</li>
+        <li>${t('Log in to GitHub if it asks (also with Google).')}</li>
         <li>${t('Press Continue, then Authorize.')}</li>
       </ol>
-      <small>${t('GitHub does not send anything to your phone for this – the code is only here in Flux.')}</small>
+      <small>${t('If the code is not filled in, click the first box and press Ctrl+V – it is already copied.')}</small>
       <div class="gh-wait"><span class="spin"></span>${t('Waiting for GitHub…')}</div>
-      <div class="s-inline"><button class="s-btn" data-gh-reopen>${icon('external', 13)}${t('Open GitHub again')}</button><button class="s-btn" data-gh-cancel>${t('Cancel')}</button></div>
+      <div class="s-inline"><button class="s-btn" data-gh-reopen>${icon('external', 13)}${t('Use my browser instead')}</button><button class="s-btn" data-gh-cancel>${t('Cancel')}</button></div>
     </div>`;
     const onClick = (e) => {
       if (e.target.closest('.gh-code')) navigator.clipboard.writeText(started.userCode).then(() => toast(t('Copied.'), 'ok', 1500));
-      if (e.target.closest('[data-gh-reopen]')) flux.openExternal(started.url);
+      if (e.target.closest('[data-gh-reopen]')) {
+        flux.ghSignInClose();
+        flux.openExternal(started.url);
+      }
       if (e.target.closest('[data-gh-cancel]')) flux.ghSignInCancel();
     };
     box.addEventListener('click', onClick);
     try {
       const user = await flux.ghSignInWait();
+      flux.ghSignInClose();
       box.removeEventListener('click', onClick);
       if (!user) {
         box.innerHTML = back;
@@ -96,6 +99,7 @@ export function createGitHub({ toast, tools, openSettingsTab, openProject, getWo
       toast(t('Connected as {user}.', { user: user.login }), 'ok');
       return onDone(user);
     } catch (err) {
+      flux.ghSignInClose();
       box.removeEventListener('click', onClick);
       box.innerHTML = back;
       toast(errText(err), 'error', 8000);

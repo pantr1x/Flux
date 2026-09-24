@@ -11,6 +11,7 @@ const { createAI } = require('./ai');
 const { createGitHub } = require('./github');
 const { createPlugins, pluginsDir } = require('./plugins');
 const { createUpdater } = require('./updater');
+const { createMcpServer } = require('./mcpServer');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
 const i18n = require('./i18n');
@@ -169,6 +170,76 @@ async function projectTool(name, input = {}) {
   }
   return { error: `Unknown tool ${name}` };
 }
+
+// ---------- MCP server: Flux pre iné AI aplikácie (Claude Desktop, Claude Code, Cursor…) ----------
+const MCP_TOOLS = [
+  { name: 'flux_list_projects', description: 'List the projects in Flux (name, folder, main language, languages, whether it is a GitHub repository) and which one is open.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'flux_open_project', description: 'Open a project in Flux by its folder (from flux_list_projects). The other tools then work with this project.', inputSchema: { type: 'object', properties: { folder: { type: 'string' } }, required: ['folder'] } },
+  { name: 'flux_project_info', description: 'Get the open Flux project: name, folder, type, short description, to-do list (with ids) and its files.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'flux_read_file', description: 'Read a text file of the open project. Path is relative to the project folder, e.g. "index.html" or "src/main.py".', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+  { name: 'flux_write_file', description: 'Create or overwrite a text file in the open project with the full new content. Flux shows the change right away.', inputSchema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
+  { name: 'flux_open_file', description: 'Open a file of the project in the Flux editor so the user sees it.', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
+  { name: 'flux_add_todos', description: "Add tasks to the project's to-do list (shown on the project page in Flux).", inputSchema: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'string' } } }, required: ['tasks'] } },
+  { name: 'flux_update_todo', description: 'Mark a to-do as done or not done, rename it, or remove it (id from flux_project_info).', inputSchema: { type: 'object', properties: { id: { type: 'number' }, done: { type: 'boolean' }, text: { type: 'string' }, remove: { type: 'boolean' } }, required: ['id'] } },
+  { name: 'flux_set_description', description: 'Set the short description of the project (one sentence).', inputSchema: { type: 'object', properties: { description: { type: 'string' } }, required: ['description'] } },
+];
+
+async function mcpCall(name, input) {
+  if (name === 'flux_list_projects') {
+    ensureProjects();
+    const list = await Promise.all(
+      settings.projects
+        .filter((p) => fs.existsSync(p.dir))
+        .map(async (p) => {
+          const l = await projectLangs(p.dir);
+          return { name: path.basename(p.dir), folder: p.dir, main: l.kind, languages: l.langs, github: l.github, open: p.dir === workspace, description: settings.projectMeta?.[p.dir]?.description || '' };
+        }),
+    );
+    return { result: list };
+  }
+  if (name === 'flux_open_project') {
+    const dir = String(input.folder || '');
+    if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { error: `Folder not found: ${dir}` };
+    send('mcp:open-project', dir);
+    for (let i = 0; i < 40 && workspace !== dir; i++) await new Promise((r) => setTimeout(r, 100));
+    return workspace === dir ? { result: `Opened ${path.basename(dir)}.` } : { error: 'Flux could not open the project.' };
+  }
+  if (name === 'flux_write_file') {
+    if (!workspace) return { error: 'No project is open.' };
+    if (typeof input.path !== 'string' || typeof input.content !== 'string') return { error: 'path and content must be text.' };
+    const file = path.resolve(workspace, input.path);
+    if (!insideWorkspace(file)) return { error: 'That file is outside the project.' };
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(file, input.content);
+    send('mcp:file-written', file);
+    return { result: `Saved ${input.path} (${input.content.length} characters).` };
+  }
+  if (name === 'flux_open_file') {
+    if (!workspace) return { error: 'No project is open.' };
+    const file = path.resolve(workspace, String(input.path || ''));
+    if (!insideWorkspace(file) || !fs.existsSync(file)) return { error: `File not found: ${input.path}` };
+    send('mcp:open-file', file);
+    return { result: `Opened ${input.path} in Flux.` };
+  }
+  if (!MCP_TOOLS.some((t2) => t2.name === name)) return { error: `Unknown tool ${name}` };
+  const need = { flux_read_file: 'path', flux_add_todos: 'tasks', flux_update_todo: 'id', flux_set_description: 'description' }[name];
+  if (need && input[need] === undefined) return { error: `Missing "${need}".` };
+  if (name === 'flux_add_todos' && !Array.isArray(input.tasks)) return { error: 'tasks must be a list of text.' };
+  const out = await projectTool(name, input);
+  if (out?.changed) send('project:meta-changed');
+  return out;
+}
+
+const mcp = createMcpServer({
+  getSettings: () => settings,
+  saveSettings: (patch) => {
+    Object.assign(settings, patch);
+    saveSettings();
+  },
+  version: app.getVersion(),
+  tools: () => MCP_TOOLS,
+  callTool: mcpCall,
+});
 
 const ai = createAI({
   project: projectTool,
@@ -351,6 +422,66 @@ const THEME_TEMPLATE = (name, type, colors) => `{
 }
 `;
 
+// Súbor s nastaveniami Claude Desktop (tam sa pridávajú MCP servery).
+function claudeDesktopConfigPath() {
+  if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  return path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+}
+
+// ---------- prihlásenie na GitHub v okne Fluxu ----------
+// Otvorí github.com/login/device a kód z Fluxu doň vpíše sám (prihlásiť sa dá aj cez Google).
+let ghLoginWin = null;
+function closeGitHubLogin() {
+  if (ghLoginWin && !ghLoginWin.isDestroyed()) ghLoginWin.close();
+  ghLoginWin = null;
+  return true;
+}
+function openGitHubLogin({ url, userCode }) {
+  closeGitHubLogin();
+  const w = new BrowserWindow({
+    width: 540,
+    height: 780,
+    parent: win || undefined,
+    title: 'Sign in with GitHub',
+    autoHideMenuBar: true,
+    backgroundColor: '#0d1117',
+    webPreferences: { partition: 'persist:github-login', contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  ghLoginWin = w;
+  // bežný prehliadač (niektoré prihlásenia, napr. Google, inak odmietnu vložené okno)
+  w.webContents.setUserAgent(w.webContents.getUserAgent().replace(/\s(Electron|flux)\/\S+/gi, ''));
+  w.webContents.setWindowOpenHandler(({ url: u }) => {
+    if (/^https:\/\/([\w-]+\.)*(github\.com|google\.com|googleusercontent\.com|apple\.com|microsoft\.com|live\.com)\//i.test(u)) return { action: 'allow' };
+    shell.openExternal(u);
+    return { action: 'deny' };
+  });
+  const code = String(userCode || '').replace(/[^A-Z0-9]/gi, '');
+  let filled = false;
+  const tryFill = async () => {
+    if (filled || w.isDestroyed() || !/github\.com\/login\/device/i.test(w.webContents.getURL())) return;
+    const n = await w.webContents
+      .executeJavaScript(
+        `(() => { const ins = [...document.querySelectorAll('input')].filter((i) => i.offsetParent && i.type !== 'hidden' && (i.maxLength === 1 || /user[-_]?code/i.test(i.name + i.id))); if (!ins.length || ins.some((i) => i.value)) return 0; ins[0].focus(); return ins.length; })()`,
+      )
+      .catch(() => 0);
+    if (!n) return;
+    filled = true;
+    const chars = n === 1 ? String(userCode) : code;
+    for (const ch of chars) {
+      if (w.isDestroyed()) return;
+      w.webContents.sendInputEvent({ type: 'char', keyCode: ch });
+      await new Promise((r) => setTimeout(r, 45));
+    }
+  };
+  w.webContents.on('did-finish-load', () => setTimeout(tryFill, 400));
+  w.webContents.on('did-navigate-in-page', () => setTimeout(tryFill, 400));
+  w.on('closed', () => {
+    if (ghLoginWin === w) ghLoginWin = null;
+  });
+  w.loadURL(url || 'https://github.com/login/device');
+}
+
 // ---------- IPC ----------
 function registerIpc() {
   ipcMain.handle('i18n:list', () => i18n.listLanguages());
@@ -400,7 +531,10 @@ function registerIpc() {
     const list = settings.projects.filter((p) => fs.existsSync(p.dir));
     const ordered = [...list.filter((p) => p.pinned), ...list.filter((p) => !p.pinned)];
     return Promise.all(
-      ordered.map(async (p) => ({ dir: p.dir, pinned: !!p.pinned, name: path.basename(p.dir), kind: await projectKind(p.dir), recent: settings.recent.indexOf(p.dir) })),
+      ordered.map(async (p) => {
+        const l = await projectLangs(p.dir);
+        return { dir: p.dir, pinned: !!p.pinned, name: path.basename(p.dir), kind: await projectKind(p.dir), langs: l.langs, github: l.github, recent: settings.recent.indexOf(p.dir) };
+      }),
     );
   });
   ipcMain.handle('workspace:forget', (_e, dir) => {
@@ -623,6 +757,30 @@ function registerIpc() {
 
   // Jazyky na stiahnutie (Java, C++, Go…)
   // GitHub / Git – operácie len nad otvoreným projektom
+  // MCP server pre iné AI aplikácie
+  ipcMain.handle('mcp:info', () => ({ ...mcp.info(), exe: process.execPath, bridge: path.join(__dirname, 'mcp-bridge.js'), claudeConfig: claudeDesktopConfigPath() }));
+  ipcMain.handle('mcp:enable', async (_e, on) => {
+    settings.mcpServer = { ...(settings.mcpServer || {}), enabled: !!on };
+    saveSettings();
+    if (on) await mcp.start();
+    else mcp.stop();
+    return mcp.info();
+  });
+  ipcMain.handle('mcp:new-key', () => mcp.newKey());
+  ipcMain.handle('mcp:add-to-claude', async () => {
+    const file = claudeDesktopConfigPath();
+    let data = {};
+    try {
+      data = JSON.parse(await fsp.readFile(file, 'utf8'));
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw new Error(t('Claude Desktop settings could not be read: {msg}', { msg: err.message }));
+    }
+    const i = mcp.info();
+    data.mcpServers = { ...(data.mcpServers || {}), flux: { command: process.execPath, args: [path.join(__dirname, 'mcp-bridge.js'), `http://127.0.0.1:${i.port || settings.mcpServer?.port || 39217}/mcp`, i.token], env: { ELECTRON_RUN_AS_NODE: '1' } } };
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(file, JSON.stringify(data, null, 2));
+    return file;
+  });
   // Verzia a aktualizácie Fluxu
   ipcMain.handle('update:state', () => updater.state());
   ipcMain.handle('update:check', () => updater.check());
@@ -632,9 +790,17 @@ function registerIpc() {
   ipcMain.handle('gh:info', () => github.info());
   ipcMain.handle('gh:connect', (_e, token) => github.connect(String(token || '')));
   ipcMain.handle('gh:disconnect', () => github.disconnect());
-  ipcMain.handle('gh:signin-start', () => github.signInStart());
+  ipcMain.handle('gh:signin-start', async (_e, inApp = true) => {
+    const r = await github.signInStart();
+    if (inApp) openGitHubLogin(r);
+    return r;
+  });
   ipcMain.handle('gh:signin-wait', () => github.signInWait());
-  ipcMain.handle('gh:signin-cancel', () => github.signInCancel());
+  ipcMain.handle('gh:signin-cancel', () => {
+    closeGitHubLogin();
+    return github.signInCancel();
+  });
+  ipcMain.handle('gh:signin-close', () => closeGitHubLogin());
   ipcMain.handle('gh:repos', () => github.repos());
   ipcMain.handle('gh:clone', (_e, full, root) => {
     // aj celý odkaz: https://github.com/owner/repo(.git)
@@ -863,10 +1029,13 @@ const KIND_EXT = {
   lua: /\.lua$/i,
 };
 
-async function projectKind(dir) {
-  const chosen = settings.projectMeta?.[dir]?.kind;
-  if (chosen && chosen !== 'empty') return chosen === 'c' ? 'cpp' : chosen;
-  const count = {};
+// Jazyky projektu podľa množstva kódu (ako na GitHube): hlavný jazyk, ostatné a či je to repozitár z GitHubu.
+const langCache = new Map();
+async function projectLangs(dir) {
+  const hit = langCache.get(dir);
+  if (hit && Date.now() - hit.at < 60000) return hit.data;
+  const bytes = {};
+  let files = 0;
   const scan = async (d, depth) => {
     let entries = [];
     try {
@@ -875,22 +1044,42 @@ async function projectKind(dir) {
       return;
     }
     for (const e of entries) {
-      if (IGNORED_DIRS.has(e.name) || e.name.startsWith('.') || e.name === 'venv') continue;
+      if (files > 3000) return;
+      if (IGNORED_DIRS.has(e.name) || e.name.startsWith('.') || e.name === 'venv' || e.name === 'dist' || e.name === 'build' || e.name === 'release') continue;
+      const p = path.join(d, e.name);
       if (e.isDirectory()) {
-        if (depth < 1) await scan(path.join(d, e.name), depth + 1);
+        if (depth < 4) await scan(p, depth + 1);
         continue;
       }
-      for (const [kind, re] of Object.entries(KIND_EXT)) if (re.test(e.name)) count[kind] = (count[kind] || 0) + 1;
+      const kind = Object.keys(KIND_EXT).find((k) => KIND_EXT[k].test(e.name));
+      if (!kind || /\.min\.(js|css)$/i.test(e.name)) continue;
+      files++;
+      let size = 1;
+      try {
+        size = Math.max(1, (await fsp.stat(p)).size);
+      } catch {}
+      bytes[kind] = (bytes[kind] || 0) + size;
     }
   };
   await scan(dir, 0);
-  // JavaScript pri HTML patrí k webu.
-  if (count.web && count.node) {
-    count.web += count.node;
-    delete count.node;
-  }
-  const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
-  return best ? best[0] : 'folder';
+  const langs = Object.entries(bytes)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k]) => k);
+  // HTML stránka s JavaScriptom je web.
+  if (langs[0] === 'node' && bytes.web && bytes.web * 3 > bytes.node && !fs.existsSync(path.join(dir, 'package.json'))) langs.splice(langs.indexOf('web'), 1), langs.unshift('web');
+  let github = false;
+  try {
+    github = /github\.com[/:]/i.test(fs.readFileSync(path.join(dir, '.git', 'config'), 'utf8'));
+  } catch {}
+  const data = { kind: langs[0] || 'folder', langs, github };
+  langCache.set(dir, { at: Date.now(), data });
+  return data;
+}
+
+async function projectKind(dir) {
+  const chosen = settings.projectMeta?.[dir]?.kind;
+  if (chosen && chosen !== 'empty') return chosen === 'c' ? 'cpp' : chosen;
+  return (await projectLangs(dir)).kind;
 }
 
 // Štatistiky projektu: súbory, riadky, znaky, čas.
@@ -979,6 +1168,7 @@ app.whenReady().then(() => {
   createWindow();
   setTimeout(() => autoUpdateToolchains().catch(() => {}), 20000);
   updater.start();
+  if (settings.mcpServer?.enabled) mcp.start().catch(() => {});
 });
 
 app.on('window-all-closed', () => {

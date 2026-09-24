@@ -2,6 +2,15 @@
 
 Every version with its changes. Flux shows these notes in **Settings → About & updates**.
 
+## 0.3.0 – 2026-09-24
+
+### 🤖 Use Flux from Claude and other AI apps
+Turn it on in **Settings → AI → Use Flux from other AI apps**. Claude Desktop (one click), Claude Code, Cursor and VS Code can then see your Flux projects, read and write files, and update the description and to-do list – changes show up in Flux right away. It works only on your computer and needs a secret key.
+
+### ✨ Also new
+- **Sign in with GitHub** opens a GitHub window inside Flux and types the code in for you.
+- Projects show their **main language plus how many others** they use (e.g. *JavaScript +3*), measured by the amount of code like on GitHub, and a small **GitHub mark** when they come from GitHub.
+
 ## 0.2.2 – 2026-09-24
 
 - Installer: the “Start Flux now” text on the last page is readable on the dark background.

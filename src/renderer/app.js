@@ -1250,10 +1250,23 @@ async function setWorkspace(dir) {
 // Zoznam nedávnych priečinkov s ikonou podľa obsahu – prepnutie jedným klikom.
 // Ikona typu projektu (Python, web, Java…).
 const KIND_FILE = { python: 'a.py', web: 'a.html', node: 'a.js', java: 'a.java', cpp: 'a.cpp', c: 'a.c', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua' };
-function kindIcon(kind, size = 16) {
+function kindIcon(kind, size = 16, github = false) {
   const svg = KIND_FILE[kind] ? fileIcon(KIND_FILE[kind]) : icon('folder', 16);
-  return size === 16 ? svg : svg.replace(/width="16" height="16"/, `width="${size}" height="${size}"`);
+  const out = size === 16 ? svg : svg.replace(/width="16" height="16"/, `width="${size}" height="${size}"`);
+  // projekt z GitHubu: malý znak v rohu ikony
+  return github ? `<span class="kind-ic" title="GitHub">${out}<i class="kind-gh">${icon('git', Math.max(8, Math.round(size * 0.55)))}</i></span>` : out;
 }
+
+const KIND_LANG_NAMES = { python: 'Python', web: 'HTML/CSS', node: 'JavaScript', java: 'Java', cpp: 'C/C++', go: 'Go', csharp: 'C#', rust: 'Rust', ruby: 'Ruby', php: 'PHP', lua: 'Lua' };
+// „JavaScript +3“ – hlavný jazyk a koľko ďalších má projekt
+function langLine(p) {
+  const langs = (p.langs || []).filter((l) => KIND_LANG_NAMES[l]);
+  const main = KIND_LANG_NAMES[p.kind] || KIND_LANG_NAMES[langs[0]];
+  if (!main) return '';
+  const more = langs.filter((l) => l !== p.kind).length;
+  return more ? `${main} +${more}` : main;
+}
+const langTitle = (p) => (p.langs || []).map((l) => KIND_LANG_NAMES[l]).filter(Boolean).join(', ');
 
 async function renderProjects() {
   const el = $('#projects');
@@ -1263,7 +1276,7 @@ async function renderProjects() {
   } catch {}
   state.projectList = list;
   const row = (p) =>
-    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}\n${t('Right-click to rename or remove')}">${kindIcon(p.kind)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
+    `<div class="pr-row${keyOf(p.dir) === keyOf(state.workspace || '') ? ' active' : ''}${p.pinned ? ' pinned' : ''}" data-dir="${escapeAttr(p.dir)}" data-pinned="${p.pinned ? 1 : ''}" title="${escapeAttr(p.dir)}${langTitle(p) ? `\n${escapeAttr(langTitle(p))}` : ''}\n${t('Right-click to rename or remove')}">${kindIcon(p.kind, 16, p.github)}<span class="pr-text"><span class="pr-name">${escapeHtml(p.name)}</span><small class="pr-sub" data-stats="${escapeAttr(p.dir)}"></small></span><button class="pr-pin" data-pin title="${p.pinned ? t('Unpin') : t('Pin to top')}">${icon('pin', 13)}</button></div>`;
   const pinned = list.filter((p) => p.pinned);
   const rest = list.filter((p) => !p.pinned);
   el.innerHTML =
@@ -1280,7 +1293,7 @@ async function renderProjects() {
   for (const p of list) {
     flux.projectStats(p.dir).then((st) => {
       const sub = [...el.querySelectorAll('.pr-sub')].find((x) => x.dataset.stats === p.dir);
-      if (sub) sub.textContent = `${st.files} ${st.files === 1 ? t('file') : t('files')}${st.time >= 60 ? ` · ${formatTime(st.time)}` : ''}`;
+      if (sub) sub.textContent = [langLine(p), `${st.files} ${st.files === 1 ? t('file') : t('files')}`, st.time >= 60 ? formatTime(st.time) : ''].filter(Boolean).join(' · ');
     });
   }
 }
@@ -2415,6 +2428,9 @@ function openSettings() {
               <input id="s-mcp-token" type="password" placeholder="${t('Token (optional)')}" autocomplete="off">
               <button class="s-btn">${icon('plus', 13)}${t('Add')}</button>
             </form>
+            <h3>${t('Use Flux from other AI apps')}</h3>
+            <p class="s-lead">${t('Claude Desktop, Claude Code, Cursor and other apps that support MCP can see and change your Flux projects – files, description and to-do list. It works only on this computer and needs a secret key.')}</p>
+            <div id="s-flux-mcp"></div>
           </section>
           <section data-pane="github" id="s-github"></section>
           <section data-pane="plugins" id="s-plugins"></section>
@@ -2467,6 +2483,61 @@ function openSettings() {
     renderAI();
     aiPanel?.refreshConfig();
   };
+  // Flux ako MCP server pre iné AI aplikácie
+  const renderFluxMcp = async () => {
+    const box = $('#s-flux-mcp');
+    if (!box) return;
+    const m = await flux.mcpInfo();
+    const on = m.enabled && m.running;
+    box.innerHTML = `<div class="s-group">
+        <label class="s-row"><span><b>${t('Let AI apps use Flux')}</b><small>${on ? t('Running – AI apps can connect now.') : t('Off')}</small></span><input type="checkbox" class="switch" id="s-fmcp-on"${on ? ' checked' : ''}></label>
+        ${
+          on
+            ? `<div class="s-row"><span><b>${t('Link')}</b><small class="mono">${escapeHtml(m.url)}</small></span><button class="s-btn" data-copy-mcp="url">${icon('file', 13)}${t('Copy')}</button></div>
+               <div class="s-row"><span><b>${t('Secret key')}</b><small>${t('Anyone with the key can change your projects – do not share it.')}</small></span><span class="s-inline"><button class="s-btn" data-copy-mcp="key">${icon('file', 13)}${t('Copy')}</button><button class="s-btn" data-action="mcp-new-key">${icon('refresh', 13)}${t('New key')}</button></span></div>
+               <div class="s-row s-mcp-apps"><span><b>${t('Connect an app')}</b><small>${t('One click for Claude Desktop (restart it afterwards); the others get a ready command to paste.')}</small></span><span class="s-inline wrap"><button class="s-btn primary" data-action="mcp-claude">${icon('sparkle', 13)}${t('Add to Claude Desktop')}</button><button class="s-btn" data-copy-mcp="claude-code">${t('Claude Code')}</button><button class="s-btn" data-copy-mcp="cursor">${t('Cursor / VS Code')}</button></span></div>`
+            : ''
+        }
+      </div>
+      <p class="s-note">${t('ChatGPT and claude.ai in the browser can only connect to servers on the internet, not to apps on your computer – use Claude Desktop, Claude Code or Cursor.')}</p>`;
+    box.onchange = async (e) => {
+      if (e.target.id !== 's-fmcp-on') return;
+      try {
+        await flux.mcpEnable(e.target.checked);
+      } catch (err) {
+        toast(errorText(err), 'error', 7000);
+      }
+      renderFluxMcp();
+    };
+    box.onclick = async (e) => {
+      const c = e.target.closest('[data-copy-mcp]');
+      if (c) {
+        const kind = c.dataset.copyMcp;
+        const text = {
+          url: m.url,
+          key: m.token,
+          'claude-code': `claude mcp add --transport http flux ${m.url} --header "Authorization: Bearer ${m.token}"`,
+          cursor: JSON.stringify({ mcpServers: { flux: { url: m.url, headers: { Authorization: `Bearer ${m.token}` } } } }, null, 2),
+        }[kind];
+        await navigator.clipboard.writeText(text);
+        return toast(kind === 'claude-code' ? t('Copied – paste it into a terminal.') : kind === 'cursor' ? t('Copied – paste it into mcp.json of Cursor or VS Code.') : t('Copied.'), 'ok', 5000);
+      }
+      if (e.target.closest('[data-action="mcp-new-key"]')) {
+        await flux.mcpNewKey();
+        toast(t('New key made. Connect your AI apps again.'), 'ok', 6000);
+        return renderFluxMcp();
+      }
+      if (e.target.closest('[data-action="mcp-claude"]')) {
+        try {
+          await flux.mcpAddToClaude();
+          toast(t('Added to Claude Desktop. Restart Claude Desktop – then ask it about your Flux projects.'), 'ok', 9000);
+        } catch (err) {
+          toast(errorText(err), 'error', 8000);
+        }
+      }
+    };
+  };
+  renderFluxMcp();
   $('#s-mcp-add').onsubmit = async (e) => {
     e.preventDefault();
     const name = $('#s-mcp-name').value.trim().replace(/\s+/g, '-');
@@ -2876,9 +2947,9 @@ async function openStart() {
   const greet = name ? `${greetBase}, ${escapeHtml(name)}` : greetBase;
   const desc = (p) => projectMeta(p.dir).description;
   const card = (p) =>
-    `<button class="hm-card${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}"><span class="hm-ic">${kindIcon(p.kind, 26)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
+    `<button class="hm-card${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}"><span class="hm-ic">${kindIcon(p.kind, 26, p.github)}</span><span class="hm-text"><b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small></span><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
   const line = (p) =>
-    `<button class="hm-line${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}">${kindIcon(p.kind, 18)}<b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
+    `<button class="hm-line${keyOf(p.dir) === keyOf(state.workspace || '') ? ' current' : ''}" data-dir="${escapeAttr(p.dir)}">${kindIcon(p.kind, 18, p.github)}<b>${escapeHtml(p.name)}</b><small>${escapeHtml(desc(p) || p.dir)}</small><small class="hm-stat" data-stats="${escapeAttr(p.dir)}"></small></button>`;
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
     <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span></div>
@@ -2905,7 +2976,7 @@ async function openStart() {
   for (const p of [...pinned, ...recent]) {
     flux.projectStats(p.dir).then((st) => {
       for (const x of el.querySelectorAll('.hm-stat')) {
-        if (x.dataset.stats === p.dir) x.textContent = `${st.files} ${st.files === 1 ? t('file') : t('files')}${st.time >= 60 ? ` · ${formatTime(st.time)}` : ''}`;
+        if (x.dataset.stats === p.dir) x.textContent = [langLine(p), `${st.files} ${st.files === 1 ? t('file') : t('files')}`, st.time >= 60 ? formatTime(st.time) : ''].filter(Boolean).join(' · ');
       }
     });
   }
@@ -3565,6 +3636,13 @@ async function main() {
     // Počet zmien pre Git – nie pri každom uložení hneď, stačí raz za chvíľu.
     clearTimeout(gitTimer);
     gitTimer = setTimeout(() => gh?.refreshStatus(), 1500);
+  });
+  // Iná AI aplikácia (cez MCP) otvorila projekt / súbor alebo zapísala súbor.
+  flux.onMcpOpenProject((dir) => setWorkspace(dir));
+  flux.onMcpOpenFile((file) => openFile(file));
+  flux.onMcpFileWritten(async () => {
+    await refreshTree();
+    syncOpenTabs();
   });
   flux.onSaveAllAndClose(async () => {
     await saveAll();

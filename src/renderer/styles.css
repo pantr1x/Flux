@@ -5474,3 +5474,50 @@ body.pointer-everywhere * {
 .gh-howto li + li {
   margin-top: 4px;
 }
+
+/* Ikona projektu z GitHubu */
+.kind-ic {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.kind-gh {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  padding: 1.5px;
+  border-radius: 50%;
+  background: var(--card-solid);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+/* Flux ako MCP server */
+.s-note {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.s-inline.wrap {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.s-row.s-mcp-apps {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.s-mcp-apps .s-inline.wrap {
+  justify-content: flex-start;
+}
+.pr-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+small.mono {
+  font-family: var(--mono);
+  user-select: all;
+}
