@@ -56,7 +56,16 @@ exec "$DIR/Flux.AppImage" "\$@"
 EOF
 chmod +x "$BIN/flux"
 
-curl -fsSL -o "$ICONS/flux.png" "https://pantr1x.github.io/Flux/icon.png" || true
+# ikona priamo z AppImage (záloha: z webu); v .desktop s plnou cestou – funguje v každom menu
+tmp=$(mktemp -d)
+(cd "$tmp" && "$DIR/Flux.AppImage" --appimage-extract 'usr/share/icons/hicolor/512x512/apps/flux.png' >/dev/null 2>&1) || true
+if [ -s "$tmp/squashfs-root/usr/share/icons/hicolor/512x512/apps/flux.png" ]; then
+  cp -f "$tmp/squashfs-root/usr/share/icons/hicolor/512x512/apps/flux.png" "$DIR/flux.png"
+else
+  curl -fsSL -o "$DIR/flux.png" "https://pantr1x.github.io/Flux/icon.png" || true
+fi
+rm -rf "$tmp"
+cp -f "$DIR/flux.png" "$ICONS/flux.png" 2>/dev/null || true
 cat >"$APPS/flux.desktop" <<EOF
 [Desktop Entry]
 Type=Application
@@ -64,7 +73,7 @@ Name=Flux
 GenericName=Code Editor
 Comment=A small, good-looking code editor
 Exec=$BIN/flux %F
-Icon=flux
+Icon=$DIR/flux.png
 Terminal=false
 Categories=Development;TextEditor;IDE;
 MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;

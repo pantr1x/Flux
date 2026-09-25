@@ -16,6 +16,7 @@ const { createUpdater } = require('./updater');
 const { createMcpServer } = require('./mcpServer');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
+const { linuxWallpaper } = require('./wallpaper');
 const i18n = require('./i18n');
 const { t } = i18n;
 
@@ -52,6 +53,7 @@ function wallpaperPath() {
   // Vlastný obrázok pozadia (Nastavenia → Personalize) má prednosť.
   if (settings.bgImage && fs.existsSync(settings.bgImage)) return settings.bgImage;
   if (process.env.FLUX_WALLPAPER) return process.env.FLUX_WALLPAPER;
+  if (process.platform === 'linux') return linuxWallpaper();
   if (!isWin || !process.env.APPDATA) return null;
   const p = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
   return fs.existsSync(p) ? p : null;
