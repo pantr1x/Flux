@@ -1,6 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
+  "desktopName": "flux.desktop",
   "version": "1.4.13",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
@@ -76,7 +77,20 @@
       "displayLanguageSelector": false
     },
     "linux": {
-      "target": "dir"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "executableName": "flux",
+      "syncDesktopName": true,
+      "synopsis": "A small, good-looking code editor",
+      "artifactName": "Flux-${version}.${ext}"
     },
     "publish": [
       {
@@ -106,5 +120,6 @@
   "author": "pantr1x",
   "flux": {
     "githubClientId": "Ov23lizS4t9eZvEEScJ8"
-  }
+  },
+  "devBuild": "1.4.13.1"
 }

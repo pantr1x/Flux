@@ -99,9 +99,17 @@ Flux updates itself from **GitHub Releases** of `pantr1x/Flux` (`src/main/update
 - The app shows it as `1.4.4.1` (`showVer()` in `updatesUI.js`).
 - For the next build, raise N. Once you raise `version`, the old `devBuild` no longer matches, and a normal release is built.
 - A manual `-beta.N` version also works. Never use another id such as `dev`: electron-updater treats those as custom channels, and a user on one of them would never move back to stable versions.
-- The CHANGELOG section is optional (`## 1.4.4.1` works). Without it, the notes are the last commit messages. `release.yml` publishes the build as a GitHub **pre-release** with `beta.yml` (not `--latest`). Only a Flux signed in to the GitHub account **`pantr1x`** gets these builds (`DEV_LOGIN` / `devAllowed()` in `updater.js`, which sets `autoUpdater.allowPrerelease`). That user also sees the *Developer updates* switch in About & updates (`devUpdates`, on by default) and the pre-releases in the release notes. Everyone else, and the website, ignore pre-releases completely. Version comparisons (`newer()` in `updater.js` and `updatesUI.js`) understand pre-release suffixes. To end a beta, release the plain version (`1.5.0` > `1.5.0-beta.N`).
+- The CHANGELOG section is optional (`## 1.4.4.1` works, but the bundled CHANGELOG is shown to everyone offline, so prefer commit messages). Without it, the notes are the last commit messages. `release.yml` publishes the build as a GitHub **pre-release** (not `--latest`). electron-builder writes `latest.yml` even for a beta with the GitHub provider; electron-updater with `allowPrerelease` tries `beta.yml` and falls back to that `latest.yml`, so the workflow uploads `latest.yml`. Only a Flux signed in to the GitHub account **`pantr1x`** gets these builds (`DEV_LOGIN` / `devAllowed()` in `updater.js`, which sets `autoUpdater.allowPrerelease`). That user also sees the *Developer updates* switch in About & updates (`devUpdates`, on by default) and the pre-releases in the release notes. Everyone else, and the website, ignore pre-releases completely. Version comparisons (`newer()` in `updater.js` and `updatesUI.js`) understand pre-release suffixes. To end a beta, release the plain version (`1.5.0` > `1.5.0-beta.N`).
 
 The same release notes appear in the app (Settings → General → About & updates, plus the bundled `CHANGELOG.md` when offline) and on the website.
+
+**Linux (developer builds only, for now)**:
+- The `linux` job in `release.yml` runs only for pre-releases. It builds on Ubuntu, because `npm ci` installs the node-pty prebuilt for the runner's platform. It adds `Flux-<v>.AppImage` and `latest-linux.yml` to the same release.
+- In the app (`updater.js`), Linux updates only run from an AppImage (`APPIMAGE`) and only while developer updates are on (`useUpdater()`). Other Linux users just see the newest version, like a source checkout.
+- A release without `latest-linux.yml` (a Windows-only stable release) counts as "up to date" on Linux, not as an error (`noLinuxBuild()`).
+- `package.json` → `build.linux` sets the AppImage target, `desktopName` and `syncDesktopName` (window ↔ `.desktop` entry). The quick update never applies there: the AppImage is read-only, so it falls back to the full AppImage.
+- The website still says Linux is *coming soon*.
+- Test it locally: `npx electron-builder --linux AppImage --publish never`, then run it with `APPIMAGE_EXTRACT_AND_RUN=1 … --no-sandbox` in a container without FUSE.
 
 ## Website (GitHub Pages)
 

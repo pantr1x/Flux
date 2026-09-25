@@ -4,6 +4,7 @@
 # Vývojárska verzia: do package.json daj "devBuild": "<version>.N" (napr. 1.4.4.1). Vydá sa ako „pre-release“
 # 1.4.5-beta.1 s beta.yml (novšia ako 1.4.4, staršia ako 1.4.5) – dostane ju len účet pantr1x, stránka ju neukazuje.
 # Keď zvýšiš "version", starý devBuild už nesedí a vydá sa normálna verzia. Sekcia v CHANGELOG.md nie je nutná.
+# Linux (AppImage + latest-linux.yml) sa zatiaľ zostavuje len pre vývojárske verzie (job linux).
 name: Release
 
 on:
@@ -18,6 +19,10 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      show: ${{ steps.check.outputs.show }}
+      pre: ${{ steps.check.outputs.pre }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,13 +44,13 @@ jobs:
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "show=$show" >> "$GITHUB_OUTPUT"
-          # predbežná verzia (1.5.0-beta.1) → kanál beta.yml, inak latest.yml
-          if [[ "$v" == *-* ]]; then ch="${v#*-}"; ch="${ch%%.*}"; echo "pre=true" >> "$GITHUB_OUTPUT"; else ch=latest; echo "pre=false" >> "$GITHUB_OUTPUT"; fi
-          echo "channel=$ch" >> "$GITHUB_OUTPUT"
-          # Hotové vydanie = má inštalátor aj $ch.yml (podľa neho sa Flux aktualizuje).
+          # predbežná verzia (1.5.0-beta.1) = GitHub „pre-release“; electron-builder aj pri nej zapíše latest.yml
+          # (electron-updater s allowPrerelease skúsi beta.yml a potom latest.yml z toho vydania)
+          if [[ "$v" == *-* ]]; then echo "pre=true" >> "$GITHUB_OUTPUT"; else echo "pre=false" >> "$GITHUB_OUTPUT"; fi
+          # Hotové vydanie = má inštalátor aj latest.yml (podľa neho sa Flux aktualizuje).
           assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$v" --jq '.assets[].name' 2>/dev/null | tr -d '\r' || true)
           echo "Assets of v$v: ${assets:-none}"
-          if grep -qx "$ch.yml" <<<"$assets" && grep -q '\.exe$' <<<"$assets"; then
+          if grep -qx "latest.yml" <<<"$assets" && grep -q '\.exe$' <<<"$assets"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -83,6 +88,48 @@ jobs:
           v="${{ steps.check.outputs.version }}"
           ls release
           if [ "${{ steps.check.outputs.pre }}" = true ]; then kind=--prerelease; title="Flux ${{ steps.check.outputs.show }} (dev build)"; else kind=--latest; title="Flux $v"; fi
-          gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap "release/${{ steps.check.outputs.channel }}.yml" \
+          gh release create "v$v" release/Flux-Setup-$v.exe release/Flux-Setup-$v.exe.blockmap release/latest.yml \
             "release/Flux-$v.asar.gz" release/quick.json \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes-file build/release-notes.md $kind
+
+  # Linux (zatiaľ len vývojárske verzie): AppImage + latest-linux.yml do toho istého vydania.
+  # Natívne moduly (node-pty) sa inštalujú pre platformu, na ktorej beží npm ci – preto samostatný job na Ubuntu.
+  linux:
+    needs: release
+    if: needs.release.outputs.pre == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+      - name: Is the Linux build already there?
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ needs.release.outputs.version }}"
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$v" --jq '.assets[].name' 2>/dev/null || true)
+          if grep -qx "latest-linux.yml" <<<"$assets" && grep -q '\.AppImage$' <<<"$assets"; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.check.outputs.exists == 'false'
+        run: npm pkg set "version=${{ needs.release.outputs.version }}"
+      - if: steps.check.outputs.exists == 'false'
+        run: npm ci
+      - if: steps.check.outputs.exists == 'false'
+        run: node scripts/build.mjs
+      - if: steps.check.outputs.exists == 'false'
+        run: node scripts/release-notes.mjs
+      - if: steps.check.outputs.exists == 'false'
+        run: npx electron-builder --linux AppImage --publish never
+      - name: Upload to the release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ needs.release.outputs.version }}"
+          ls release
+          gh release upload "v$v" "release/Flux-$v.AppImage" release/latest-linux.yml --repo "$GITHUB_REPOSITORY" --clobber

@@ -14,13 +14,22 @@ try {
 } catch {}
 
 function createUpdater({ getSettings, send }) {
-  const state = { version: app.getVersion(), status: 'idle', latest: '', progress: 0, error: '', canUpdate: app.isPackaged && !!autoUpdater };
+  // Linux (AppImage) je zatiaľ len vývojárska verzia: aktualizuje sa iba pri zapnutých vývojárskych aktualizáciách
+  // a len keď beží ako AppImage (electron-updater ho vymení za nový).
+  const linux = process.platform === 'linux';
+  const packaged = app.isPackaged && !!autoUpdater && (!linux || !!process.env.APPIMAGE);
+  const useUpdater = () => packaged && (!linux || dev());
+  const state = { version: app.getVersion(), status: 'idle', latest: '', progress: 0, error: '' };
   let notesCache = { at: 0, list: null };
 
+  const snap = () => ({ ...state, canUpdate: useUpdater(), devAllowed: devAllowed(), dev: dev() });
   const emit = (patch) => {
     Object.assign(state, patch);
-    send('update:state', { ...state, devAllowed: devAllowed(), dev: dev() });
+    send('update:state', snap());
   };
+  // Vydanie bez linuxovej verzie (napr. stabilné pre Windows) nie je chyba – pre Linux jednoducho nič nové.
+  const noLinuxBuild = (err) => linux && (err?.code === 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND' || /latest-linux\.yml/.test(String(err?.message)));
+  const failed = (err) => emit(noLinuxBuild(err) ? { status: 'latest', latest: state.version, error: '' } : { status: 'error', error: String(err?.message || err).split('\n')[0] });
   const auto = () => getSettings().autoUpdate !== false;
   // Vývojárske aktualizácie: predbežné verzie (napr. 1.5.0-beta.1, na GitHube ako „pre-release“).
   // Dostane ich len vývojár – keď je vo Fluxe prihlásený GitHub účet DEV_LOGIN (overený tokenom);
@@ -29,7 +38,7 @@ function createUpdater({ getSettings, send }) {
   const dev = () => devAllowed() && getSettings().devUpdates !== false;
 
   // Rýchla aktualizácia (len app.asar) – quickUpdate.js. FLUX_QUICK_URL = iný zdroj na testovanie.
-  const quick = state.canUpdate
+  const quick = packaged
     ? createQuickUpdate({ repo: REPO, fetch: (u) => net.fetch(u, { headers: { 'User-Agent': 'Flux' } }), resourcesDir: process.resourcesPath, execPath: process.execPath, baseUrl: process.env.FLUX_QUICK_URL })
     : null;
 
@@ -45,13 +54,13 @@ function createUpdater({ getSettings, send }) {
       }
       await autoUpdater.downloadUpdate();
     })()
-      .catch((err) => emit({ status: 'error', error: String(err?.message || err).split('\n')[0] }))
+      .catch(failed)
       .finally(() => downloads.delete(v));
     downloads.set(v, job);
     return job;
   }
 
-  if (state.canUpdate) {
+  if (packaged) {
     quick.cleanup();
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -72,7 +81,7 @@ function createUpdater({ getSettings, send }) {
     autoUpdater.on('update-not-available', (info) => emit({ status: 'latest', latest: info?.version || state.version }));
     autoUpdater.on('download-progress', (p) => emit({ status: 'downloading', progress: Math.round(p.percent || 0) }));
     autoUpdater.on('update-downloaded', (info) => emit({ status: 'ready', latest: info.version, progress: 100, quick: false }));
-    autoUpdater.on('error', (err) => emit({ status: 'error', error: String(err?.message || err).split('\n')[0] }));
+    autoUpdater.on('error', failed);
   }
 
   // Poznámky pribalené v aplikácii (CHANGELOG.md) – fungujú aj bez internetu.
@@ -112,16 +121,16 @@ function createUpdater({ getSettings, send }) {
   }
 
   async function check() {
-    if (state.canUpdate) {
+    if (useUpdater()) {
       autoUpdater.allowPrerelease = dev();
       try {
         await autoUpdater.checkForUpdates();
       } catch (err) {
-        emit({ status: 'error', error: String(err?.message || err).split('\n')[0] });
+        failed(err);
       }
-      return { ...state, devAllowed: devAllowed(), dev: dev() };
+      return snap();
     }
-    // Vývojová verzia (nie nainštalovaná): len zistí, aká verzia je najnovšia.
+    // Vývojová verzia (nie nainštalovaná) alebo Linux bez vývojárskych aktualizácií: len zistí, aká verzia je najnovšia.
     emit({ status: 'checking', error: '' });
     try {
       const latest = (await notes(true)).find((r) => dev() || !r.prerelease)?.version || '';
@@ -129,11 +138,11 @@ function createUpdater({ getSettings, send }) {
     } catch (err) {
       emit({ status: 'error', error: err.message });
     }
-    return { ...state, devAllowed: devAllowed(), dev: dev() };
+    return snap();
   }
 
   async function download() {
-    if (!state.canUpdate || !state.latest) return false;
+    if (!useUpdater() || !state.latest) return false;
     await startDownload(state.latest);
     return true;
   }
@@ -153,7 +162,7 @@ function createUpdater({ getSettings, send }) {
     }, 10000);
   }
   async function install() {
-    if (!(state.canUpdate && state.status === 'ready') || installing) return;
+    if (!(useUpdater() && state.status === 'ready') || installing) return;
     installing = true;
     try {
       const ready = state.latest;
@@ -197,7 +206,7 @@ function createUpdater({ getSettings, send }) {
     return check();
   }
 
-  return { state: () => ({ ...state, devAllowed: devAllowed(), dev: dev() }), check, download, install, notes, start, setDev };
+  return { state: snap, check, download, install, notes, start, setDev };
 }
 
 // a > b podľa semver: 1.5.0 > 1.5.0-beta.2 > 1.5.0-beta.1 > 1.4.9
