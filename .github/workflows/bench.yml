@@ -1,0 +1,34 @@
+# DOČASNÉ: overenie záťažového testu Flux vs VS Code na Windowse (po overení sa zmaže).
+name: Bench (temporary)
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/bench/**', '.github/workflows/bench.yml']
+permissions:
+  contents: read
+jobs:
+  bench:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flux and VS Code
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $rel = Invoke-RestMethod https://api.github.com/repos/pantr1x/Flux/releases/latest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" }
+          $asset = $rel.assets | Where-Object name -like '*.exe' | Select-Object -First 1
+          Invoke-WebRequest $asset.browser_download_url -OutFile flux-setup.exe
+          $p = Start-Process .\flux-setup.exe -ArgumentList '/S' -PassThru
+          if (-not $p.WaitForExit(300000)) { throw 'Flux install timed out' }
+          Start-Sleep 3
+          Get-Process Flux -ErrorAction SilentlyContinue | Stop-Process -Force
+          Invoke-WebRequest 'https://update.code.visualstudio.com/latest/win32-x64/stable' -OutFile vscode-setup.exe
+          $p = Start-Process .\vscode-setup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/MERGETASKS=!runcode' -PassThru
+          if (-not $p.WaitForExit(600000)) { throw 'VS Code install timed out' }
+          $code = "$env:ProgramFiles\Microsoft VS Code\bin\code.cmd"
+          & $code --install-extension ms-python.python --force
+          & $code --install-extension ms-python.vscode-pylance --force
+      - name: Run the load test
+        shell: powershell
+        run: .\.github\bench\flux-vs-code-test.ps1
