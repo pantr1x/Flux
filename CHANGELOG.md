@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.13 – 2026-09-25
+
+### Python
+- **Autocomplete and error checking now also work for a single Python file** you open without a project – for example with a double-click on a `.py` file. Before, they only worked inside an open folder.
+
 ## 1.4.12 – 2026-09-24
 
 ### Plugins

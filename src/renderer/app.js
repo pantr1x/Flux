@@ -827,7 +827,8 @@ function registerSnippets() {
 let lsp;
 function createLanguageClient() {
   lsp = new PythonLanguageClient(monaco, {
-    isLibrary: (uri) => !inside(monaco.Uri.parse(uri).fsPath),
+    // knižnica = mimo koreňa Pyrightu (projekt, alebo priečinok samostatného súboru) – napr. typeshed
+    isLibrary: (uri) => !inside(monaco.Uri.parse(uri).fsPath, lsp?.root || state.workspace),
     onStatus: (status) => {
       state.lspStatus = status;
       renderStatus();
@@ -1536,13 +1537,21 @@ function applyPerformance() {
 }
 
 // ---------- Python autocomplete len na požiadanie ----------
-const isPythonTab = (tab) => tab?.model?.getLanguageId() === 'python' && inside(tab.path);
+// Python súbor v projekte – alebo samostatný súbor (dvojklik na .py), keď projekt otvorený nie je
+const isPythonTab = (tab) => tab?.model?.getLanguageId() === 'python' && !!tab.path && (inside(tab.path) || !state.workspace);
 let lspIdleSince = 0;
+// koreň pre Pyright: projekt, inak priečinok otvoreného Python súboru
+function lspRoot() {
+  if (state.workspace) return state.workspace;
+  const py = isPythonTab(state.active) ? state.active : state.tabs.find(isPythonTab);
+  return py ? dirname(py.path) : null;
+}
 function ensureLsp(force = false) {
-  if (!state.workspace || !lsp || !optOn('optPyAc')) return;
+  const root = lspRoot();
+  if (!root || !lsp || !optOn('optPyAc')) return;
   lspIdleSince = 0;
-  if (!force && lsp.root === state.workspace) return;
-  lsp.start(state.workspace, state.python?.path);
+  if (!force && lsp.root === root) return;
+  lsp.start(root, state.python?.path);
 }
 // Keď dlho nie je otvorený žiadny Python súbor, server sa vypne (v úspornom režime skôr).
 setInterval(() => {
@@ -2667,14 +2676,14 @@ function commands() {
     c(t('Python: detect interpreter automatically'), async () => {
       await flux.resetPython();
       await detectPython();
-      lsp.start(state.workspace, state.python?.path);
+      lsp.start(lspRoot(), state.python?.path);
     }, '', 'python'),
     c(t('Python: create virtual environment (.venv)'), createVenv, '', 'python'),
     c(t('Python: install package (pip)…'), async () => {
       const pkg = await promptPalette({ placeholder: t('e.g. requests, numpy, pygame'), note: 'pip install' });
       if (pkg) pipInstall(pkg);
     }, '', 'download'),
-    c(t('Python: restart autocomplete'), () => lsp.start(state.workspace, state.python?.path), '', 'refresh'),
+    c(t('Python: restart autocomplete'), () => lsp.start(lspRoot(), state.python?.path), '', 'refresh'),
     c(t('Replay the intro'), () => onboarding.open(), '', 'sparkle', 'onboarding welcome intro'),
     c(t('Feature tour'), () => onboarding.startTour(), '', 'sparkle', 'tour help'),
     c(t('Show problems in file'), showProblems, '', 'x', 'problems errors'),
@@ -2717,7 +2726,7 @@ async function choosePython() {
     if (!info) return;
     state.python = info;
     renderStatus();
-    lsp.start(state.workspace, info.path);
+    lsp.start(lspRoot(), info.path);
     toast(t('Using Python {v}', { v: info.version }));
   } catch (err) {
     toast(errorText(err), 'error');
