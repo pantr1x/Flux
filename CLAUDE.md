@@ -108,6 +108,7 @@ The same release notes appear in the app (Settings → General → About & updat
 - In the app (`updater.js`), Linux updates only run from an AppImage (`APPIMAGE`) and only while developer updates are on (`useUpdater()`). Other Linux users just see the newest version, like a source checkout.
 - A release without `latest-linux.yml` (a Windows-only stable release) counts as "up to date" on Linux, not as an error (`noLinuxBuild()`).
 - `package.json` → `build.linux` sets the AppImage target, `desktopName` and `syncDesktopName` (window ↔ `.desktop` entry). The quick update never applies there: the AppImage is read-only, so it falls back to the full AppImage.
+- One-command install: `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash` (`site/install.sh`, deployed with the website but not linked from it). It installs FUSE 2 with the distro's package manager (pacman/apt/dnf/zypper), downloads the newest release that has an AppImage to `~/.local/share/flux/Flux.AppImage` (a name without a version, so electron-updater replaces it in place), and adds `~/.local/bin/flux` plus a `.desktop` entry and icon. `--uninstall` removes them. Without FUSE the `flux` wrapper sets `APPIMAGE_EXTRACT_AND_RUN=1`.
 - The website still says Linux is *coming soon*.
 - Test it locally: `npx electron-builder --linux AppImage --publish never`, then run it with `APPIMAGE_EXTRACT_AND_RUN=1 … --no-sandbox` in a container without FUSE.
 
