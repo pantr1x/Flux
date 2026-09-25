@@ -40,7 +40,7 @@ New-Item -ItemType Directory -Force -Path $proj | Out-Null
 function New-PyFile($path, $cls, $count) {
   $sb = New-Object System.Text.StringBuilder
   [void]$sb.AppendLine('import os'); [void]$sb.AppendLine('import math'); [void]$sb.AppendLine('import random'); [void]$sb.AppendLine('')
-  [void]$sb.AppendLine("class $cls:"); [void]$sb.AppendLine('    def __init__(self, size):'); [void]$sb.AppendLine('        self.size = size')
+  [void]$sb.AppendLine("class ${cls}:"); [void]$sb.AppendLine('    def __init__(self, size):'); [void]$sb.AppendLine('        self.size = size')
   [void]$sb.AppendLine('        self.items = [random.random() for _ in range(size)]'); [void]$sb.AppendLine('')
   $lines = 9
   for ($i = 1; $lines -lt $count; $i++) {
