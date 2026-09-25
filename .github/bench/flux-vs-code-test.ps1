@@ -194,10 +194,10 @@ $codeWarm = {
   foreach ($x in (Get-Tree $p.Id ([IO.Path]::GetFileName($Code)))) { Stop-Process -Id $x.ProcessId -Force -ErrorAction SilentlyContinue }
   Start-Sleep -Seconds 2
 }
-$flux = Run-App 'Flux' $Flux `
+$resFlux = Run-App 'Flux' $Flux `
   { param($profile, $f) @("--user-data-dir=`"$profile`"") + ($f | ForEach-Object { "`"$_`"" }) } `
   { param($profile, $f) @("--user-data-dir=`"$profile`"") + ($f | ForEach-Object { "`"$_`"" }) } $fluxWarm
-$code = Run-App 'VS Code' $Code `
+$resCode = Run-App 'VS Code' $Code `
   { param($profile, $f) @('--user-data-dir', "`"$profile`"", '--disable-workspace-trust') + ($f | ForEach-Object { "`"$_`"" }) } `
   { param($profile, $f) @('--user-data-dir', "`"$profile`"", '-r') + ($f | ForEach-Object { "`"$_`"" }) } $codeWarm
 
@@ -215,7 +215,7 @@ $data = [pscustomobject]@{
   versions = [pscustomobject]@{ flux = (Get-Item $Flux).VersionInfo.ProductVersion; code = (Get-Item $Code).VersionInfo.ProductVersion }
   extensions = $ext
   phases = $phases
-  apps = @($flux, $code)
+  apps = @($resFlux, $resCode)
 }
 $json = $data | ConvertTo-Json -Depth 6 -Compress
 $html = @'
