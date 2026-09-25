@@ -4,6 +4,7 @@
 # Celý čas sa meria RAM a CPU všetkých ich procesov (okno, GPU, rozšírenia, jazykový server pre Python).
 # Na konci sa otvorí stránka s grafmi (flux-vs-code-report.html na Ploche).
 #
+# Oba editory otvoria celý projekt (priečinok), takže beží aj jazykový server pre Python (Flux: Pyright, VS Code: Pylance).
 # Beží s dočasnými profilmi – tvoje nastavenia, projekty ani otvorené okná sa nezmenia a Flux aj VS Code
 # môžu ostať otvorené. Počas testu (asi 5 minút) nepoužívaj myš ani klávesnicu – test píše do okna.
 param(
@@ -16,7 +17,7 @@ param(
   [int]$Big = 50000           # riadky veľkého súboru
 )
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type @'
 using System; using System.Runtime.InteropServices;
 public static class FxWin {
@@ -77,6 +78,22 @@ $phases = @(
   @{ name = 'After typing'; short = 'After'; start = $typeEnd; end = $endAt }
 )
 $cores = [Environment]::ProcessorCount
+
+# zmenšený screenshot obrazovky do správy (dôkaz, že sa naozaj písalo do editora)
+function Get-Shot {
+  try {
+    $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+    $w = 760; $h = [int]($b.Height * $w / $b.Width)
+    $small = New-Object System.Drawing.Bitmap $bmp, $w, $h
+    $ms = New-Object IO.MemoryStream
+    $small.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    $g.Dispose(); $bmp.Dispose(); $small.Dispose()
+    return 'data:image/jpeg;base64,' + [Convert]::ToBase64String($ms.ToArray())
+  } catch { return $null }
+}
 
 # všetky procesy appky = potomkovia hlavného procesu (okno, GPU, rozšírenia, jazykový server…)
 function Get-Tree($rootPid, $exeName) {
@@ -169,19 +186,22 @@ function Run-App($name, $exe, $argsFor, $openArgs, $warm) {
     [System.Windows.Forms.SendKeys]::SendWait('{ESC}{ENTER}{HOME}+{END}{DEL}')  # nový riadok bez automatického odsadenia/návrhu
   }
   Write-Host "  typed $typed characters ($n lines)"
+  $shot = Get-Shot
   . $waitUntil $endAt
 
   # zatvoriť (celý strom), dočasný profil ostane zmazaný na konci
   foreach ($p in (Get-Tree $main.Id $exeName)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
   Start-Sleep -Seconds 2
-  return [pscustomobject]@{ name = $name; startup = $startup; typed = $typed; samples = @($samples) }
+  return [pscustomobject]@{ name = $name; startup = $startup; typed = $typed; shot = $shot; samples = @($samples) }
 }
 
 # zahriatie: raz spustiť a zavrieť (disk cache, u Fluxu aj prvé rozbalenie Pythonu)
 $fluxWarm = {
   param($profile)
   $ver = (Get-Item $Flux).VersionInfo.ProductVersion
-  Set-Content (Join-Path $profile 'settings.json') ('{"onboarded":true,"lastSeenVersion":"' + $ver + '","autoUpdate":false}') -Encoding UTF8
+  # projekt otvorený rovno pri štarte (ako u bežného používateľa), bez úvodu a bez aktualizácií
+  $cfg = [ordered]@{ onboarded = $true; lastSeenVersion = $ver; autoUpdate = $false; lastFolder = $proj; projects = @(@{ dir = $proj }) }
+  [IO.File]::WriteAllText((Join-Path $profile 'settings.json'), ($cfg | ConvertTo-Json -Depth 4))
   $p = Start-Process -FilePath $Flux -ArgumentList "--user-data-dir=`"$profile`"", "`"$($files[0])`"" -PassThru
   Start-Sleep -Seconds 12
   foreach ($x in (Get-Tree $p.Id 'Flux.exe')) { Stop-Process -Id $x.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -189,7 +209,7 @@ $fluxWarm = {
 }
 $codeWarm = {
   param($profile)
-  $p = Start-Process -FilePath $Code -ArgumentList '--user-data-dir', "`"$profile`"", '--disable-workspace-trust', "`"$($files[0])`"" -PassThru
+  $p = Start-Process -FilePath $Code -ArgumentList '--user-data-dir', "`"$profile`"", '--disable-workspace-trust', "`"$proj`"", "`"$($files[0])`"" -PassThru
   Start-Sleep -Seconds 12
   foreach ($x in (Get-Tree $p.Id ([IO.Path]::GetFileName($Code)))) { Stop-Process -Id $x.ProcessId -Force -ErrorAction SilentlyContinue }
   Start-Sleep -Seconds 2
@@ -198,7 +218,7 @@ $resFlux = Run-App 'Flux' $Flux `
   { param($profile, $f) @("--user-data-dir=`"$profile`"") + ($f | ForEach-Object { "`"$_`"" }) } `
   { param($profile, $f) @("--user-data-dir=`"$profile`"") + ($f | ForEach-Object { "`"$_`"" }) } $fluxWarm
 $resCode = Run-App 'VS Code' $Code `
-  { param($profile, $f) @('--user-data-dir', "`"$profile`"", '--disable-workspace-trust') + ($f | ForEach-Object { "`"$_`"" }) } `
+  { param($profile, $f) @('--user-data-dir', "`"$profile`"", '--disable-workspace-trust', "`"$proj`"") + ($f | ForEach-Object { "`"$_`"" }) } `
   { param($profile, $f) @('--user-data-dir', "`"$profile`"", '-r') + ($f | ForEach-Object { "`"$_`"" }) } $codeWarm
 
 # ---------- report ----------
@@ -288,6 +308,12 @@ $html = @'
   th { color: var(--text-secondary); font-weight: 600; }
   td.better { color: var(--good); font-weight: 600; }
   .note { color: var(--text-muted); font-size: 12.5px; }
+  [hidden] { display: none !important; }
+  .shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-bottom: 8px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .shots figcaption { color: var(--text-secondary); font-size: 12.5px; margin-top: 6px; }
+  @media (max-width: 700px) { .shots { grid-template-columns: 1fr; } }
   @media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 480px) { h1 { font-size: 21px; } .tiles { grid-template-columns: 1fr; } }
 </style>
@@ -302,6 +328,7 @@ $html = @'
   <div class="card"><h2>Memory (RAM)</h2><p class="hint">All processes of each app added up – window, GPU, extensions and the Python language server. Lower is better.</p><div id="mem" class="plot"></div></div>
   <div class="card"><h2>CPU</h2><p class="hint">Share of the whole processor. Lower is better.</p><div id="cpu" class="plot"></div></div>
   <div class="card"><h2>Per phase</h2><p class="hint">Averages for each part of the test. Green = the lower (better) value.</p><div id="table"></div></div>
+  <div class="card" id="shots-card" hidden><h2>What the test saw</h2><p class="hint">Screenshots taken right after typing – proof that the text really went into each editor.</p><div class="shots" id="shots"></div></div>
   <p class="note" id="notes"></p>
 </main>
 <script>
@@ -394,6 +421,12 @@ function chart(el, key, unit, fmt) {
     tip.style.top = `${e.clientY - cr.top - 10}px`;
   });
   el.querySelector('.hit').addEventListener('pointerleave', () => { tip.style.display = 'none'; cross.setAttribute('visibility', 'hidden'); el.querySelectorAll('circle').forEach((c) => c.setAttribute('visibility', 'hidden')); });
+}
+// screenshoty po písaní
+const shots = DATA.apps.filter((a) => a.shot && /^data:image\/jpeg;base64,/.test(a.shot));
+if (shots.length) {
+  $('#shots-card').hidden = false;
+  $('#shots').innerHTML = shots.map((a) => `<figure><img src="${a.shot}" alt="${esc(a.name)} after typing"><figcaption>${esc(a.name)}</figcaption></figure>`).join('');
 }
 chart($('#mem'), 'mem', 'RAM', (v) => `${Math.round(v)} MB`);
 chart($('#cpu'), 'cpu', 'CPU', (v) => `${Math.round(v * 10) / 10} %`);

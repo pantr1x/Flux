@@ -16,7 +16,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $rel = Invoke-RestMethod https://api.github.com/repos/pantr1x/Flux/releases/latest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" }
+          # počkať na vydanie verzie z package.json (release.yml beží súbežne)
+          $want = 'v' + (Get-Content package.json -Raw | ConvertFrom-Json).version
+          for ($i = 0; $i -lt 40; $i++) {
+            $rel = Invoke-RestMethod https://api.github.com/repos/pantr1x/Flux/releases/latest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" }
+            if ($rel.tag_name -eq $want -and ($rel.assets | Where-Object name -like '*.exe')) { break }
+            Write-Host "waiting for $want (latest is $($rel.tag_name))"; Start-Sleep 20
+          }
+          Write-Host "Testing Flux $($rel.tag_name)"
           $asset = $rel.assets | Where-Object name -like '*.exe' | Select-Object -First 1
           Invoke-WebRequest $asset.browser_download_url -OutFile flux-setup.exe
           $p = Start-Process .\flux-setup.exe -ArgumentList '/S' -PassThru
