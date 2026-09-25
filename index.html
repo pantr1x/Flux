@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flux – free code editor with one-click Run, Live Server and AI</title>
+  <meta name="description" content="Flux is a free, modern code editor: run Python, JavaScript, C++ and 13 more languages with one click, see websites live as you type and get help from Claude AI. For Windows – macOS and Linux coming soon.">
+  <meta name="keywords" content="code editor, free code editor, Windows code editor, Python editor, live server, AI code editor, Claude, Monaco, beginner code editor, Flux">
+  <meta name="author" content="pantr1x">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#1d2238">
+  <meta name="color-scheme" content="dark">
+  <link rel="canonical" href="https://pantr1x.github.io/Flux/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Flux">
+  <meta property="og:url" content="https://pantr1x.github.io/Flux/">
+  <meta property="og:title" content="Flux – code. run. create.">
+  <meta property="og:description" content="A free, modern code editor with one-click Run, Live Server and Claude AI. Windows now – macOS &amp; Linux coming soon.">
+  <meta property="og:image" content="https://pantr1x.github.io/Flux/images/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Flux code editor with a project open and the Run button">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Flux – code. run. create.">
+  <meta name="twitter:description" content="A free, modern code editor with one-click Run, Live Server and Claude AI. Windows now – macOS &amp; Linux coming soon.">
+  <meta name="twitter:image" content="https://pantr1x.github.io/Flux/images/og.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="sitemap" type="application/xml" href="sitemap.xml">
+  <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Flux", "alternateName": "Flux code editor", "applicationCategory": "DeveloperApplication", "applicationSubCategory": "Code editor", "operatingSystem": "Windows 10, Windows 11 (macOS and Linux coming soon)", "description": "A free, small and modern code editor with one-click Run, Live Server and Claude AI built in.", "url": "https://pantr1x.github.io/Flux/", "downloadUrl": "https://github.com/pantr1x/Flux/releases/latest", "installUrl": "https://github.com/pantr1x/Flux/releases/latest", "image": "https://pantr1x.github.io/Flux/images/og.png", "screenshot": ["https://pantr1x.github.io/Flux/images/editor.png", "https://pantr1x.github.io/Flux/images/live.png", "https://pantr1x.github.io/Flux/images/home.png"], "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "isAccessibleForFree": true, "license": "https://github.com/pantr1x/Flux", "codeRepository": "https://github.com/pantr1x/Flux", "programmingLanguage": ["Python", "JavaScript", "TypeScript", "HTML", "CSS", "Java", "C", "C++", "C#", "Go", "Rust", "Ruby", "PHP", "Lua", "Perl", "Zig", "R", "Julia"], "featureList": ["One-click Run for 16 languages", "Live Server with phone preview", "Claude AI assistant", "GitHub publish, commit and pull", "Plugins and themes", "Automatic updates"], "author": {"@type": "Person", "name": "pantr1x", "url": "https://github.com/pantr1x"}}, {"@context": "https://schema.org", "@type": "WebSite", "name": "Flux", "url": "https://pantr1x.github.io/Flux/"}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is Flux?", "acceptedAnswer": {"@type": "Answer", "text": "Flux is a free, small and modern code editor built on Monaco (the editor inside VS Code). It runs your code with one click, shows websites live while you type (Live Server) and has Claude AI built in – without any setup."}}, {"@type": "Question", "name": "Is Flux free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Flux is completely free, needs no account and has no ads. The source code is on GitHub."}}, {"@type": "Question", "name": "Which operating systems does Flux run on?", "acceptedAnswer": {"@type": "Answer", "text": "Flux runs on Windows 10 and Windows 11 today. Versions for macOS and Linux are being prepared and will come later."}}, {"@type": "Question", "name": "Which programming languages does Flux support?", "acceptedAnswer": {"@type": "Answer", "text": "Python, JavaScript, TypeScript, HTML & CSS, Java, C / C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R and Julia. Press F5 to run a file – if a language is missing, Flux downloads it from its official source."}}, {"@type": "Question", "name": "How do I install Flux?", "acceptedAnswer": {"@type": "Answer", "text": "Download Flux-Setup.exe from this page or from GitHub Releases and run it. If Windows shows “Windows protected your PC”, click More info → Run anyway. After that Flux updates itself."}}, {"@type": "Question", "name": "How does Flux update?", "acceptedAnswer": {"@type": "Answer", "text": "Flux checks GitHub Releases and downloads new versions in the background. They install when you close Flux, or right away with Restart and update – a small “Updating Flux” window shows the progress and Flux opens again by itself."}}, {"@type": "Question", "name": "Is Flux a good editor for beginners?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Flux is made to be simple: there is nothing to configure, code runs with one key, errors are explained and the AI assistant can help you fix them."}}, {"@type": "Question", "name": "How is Flux different from VS Code?", "acceptedAnswer": {"@type": "Answer", "text": "Flux uses the same Monaco editor but is smaller and ready right away: running code, Live Server, AI and GitHub are built in instead of needing extensions and configuration."}}]}]</script>
+  <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --base: #1d2238;
+      --card: rgba(44, 50, 80, .74);
+      --card-solid: #22263a;
+      --card-2: rgba(255, 255, 255, .045);
+      --hover: rgba(255, 255, 255, .06);
+      --active: rgba(255, 255, 255, .1);
+      --line: rgba(255, 255, 255, .09);
+      --line-strong: rgba(255, 255, 255, .16);
+      --text: #f0f1f8;
+      --text-2: #b9bcd0;
+      --text-3: #8e92aa;
+      --accent: #5b8cff;
+      --ok: #3ecf8e;
+      --warn: #f0a44b;
+      --mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+      --ui: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --r: 14px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 76px; }
+    body { margin: 0; background: linear-gradient(160deg, #26306a 0%, #1f2548 38%, var(--base) 62%, #2a2050 100%); color: var(--text); font: 15.5px/1.6 var(--ui); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow-x: hidden; }
+    h1, h2, h3 { font-feature-settings: 'ss01', 'cv11'; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; }
+    svg { flex: none; }
+
+    /* pozadie ako vo Fluxe: rozmazané farebné škvrny + bodky */
+    /* pozadie: mäkké farebné škvrny ako gradienty (bez filter: blur – ten sa pri skrolovaní prepočítaval a sekal) */
+    .wall { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; will-change: transform; transform: translateZ(0);
+      background:
+        radial-gradient(38vw 38vw at 13vw 7vw, rgba(53, 88, 230, .6), transparent 70%),
+        radial-gradient(34vw 34vw at 88vw 8vw, rgba(90, 70, 214, .45), transparent 70%),
+        radial-gradient(32vw 32vw at 86vw 48vh, rgba(122, 58, 208, .42), transparent 70%),
+        radial-gradient(28vw 28vw at 51vw 52vh, rgba(61, 99, 224, .3), transparent 70%),
+        radial-gradient(30vw 30vw at 41vw 100vh, rgba(19, 143, 115, .38), transparent 70%); }
+    .wall::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; mask-image: linear-gradient(#000 0, transparent 70%); }
+
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+
+    /* horná lišta ako titulok okna Fluxu */
+    .bar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); background: rgba(24, 28, 48, .62); border-bottom: 1px solid var(--line); }
+    .bar .wrap { display: flex; align-items: center; gap: 6px; height: 58px; }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-right: 14px; }
+    .logo .mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #111; box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 10px; color: var(--text-2); font-size: 14px; white-space: nowrap; transition: background .15s, color .15s; }
+    .tab:hover { background: var(--hover); color: var(--text); }
+    .tab.on { background: var(--card); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+    .tab .fi { width: 15px; height: 15px; }
+    .grow { flex: 1; }
+    .pill-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 14px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; transition: background .15s, transform .15s; }
+    .pill-btn:hover { background: var(--active); }
+    .pill-btn.star svg { color: #f5c542; }
+    .star-n { margin-left: 2px; padding: 0 7px; border-radius: 99px; background: var(--active); font-size: 12px; }
+    .run-btn { background: #ecedf3; color: #111; box-shadow: none; }
+    .run-btn:hover { background: #fff; transform: translateY(-1px); }
+
+    /* HOME – ako domovská obrazovka Fluxu */
+    .home { padding: 64px 0 20px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: end; }
+    .date { color: var(--text-2); font-weight: 600; font-size: 14px; }
+    h1 { font-size: clamp(40px, 6.4vw, 70px); line-height: 1.02; letter-spacing: -2.4px; font-weight: 800; margin: 10px 0 14px; }
+    h1 .grad { background: linear-gradient(90deg, #9fb8ff, #5b8cff 45%, #3ecfb2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .lead { color: var(--text-2); font-size: 18.5px; line-height: 1.6; max-width: 590px; margin: 0; }
+    .stats { display: grid; grid-template-columns: repeat(4, 136px); gap: 8px; }
+    .stat { position: relative; padding: 12px 14px; border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .stat b { display: block; padding-right: 26px; white-space: nowrap; font-size: 19px; letter-spacing: -.4px; }
+    .stat small { color: var(--text-2); font-size: 13px; }
+    .stat .si { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--active); color: var(--text-2); }
+    .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 26px 0 0; }
+    .act { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); transition: transform .15s, background .15s; }
+    .act:hover { transform: translateY(-2px); background: rgba(40, 43, 60, .8); }
+    .act .ai { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--active); }
+    .act b { display: block; font-size: 15px; }
+    .act small { color: var(--text-2); font-size: 13px; }
+    .act.primary { background: #e8e9f0; color: #15151d; }
+    .act.primary small { color: #555; }
+    .act.primary .ai { background: rgba(0,0,0,.08); }
+    .act.primary:hover { background: #fff; }
+    .note { color: var(--text-3); font-size: 13px; margin-top: 12px; }
+    .platforms { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .plat { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 99px; background: var(--card-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font-size: 13px; font-weight: 600; }
+    .plat small { font-weight: 500; color: var(--text-3); }
+    .plat.on { color: var(--text); box-shadow: inset 0 0 0 1px rgba(62, 207, 142, .35); }
+    .plat.on small { color: var(--ok); }
+    .faq details { border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); margin-bottom: 8px; }
+    .faq summary { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; list-style: none; font-weight: 600; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary:hover { background: var(--hover); border-radius: var(--r); }
+    .faq summary .chev { flex: none; transition: transform .15s; color: var(--text-3); }
+    .faq details[open] summary .chev { transform: rotate(90deg); }
+    .faq details p { margin: 0; padding: 0 18px 16px 38px; color: var(--text-2); font-size: 14.5px; }
+    kbd { font: 600 11.5px var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--active); box-shadow: inset 0 -1px 0 rgba(0,0,0,.4), inset 0 0 0 1px var(--line-strong); color: var(--text); white-space: nowrap; }
+
+    /* EDITOR – živá ukážka okna */
+    .window { margin: 44px 0 0; display: grid; grid-template-columns: 236px 1fr; height: 560px; border-radius: 18px; overflow: hidden; background: rgba(30, 34, 56, .86); box-shadow: 0 0 0 1px var(--line-strong), 0 40px 120px rgba(0, 0, 0, .55), 0 0 90px rgba(91, 140, 255, .14); }
+    .side { display: flex; flex-direction: column; padding: 12px 8px; min-width: 0; }
+    .side .head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 12px; font-weight: 700; }
+    .side .cap { color: var(--text-3); font-size: 11.5px; font-weight: 700; letter-spacing: 1px; padding: 6px 8px; }
+    .proj { margin: 2px 0 10px; padding: 8px 10px; border-radius: 10px; background: var(--active); display: flex; gap: 10px; align-items: center; }
+    .proj b { display: block; font-size: 14px; }
+    .proj small { color: var(--text-2); font-size: 12px; }
+    .files { border-top: 1px solid var(--line); padding-top: 8px; overflow: auto; }
+    .file { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: none; padding: 6px 10px; border-radius: 8px; font-size: 14px; color: var(--text-2); cursor: pointer; text-align: left; }
+    .file:hover { background: var(--hover); color: var(--text); }
+    .file.on { background: var(--active); color: var(--text); }
+    .side .foot { margin-top: auto; display: flex; gap: 12px; justify-content: flex-end; color: var(--text-3); padding: 8px 6px 0; border-top: 1px solid var(--line); }
+    .main { display: flex; flex-direction: column; min-width: 0; padding: 8px 8px 8px 0; }
+    .etop { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 2px 6px; }
+    .etab { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 9px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; }
+    .etab .x { color: var(--text-3); font-size: 12px; margin-left: 6px; }
+    .ebtn { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 9px; font-weight: 600; font-size: 13.5px; border: 0; cursor: pointer; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .ebtn.run { background: #e8e9f0; color: #111; box-shadow: none; }
+    .ebtn.run:hover { background: #fff; }
+    .ebtn:disabled { opacity: .6; cursor: default; }
+    .pane { flex: 1; display: flex; flex-direction: column; border-radius: 12px; background: rgba(34, 37, 56, .88); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; min-height: 0; }
+    .code { flex: 1; overflow: auto; padding: 12px 0; font: 14px/1.52 var(--mono); tab-size: 4; min-height: 0; }
+    .ln { display: flex; white-space: pre; }
+    .ln .n { flex: none; width: 52px; padding-right: 18px; text-align: right; color: #4f5370; user-select: none; }
+    .ln.cur { background: rgba(255,255,255,.035); }
+    .ln.cur .n { color: #c9cbe0; }
+    .caret { display: inline-block; width: 2px; height: 1.15em; margin-bottom: -3px; background: var(--accent); animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    .k { color: #ff7b93; } .s { color: #e6b673; } .c { color: #6a7090; font-style: italic; } .f { color: #7ec3ff; } .nm { color: #c4a5ff; } .t { color: #7ee0c3; } .todo { color: #f0a44b; font-weight: 700; font-style: normal; } .a { color: #9fd18b; }
+    .out { height: 150px; flex: none; border-top: 1px solid var(--line); padding: 10px 14px; font: 13.5px/1.55 var(--mono); overflow: auto; }
+    .out .oh { display: flex; gap: 10px; font: 600 13px var(--ui); margin-bottom: 6px; }
+    .out .oh em { font-style: normal; color: var(--ok); font-weight: 500; }
+    .out .dim { color: var(--text-3); }
+    .status { display: flex; gap: 18px; align-items: center; padding: 7px 12px 1px; color: var(--text-2); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+    .status .ok { color: var(--ok); }
+    .status span { display: inline-flex; align-items: center; gap: 6px; }
+
+    /* sekcie */
+    section { padding: 110px 0 0; }
+    .cap2 { display: inline-block; padding: 3px 10px; border-radius: 99px; background: rgba(91, 140, 255, .14); color: #a9c1ff; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+    h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -1.2px; line-height: 1.12; font-weight: 800; margin: 8px 0 12px; }
+    .sub { color: var(--text-2); font-size: 17px; max-width: 640px; margin: 0 0 34px; }
+    .panel { padding: 18px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+    .feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .fc { display: flex; gap: 14px; padding: 16px; border-radius: var(--r); background: var(--card-2); box-shadow: inset 0 0 0 1px var(--line); transition: background .15s, transform .15s; }
+    .fc:hover { background: var(--hover); transform: translateY(-2px); }
+    .fc .fi2 { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: var(--active); flex: none; }
+    .fc h3 { margin: 0 0 3px; font-size: 15.5px; }
+    .fc p { margin: 0; color: var(--text-2); font-size: 14px; }
+    .split { display: grid; grid-template-columns: 1fr 1.25fr; gap: 44px; align-items: center; }
+    .split.rev { grid-template-columns: 1.25fr 1fr; }
+    .split img { width: 100%; display: block; border-radius: 14px; box-shadow: 0 0 0 1px var(--line-strong), 0 30px 80px rgba(0, 0, 0, .5); }
+    .list { list-style: none; padding: 0; margin: 0; }
+    .list li { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--text-2); }
+    .list li:last-child { border: 0; }
+    .list li b { color: var(--text); font-weight: 600; }
+    .list .dot { flex: none; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: var(--active); margin-top: 1px; }
+    .langs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .lang { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; }
+    .lang i { width: 9px; height: 9px; border-radius: 3px; }
+    .keys { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 28px; }
+    .key { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+    .key span { color: var(--text-2); }
+    .key .kb { display: flex; gap: 4px; }
+
+    /* RELEASES */
+    .rel-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 20px; border-radius: 18px; background: linear-gradient(135deg, rgba(91, 140, 255, .22), var(--card-2)); box-shadow: inset 0 0 0 1px var(--line-strong); margin-bottom: 14px; }
+    .rel-top .mark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: #111; box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .rel-top b { display: block; font-size: 20px; }
+    .rel-top small { color: var(--text-2); }
+    .rel { border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); margin-bottom: 8px; overflow: hidden; }
+    .rel summary { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; list-style: none; }
+    .rel summary::-webkit-details-marker { display: none; }
+    .rel summary:hover { background: var(--hover); }
+    .rel summary .chev { transition: transform .15s; color: var(--text-3); }
+    .rel[open] summary .chev { transform: rotate(90deg); }
+    .rel summary small { color: var(--text-3); margin-left: auto; font-size: 13px; }
+    .badge { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--active); color: var(--text-2); }
+    .badge.new { background: rgba(62, 207, 142, .16); color: var(--ok); }
+    .rel .body { padding: 0 18px 16px 42px; color: var(--text-2); font-size: 14.5px; }
+    .rel .body h3, .rel .body h4 { color: var(--text); font-size: 15px; margin: 16px 0 6px; }
+    .rel .body ul { padding-left: 20px; margin: 6px 0; }
+    .rel .body li { margin: 3px 0; }
+    .rel .body li.sub { margin-left: 20px; list-style: circle; }
+    .rel .body strong { color: var(--text); }
+    .rel .body code { font: 12.5px var(--mono); padding: 1px 5px; border-radius: 5px; background: var(--active); color: var(--text); }
+    .rel .body a { color: #9fb8ff; }
+    .rel .dl { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .loading { color: var(--text-3); padding: 20px; text-align: center; }
+    .spin { display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--text); animation: sp .8s linear infinite; vertical-align: -2px; margin-right: 8px; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+
+    .final { text-align: center; padding: 120px 0 70px; }
+    .final .sub { margin: 0 auto 28px; }
+    .final .cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .big { padding: 14px 22px; font-size: 16px; border-radius: 13px; }
+    footer { border-top: 1px solid var(--line); }
+    footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; padding: 14px 0 24px; color: var(--text-3); font-size: 13px; }
+    footer a:hover { color: var(--text); }
+    footer .ok { color: var(--ok); }
+
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s, transform .6s; }
+    .reveal.in { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } .caret { animation: none; } }
+
+    @media (max-width: 1040px) {
+      .home { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(4, 1fr); }
+      .actions { grid-template-columns: 1fr 1fr; }
+      .feat { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 820px) {
+      .window { grid-template-columns: 1fr; height: 520px; }
+      .side { display: none; }
+      .main { padding: 8px; }
+      .split, .split.rev { grid-template-columns: 1fr; gap: 26px; }
+      .split.rev > img { order: 2; }
+      .keys { grid-template-columns: 1fr; }
+      .bar .tabs { display: none; }
+    }
+    @media (max-width: 560px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .actions, .feat { grid-template-columns: 1fr; }
+      .home { padding-top: 36px; }
+      .code { font-size: 12.5px; }
+      .ln .n { width: 38px; padding-right: 12px; }
+      .bar .pill-btn.gh { display: none; }
+      .rel .body { padding-left: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wall"></div>
+
+  <header class="bar">
+    <div class="wrap">
+      <a class="logo" href="#top"><span class="mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>flux</a>
+      <nav class="tabs" id="tabs">
+        <a class="tab on" href="#top"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7v9H3z"/></svg>Home</a>
+        <a class="tab" href="#features"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L19 9.7l-4.3 3.1L16 18l-4-2.8L8 18l1.3-5.2L5 9.7l5.2-1.8z"/></svg>Features</a>
+        <a class="tab" href="#live"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Live Server</a>
+        <a class="tab" href="#shortcuts"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6H6a3 3 0 1 0 3 3V6zm0 0v12m0-12h6m-6 12H6a3 3 0 1 1 3-3v3zm0 0h6m0 0v-3a3 3 0 1 1 3 3h-3zm0 0V6m0 0V9a3 3 0 1 0 3-3h-3z"/></svg>Shortcuts</a>
+        <a class="tab" href="#releases"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg>Releases</a>
+        <a class="tab" href="#faq"><svg class="fi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6M12 17h.01"/></svg>FAQ</a>
+      </nav>
+      <div class="grow"></div>
+      <a class="pill-btn gh star" href="https://github.com/pantr1x/Flux" title="Star Flux on GitHub"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.8 2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8Z"/></svg>Star<span class="star-n" id="stars" hidden></span></a>
+      <a class="pill-btn gh" href="https://github.com/pantr1x/Flux"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+      <a class="pill-btn run-btn" href="#releases" data-dl><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Download</a>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <!-- HOME -->
+    <div class="home">
+      <div>
+        <div class="date" id="today">Free · Windows 10 and 11</div>
+        <h1>Code. Run. <span class="grad">Create.</span></h1>
+        <p class="lead">A small, modern code editor. Run your code with one click, see your website live while you type and get help from AI – without setting anything up.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></span><b>16</b><small>languages</small></div>
+        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M16 5a3 3 0 0 1 0 6M21 19c0-2.5-1.5-4.3-4-4.9"/></svg></span><b id="st-dl">–</b><small>downloads</small></div>
+        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/></svg></span><b id="st-size">~117 MB</b><small>installer</small></div>
+        <div class="stat"><span class="si"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></span><b id="st-ver">1.2</b><small>newest version</small></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <a class="act primary" href="https://github.com/pantr1x/Flux/releases/latest" data-dl>
+        <span class="ai"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg></span>
+        <span><b id="dl-text">Download for Windows</b><small id="dl-meta">installer from GitHub Releases</small></span>
+      </a>
+      <a class="act" href="#releases">
+        <span class="ai"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+        <span><b>All releases</b><small>every version with notes</small></span>
+      </a>
+      <a class="act" href="#features">
+        <span class="ai"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.9L19 9.7l-4.3 3.1L16 18l-4-2.8L8 18l1.3-5.2L5 9.7l5.2-1.8z"/></svg></span>
+        <span><b>Features</b><small>what Flux can do</small></span>
+      </a>
+      <a class="act" href="https://github.com/pantr1x/Flux">
+        <span class="ai"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-6 3-11 5.5"/></svg></span>
+        <span><b>Source code</b><small>open on GitHub</small></span>
+      </a>
+    </div>
+    <div class="platforms" aria-label="Platforms">
+      <span class="plat on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>Windows 10 &amp; 11<small>available</small></span>
+      <span class="plat"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.9-1.1-2.9-4.2zM13.9 5.2c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.5z"/></svg>macOS<small>coming soon</small></span>
+      <span class="plat"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg>Linux<small>coming soon</small></span>
+    </div>
+    <div class="note">If Windows shows “Windows protected your PC”, click <b>More info → Run anyway</b>. Flux then updates itself.</div>
+
+    <!-- živý editor -->
+    <div class="window reveal" id="editor">
+      <aside class="side">
+        <div class="head"><span class="mark" style="display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:#111"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg></span>flux</div>
+        <div class="cap">PROJECTS</div>
+        <div class="proj"><svg width="18" height="18" viewBox="0 0 24 24"><path fill="#e44d26" d="M4 3h16l-1.5 16L12 21l-6.5-2z"/><path fill="#fff" d="M8 7h8l-.2 2H10l.2 2h5.4l-.5 5-3.1 1-3.1-1-.2-2h2l.1 1 1.2.4 1.2-.4.1-2H8.4z"/></svg><span><b>my-website</b><small>HTML/CSS +3 · 14 files</small></span></div>
+        <div class="files" id="files"></div>
+        <div class="foot">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6H6a3 3 0 1 0 3 3V6zm0 0v12m0-12h6m-6 12H6a3 3 0 1 1 3-3v3zm0 0h6m0 0v-3a3 3 0 1 1 3 3h-3zm0 0V6m0 0V9a3 3 0 1 0 3-3h-3z"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 13.7H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </div>
+      </aside>
+      <div class="main">
+        <div class="etop">
+          <span class="etab" id="etab"></span>
+          <div class="grow"></div>
+          <button class="ebtn" id="ai-btn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>AI</button>
+          <button class="ebtn run" id="run-btn" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Run</button>
+        </div>
+        <div class="pane">
+          <div class="code" id="code"></div>
+          <div class="out" id="out"></div>
+        </div>
+        <div class="status">
+          <span id="sb-lang">Python 3.12</span>
+          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-6 3-11 5.5"/></svg>main</span>
+          <span class="ok">✓ No problems</span>
+          <span class="ok">● Autocomplete</span>
+          <div class="grow"></div>
+          <span>Save: <kbd>Ctrl+S</kbd></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FEATURES -->
+    <section id="features" class="reveal">
+      <div class="cap2">Features</div>
+      <h2>Everything you need,<br>nothing you don't</h2>
+      <p class="sub">Flux is made for learning and building – from your first <code style="font-family:var(--mono);font-size:.9em">print()</code> to a full website.</p>
+      <div class="panel feat" id="feat"></div>
+    </section>
+
+    <!-- LIVE SERVER -->
+    <section id="live" class="reveal">
+      <div class="split">
+        <div>
+          <div class="cap2">Live Server</div>
+          <h2>See your website change as you type</h2>
+          <p class="sub">Your page right next to the code, reloading every time you save.</p>
+          <ul class="list">
+            <li><span class="dot">⌥</span><span><b>Alt + click</b> any element and Flux jumps to its line in the HTML.</span></li>
+            <li><span class="dot">!</span><span><b>JavaScript errors</b> show up on the page with a <i>Show in Flux</i> button.</span></li>
+            <li><span class="dot">▭</span><span><b>Phone, tablet or laptop</b> frames – rotate them, take a screenshot.</span></li>
+            <li><span class="dot">⌗</span><span><b>Scan a QR code</b> to open the page on your real phone.</span></li>
+          </ul>
+        </div>
+        <img src="images/live.png" alt="Live Server in Flux" loading="lazy">
+      </div>
+    </section>
+
+    <section class="reveal">
+      <div class="split rev">
+        <img src="images/plugins.png" alt="Plugins in Flux" loading="lazy">
+        <div>
+          <div class="cap2">Make it yours</div>
+          <h2>Themes, colors, plugins</h2>
+          <p class="sub">Pick a code theme, your accent and app colors, fonts, cursor and wallpaper – or install plugins with one click.</p>
+          <ul class="list">
+            <li><span class="dot">◐</span><span><b>Themes</b> – or build your own in the theme studio.</span></li>
+            <li><span class="dot">✦</span><span><b>Plugins</b> – Theme Pack, Glass UI, Snippets, Flux Together and more.</span></li>
+            <li><span class="dot">⚡</span><span><b>Save memory</b> on slower PCs – and fine-tune every part yourself under <i>Advanced</i>.</span></li>
+            <li><span class="dot">🌐</span><span><b>9 app languages</b>, downloaded only when you pick one.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <div class="cap2">Languages</div>
+      <h2>Your languages, your way</h2>
+      <p class="sub">The installer stays small – programming languages download from their official sources only when you need them.</p>
+      <div class="langs" id="langs"></div>
+    </section>
+
+    <!-- SHORTCUTS -->
+    <section id="shortcuts" class="reveal">
+      <div class="cap2">Shortcuts</div>
+      <h2>Fast with the keyboard</h2>
+      <p class="sub">Every shortcut can be changed in Settings → General → Shortcuts, and you can add your own that run scripts or insert text.</p>
+      <div class="panel keys" id="keys"></div>
+    </section>
+
+    <!-- RELEASES -->
+    <section id="releases" class="reveal">
+      <div class="cap2">Releases</div>
+      <h2>Download Flux</h2>
+      <p class="sub">Every version straight from GitHub Releases. Once installed, Flux downloads new versions by itself.</p>
+      <div class="rel-top">
+        <span class="mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg></span>
+        <span><b id="rel-name">Flux</b><small id="rel-meta">Loading the newest version…</small></span>
+        <div class="grow"></div>
+        <a class="pill-btn run-btn big" href="https://github.com/pantr1x/Flux/releases/latest" data-dl><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg><span data-dl-label>Download for Windows</span></a>
+      </div>
+      <div id="rel-list"><div class="loading"><span class="spin"></span>Loading releases from GitHub…</div></div>
+    </section>
+
+    <!-- FAQ (aj pre vyhľadávače a AI – rovnaké otázky sú v JSON-LD v hlavičke) -->
+    <section id="faq" class="reveal faq">
+      <div class="cap2">FAQ</div>
+      <h2>Questions and answers</h2>
+      <p class="sub">The short version of everything people ask about Flux.</p>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">What is Flux?</h3></summary><p>Flux is a free, small and modern code editor built on Monaco (the editor inside VS Code). It runs your code with one click, shows websites live while you type (Live Server) and has Claude AI built in – without any setup.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">Is Flux free?</h3></summary><p>Yes. Flux is completely free, needs no account and has no ads. The source code is on GitHub.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">Which operating systems does Flux run on?</h3></summary><p>Flux runs on Windows 10 and Windows 11 today. Versions for macOS and Linux are being prepared and will come later.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">Which programming languages does Flux support?</h3></summary><p>Python, JavaScript, TypeScript, HTML &amp; CSS, Java, C / C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R and Julia. Press F5 to run a file – if a language is missing, Flux downloads it from its official source.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">How do I install Flux?</h3></summary><p>Download Flux-Setup.exe from this page or from GitHub Releases and run it. If Windows shows “Windows protected your PC”, click More info → Run anyway. After that Flux updates itself.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">How does Flux update?</h3></summary><p>Flux checks GitHub Releases and downloads new versions in the background. They install when you close Flux, or right away with Restart and update – a small “Updating Flux” window shows the progress and Flux opens again by itself.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">Is Flux a good editor for beginners?</h3></summary><p>Yes. Flux is made to be simple: there is nothing to configure, code runs with one key, errors are explained and the AI assistant can help you fix them.</p></details>
+        <details><summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><h3 style="font:inherit;margin:0">How is Flux different from VS Code?</h3></summary><p>Flux uses the same Monaco editor but is smaller and ready right away: running code, Live Server, AI and GitHub are built in instead of needing extensions and configuration.</p></details>
+    </section>
+
+    <section class="final reveal">
+      <h2>Start coding in a minute</h2>
+      <p class="sub">Download, run the installer, pick your languages – done.</p>
+      <div class="cta">
+        <a class="pill-btn run-btn big" href="https://github.com/pantr1x/Flux/releases/latest" data-dl><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg><span data-dl-label>Download for Windows</span></a>
+        <a class="pill-btn big" href="https://github.com/pantr1x/Flux/releases">All versions on GitHub</a>
+        <a class="pill-btn big star" href="https://github.com/pantr1x/Flux"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2.8 2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8Z"/></svg>Star on GitHub</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span class="ok">✓ Free · no account</span>
+      <span>Windows now · macOS &amp; Linux coming soon</span>
+      <span>Made with Electron and Monaco</span>
+      <div class="grow"></div>
+      <a href="https://github.com/pantr1x/Flux/releases">Releases</a>
+      <a href="https://github.com/pantr1x/Flux/blob/HEAD/docs/PLUGINS.md">Make a plugin</a>
+      <a href="https://github.com/pantr1x/Flux">GitHub</a>
+    </div>
+  </footer>
+
+  <script>
+    const REPO = 'pantr1x/Flux';
+    const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const svg = (d, fill) => `<svg width="18" height="18" viewBox="0 0 24 24" ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'}>${d}</svg>`;
+
+    // ---------- ikonky súborov ako vo Fluxe ----------
+    const FILE_IC = {
+      py: '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#3776ab" d="M11.9 2C7 2 7.3 4.1 7.3 4.1v2.2h4.7V7H5.4S2 6.6 2 11.9s3 5.1 3 5.1h1.8v-2.5s-.1-3 2.9-3h4.9s2.8 0 2.8-2.7V4.9S17.9 2 11.9 2zM9.2 3.6a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8z"/><path fill="#ffd43b" d="M12.1 22c4.9 0 4.6-2.1 4.6-2.1v-2.2H12V17h6.6s3.4.4 3.4-4.9-3-5.1-3-5.1h-1.8v2.5s.1 3-2.9 3H9.4s-2.8 0-2.8 2.7v3.9S6.1 22 12.1 22zm2.7-1.6a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8z"/></svg>',
+      html: '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#e44d26" d="M4 3h16l-1.5 16L12 21l-6.5-2z"/><path fill="#fff" d="M8 7h8l-.2 2H10l.2 2h5.4l-.5 5-3.1 1-3.1-1-.2-2h2l.1 1 1.2.4 1.2-.4.1-2H8.4z"/></svg>',
+      css: '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#1572b6" d="M4 3h16l-1.5 16L12 21l-6.5-2z"/><path fill="#fff" d="M8 7h8l-.2 2h-5.6l.2 2h5.2l-.5 5-3.1 1-3.1-1-.2-2h2l.1 1 1.2.4 1.2-.4.1-2H8.4z"/></svg>',
+      js: '<svg width="16" height="16" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="#f7df1e"/><path d="M12.5 16.8c0 1.6-1 2.3-2.3 2.3-1.2 0-1.9-.6-2.3-1.4l1.2-.7c.2.4.4.8.9.8.5 0 .8-.2.8-.9v-5h1.5zm3.2 2.3c-1.4 0-2.3-.7-2.7-1.6l1.2-.7c.3.5.7.9 1.4.9.6 0 1-.3 1-.7 0-.5-.4-.7-1.1-1l-.4-.2c-1.1-.5-1.8-1-1.8-2.3 0-1.1.9-2 2.2-2 1 0 1.7.3 2.2 1.2l-1.2.8c-.3-.5-.5-.7-1-.7s-.7.3-.7.7c0 .4.3.6 1 .9l.4.2c1.3.6 2 1.1 2 2.4 0 1.4-1.1 2.1-2.5 2.1z"/></svg>',
+      md: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7aa7ff" stroke-width="1.8"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 15V9l2.5 3L11 9v6M15.5 9v6m0 0-2-2m2 2 2-2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      folder: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    };
+
+    // ---------- súbory v ukážke: kód + čo vypíše Run ----------
+    // Tokeny: [trieda, text]; '' = obyčajný text.
+    const FILES = [
+      {
+        name: 'game.py', ic: 'py', lang: 'Python 3.12',
+        code: [
+          [['k', 'import'], ['', ' random']],
+          [],
+          [['c', '# '], ['todo', 'TODO: ask the player for their name']],
+          [['', 'score = '], ['nm', '0']],
+          [],
+          [['k', 'def'], ['f', ' roll'], ['', '():']],
+          [['', '    '], ['k', 'return'], ['', ' random.'], ['f', 'randint'], ['', '('], ['nm', '1'], ['', ', '], ['nm', '6'], ['', ')']],
+          [],
+          [['k', 'for'], ['', ' i '], ['k', 'in'], ['t', ' range'], ['', '('], ['nm', '5'], ['', '):']],
+          [['', '    score += '], ['f', 'roll'], ['', '()']],
+          [['', '    '], ['t', 'print'], ['', '('], ['s', '"Roll"'], ['', ', i + '], ['nm', '1'], ['', ', '], ['s', '"score:"'], ['', ', score)']],
+        ],
+        run: () => {
+          let s = 0;
+          const lines = [];
+          for (let i = 0; i < 5; i++) { s += 1 + Math.floor(Math.random() * 6); lines.push(`Roll ${i + 1} score: ${s}`); }
+          return lines;
+        },
+      },
+      {
+        name: 'index.html', ic: 'html', lang: 'HTML',
+        code: [
+          [['', '<!'], ['k', 'doctype'], ['a', ' html'], ['', '>']],
+          [['', '<'], ['k', 'html'], ['a', ' lang'], ['', '='], ['s', '"en"'], ['', '>']],
+          [['', '  <'], ['k', 'head'], ['', '><'], ['k', 'link'], ['a', ' rel'], ['', '='], ['s', '"stylesheet"'], ['a', ' href'], ['', '='], ['s', '"style.css"'], ['', '></'], ['k', 'head'], ['', '>']],
+          [['', '  <'], ['k', 'body'], ['', '>']],
+          [['', '    <'], ['k', 'h1'], ['', '>Hello, Flux!</'], ['k', 'h1'], ['', '>']],
+          [['', '    <'], ['k', 'button'], ['a', ' id'], ['', '='], ['s', '"go"'], ['', '>Click me</'], ['k', 'button'], ['', '>']],
+          [['', '    <'], ['k', 'script'], ['a', ' src'], ['', '='], ['s', '"script.js"'], ['', '></'], ['k', 'script'], ['', '>']],
+          [['', '  </'], ['k', 'body'], ['', '>']],
+          [['', '</'], ['k', 'html'], ['', '>']],
+        ],
+        run: () => ['Live Server started → http://localhost:5500', 'Watching 14 files – the page reloads when you save.', 'Open on your phone: scan the QR code in the preview.'],
+      },
+      {
+        name: 'script.js', ic: 'js', lang: 'JavaScript (Node.js)',
+        code: [
+          [['k', 'const'], ['', ' names = ['], ['s', "'Ada'"], ['', ', '], ['s', "'Linus'"], ['', ', '], ['s', "'Grace'"], ['', '];']],
+          [],
+          [['c', '// greet everyone'], ['', '']],
+          [['k', 'for'], ['', ' ('], ['k', 'const'], ['', ' name '], ['k', 'of'], ['', ' names) {']],
+          [['', '  console.'], ['f', 'log'], ['', '('], ['s', '`Hello, ${name}!`'], ['', ');']],
+          [['', '}']],
+        ],
+        run: () => ['Hello, Ada!', 'Hello, Linus!', 'Hello, Grace!'],
+      },
+      {
+        name: 'style.css', ic: 'css', lang: 'CSS',
+        code: [
+          [['f', 'body'], ['', ' {']],
+          [['a', '  font-family'], ['', ': system-ui;']],
+          [['a', '  background'], ['', ': '], ['nm', '#0d0f1a'], ['', ';']],
+          [['a', '  color'], ['', ': '], ['nm', '#e9e9f2'], ['', ';']],
+          [['', '}']],
+          [['f', 'h1'], ['', ' { '], ['a', 'color'], ['', ': '], ['nm', '#5b8cff'], ['', '; }']],
+        ],
+        run: () => ['Saved – the Live Server preview reloaded.'],
+      },
+      { name: 'about.md', ic: 'md', lang: 'Markdown', code: [[['k', '# My website']], [], [['', 'Made in '], ['s', '**Flux**'], ['', ' – press '], ['nm', 'F5'], ['', ' to run.']]], run: () => ['Markdown preview opened next to the file.'] },
+    ];
+
+    const filesBox = $('#files');
+    const codeBox = $('#code');
+    const outBox = $('#out');
+    let cur = 0;
+    let typing = null;
+
+    filesBox.innerHTML = `<button class="file" type="button" disabled>${FILE_IC.folder}img</button>` +
+      FILES.map((f, i) => `<button class="file" type="button" data-i="${i}">${FILE_IC[f.ic]}${esc(f.name)}</button>`).join('');
+
+    const lineHtml = (toks, n, isCur, caret) =>
+      `<div class="ln${isCur ? ' cur' : ''}"><span class="n">${n}</span><span>${toks.map(([c, s]) => (c ? `<span class="${c}">${esc(s)}</span>` : esc(s))).join('')}${caret ? '<span class="caret"></span>' : ''}</span></div>`;
+
+    function showOut(head, lines, done) {
+      outBox.innerHTML = `<div class="oh">Output ${done ? `<em>${esc(done)}</em>` : ''}</div>` + lines.map((l) => `<div>${esc(l)}</div>`).join('') + (head ? `<div class="dim">${esc(head)}</div>` : '');
+    }
+
+    // Kód sa „napíše“ po znakoch (pri prvom otvorení), potom stačí prepínať.
+    function openFile(i, animate) {
+      cur = i;
+      clearInterval(typing);
+      const f = FILES[i];
+      filesBox.querySelectorAll('[data-i]').forEach((b) => b.classList.toggle('on', Number(b.dataset.i) === i));
+      $('#etab').innerHTML = `${FILE_IC[f.ic]}${esc(f.name)}<span class="x">✕</span>`;
+      $('#sb-lang').textContent = f.lang;
+      showOut('', [], '');
+      outBox.innerHTML = `<div class="oh">Output</div><div class="dim">Press Run (F5) to run ${esc(f.name)}.</div>`;
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!animate || reduce) {
+        codeBox.innerHTML = f.code.map((l, k) => lineHtml(l, k + 1, k === f.code.length - 1, k === f.code.length - 1)).join('');
+        return;
+      }
+      const flat = f.code.map((l) => l.map(([c, s]) => [c, s]));
+      let li = 0, ti = 0, ci = 0;
+      const render = () => {
+        const lines = flat.slice(0, li).map((l, k) => lineHtml(l, k + 1, false, false));
+        if (li < flat.length) {
+          const part = flat[li].slice(0, ti).concat(ti < flat[li].length ? [[flat[li][ti][0], flat[li][ti][1].slice(0, ci)]] : []);
+          lines.push(lineHtml(part, li + 1, true, true));
+        }
+        codeBox.innerHTML = lines.join('');
+      };
+      typing = setInterval(() => {
+        for (let step = 0; step < 2; step++) {
+          if (li >= flat.length) { clearInterval(typing); codeBox.innerHTML = flat.map((l, k) => lineHtml(l, k + 1, k === flat.length - 1, k === flat.length - 1)).join(''); return; }
+          const line = flat[li];
+          if (ti >= line.length) { li++; ti = 0; ci = 0; continue; }
+          ci++;
+          if (ci > line[ti][1].length) { ti++; ci = 0; }
+        }
+        render();
+      }, 18);
+    }
+
+    function run() {
+      const f = FILES[cur];
+      const btn = $('#run-btn');
+      btn.disabled = true;
+      outBox.innerHTML = `<div class="oh">Output <em style="color:var(--text-2)"><span class="spin"></span>Running…</em></div>`;
+      const t0 = performance.now();
+      setTimeout(() => {
+        const lines = f.run();
+        showOut(`── Done in ${Math.round(40 + Math.random() * 80)} ms ──`, lines, 'Done');
+        btn.disabled = false;
+      }, 380 + (performance.now() - t0));
+    }
+
+    filesBox.onclick = (e) => {
+      const b = e.target.closest('[data-i]');
+      if (b) openFile(Number(b.dataset.i), false);
+    };
+    $('#run-btn').onclick = run;
+    $('#ai-btn').onclick = () => {
+      outBox.innerHTML = `<div class="oh">Claude <em style="color:#c4a5ff">AI</em></div><div>${esc(FILES[cur].name)}: looks good! ${cur === 0 ? 'Tip: use input() to ask for the player’s name – that solves your TODO.' : 'Tip: press Ctrl+I in Flux to ask me anything about your code.'}</div>`;
+    };
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F5' && $('#editor').getBoundingClientRect().top < innerHeight && $('#editor').getBoundingClientRect().bottom > 0) { e.preventDefault(); run(); }
+    });
+    // Písanie sa spustí, až keď editor uvidíš.
+    new IntersectionObserver((ents, obs) => {
+      if (ents.some((x) => x.isIntersecting)) { openFile(0, true); obs.disconnect(); }
+    }, { threshold: 0.3 }).observe($('#editor'));
+    openFile(0, false);
+
+    // ---------- features ----------
+    const FEATURES = [
+      ['<path d="M7 4v16l13-8z"/>', true, 'One-click Run', 'F5 runs Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust and more. Missing languages install themselves.'],
+      ['<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>', false, 'Live Server', 'Your website next to the code, reloading on save. Preview as phone or tablet, or open it on your phone with a QR code.'],
+      ['<path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>', true, 'Claude AI built in', 'Ask about your code, fix errors or plan your to-dos. Claude Desktop, Claude Code and Cursor can work with your projects too.'],
+      ['<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>', false, 'Smart editor', 'Autocomplete and error checking for Python, HTML, CSS and JavaScript, Emmet, snippets, sticky headers and a code map.'],
+      ['<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 19c0-2 1.5-4 4-4s3 1 3 3"/>', false, 'Flux Together', 'Friends on the same Wi-Fi see who has which file open and what they are typing – live, without the internet.'],
+      ['<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-6 3-11 5.5"/>', false, 'GitHub', 'Open a repository, commit and push from the sidebar – Flux signs you in with one code.'],
+      ['<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', false, 'Search everything', 'Ctrl+Shift+A finds commands, settings, files and projects in one box.'],
+      ['<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>', false, 'Updates itself', 'New versions download in the background from GitHub Releases and install when you close Flux.'],
+      ['<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/>', false, 'Projects & to-dos', 'A home screen with your projects, coding time, a project description and a to-do list for each one.'],
+    ];
+    $('#feat').innerHTML = FEATURES.map(([d, fill, h, p]) => `<div class="fc"><span class="fi2">${svg(d, fill)}</span><div><h3>${h}</h3><p>${p}</p></div></div>`).join('');
+
+    const LANGS = [['Python', '#3776ab'], ['JavaScript', '#f7df1e'], ['TypeScript', '#3178c6'], ['HTML & CSS', '#e44d26'], ['Java', '#e76f00'], ['C / C++', '#659ad2'], ['C#', '#9b4f96'], ['Go', '#00add8'], ['Rust', '#dea584'], ['Ruby', '#cc342d'], ['PHP', '#777bb3'], ['Lua', '#2c2d72'], ['Perl', '#39457e'], ['Zig', '#f7a41d'], ['R', '#2266b8'], ['Julia', '#9558b2']];
+    $('#langs').innerHTML = LANGS.map(([n, c]) => `<span class="lang"><i style="background:${c}"></i>${esc(n)}</span>`).join('');
+
+    const KEYS = [
+      ['Run the file', 'F5'], ['Search everything', 'Ctrl Shift A'], ['Save', 'Ctrl S'], ['AI assistant', 'Ctrl I'],
+      ['Command palette', 'Ctrl Shift P'], ['New project', 'Ctrl Shift N'], ['Open folder', 'Ctrl O'], ['Settings', 'Ctrl ,'],
+      ['Focus mode', 'F11'], ['Back / forward', 'Alt ← →'],
+    ];
+    $('#keys').innerHTML = KEYS.map(([l, k]) => `<div class="key"><span>${esc(l)}</span><span class="kb">${k.split(' ').map((x) => `<kbd>${esc(x)}</kbd>`).join('')}</span></div>`).join('');
+
+    const d = new Date();
+    $('#today').textContent = d.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' }) + ' · free for Windows';
+
+    // ---------- releases z GitHubu ----------
+    // Malý markdown: nadpisy, zoznamy, **tučné**, *kurzíva*, `kód`, odkazy.
+    function md(src) {
+      const inline = (s) => esc(s)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
+        .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+      let html = '', inList = false;
+      for (const raw of String(src || '').replace(/\r/g, '').split('\n')) {
+        const line = raw.trimEnd();
+        const li = line.match(/^\s*[-*]\s+(.*)/);
+        if (li) { if (!inList) { html += '<ul>'; inList = true; } html += `<li${/^\s{2,}/.test(line) ? ' class="sub"' : ''}>${inline(li[1])}</li>`; continue; }
+        if (inList) { html += '</ul>'; inList = false; }
+        const h = line.match(/^(#{1,4})\s+(.*)/);
+        if (h) html += `<h${h[1].length < 3 ? 3 : 4}>${inline(h[2])}</h${h[1].length < 3 ? 3 : 4}>`;
+        else if (line.trim()) html += `<p>${inline(line)}</p>`;
+      }
+      return html + (inList ? '</ul>' : '');
+    }
+    const mb = (n) => `${Math.round(n / 1048576)} MB`;
+    const num = (n) => n.toLocaleString('en');
+    const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('en', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+
+    fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
+      .then((list) => {
+        // vývojárske buildy (pre-release) sú len pre vývojára – stránka ich neukazuje vôbec
+        list = list.filter((r) => !r.draft && !r.prerelease);
+        const latest = list[0];
+        if (!latest) throw new Error('none');
+        const exeOf = (r) => (r.assets || []).find((a) => /\.exe$/i.test(a.name));
+        const v = String(latest.tag_name || '').replace(/^v/, '');
+        const exe = exeOf(latest);
+        const href = exe ? exe.browser_download_url : latest.html_url;
+        document.querySelectorAll('[data-dl]').forEach((a) => (a.href = href));
+        document.querySelectorAll('[data-dl-label]').forEach((s) => (s.textContent = `Download Flux ${v}`));
+        $('#dl-text').textContent = `Download Flux ${v}`;
+        $('#dl-meta').textContent = exe ? `${mb(exe.size)} · ${fmtDate(latest.published_at)}` : fmtDate(latest.published_at);
+        $('#st-ver').textContent = v;
+        // Koľko ľudí si Flux stiahlo: súčet stiahnutí inštalátorov všetkých verzií (GitHub počíta download_count).
+        const dls = (r) => exeOf(r)?.download_count || 0;
+        const total = list.reduce((n, r) => n + dls(r), 0);
+        $('#st-dl').textContent = num(total);
+        $('#dl-meta').textContent = `${exe ? `${mb(exe.size)} · ` : ''}${num(total)} downloads`;
+        if (exe) $('#st-size').textContent = mb(exe.size);
+        $('#rel-name').textContent = `Flux ${v}`;
+        $('#rel-meta').textContent = `Newest version · ${fmtDate(latest.published_at)}${exe ? ` · ${exe.name} · ${mb(exe.size)}` : ''} · downloaded ${num(total)}× in total`;
+        $('#rel-list').innerHTML = list.map((r, i) => {
+          const rv = String(r.tag_name || '').replace(/^v/, '');
+          const e = exeOf(r);
+          return `<details class="rel"${r === latest ? ' open' : ''}>
+            <summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg><b>${esc(r.name || `Flux ${rv}`)}</b>${r === latest ? '<span class="badge new">newest</span>' : ''}<small>${e ? `${num(e.download_count || 0)} downloads · ` : ''}${fmtDate(r.published_at)}</small></summary>
+            <div class="body">${md(r.body) || '<p>No notes for this version.</p>'}
+              <div class="dl">${e ? `<a class="pill-btn${r === latest ? ' run-btn' : ''}" href="${esc(e.browser_download_url)}">${svg('<path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/>')}Download ${esc(e.name)} · ${mb(e.size)}</a>` : ''}<a class="pill-btn" href="${esc(r.html_url)}">Open on GitHub</a></div>
+            </div></details>`;
+        }).join('');
+      })
+      .catch(() => {
+        $('#rel-meta').textContent = 'Get the newest installer on GitHub Releases.';
+        $('#rel-list').innerHTML = `<div class="loading">Could not load the list right now. <a style="color:#9fb8ff" href="https://github.com/${REPO}/releases">See all releases on GitHub →</a></div>`;
+      });
+
+    // ---------- hviezdičky na GitHube ----------
+    fetch(`https://api.github.com/repos/${REPO}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((repo) => {
+        if (!repo || !repo.stargazers_count) return;
+        const el = $('#stars');
+        el.textContent = repo.stargazers_count.toLocaleString('en');
+        el.hidden = false;
+      })
+      .catch(() => {});
+
+    // ---------- plynulé skrolovanie (ako vo Fluxe) ----------
+    // Koliesko posunie cieľ a stránka k nemu plynulo dobieha (exponenciálne – každú snímku rovnaký podiel
+    // zvyšnej vzdialenosti, nezávisle od FPS). Rýchle točenie sa zráta, po pustení to mäkko dobehne.
+    // Touchpad a klávesnica ostávajú prirodzené – tie sú plynulé samy.
+    (() => {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      let pos = scrollY;
+      let target = scrollY;
+      let frame = 0;
+      let last = 0;
+      let max = 0;
+      const stop = () => {
+        if (frame) cancelAnimationFrame(frame);
+        frame = 0;
+      };
+      const step = (now) => {
+        // čas snímky môže byť starší ako posledné koliesko – nikdy záporný krok
+        const dt = Math.min(50, Math.max(1, now - last));
+        last = now;
+        pos += (target - pos) * (1 - Math.exp(-dt / 95));
+        if (Math.abs(target - pos) < 0.5) pos = target;
+        scrollTo(0, pos);
+        if (pos === target) return (frame = 0);
+        frame = requestAnimationFrame(step);
+      };
+      // vnorené posuvné časti (kód, výstup v ukážke) sa posúvajú samé
+      const innerScroller = (el, dy) => {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const o = getComputedStyle(n).overflowY;
+          if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight + 1) {
+            if ((dy > 0 && n.scrollTop + n.clientHeight < n.scrollHeight - 1) || (dy < 0 && n.scrollTop > 0)) return true;
+          }
+        }
+        return false;
+      };
+      addEventListener(
+        'wheel',
+        (e) => {
+          if (e.ctrlKey || e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          // touchpad posiela veľa malých krokov – ten nechávame prehliadaču
+          if (e.deltaMode === 0 && Math.abs(e.deltaY) < 40) return stop();
+          if (innerScroller(e.target, e.deltaY)) return;
+          e.preventDefault();
+          const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+          if (!frame) {
+            // začíname z miesta, kde stránka naozaj je (posuvník, klávesnica, odkaz)
+            pos = target = scrollY;
+            max = document.documentElement.scrollHeight - innerHeight;
+            last = performance.now();
+            frame = requestAnimationFrame(step);
+          }
+          // zmena smeru: cieľ sa počíta od aktuálnej polohy, nie od starého cieľa
+          if (Math.sign(dy) !== Math.sign(target - pos)) target = pos;
+          target = Math.max(0, Math.min(max, target + dy * 1.1));
+        },
+        { passive: false },
+      );
+      // skok na časť stránky (karty v lište, tlačidlá): plynulo, prehliadačom
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href^="#"]');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        const el = href === '#top' ? null : document.querySelector(href);
+        if (href !== '#top' && !el) return;
+        e.preventDefault();
+        stop();
+        scrollTo({ top: el ? el.getBoundingClientRect().top + scrollY - 70 : 0, behavior: 'smooth' });
+        history.replaceState(null, '', href);
+      });
+      addEventListener('keydown', stop);
+      addEventListener('pointerdown', stop);
+    })();
+
+    // ---------- animácie a aktívna karta v lište ----------
+    const io = new IntersectionObserver((ents) => ents.forEach((x) => x.isIntersecting && x.target.classList.add('in')), { threshold: 0.08 });
+    document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+    const tabs = [...document.querySelectorAll('#tabs .tab')];
+    const spy = () => {
+      let on = tabs[0];
+      for (const t of tabs) {
+        const el = document.querySelector(t.getAttribute('href'));
+        if (el && el.getBoundingClientRect().top < 140) on = t;
+      }
+      tabs.forEach((t) => t.classList.toggle('on', t === on));
+    };
+    // najviac raz za snímku (getBoundingClientRect pri každom scroll evente zbytočne brzdí)
+    let spyQueued = false;
+    addEventListener('scroll', () => spyQueued || ((spyQueued = true), requestAnimationFrame(() => ((spyQueued = false), spy()))), { passive: true });
+    spy();
+  </script>
+</body>
+</html>
