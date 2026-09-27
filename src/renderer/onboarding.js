@@ -26,6 +26,9 @@ const CODE_LANGS = [
   { id: 'ruby', label: 'Ruby', icon: 'a.rb', tool: 'ruby', more: true },
   { id: 'php', label: 'PHP', icon: 'a.php', tool: 'php', more: true },
   { id: 'lua', label: 'Lua', icon: 'a.lua', tool: 'lua', more: true },
+  { id: 'zig', label: 'Zig', icon: 'a.zig', tool: 'zig', more: true },
+  { id: 'r', label: 'R', icon: 'a.r', tool: 'r', more: true },
+  { id: 'julia', label: 'Julia', icon: 'a.jl', tool: 'julia', more: true },
   { id: 'ts', label: 'TypeScript', icon: 'a.ts', tool: 'node', more: true },
   { id: 'perl', label: 'Perl', icon: 'a.pl', tool: 'perl', more: true },
   { id: 'explore', label: 'Just exploring', icon: null, more: true },
@@ -114,12 +117,23 @@ export function createOnboarding(app) {
       .map((b) => `<div class="ob-key"><span>${t(b.label)}</span><button class="ob-kbd" data-rekey="${b.id}" title="${t('Click and press a new shortcut')}">${(km ? km.current(b) : b.key) || '—'}</button></div>`)
       .join('')}</div>`;
   }
+  // Aktualizácie Fluxu: automaticky na pozadí, alebo najprv upozorniť.
+  function upHtml() {
+    const auto = app.getSettings().autoUpdate !== false;
+    return `<div class="ob-up">${[
+      [true, t('Automatically'), t('in the background, installed when you close Flux')],
+      [false, t('Ask me first'), t('Flux tells you when a new version is out')],
+    ]
+      .map(([v, b, s]) => `<button class="ob-up-opt${auto === v ? ' on' : ''}" data-autoup="${v ? 1 : 0}"><span class="ob-up-dot"></span><span><b>${b}</b><small>${s}</small></span></button>`)
+      .join('')}</div>`;
+  }
   function extrasBody() {
     return `<div class="ob-step ob-extras"><h2>${t('Set up extras')}</h2><p>${t('All optional – you can skip this and do it later in Settings.')}</p>
       <div class="ob-ex-grid">
-        <section class="ob-ex ob-ex-wide"><h3>${app.icon('sparkle', 15)}${t('Plugins')}</h3><div id="ob-plugins">${pluginsHtml()}</div></section>
+        <section class="ob-ex ob-ex-wide"><h3>${app.icon('puzzle', 15)}${t('Plugins')}</h3><div id="ob-plugins">${pluginsHtml()}</div></section>
         <section class="ob-ex"><h3>${app.icon('github', 15)}GitHub</h3><p>${t('Open your repositories and save your work online. Installs Git if it is missing.')}</p><div id="ob-gh">${ghHtml()}</div></section>
         <section class="ob-ex"><h3>${app.icon('command', 15)}${t('Shortcuts')}</h3><div id="ob-keys">${keysHtml()}</div></section>
+        <section class="ob-ex ob-ex-wide"><h3>${app.icon('refresh', 15)}${t('Updates')}</h3><p>${t('Should Flux keep itself up to date? You can change this later in Settings → General.')}</p><div id="ob-up">${upHtml()}</div></section>
       </div></div>${nav(t('Continue'), true)}`;
   }
   const redraw = (id, html) => {
@@ -175,7 +189,7 @@ export function createOnboarding(app) {
         <button class="ob-primary ob-start" data-next>${t('Get started')}</button></div>`;
     }
     if (step === S('uilang')) {
-      return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('More languages are downloaded from GitHub, so Flux stays small.')}</p>
+      return `<div class="ob-step"><h2>${t('Choose your language')}</h2><p>${t('Every language comes with Flux – switching is instant.')}</p>
         ${langList()}</div>${nav()}`;
     }
     if (step === S('name')) {
@@ -344,6 +358,12 @@ export function createOnboarding(app) {
       dir = 1;
       step = step === S('extras') ? S('look') : S('tools');
       return goTools();
+    }
+    if (b.dataset.autoup !== undefined) {
+      const on = b.dataset.autoup === '1';
+      await app.saveSettings({ autoUpdate: on });
+      if (on) flux.updateCheck?.();
+      return redraw('ob-up', upHtml());
     }
     if (b.dataset.plug) {
       picked.has(b.dataset.plug) ? picked.delete(b.dataset.plug) : picked.add(b.dataset.plug);

@@ -208,6 +208,27 @@ export const TEMPLATES = [
     files: [{ name: '{{name}}', content: 'print("Hello from Lua!")\n$0\n' }],
   },
   {
+    id: 'zig-main',
+    label: 'Zig program',
+    detail: 'main.zig',
+    name: 'main.zig',
+    files: [{ name: '{{name}}', content: 'const std = @import("std");\n\npub fn main() void {\n    std.debug.print("Hello from Zig!\\n", .{});\n    $0\n}\n' }],
+  },
+  {
+    id: 'r-main',
+    label: 'R script',
+    detail: 'main.R',
+    name: 'main.R',
+    files: [{ name: '{{name}}', content: 'numbers <- c(3, 1, 4, 1, 5, 9)\ncat("Hello from R!\\n")\ncat("Average:", mean(numbers), "\\n")\n$0\n' }],
+  },
+  {
+    id: 'jl-main',
+    label: 'Julia script',
+    detail: 'main.jl',
+    name: 'main.jl',
+    files: [{ name: '{{name}}', content: 'println("Hello from Julia!")\nprintln("2 + 2 = ", 2 + 2)\n$0\n' }],
+  },
+  {
     id: 'ts-main',
     label: 'TypeScript program',
     detail: 'main.ts (runs with Node.js)',

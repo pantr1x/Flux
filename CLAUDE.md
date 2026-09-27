@@ -1,0 +1,222 @@
+# Flux – notes for Claude
+
+Flux is a small code editor for Windows 10/11, built with Electron and Monaco. It has one-click Run, Live Server, Claude AI, GitHub, plugins, and it updates itself from GitHub Releases. The repository also holds the website (`site/`), translations (`locales/`) and plugins (`plugins/`).
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `src/main/` | Electron main process. `main.js` = window, settings, IPC. One module per area: `updater.js` (GitHub Releases + electron-updater), `runner.js`/`toolchains.js` (running code, downloading languages), `liveServer.js`, `lsp.js` (Pyright), `ai.js`, `github.js`, `plugins.js`, `i18n.js`, `lan.js` (Flux Together), `mcpServer.js`. |
+| `src/preload.js` | The only bridge between UI and Node: everything the UI can do is `window.flux.*` here. A new IPC call needs a handler in `main.js` **and** a line here. |
+| `src/renderer/` | UI. `app.js` is the core (editor, sidebar, home screen, **settings**, commands). Bigger parts have their own module: `updatesUI.js`, `pluginsUI.js`, `keymap.js`, `userShortcuts.js`, `themes.js`, `themeStudio.js`, `onboarding.js`, `together.js`, `aiPanel.js`… `styles.css` holds all styles. |
+| `locales/` | Translations downloaded by the app at runtime (see *Translations*). |
+| `plugins/` | Built-in and community plugins + `index.json`. Guide: `docs/PLUGINS.md`. |
+| `site/` | The website (a single `index.html`, no build step). |
+| `build/` | Installer assets; `release-notes.md` is generated during a release. |
+| `scripts/` | `build.mjs` (esbuild → `dist/renderer`), `release-notes.mjs`, `extract-strings.mjs`, `build-locales.py` + `locales_*.py`. |
+| `.github/workflows/` | `release.yml`, `pages.yml`, `windows-build.yml`. |
+
+## Build and check
+
+```bash
+npm install
+npm start        # build the renderer and start Flux
+npm run dist     # Windows installer into release/
+```
+
+There are no tests or linter. Before committing, at least check syntax:
+
+```bash
+node --input-type=module --check < src/renderer/app.js   # renderer files are ES modules
+node --check src/main/main.js                            # main process is CommonJS
+```
+
+**Check the UI in the real app, not only the code.** In a cloud session Electron runs headless:
+
+```bash
+npm ci --ignore-scripts && node node_modules/electron/install.js && node scripts/build.mjs
+xvfb-run -a -s "-screen 0 1280x800x24" node test.mjs   # Playwright `_electron.launch()`
+```
+
+Launch with `executablePath: 'node_modules/electron/dist/electron'`, `args: ['--no-sandbox', '--user-data-dir=<tmp>', '.']` and put a `settings.json` in that folder (`onboarded: true`, `projects`, `lastFolder`, `togetherPlugin`…) so the app opens straight into a project. Take screenshots of every screen you touched and also check:
+
+- no element with the `hidden` attribute is still displayed (`[hidden]` is forced to `display: none` globally – keep it that way),
+- text does not run under icons or get cut to `…` in cards (`.pj-tile`),
+- layouts at narrow widths (AI panel open, Live Server open),
+- shortcuts on every screen (home screen, settings, dialogs) – the global key handler in `app.js` returns early per screen, so order matters (settings are checked before the home screen because they can open on top of it).
+
+Flux Together peers can be faked from the test: `app.evaluate(({ BrowserWindow }, p) => BrowserWindow.getAllWindows()[0].webContents.send('lan:peers', p), peers)` with `peers = [{ id, name, state: { project, file, line, col, text, typing, recent } }]` (send again before each check – the real LAN module re-emits every 2 s).
+
+For the website, open `site/index.html` in a browser (or Playwright with `/opt/pw-browsers/chromium` in cloud sessions) and check desktop and phone width (no horizontal scroll).
+
+## Conventions
+
+- **UI text is English and always goes through `t('…')`** (`src/renderer/i18n.js`, `src/main/i18n.js`). Placeholders: `t('Version {v}', { v })`.
+- **Code comments are in Slovak**, short, like the surrounding code.
+- HTML is built with template strings; always escape user data with `escapeHtml` / `escapeAttr` (or `esc` in smaller modules).
+- Settings live in `state.settings`; read with `setting(key)`, write with `saveSettings({...})`. Inputs with `data-key` in the settings panel are saved automatically.
+- Icons: `icon(name, size)` from `src/renderer/icons.js`.
+
+## Settings panel
+
+`openSettings()` in `src/renderer/app.js` builds the whole panel:
+
+- `tabs` = the left menu (`[id, icon, label]`), each tab is a `<section data-pane="id">`.
+- **General** is the first tab. Its parts (each an `<h3>` directly inside the section): *About & updates* (`#g-updates`, filled by `updatesUI.render(el, { compact: true })`), *You*, *Performance*, *Language*, *Welcome*, *Shortcuts* (`#g-keys`, list from `shortcutRows()`).
+- **General** and **Appearance** show their `<h3>` parts as sub-items in the left menu (the `.s-sub` loop after `showTab`). A new `<h3>` directly in those sections automatically becomes a menu item.
+- The old tab ids `keys` and `about` still work: `state.settingsTab = 'keys'` opens General and scrolls to *Shortcuts* (`jumpTo`).
+- The *Search settings* box (`#s-find`) filters rows across all tabs and shows suggestions (`.s-suggest`, arrow keys + Enter jump to the row). Matching: every word must hit the row's name, description, section (`h3`) or tab; related words come from `SYN` (phrases separated by `|`), and one typo (incl. swapped letters) is allowed via `near()`/`fuzzy()`. Add a `SYN` entry when people would search a setting by another word.
+
+## Translations
+
+All app languages are **bundled** (`package.json` → `build.files` ships `locales/*.json`), so switching is instant and works offline. `src/main/i18n.js` merges the bundled file with a newer copy in `userData/locales`, which is downloaded in the background from GitHub (branches in `BRANCHES` – currently `main` and `claude/optimistic-darwin-5i7m9t`). New strings reach users with the next release, or earlier once they are on one of those branches.
+
+Adding strings:
+
+1. Use `t('New text')` in code (add the file to the list in `scripts/extract-strings.mjs` if it is new).
+2. `node scripts/extract-strings.mjs` → updates `locales/en.keys.json`.
+3. Add translations for all 8 languages (sk, de, es, fr, it, pl, pt, uk) in a new `scripts/locales_vNN.py` (copy the shape of `locales_v11.py`) and import it in `scripts/build-locales.py`.
+4. `python3 scripts/build-locales.py` → regenerates `locales/*.json`; it prints missing strings and placeholder mismatches.
+
+Never edit `locales/*.json` by hand – the next build overwrites them.
+
+## Releases (GitHub Releases)
+
+Flux updates itself from **GitHub Releases** of `pantr1x/Flux` (`src/main/updater.js`, electron-updater reads `latest.yml`). To release a version:
+
+1. Raise `version` in `package.json` (semver, e.g. `1.2.1`).
+2. Add a `## 1.2.1 – YYYY-MM-DD` section at the top of `CHANGELOG.md`, written for users (simple English, what changed and where to find it).
+3. Commit and push to `main` or a `claude/**` branch.
+
+`release.yml` runs when `package.json` or `CHANGELOG.md` change. If `v<version>` has no complete release (installer + `latest.yml`), it builds on Windows, takes the notes for that version from `CHANGELOG.md` (`scripts/release-notes.mjs`) and publishes these assets with the tag `v<version>`:
+- `Flux-Setup-<v>.exe` and its `.blockmap`,
+- `latest.yml`,
+- the **quick update** files `Flux-<v>.asar.gz` and `quick.json` (`scripts/quick-pack.mjs`; see *Updates*). A broken, incomplete release is deleted and built again. If the version was already released, nothing happens – so a fix always needs a new version.
+
+**Developer builds** (only for the Flux developer):
+- Set `"devBuild": "<version>.N"` in `package.json`, for example `"devBuild": "1.4.4.1"` next to `"version": "1.4.4"`, and push.
+- `release.yml` turns it into the semver `1.4.5-beta.1`: newer than 1.4.4, older than 1.4.5. It sets it with `npm pkg set` before building.
+- The app shows it as `1.4.4.1` (`showVer()` in `updatesUI.js`).
+- For the next build, raise N. Once you raise `version`, the old `devBuild` no longer matches, and a normal release is built.
+- A manual `-beta.N` version also works. Never use another id such as `dev`: electron-updater treats those as custom channels, and a user on one of them would never move back to stable versions.
+- The CHANGELOG section is optional (`## 1.4.4.1` works, but the bundled CHANGELOG is shown to everyone offline, so prefer commit messages). Without it, the notes are the last commit messages. `release.yml` publishes the build as a GitHub **pre-release** (not `--latest`). electron-builder writes `latest.yml` even for a beta with the GitHub provider; electron-updater with `allowPrerelease` tries `beta.yml` and falls back to that `latest.yml`, so the workflow uploads `latest.yml`. Only a Flux signed in to the GitHub account **`pantr1x`** gets these builds (`DEV_LOGIN` / `devAllowed()` in `updater.js`, which sets `autoUpdater.allowPrerelease`). That user also sees the *Developer updates* switch in About & updates (`devUpdates`, on by default) and the pre-releases in the release notes. Everyone else, and the website, ignore pre-releases completely. Version comparisons (`newer()` in `updater.js` and `updatesUI.js`) understand pre-release suffixes. To end a beta, release the plain version (`1.5.0` > `1.5.0-beta.N`).
+
+The same release notes appear in the app (Settings → General → About & updates, plus the bundled `CHANGELOG.md` when offline) and on the website.
+
+**Linux (developer builds only, for now)**:
+- The `linux` job in `release.yml` runs only for pre-releases. It builds on Ubuntu, because `npm ci` installs the node-pty prebuilt for the runner's platform. It adds `Flux-<v>.AppImage` and `latest-linux.yml` to the same release.
+- In the app (`updater.js`), Linux updates only run from an AppImage (`APPIMAGE`) and only while developer updates are on (`useUpdater()`). Other Linux users just see the newest version, like a source checkout.
+- A release without `latest-linux.yml` (a Windows-only stable release) counts as "up to date" on Linux, not as an error (`noLinuxBuild()`).
+- `package.json` → `build.linux` sets the AppImage target, `desktopName` and `syncDesktopName` (window ↔ `.desktop` entry). The quick update never applies there: the AppImage is read-only, so it falls back to the full AppImage.
+- One-command install: `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash` (`site/install.sh`, deployed with the website but not linked from it). It installs FUSE 2 with the distro's package manager (pacman/apt/dnf/zypper), downloads the newest release that has an AppImage to `~/.local/share/flux/Flux.AppImage` (a name without a version, so electron-updater replaces it in place), and adds `~/.local/bin/flux` plus a `.desktop` entry and icon. `--uninstall` removes them. Without FUSE the `flux` wrapper sets `APPIMAGE_EXTRACT_AND_RUN=1`.
+- The see-through background (material `wallpaper`) needs the desktop wallpaper: `src/main/wallpaper.js` → `linuxWallpaper()` reads it from KDE Plasma (`plasma-org.kde.plasma.desktop-appletsrc`, also wallpaper packages), GNOME/Cinnamon/MATE (`gsettings`), XFCE (`xfconf-query`), swww, hyprpaper, feh and nitrogen. On Wayland the window position is unknown (always 0,0), so the wallpaper lines up only when the window is maximized.
+- `install.sh` takes the icon out of the AppImage (`--appimage-extract usr/share/icons/hicolor/512x512/apps/flux.png`) and writes the full path into `Icon=`.
+- The website still says Linux is *coming soon*.
+- Test it locally: `npx electron-builder --linux AppImage --publish never`, then run it with `APPIMAGE_EXTRACT_AND_RUN=1 … --no-sandbox` in a container without FUSE.
+
+## Website (GitHub Pages)
+
+- Source: `site/index.html` (+ `site/icon.png`, `site/images/*.png`). Plain HTML/CSS/JS, no build, no dependencies.
+- Deploy: `pages.yml` runs on every push that touches `site/**` (any branch) or by hand (*Actions → Website → Run workflow*). It force-pushes the contents of `site/` to the **`gh-pages`** branch. GitHub Pages must be set once to *Settings → Pages → Deploy from a branch → `gh-pages` / (root)*. Address: https://pantr1x.github.io/Flux/
+- The page is styled like the Flux app itself (top bar = window tabs, home-screen stats and action cards, a live editor window, status bar). Colors are CSS variables in `:root`.
+- The *downloads* stat and the count per release are the `download_count` of each release's `.exe` (GitHub counts every download, including self-updates).
+- **Everything version-related is loaded in the browser from the GitHub API** (`/repos/pantr1x/Flux/releases`): the download buttons (`[data-dl]`) point to the newest `.exe`, the version/size stats, and the *Releases* section (`#releases`) lists every release with its notes (small markdown renderer `md()`) and installer. Nothing on the page has to be changed for a new release. Without the API it falls back to links to GitHub Releases.
+- **SEO / GEO**:
+  - `<head>` carries the description, canonical, Open Graph and Twitter tags, plus JSON-LD (`SoftwareApplication`, `WebSite`, and a `FAQPage` whose Q&As must match the `#faq` section).
+  - `site/images/og.png` (1200×630) is the link preview, and its URLs are absolute.
+  - The site also serves `robots.txt`, `sitemap.xml` and `llms.txt`, a plain summary for AI assistants.
+  - Platforms: Windows is available, macOS and Linux are *coming soon* (the `.platforms` chips, FAQ, footer and og.png). Update them when a new platform ships.
+- **Scrolling**:
+  - The wheel moves a target, and the page eases toward it exponentially (`1 - exp(-dt/95)`). Touchpad and keyboard scrolling stay native.
+  - Keep scrolling cheap: the background `.wall` is plain radial gradients on its own layer, and cards have no `backdrop-filter`. Blur filters there made scrolling stutter. Only the sticky top bar blurs.
+- Content lives in arrays in the script at the bottom: `FILES` (files in the demo editor: tokens per line + what *Run* prints), `FEATURES`, `LANGS`, `KEYS` (shortcuts). Edit those to change the page.
+- The app links to `https://pantr1x.github.io/Flux/#releases` from Settings → General → *All versions*.
+
+## Plugins
+
+See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed in `plugins/index.json`. **Nothing is bundled or turned on by itself**: `BUILTIN_IDS` in `src/main/plugins.js` is empty and `package.json` → `build.files` does not ship `plugins/`. A plugin is downloaded from GitHub (same branches as translations) only when the user presses **Install** in Settings → Plugins. For local testing, `FLUX_PLUGIN_REGISTRY=/path/to/plugins` makes the store read that folder instead of GitHub.
+
+**Ratings and comments**: 1–5 stars plus text.
+- **Storage.** Each plugin has a GitHub issue in `pantr1x/Flux` (`issue` in `index.json`). A review is a comment on that issue, starting with `<!-- flux-review stars=N -->` and ★★★★☆.
+- **Rules.** One rating per user: the latest counts, and `review()` PATCHes your own comment. A comment without stars is a plain comment.
+- **Access.** Reading works without a login (60 requests/h, so the catalog is cached for 10 min); writing needs GitHub sign-in (`githubApi`).
+- **Code.**
+  - `plugins.js`: `reviews` / `review` / `deleteComment` / `summary`.
+  - `pluginsUI.js`: `renderReviews`, `rateSum`, `starRow` (half stars via `--f`).
+- **Screenshots.** They open in `openShots()`, a lightbox: ← → / wheel to switch, click to zoom and drag to pan, Esc to close. The global key handler in `app.js` returns early while `.pl-lightbox` is open, so Esc does not close the settings.
+- **New plugins.** Add a new issue titled `Plugin reviews: <name> (<id>)` and put its number in `index.json`.
+
+*Built into Flux* in the store are features that live in the app code, not in `plugins/`: **GitHub** and **Flux Together** (list in `app.js`, `createPluginsUI({ builtins })`). Each has `description` (card) and `details` (bullets on its own page, `renderBuiltinDetail` in `pluginsUI.js`).
+
+## Layout, menu and search
+
+- **Menu** (`src/renderer/menubar.js`, items in `appMenus()` in `app.js`): opens from `#btn-appmenu` (☰ next to the `.brand` logo – the logo itself opens the start screen), from `#btn-menu` (☰ in the top bar, shown only when the sidebar is hidden) and from the home screen's ☰ (`data-act="menu"`, re-rendered each time, so it uses `menubar.openAt(el)`; `data-menu-trigger` keeps the outside-click handler from closing it). Submenus switch with a short delay so moving the mouse diagonally does not jump to another one. Items are `[label, action, shortcut, { checked, radio, disabled }]`, `'-'` = separator, a plain string = caption; a top-level entry with `run` (Home) is a direct action. `menuBar: true` also shows the classic `#menubar` row in the top bar (default off – it takes too much room).
+- **Search** is the `#topsearch` magnifier (opens `searchEverything()`); `showSearch: false` hides it, `searchWide: true` (`body.search-wide`) turns it into a wide search field (same button, text + shortcut shown).
+- **Panel position** `panelPos` = `bottom` | `right` | `left` (body classes `panel-side`, `panel-right`, `panel-left`; `#card` is a CSS grid). Width `panelWidth` / `--panel-w`, height `panelHeight`. **Sidebar** `sidePos` = `left` | `right` (`body.side-right`, `#app` row-reverse; on Windows the window buttons then sit above the sidebar, so `.side-top` gets the caption padding). Change them with `setLayout(patch)` – it re-lays out Monaco and xterm.
+- Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).
+- The intro (`onboarding.js`, step *extras*) asks about `autoUpdate` (*Automatically* / *Ask me first*).
+
+## Rename everywhere
+
+- **Editor offer**: `renameEverywhere()` in `editorExtras.js`.
+  - Edit an identifier, or the text inside quotes, after moving the cursor there yourself. When the cursor leaves it, the offer appears: *Rename all* (this file) and *Also in N other files*.
+  - Identifiers skip comments and strings; this uses Monaco tokens.
+  - Strings match the same content or longer paths that start with it (`old/…`).
+  - For paths, `changedPrefix()` first cuts both values to the end of the changed segment. Changing `Desktop` in `C:/…/Desktop/python/a.py` then renames every path under `C:/…/Desktop`.
+- **Sidebar rename**: `offerPathRefs()` in `app.js`, after `renameItem()`.
+  - It finds quoted paths that really resolve to the renamed file or folder: relative to the file, to the project, or `/…` as web root.
+  - It then offers to update them.
+- **Shared logic**: `src/renderer/refactor.js`, which contains `scanOthers`, `pathRefs` and `apply`.
+  - Open files are changed through their Monaco model, so Ctrl+Z works. Closed files are written to disk.
+
+## Programming languages
+
+A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe` command, `winget` package id, sizes, `url`), how to run a file in `commandFor()` and the extension in `toolchainFor()` (`src/main/runner.js`), and in the UI: `LANGS`/`RUNNABLE`/`KIND_FILE`/`KIND_LANG_NAMES`/`PROJECT_KINDS`/`MAIN_EXT` (`app.js`), `TOOL_FILE` (`tools.js`), `CODE_LANGS` (`onboarding.js`), a template (`templates.js`), an icon + `EXT_ICON` (`icons.js`), `KIND_EXT` and `TEXT_EXT` (`main.js`), comment tokens (`editorExtras.js`) and the website `LANGS`. Only use winget ids the language's own docs name (Zig `zig.zig`, R `RProject.R`, Julia `9NJNWW8PVKMN` = Juliaup from the Store). R does not add itself to PATH – `addRPath()` in `toolchains.js` does it.
+
+## Updates
+
+**Quick update** (`src/main/quickUpdate.js`) – the normal path when only Flux's own code changed:
+- **How it works.**
+  - `updater.js` sets `autoDownload = false` and `startDownload(v)` first tries `quick.fetch(v)`.
+  - That reads `quick.json` from the release, downloads `Flux-<v>.asar.gz` (~5 MB), checks the sha512 and writes `resources/app.asar.new`.
+  - The helper starts only in `will-quit`, when Flux really closes. `quick.apply(quitRelaunch)` writes it to TEMP; it is `Flux.exe` run as Node (`ELECTRON_RUN_AS_NODE`). It waits for Flux to exit, swaps `app.asar`, then starts Flux again, keeping `--user-data-dir`/`--no-sandbox`.
+  - *Restart and update* sets `quitRelaunch = true` and calls `app.quit()`. A normal quit swaps the file without the restart.
+  - Closing can be canceled: unsaved files → *Cancel*. `watchCancel()` handles this for both paths: if Flux is still running after 10 s, the state goes back to `ready` with `canceled`, and `updatesUI` closes its overlay.
+- **When it is used.** Only when the release's `base` equals the installed `resources/quick-base.txt` and the install folder is writable (per-user install, not Program Files).
+  - `base` is a fingerprint of everything except `app.asar`, the main `.exe` and `app-update.yml`: Electron, the Pyright tar, native modules.
+  - `scripts/after-pack.cjs` (electron-builder `afterPack`) computes it.
+  - A new Electron, a new basedpyright or a new native module changes `base`. Then Flux silently falls back to the full installer below, as it also does on any error.
+  - Do not make those files differ between builds without a reason: e.g. the Pyright tar is written deterministically in `build.mjs`.
+- **Testing it.** `FLUX_QUICK_URL` points `quick.json` downloads at another server. On Linux: build `--linux dir`, point `resources/app-update.yml` at a generic provider and set `APPIMAGE`.
+
+**Pyright is one file**:
+- `build.mjs` packs `node_modules/basedpyright` into `build/pyright/pyright-<ver>.tar` (deterministic ustar, no `.map` files).
+- It is shipped via `extraResources` and excluded from `files`.
+- `lsp.js` unpacks it into `userData/pyright/<name>` on first use (Windows `System32\tar.exe`) and queues LSP messages meanwhile.
+- **Root.** In the renderer, `lspRoot()` returns the project, or the folder of a loose Python file when no project is open (double-click on a `.py`). `isLibrary` compares against `lsp.root`, so such a file is sent to Pyright, while typeshed and other library files are not.
+- The installer used to delete and copy its ~5,400 files on every update. That made updates take about a minute.
+
+**Full installer** – `updater.js` → `install()`: re-checks for a newer version (max 4 s), writes the TEMP marker `flux-relaunch-after-update`, emits `status: 'installing'` and calls `quitAndInstall(false, true)` – the installer runs **visibly**, but on updates (`${isUpdated}`) `build/installer.nsh` skips the welcome page (`skipPageIfUpdated`), the install-mode page (`customInstallMode` keeps the previous per-user / per-machine mode), the folder page (electron-builder) and the finish page (`FluxFinishPre`), so only the progress bar shows – and `customPageAfterChangeDir` → `FluxInstShow` turns that page into a small **“Updating Flux”** window (caption and header text, Back/Next/Cancel and *Show details* hidden, window cut below the progress bar); `customInstall` then starts Flux because of the marker. The installer UI always comes from the **new** version, so installer changes show up on the very next update. Closing Flux normally with a downloaded update still installs silently (`autoInstallOnAppQuit`). The *Windows build* workflow tests exactly this flow (install, then `--updated --force-run`) and fails if the installer waits for a click or Flux does not reopen – **keep it green before releasing installer changes**. It also takes a screenshot every second during the update and force-pushes them (plus `windows.txt`, the visible window titles) to the **`ci-screens`** branch – `git fetch origin ci-screens && git show origin/ci-screens:update-020.png > x.png` to look at them. In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` and the status bar `#st-update` (Updating N % / Restart to update) while a version downloads.
+
+## Smooth scrolling and transitions
+
+- `inertia` (*Smooth scrolling with inertia*, Appearance → Window) controls both the editor (`inertiaScroll()` in `app.js`, a capture wheel listener on `#editor`) and every other scrollable element (`src/renderer/smoothScroll.js` – a global wheel listener that moves the nearest scrollable parent with velocity + friction). Elements that must keep native scrolling: add class `no-smooth` (Monaco, xterm, iframes, selects and range inputs are skipped already).
+- `transitions` (*Transition animations*) sets `body.fx-trans`; CSS plays `fx-in`/`fx-fade` when settings panes, Output/Terminal or the project page appear, and `playTransition(el, dir)` restarts the animation (in `activate()` the editor slides in from the side of the new tab). `slideIndicator(box, activeEl, key)` draws a `.slide-ind` highlight that glides to the selected item (file tabs, tree, projects, settings menu); call it after re-rendering such a list. Its position comes from the `offsetLeft/Top` chain (not affected by running animations) and a `ResizeObserver` re-aligns it when rows change size later (e.g. project stats load async).
+- Anything that only becomes visible through an animation (`forwards`, e.g. the intro logo `.ob-draw`) needs a `body.no-anim` rule with its final state – `no-anim` removes all animations.
+- Animation loops: the `requestAnimationFrame` timestamp can be older than the `performance.now()` taken at the last wheel event – clamp `dt` so it is never negative (see `inertiaScroll()` and the website). `body.no-anim` (Memory & speed) wins over it.
+
+## Memory & speed
+
+Settings → General → *Memory & speed*. `lite` (*Save memory*) is the master switch. Each part in *Advanced* has its own key and, while unset, follows `lite`: `optOn(key)` = `settings[key] ?? !lite` (same helper in `app.js` and `main.js`).
+
+| Key | Off means |
+|---|---|
+| `optPyAc` | Pyright is never started (`ensureLsp`) |
+| `optFx` | `body.no-fx` (no backdrop blur, no wallpaper) and window material `none` |
+| `optAnim` | `body.no-anim` (no CSS animations/transitions), no smooth scrolling |
+| `optEditorFx` | no sticky scroll, code map, smooth caret, word highlight |
+| `optJsLimit` (on = limit) | `--max-old-space-size=512` for the window, after restart |
+| `pyMemory` | MB for Pyright (default 768 with `lite`, else 2048) |
+| `lspIdle` | minutes until Pyright stops without a Python file (0 = never) |
+
+Changing `lite` or pressing *Reset advanced* clears all these keys. Use `optOn()` for new savings, never `setting('lite')` directly.

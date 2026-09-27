@@ -53,6 +53,12 @@ function commandFor(file, python, lang) {
       return { cmd: 'php', args: [path.basename(file)] };
     case '.lua':
       return { cmd: 'lua', args: [path.basename(file)] };
+    case '.zig':
+      return { cmd: 'zig', args: ['run', path.basename(file)] };
+    case '.r':
+      return { cmd: 'Rscript', args: [path.basename(file)] };
+    case '.jl':
+      return { cmd: 'julia', args: [path.basename(file)] };
     case '.c':
     case '.cpp':
     case '.cc':
@@ -101,7 +107,7 @@ function compileAndRun(file, compiler) {
 // Ktorý jazyk (na stiahnutie) treba pre súbor.
 function toolchainFor(file) {
   const ext = path.extname(file).toLowerCase();
-  return { '.py': 'python', '.pyw': 'python', '.js': 'node', '.mjs': 'node', '.cjs': 'node', '.java': 'java', '.go': 'go', '.cs': 'csharp', '.c': 'cpp', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.rs': 'rust', '.rb': 'ruby', '.php': 'php', '.lua': 'lua', '.ts': 'node', '.mts': 'node', '.cts': 'node', '.pl': 'perl', '.sh': isWin ? 'git' : null }[ext] || null;
+  return { '.py': 'python', '.pyw': 'python', '.js': 'node', '.mjs': 'node', '.cjs': 'node', '.java': 'java', '.go': 'go', '.cs': 'csharp', '.c': 'cpp', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.rs': 'rust', '.rb': 'ruby', '.php': 'php', '.lua': 'lua', '.zig': 'zig', '.r': 'r', '.jl': 'julia', '.ts': 'node', '.mts': 'node', '.cts': 'node', '.pl': 'perl', '.sh': isWin ? 'git' : null }[ext] || null;
 }
 
 // Nájde napr. „node“ → C:\Program Files\nodejs\node.exe (pseudoterminál na Windows potrebuje celú cestu).

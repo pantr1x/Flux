@@ -16,6 +16,7 @@ const { createUpdater } = require('./updater');
 const { createMcpServer } = require('./mcpServer');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
+const { linuxWallpaper } = require('./wallpaper');
 const i18n = require('./i18n');
 const { t } = i18n;
 
@@ -52,14 +53,18 @@ function wallpaperPath() {
   // Vlastný obrázok pozadia (Nastavenia → Personalize) má prednosť.
   if (settings.bgImage && fs.existsSync(settings.bgImage)) return settings.bgImage;
   if (process.env.FLUX_WALLPAPER) return process.env.FLUX_WALLPAPER;
+  if (process.platform === 'linux') return linuxWallpaper();
   if (!isWin || !process.env.APPDATA) return null;
   const p = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Themes', 'TranscodedWallpaper');
   return fs.existsSync(p) ? p : null;
 }
 
+// Pamäť a rýchlosť (Nastavenia → Všeobecné → Advanced): kým časť nezmeníš, riadi sa „Save memory“ (lite).
+const optOn = (key) => settings[key] ?? !settings.lite;
+
 function materialMode() {
   let m = settings.material || 'wallpaper';
-  if (settings.translucent === false || settings.lite) m = 'none';
+  if (settings.translucent === false || !optOn('optFx')) m = 'none';
   if (m === 'wallpaper' && !wallpaperPath()) m = mica ? 'acrylic' : 'none';
   if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
   return m;
@@ -277,7 +282,7 @@ const live = new LiveServer(
 const lsp = new LanguageServer(
   (msg) => send('lsp:message', msg),
   (code) => send('lsp:exit', code),
-  () => (settings.lite ? 768 : 2048), // strop pamäte pre Pyright (MB)
+  () => Number(settings.pyMemory) || (settings.lite ? 768 : 2048), // strop pamäte pre Pyright (MB)
 );
 
 // Automatické aktualizácie jazykov (raz za deň, na pozadí, len ak sú zapnuté).
@@ -542,6 +547,8 @@ function registerIpc() {
     // Použije jazyk; ak ešte nie je stiahnutý, stiahne ho z GitHubu.
     let data = code === 'en' ? {} : i18n.loadCached(code);
     if (!data) data = await i18n.downloadLanguage(code);
+    // pribalený jazyk je hneď; novšie preklady sa stiahnu na pozadí (platia od ďalšieho štartu)
+    else if (code !== 'en') i18n.downloadLanguage(code).catch(() => {});
     settings.language = code;
     saveSettings();
     i18n.setLanguage(code);
@@ -566,7 +573,7 @@ function registerIpc() {
       win.setTitleBarOverlay({ color: '#00000000', symbolColor: patch.theme === 'light' ? '#1d1d24' : '#e8e8ef', height: 44 });
     }
     if (patch.theme) nativeTheme.themeSource = patch.theme;
-    if ('material' in patch || 'translucent' in patch || 'theme' in patch || 'lite' in patch) applyMaterial();
+    if ('material' in patch || 'translucent' in patch || 'theme' in patch || 'lite' in patch || 'optFx' in patch) applyMaterial();
     return settings;
   });
   ipcMain.on('app:dirty', (_e, count) => {
@@ -966,18 +973,36 @@ function registerIpc() {
   ipcMain.handle('update:download', () => updater.download());
   ipcMain.handle('update:install', () => updater.install());
   ipcMain.handle('update:notes', (_e, force) => updater.notes(!!force));
+  ipcMain.handle('update:dev', (_e, on) => {
+    settings.devUpdates = !!on;
+    saveSettings();
+    return updater.setDev();
+  });
   ipcMain.handle('gh:info', () => github.info());
   ipcMain.handle('lan:start', (_e, opts) => lan.start(opts || {}));
   ipcMain.handle('lan:stop', () => lan.stop());
   ipcMain.on('lan:update', (_e, state) => lan.update(state));
-  ipcMain.handle('gh:connect', (_e, token) => github.connect(String(token || '')));
-  ipcMain.handle('gh:disconnect', () => github.disconnect());
+  // zmena účtu môže zapnúť/vypnúť vývojárske aktualizácie (updater.js)
+  ipcMain.handle('gh:connect', async (_e, token) => {
+    const u = await github.connect(String(token || ''));
+    updater.setDev();
+    return u;
+  });
+  ipcMain.handle('gh:disconnect', () => {
+    github.disconnect();
+    updater.setDev();
+    return true;
+  });
   ipcMain.handle('gh:signin-start', async (_e, inApp = true) => {
     const r = await github.signInStart();
     if (inApp) openGitHubLogin(r);
     return r;
   });
-  ipcMain.handle('gh:signin-wait', () => github.signInWait());
+  ipcMain.handle('gh:signin-wait', async () => {
+    const r = await github.signInWait();
+    updater.setDev();
+    return r;
+  });
   ipcMain.handle('gh:signin-cancel', () => {
     closeGitHubLogin();
     return github.signInCancel();
@@ -1007,7 +1032,9 @@ function registerIpc() {
   ipcMain.handle('plugins:enable', (_e, id, on) => plugins.setEnabled(id, on));
   ipcMain.handle('plugins:active', () => plugins.active());
   ipcMain.handle('plugins:installed', () => plugins.installedList());
-  ipcMain.handle('plugins:rate', (_e, issue, like) => plugins.rate(Number(issue), !!like));
+  ipcMain.handle('plugins:reviews', (_e, id) => plugins.reviews(String(id)));
+  ipcMain.handle('plugins:review', (_e, id, stars, text) => plugins.review(String(id), stars, text));
+  ipcMain.handle('plugins:delete-comment', (_e, commentId) => plugins.deleteComment(commentId));
   ipcMain.handle('plugins:builtin', () => plugins.builtins());
   ipcMain.handle('plugins:load-folder', async () => {
     const r = await dialog.showOpenDialog(win, { title: t('Plugin folder (with plugin.json)'), properties: ['openDirectory'] });
@@ -1215,7 +1242,7 @@ function registerIpc() {
   // Python autocomplete (Pyright)
   ipcMain.handle('lsp:start', () => {
     lsp.start(workspace || app.getPath('home'));
-    return true;
+    return true; // správy do Pyrightu sa podržia, kým sa (prvýkrát) nerozbalí
   });
   ipcMain.on('lsp:send', (_e, msg) => lsp.send(msg));
   ipcMain.on('lsp:stop', () => lsp.stop());
@@ -1266,6 +1293,9 @@ const KIND_EXT = {
   ruby: /\.rb$/i,
   php: /\.php$/i,
   lua: /\.lua$/i,
+  zig: /\.zig$/i,
+  r: /\.r$/i,
+  julia: /\.jl$/i,
 };
 
 // Jazyky projektu podľa množstva kódu (ako na GitHube): hlavný jazyk, ostatné a či je to repozitár z GitHubu.
@@ -1327,7 +1357,7 @@ const statsCache = new Map();
 function staleStats(file) {
   for (const dir of statsCache.keys()) if (String(file).startsWith(dir)) statsCache.delete(dir);
 }
-const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql)$/i;
+const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql|zig|r|jl)$/i;
 async function projectStats(dir) {
   const cached = statsCache.get(dir);
   if (cached && Date.now() - cached.at < 20000) return { ...cached.data, time: settings.projectTime?.[dir] || 0 };
@@ -1383,11 +1413,9 @@ if (settings.lite === undefined) {
   saveSettings();
 }
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
-if (settings.lite) {
-  // Úsporný režim: menej pamäte pre JavaScript okna a bez plynulého posúvania.
-  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
-  app.commandLine.appendSwitch('disable-smooth-scrolling');
-}
+// Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
+if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');
 app.on('second-instance', (_e, argv) => {
   if (!win) return;
   const files = filesFromArgv(argv).map(allowFile).filter(Boolean);

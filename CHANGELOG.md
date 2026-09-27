@@ -1,19 +1,234 @@
 # Flux – what's new
 
-Every version with its changes. Flux shows these notes in **Settings → About & updates**.
+Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
+
+## 1.4.13 – 2026-09-25
+
+### Python
+- **Autocomplete and error checking now also work for a single Python file** you open without a project – for example with a double-click on a `.py` file. Before, they only worked inside an open folder.
+
+## 1.4.12 – 2026-09-24
+
+### Plugins
+- **Ratings and comments:**
+  - Give a plugin **1 to 5 stars** and write what you think. Open a plugin in **Settings → Plugins** and press **Rate**.
+  - You can change or delete your rating later.
+  - Everyone can read the comments. To write, sign in with GitHub.
+- The average rating is shown on every plugin card and at the top of the plugin page, for example ★ 4.5 (12).
+- **Screenshots open full screen:**
+  - Click a screenshot to see it big. Use ← → or the mouse wheel to go through them.
+  - Click again to zoom in, drag to move around, and press Esc to close.
+
+## 1.4.11 – 2026-09-24
+
+### Fixes and small improvements
+- **Restart and update** no longer gets stuck when you have unsaved files and press **Cancel**. The progress window closes, and you can start the update again later.
+- The home screen now has the **☰ menu** next to the flux logo too, like the editor.
+- Plugin descriptions in **Settings → Plugins** now show two lines instead of being cut off after one.
+
+## 1.4.10 – 2026-09-24
+
+### Rename everywhere
+- The **Rename everywhere?** offer has a new, cleaner look: a small card that shows the old and the new name, with two clear buttons. **This file** shows how many places change, and **Whole project** shows how many other files change.
+
+## 1.4.9 – 2026-09-24
+
+### Rename everywhere
+- When you change a **folder in the middle of a path**, for example `"C:/Users/admin/Desktop/python/simon.py"` to `".../Documents/python/simon.py"`, Flux now offers to change **every path in that folder**, not only the exact same text. It works in this file and in the other files of the project. A folder with a similar name, such as `Desktop2`, stays as it is.
+- The offer shows long paths shortened, so it always fits in the editor.
+
+## 1.4.8 – 2026-09-24
+
+### Rename everywhere
+- When you change a name (a variable, a function…), Flux still offers to rename it everywhere in the file. There is now also a button to rename it **in the other files of the project**.
+- This also works for **text in quotes**, like a folder path: change `"data/images"` to `"data/pics"` and Flux offers to change the same path everywhere, including longer paths like `"data/images/cat.png"`.
+- When you **rename a file or folder** in the sidebar, Flux finds the paths in your code that point to it and asks whether to update them. It works for Python, HTML, CSS, JavaScript and other languages.
+- Names inside comments and plain text are left alone.
+
+## 1.4.7 – 2026-09-24
+
+### Faster updates
+- **Updates are now much faster.** When only Flux itself changed, Flux downloads just the changed part (about 5 MB instead of the whole 117 MB installer), swaps it and opens again in a few seconds. No installer window appears.
+- When something bigger changes (for example the Electron version), Flux still uses the normal installer, like before.
+- The normal installer is faster too. Python autocomplete used to be about 5,400 separate files, which Windows had to delete, copy and check on every update. It is now one file that Flux unpacks the first time you use Python.
+- This update itself still uses the installer. The fast updates start with the next version.
+
+## 1.4.6 – 2026-09-24
+
+### Settings
+- Clicking a suggestion in **Search settings** now jumps to that setting. Before, it closed the settings instead.
+
+## 1.4.5 – 2026-09-24
+
+### Search
+- You can turn the magnifier at the top into a **wide search field**. Turn it on in **Settings → Appearance → Window → Wide search field** or in **View → Wide search field**. Click it or press Ctrl+Shift+A to search files, commands, settings and projects.
+
+## 1.4.4 – 2026-09-24
+
+### Updating
+- Flux compares versions correctly with test builds (for example 1.5.0-beta.1), so updates never go to an older version by mistake.
+- Behind the scenes: the Flux developer can now try test builds before everyone else. They are not public releases. You keep getting only normal versions, and nothing changes for you.
+
+### Website
+- The website scrolls much more smoothly.
+- It now has a questions-and-answers section and a nicer preview when you share the link.
+- The website says that macOS and Linux versions are coming.
+
+## 1.4.3 – 2026-09-24
+
+### Updating
+- Updating Flux now shows a **small “Updating Flux” window** with just a progress bar – no “Flux Setup”, no “Installing” and no buttons. Flux opens again by itself when it is done.
+- The first installation of Flux looks the same as before.
+
+## 1.4.2 – 2026-09-24
+
+### Fixes
+- **Project list:** the highlight sat a little above the selected project (the file counts below the projects load a moment later). It now always lines up – also for file tabs, the file list and the Settings menu.
+- **Smooth scrolling in the editor** no longer jumps back a tiny bit at the start.
+- **Intro:** the Flux logo was an empty square when animations are off. Now it shows right away.
+
+### Website
+- **Scrolling fixed:** the mouse wheel sometimes did nothing or stuttered. Now the page glides and stops right away when you change direction; touchpads scroll as usual.
+
+### Checked on Windows
+- Every build now installs Flux on a real Windows machine, runs an update like the app does and takes screenshots: the installer shows only **“Installing – Please wait…” with a progress bar**, then Flux opens again by itself.
+
+## 1.4.1 – 2026-09-24
+
+### Updating shows its progress
+- After **Restart and update** the Flux installer opens with **only its progress bar** – no pages to click through – and Flux opens again by itself when it is done. (The small extra window from 1.4.0 did not show reliably.)
+- Restart and update no longer waits long on a slow connection before it starts.
+
+### Smoother switching
+- Switching **files**: the highlight **slides** to the new tab and the code **slides in** from that side.
+- The highlight also glides in the **file list**, the **project list** and the **Settings menu**.
+- Turn it off with **Transition animations** in *Settings → Appearance → Window*.
+
+## 1.4.0 – 2026-09-24
+
+### Update progress
+- While a new version **installs in the background**, the small update window shows a **real progress bar with percent** – how much of the new version is already installed.
+- While a new version **downloads**, the status bar at the bottom shows **Updating 42 %** with a small bar. When it is ready it says **Restart to update** – click it to install.
+
+### Smooth scrolling everywhere
+- Not just the editor: **Settings, lists, the sidebar, the project page, AI and every other panel** now glide a little after you stop the mouse wheel.
+- Turn it off with **Smooth scrolling with inertia** in *Settings → Appearance → Window* (it moved there from *Editor*).
+
+### Transition animations
+- A soft fade when you **switch files**, **Settings pages**, **Output / Terminal** and screens like the project page.
+- Turn them off with **Transition animations** in *Settings → Appearance → Window*. *Animations off* in *Memory & speed* turns them off too.
+
+## 1.3.2 – 2026-09-24
+
+### Updating with progress
+- **Restart and update** now shows a window with a **progress bar**: first it finishes downloading (in %), then it installs.
+- While Flux is closed and the update installs, a small window with a progress bar stays on the screen until Flux opens again.
+- In *Settings → General → About & updates* you see a progress bar while a new version downloads.
+
+### More languages
+- **Zig**, **R** and **Julia** – install them with one click in *Settings → Languages*, run them with **F5** and start a new project with them (*More languages*).
+
+### GitHub
+- *Save this project on GitHub* is just one **Publish** button – the project is private, and you can change that on GitHub any time.
+- **Like Flux?** Give it a star: *Settings → General* or *Help → Star Flux on GitHub*.
+
+### Other
+- The command *AI: open assistant* is gone – use the **AI** button or **Ctrl+I**.
+- **Home screen:** the settings button is no longer hidden under the window buttons (minimize, maximize, close).
+
+### Website
+- Brighter colors instead of large black areas, clearer text and a new font.
+- **Smooth scrolling** that glides a little after you stop the wheel.
+- A **Star** button with the number of stars, and Zig, R and Julia in the list of languages.
+
+## 1.3.1 – 2026-09-24
+
+### Menu
+- The **flux logo** takes you to the start screen again. The menu is the **☰ button right next to it**.
+- The menu no longer flickers or jumps to another submenu when you move the mouse into it at an angle.
+
+### Search in Settings
+- Finds settings by their name, description, section and tab – and by related words: *terminal* also finds *Output* and *Panel position*, *memory* finds *Save memory*.
+- Small typos are fine: *fnot size* finds *Font size*, *memroy* finds *Memory*.
+- **Suggestions** appear under the search box while you type. Pick one with the arrow keys and Enter (or a click) and Flux jumps right to it.
+
+### Languages
+- **Every app language now comes with Flux.** Switching is instant and works without the internet – newer translations still download in the background.
+
+### GitHub
+- *Save this project on GitHub* is clearer: choose **Who can see it?** – *Only you* or *Everyone* – and press **Publish on GitHub** (with a rocket).
+
+## 1.3.0 – 2026-09-24
+
+### Menu
+- **Click the flux logo** (top left) for the menu: *Home*, **File**, **Edit**, **View**, **Run** and **Help** – every menu opens next to it when you point at it.
+- When the sidebar is hidden, the menu is the small **☰** button at the top.
+- Prefer a classic menu row? Turn on **Menu bar** in *View* or in *Settings → Appearance → Window*.
+
+### Search
+- A **magnifier** at the top next to *AI* searches files, commands, settings and projects (like *Ctrl+Shift+A*). Hide it with **Search button** in *View* or in Settings.
+
+### Move things around
+- **Panel position:** put *Output* and the **Terminal** at the **bottom**, on the **right** or on the **left**. Drag its edge to make it wider.
+- **Sidebar position:** projects and files on the **left** or on the **right**.
+- Both are in the **View** menu and in *Settings → Appearance → Window*.
+
+### Updates in the intro
+- The intro now asks if Flux should **update itself automatically** or **ask you first**.
+
+### Fixes
+- **Plugins** has its own puzzle icon – it looked the same as **AI**.
+- Memory savings (*Save memory*, *Advanced*) now apply right when Flux starts, not only after you change a setting.
+
+## 1.2.3 – 2026-09-24
+
+### Memory & speed
+- **Settings → General → Memory & speed** replaces *Performance*. At the top you see **how much memory Flux uses** and can free it.
+- **Save memory** (was *Power saving*) turns on every saving at once – good for slower PCs.
+- New **Advanced** part: change each saving yourself –
+  - **Python autocomplete** on or off (it uses the most memory),
+  - **Transparency and blur**, **Animations** and **Extra editor effects** separately,
+  - **Limit memory of the window** to 512 MB,
+  - how much **memory Python autocomplete** may use (768 MB, 1 GB or 2 GB),
+  - when to **stop Python autocomplete** if no Python file is open (after 1, 5 or 15 min, or never).
+- *Reset advanced* makes every part follow *Save memory* again.
+
+### Plugins
+- Plugins are **no longer installed by themselves**. Error Lens, Bookmarks, Theme Pack and the others are in the store – press **Install** and Flux downloads them from GitHub.
+- **GitHub** and **Flux Together** open their own page with a description and everything they do.
+- A normal **back arrow** on plugin pages.
+
+### Website
+- Shows **how many people downloaded Flux** – in total and for every version.
+
+## 1.2.2 – 2026-09-24
+
+### Flux Together 1.1 – green dots
+- A **green dot** now shows where your friends are working: next to the **project**, next to **every folder** on the way to their file (even when the folder is folded) and next to the **file** itself.
+- The dot **pulses while someone is typing**. Hover it to see who it is and which file they have open.
+- You also see the dot next to your other projects in the sidebar when a friend works in one of them.
+
+### Fixes
+- **Sidebar:** no more empty strips with double lines under *N hidden* when the *Files* or *Together* list is empty.
+- **Home screen:** *Ctrl+Shift+N*, *Ctrl+O*, *Ctrl+Shift+A* and *Ctrl+,* work there now – before, only Esc did.
+- **Home screen:** the gear button (and Ctrl+,) opened Settings *behind* the home screen, so nothing seemed to happen. Esc now closes Settings first.
+- **Home screen:** the action cards always fill the whole row, also when *From GitHub* is off.
+- **Project page:** numbers like *12 min ago* are shown in full instead of *12 …*, and the page fits when the AI panel is open.
+- **Live Server + AI panel:** the editor keeps a usable width instead of shrinking to a few letters.
+- **Settings → General:** *All versions* sits in the same box as the other update settings.
+- **Search everything (Ctrl+Shift+A)** finds section names like *Accent color* and the update settings (*Update automatically*, *All versions*).
 
 ## 1.2.1 – 2026-09-24
 
-### Settings
-- **General** now works like *Appearance*: its parts are listed in the left menu, and the one you are looking at is highlighted.
-- General contains:
-  - You,
-  - Performance,
-  - Language,
-  - Welcome,
-  - **Version & updates** (with the release notes),
-  - **Shortcuts**.
-- The separate *Shortcuts* and *About & updates* pages are gone, so the menu is shorter.
+### Settings → General
+- **General** now shows its parts in the left menu, just like **Appearance** – click one to jump to it, and the part you are looking at is highlighted.
+- **About & updates** moved into General as its first part: your version, *Check for updates*, *Update automatically* and the release notes (folded, they load when you open them).
+- **Shortcuts** moved into General too – the whole list, search, changing keys and *Edit shortcuts.json* are at the end of the page.
+- **All versions** opens the Releases page of the website, where you can download any version of Flux.
+- Links that used to open the old *Shortcuts* or *About & updates* tab now jump to the right part of General.
+
+### New website
+- A new website that looks like Flux itself: a live editor you can click through and run, all features, shortcuts, and a **Releases** page with every version, its notes and its installer – loaded straight from GitHub Releases.
 
 ## 1.2.0 – 2026-09-24
 

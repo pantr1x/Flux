@@ -24,7 +24,7 @@
 
 1. Open the [latest release](https://github.com/pantr1x/Flux/releases/latest) and download `Flux-Setup-x.y.z.exe` under **Assets**.
 2. Run it. Windows may show *"Windows protected your PC"* because Flux is not signed yet – click **More info → Run anyway**.
-3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → About & updates).
+3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → General → About & updates). Every version is also on the [website](https://pantr1x.github.io/Flux/#releases).
 
 Programming languages are not bundled, so the installer stays small. Flux downloads only the ones you pick, from their official sources.
 
@@ -32,7 +32,7 @@ Programming languages are not bundled, so the installer stays small. Flux downlo
 
 | | |
 |---|---|
-| <img src="docs/icons/play.svg" width="20"> **One-click Run** | Press **F5** to run Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl or shell scripts. `input()`, colors and windows (tkinter, turtle, pygame) work. Missing languages are installed for you. |
+| <img src="docs/icons/play.svg" width="20"> **One-click Run** | Press **F5** to run Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia or shell scripts. `input()`, colors and windows (tkinter, turtle, pygame) work. Missing languages are installed for you. |
 | <img src="docs/icons/globe.svg" width="20"> **Live Server** | A preview of your website right next to the code that reloads on save. **Alt+click** any element to jump to its line in the HTML, JavaScript errors show up on the page with a *Show in Flux* button, preview as laptop, tablet or phone (and rotate it), take a screenshot, or scan a QR code to open the page on your real phone. |
 | <img src="docs/icons/code.svg" width="20"> **Smart editor** | Autocomplete and error checking for Python (Pyright), HTML, CSS and JavaScript, Emmet, snippets, rename everywhere, auto-closing HTML tags, image previews on hover, Markdown preview. |
 | <img src="docs/icons/sparkle.svg" width="20"> **Claude AI** | Ask Claude about your code (Ctrl+I) with your own API key. It can read your project and plan your to-do list. Flux also works the other way round: Claude Desktop, Claude Code and Cursor can use your Flux projects through MCP. |
@@ -69,7 +69,7 @@ Programming languages are not bundled, so the installer stays small. Flux downlo
 | `Alt+click` in the preview | Jump to that element in the HTML |
 | `Ctrl+,` | Settings |
 
-All of them can be changed in Settings → Shortcuts.
+All of them can be changed in Settings → General → Shortcuts.
 
 ## Plugins
 
@@ -89,6 +89,6 @@ npm run dist       # build the Windows installer into release/
 
 Flux is built with Electron, Monaco (the editor of VS Code), xterm.js and basedpyright.
 
-The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`).
+The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`). How the website, releases and the rest of the repository work is described in [`CLAUDE.md`](CLAUDE.md).
 
 A new version is released by raising `version` in `package.json` and adding its notes to `CHANGELOG.md` – GitHub Actions builds the installer and publishes the release, and installed copies update themselves.

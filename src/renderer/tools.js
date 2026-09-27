@@ -5,7 +5,7 @@ import { icon, fileIcon } from './icons.js';
 
 const flux = window.flux;
 
-export const TOOL_FILE = { git: 'a.git', python: 'a.py', node: 'a.js', java: 'a.java', cpp: 'a.cpp', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua' };
+export const TOOL_FILE = { git: 'a.git', python: 'a.py', node: 'a.js', java: 'a.java', cpp: 'a.cpp', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua', zig: 'a.zig', r: 'a.r', julia: 'a.jl' };
 
 const mb = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.0', '')} GB` : `${n} MB`);
 

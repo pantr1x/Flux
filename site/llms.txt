@@ -1,0 +1,24 @@
+# Flux
+
+> Flux is a free, small and modern code editor built on Monaco (the editor inside VS Code). It runs code with one click, shows websites live while you type and has Claude AI built in – with nothing to set up. It runs on Windows 10 and 11; macOS and Linux versions are being prepared.
+
+- Website: https://pantr1x.github.io/Flux/
+- Download (newest installer): https://github.com/pantr1x/Flux/releases/latest
+- Source code: https://github.com/pantr1x/Flux
+- Price: free, no account, no ads
+
+## Features
+
+- One-click Run (F5) for Python, JavaScript, TypeScript, HTML & CSS, Java, C / C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R and Julia. Missing languages download from their official sources.
+- Live Server: the website next to the code, reloading on save; phone and tablet preview, open on a phone with a QR code.
+- Claude AI assistant: explains and fixes code; Claude Desktop, Claude Code and Cursor can work with Flux projects (MCP).
+- Smart editor: autocomplete and error checking for Python, HTML, CSS and JavaScript, Emmet, snippets, sticky headers, code map.
+- GitHub: sign in, clone, commit, pull and publish a project as a private repository with one button.
+- Flux Together: see what classmates on the same Wi-Fi are working on.
+- Plugins and themes, a theme studio, customizable shortcuts, 9 interface languages.
+- Automatic updates from GitHub Releases with a small "Updating Flux" window.
+
+## Docs
+
+- [Changelog](https://github.com/pantr1x/Flux/blob/HEAD/CHANGELOG.md): what changed in every version
+- [Plugin guide](https://github.com/pantr1x/Flux/blob/HEAD/docs/PLUGINS.md): how to make a Flux plugin

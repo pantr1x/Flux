@@ -16,6 +16,8 @@
       <aside id="sidebar">
         <div class="side-top drag">
           <div class="brand"><span class="brand-mark" id="brand-mark"></span>flux</div>
+          <button class="icon-btn no-drag" id="btn-appmenu" title="Menu"></button>
+          <div class="grow"></div>
           <button class="icon-btn no-drag" id="btn-compact" title="Hide sidebar (Ctrl+B)"></button>
         </div>
 
@@ -44,9 +46,12 @@
       <main id="main">
         <header id="topbar" class="drag">
           <button class="icon-btn no-drag" id="btn-expand" title="Show sidebar (Ctrl+B)"></button>
+          <button class="icon-btn no-drag" id="btn-menu" title="Menu"></button>
           <span class="nav-btns no-drag" id="topnav"></span>
+          <nav id="menubar" class="no-drag" aria-label="Menu"></nav>
           <div id="tabs" class="no-drag"></div>
           <div class="grow"></div>
+          <button id="topsearch" class="icon-btn no-drag" type="button"></button>
           <div class="actions no-drag">
             <button class="chip-btn ai-btn" id="btn-ai" title="AI assistant (Ctrl+I)"></button>
             <button class="chip-btn" id="btn-live" title="Live Server (Alt+L)"></button>
@@ -119,6 +124,7 @@
             <div class="grow"></div>
             <button class="status-item" id="st-install" hidden></button>
             <button class="status-item" id="st-live" hidden></button>
+            <button class="status-item" id="st-update" hidden></button>
             <button class="status-item" id="st-autosave" title="Auto save"></button>
             <span class="status-item" id="st-lang"></span>
             <span class="status-item" id="st-pos"></span>

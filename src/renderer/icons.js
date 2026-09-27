@@ -30,6 +30,15 @@ const paths = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
   panel: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 14h18"/>',
+  panelRight: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M14 4v16"/>',
+  puzzle: '<path d="M9.5 4.5a2 2 0 1 1 4 0V6H17a1 1 0 0 1 1 1v3.5h1.5a2 2 0 1 1 0 4H18V18a1 1 0 0 1-1 1h-3.5v-1.5a2 2 0 1 0-4 0V19H6a1 1 0 0 1-1-1v-3.5h1.5a2 2 0 1 0 0-4H5V7a1 1 0 0 1 1-1h3.5Z"/>',
+  star: '<path d="m12 3 2.8 5.6 6.2.9-4.5 4.4 1 6.1-5.5-2.9-5.5 2.9 1-6.1L3 9.5l6.2-.9Z"/>',
+  flask: '<path d="M9 3h6"/><path d="M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/>',
+  rocket: '<path d="M5 15c-1.5 1-2 4-2 6 2 0 5-.5 6-2"/><path d="M9 12a13 13 0 0 1 11-9c0 4.5-3 9-9 11l-2-2Z"/><path d="M9 12H5.5l2-3.5H11M12 15v3.5l3.5-2V13"/><circle cx="15.5" cy="8.5" r="1.3"/>',
+  upload: '<path d="M12 16V4m0 0 5 5m-5-5-5 5M5 20h14"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  dot: '<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/>',
   command: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3Z"/>',
@@ -115,6 +124,9 @@ const FILE_ICONS = {
   php: svg16('<ellipse cx="8" cy="8" rx="7" ry="4.6" fill="#777BB4"/>' + txt(8, 10.2, 'php', '#fff', 5.6)),
   perl: svg16('<rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="#39457E"/>' + txt(8, 11.4, 'pl', '#fff', 6.6)),
   lua: svg16('<circle cx="8" cy="8.5" r="5.5" fill="#000080"/><circle cx="10.2" cy="6.3" r="1.5" fill="#fff"/><circle cx="13.3" cy="2.8" r="1.5" fill="#000080"/>'),
+  zig: svg16('<path d="M2 3h9L5 13h9" fill="none" stroke="#F7A41D" stroke-width="2.2" stroke-linejoin="round"/>'),
+  r: svg16('<ellipse cx="8" cy="7.2" rx="6.8" ry="4.6" fill="#9FA3AB"/><ellipse cx="8.3" cy="7.4" rx="4.3" ry="2.7" fill="#fff"/>' + txt(9.5, 14, 'R', '#2266B8', 9)),
+  julia: svg16('<circle cx="4.5" cy="11" r="2.8" fill="#CB3C33"/><circle cx="11.5" cy="11" r="2.8" fill="#9558B2"/><circle cx="8" cy="4.8" r="2.8" fill="#389826"/>'),
   csv: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1.8" fill="#1F9D55"/><path d="M1.5 6h13M1.5 10h13M6 2v12M10.5 2v12" stroke="#E6F7EE" stroke-width=".9"/>'),
   file: svg16('<path d="M3.5 1.5h6l3 3v10h-9Z" fill="none" stroke="#8A8A96" stroke-width="1.1" stroke-linejoin="round"/><path d="M9.5 1.5v3h3" fill="none" stroke="#8A8A96" stroke-width="1.1"/>'),
 };
@@ -128,7 +140,7 @@ const EXT_ICON = {
   sh: 'shell', bash: 'shell', bat: 'shell', cmd: 'shell', ps1: 'powershell',
   txt: 'text', log: 'text', csv: 'csv', tsv: 'csv',
   toml: 'config', ini: 'config', cfg: 'config', yml: 'config', yaml: 'config', env: 'config', gitignore: 'config', lock: 'config',
-  c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', lua: 'lua', pl: 'perl', pm: 'perl', cts: 'typescript', git: 'git',
+  c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', lua: 'lua', pl: 'perl', pm: 'perl', cts: 'typescript', git: 'git', zig: 'zig', r: 'r', jl: 'julia',
 };
 
 const LANG_ICON = { python: 'python', html: 'html', css: 'css', javascript: 'javascript', typescript: 'typescript', json: 'json', markdown: 'markdown', shell: 'shell' };

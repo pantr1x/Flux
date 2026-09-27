@@ -25,8 +25,10 @@ import { createPluginsUI } from './pluginsUI.js';
 import { createThemeStudio } from './themeStudio.js';
 import { setupFancySelects } from './fselect.js';
 import { createTogether } from './together.js';
-import { createUpdatesUI } from './updatesUI.js';
+import { createUpdatesUI, showVer } from './updatesUI.js';
 import { createOnboarding } from './onboarding.js';
+import { createMenubar } from './menubar.js';
+import { setupSmoothScroll } from './smoothScroll.js';
 
 const flux = window.flux;
 const $ = (sel) => document.querySelector(sel);
@@ -115,8 +117,19 @@ const DEFAULTS = {
   terminalFontSize: 13,
   suggestDetails: true,
   inertia: true,
+  transitions: true,
+  menuBar: false,
+  showSearch: true,
+  searchWide: false,
+  panelPos: 'bottom',
+  sidePos: 'left',
 };
 const setting = (key) => state.settings[key] ?? DEFAULTS[key];
+// Pamäť a rýchlosť: každú časť si dá zapnúť/vypnúť v Nastaveniach → Všeobecné → Advanced.
+// Kým ju nezmeníš, riadi sa hlavným prepínačom „Save memory“ (lite). true = funkcia je zapnutá.
+const optOn = (key) => state.settings[key] ?? !setting('lite');
+const OPT_KEYS = ['optFx', 'optAnim', 'optEditorFx', 'optPyAc', 'optJsLimit', 'pyMemory', 'lspIdle'];
+const lspIdleMin = () => Number(state.settings.lspIdle ?? (setting('lite') ? 1 : 5));
 
 const state = {
   platform: 'win32',
@@ -161,7 +174,7 @@ const LANGS = {
   yml: 'yaml', yaml: 'yaml', toml: 'ini', ini: 'ini', cfg: 'ini', env: 'ini',
   sh: 'shell', bat: 'bat', cmd: 'bat', ps1: 'powershell', sql: 'sql',
   c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust',
-  php: 'php', rb: 'ruby', lua: 'lua', kt: 'kotlin', swift: 'swift', dart: 'dart', r: 'r',
+  php: 'php', rb: 'ruby', lua: 'lua', kt: 'kotlin', swift: 'swift', dart: 'dart', r: 'r', jl: 'julia',
 };
 const LANG_NAMES = { python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript', html: 'HTML', css: 'CSS', json: 'JSON', markdown: 'Markdown', plaintext: 'Text' };
 const langFor = (p) => LANGS[extOf(p)] || 'plaintext';
@@ -177,7 +190,7 @@ function guessLang(text) {
 }
 const langOf = (path, text) => (extOf(path) ? langFor(path) : guessLang(text));
 
-const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua', 'ts', 'mts', 'cts', 'pl']);
+const RUNNABLE = new Set(['py', 'pyw', 'js', 'mjs', 'cjs', 'bat', 'cmd', 'ps1', 'sh', 'java', 'go', 'cs', 'c', 'cpp', 'cc', 'cxx', 'rs', 'rb', 'php', 'lua', 'ts', 'mts', 'cts', 'pl', 'zig', 'r', 'jl']);
 const WEB = new Set(['html', 'htm', 'css']);
 
 // ---------- drobnosti UI ----------
@@ -293,23 +306,23 @@ function applyEditorSettings() {
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
     minimap: { enabled: false },
-    stickyScroll: { enabled: setting('stickyScroll') !== false && !setting('lite'), maxLineCount: 4 },
+    stickyScroll: { enabled: setting('stickyScroll') !== false && optOn('optEditorFx'), maxLineCount: 4 },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
     cursorStyle: setting('caretStyle'),
     cursorBlinking: setting('caretBlink'),
     cursorWidth: Number(setting('caretWidth')) || 2,
-    cursorSmoothCaretAnimation: setting('caretSmooth') && !setting('lite') ? 'on' : 'off',
-    // Úsporný režim: menej prekresľovania v editore.
-    occurrencesHighlight: setting('lite') ? 'off' : 'singleFile',
-    renderLineHighlightOnlyWhenFocus: !!setting('lite'),
-    matchBrackets: setting('lite') ? 'near' : 'always',
+    cursorSmoothCaretAnimation: setting('caretSmooth') && optOn('optEditorFx') ? 'on' : 'off',
+    // Bez efektov editora: menej prekresľovania.
+    occurrencesHighlight: optOn('optEditorFx') ? 'singleFile' : 'off',
+    renderLineHighlightOnlyWhenFocus: !optOn('optEditorFx'),
+    matchBrackets: optOn('optEditorFx') ? 'always' : 'near',
     lineNumbers: setting('lineNumbers'),
     renderWhitespace: setting('whitespace'),
     letterSpacing: Number(setting('letterSpacing')) || 0,
     bracketPairColorization: { enabled: setting('bracketColors') },
   });
   applyCustomization();
-  codemap?.setVisible(setting('minimap') && !setting('lite'));
+  codemap?.setVisible(setting('minimap') && optOn('optEditorFx'));
   if (term) {
     term.options.fontFamily = font.css;
     term.options.fontSize = setting('terminalFontSize');
@@ -395,7 +408,17 @@ function applyCustomization() {
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
   document.body.classList.toggle('density-compact', setting('density') === 'compact');
-  document.body.classList.toggle('lite', !!setting('lite'));
+  // Rozloženie: menu a hľadanie hore, kde je panel s terminálom a bočný panel.
+  document.body.classList.toggle('no-menubar', !setting('menuBar'));
+  document.body.classList.toggle('no-topsearch', !setting('showSearch'));
+  document.body.classList.toggle('search-wide', !!setting('searchWide'));
+  for (const pos of ['right', 'left']) document.body.classList.toggle(`panel-${pos}`, setting('panelPos') === pos);
+  document.body.classList.toggle('panel-side', setting('panelPos') !== 'bottom');
+  document.body.classList.toggle('side-right', setting('sidePos') === 'right');
+  menubar?.render();
+  document.body.classList.toggle('fx-trans', !!setting('transitions'));
+  document.body.classList.toggle('no-fx', !optOn('optFx'));
+  document.body.classList.toggle('no-anim', !optOn('optAnim'));
   applyAppColors();
   root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
@@ -474,6 +497,7 @@ let userKeys;
 let aiPanel;
 let gh;
 let together;
+let menubar = null;
 // GitHub je voliteľný vstavaný plugin (Nastavenia → Plugins); potrebuje Git.
 const ghOn = () => setting('githubPlugin') === true;
 let keymap;
@@ -522,6 +546,7 @@ function createEditor() {
   codemap.setVisible(setting('minimap'));
 
   inertiaScroll();
+  setupSmoothScroll(() => !!setting('inertia'));
   monaco.editor.onDidChangeMarkers((uris) => {
     const m = editor.getModel();
     if (m && uris.some((u) => u.toString() === m.uri.toString())) updateProblems();
@@ -547,14 +572,16 @@ function createEditor() {
     },
   });
 
-  setupEditorExtras({
+  ({ refactor } = setupEditorExtras({
     monaco,
     editor,
     flux,
     getWorkspace: () => state.workspace,
     getFilePath: (model) => state.tabs.find((x) => x.model === model)?.path || null,
     onFsChanged: flux.onFsChanged,
-  });
+    langFor,
+    toast,
+  }));
 
   // HTML / CSS: Emmet (napr. „div.card>p*3“ + Tab).
   emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
@@ -648,6 +675,86 @@ function announceProblems() {
   }, 700);
 }
 
+// Prechodová animácia – pri prepnutí súboru, záložky panela a pod.; dá sa vypnúť.
+// dir: 1 = prišiel si sprava (karta vpravo), -1 = zľava, 0 = len jemné objavenie.
+function playTransition(el, dir = 0) {
+  if (!el || !setting('transitions')) return;
+  el.classList.remove('fx-in', 'fx-from-r', 'fx-from-l');
+  void el.offsetWidth; // znova spustiť animáciu
+  el.classList.add(dir > 0 ? 'fx-from-r' : dir < 0 ? 'fx-from-l' : 'fx-in');
+}
+
+// Posuvný podklad pod vybranou položkou (karta súboru, riadok v strome, projekt, menu nastavení):
+// pri zmene výberu sa plynulo presunie z pôvodného miesta na nové. Zoznamy sa prekresľujú celé,
+// preto si pamätáme poslednú polohu podľa kľúča.
+const slideMem = new Map();
+const slideObs = new Map();
+// poloha prvku vnútri zoznamu (aj keď je vo vnorenej skupine, napr. pripnuté projekty)
+// (z offsetLeft/offsetTop – nezávisí od práve bežiacej animácie položky)
+function slidePos(box, el) {
+  let x = 0;
+  let y = 0;
+  let n = el;
+  while (n && n !== box) {
+    x += n.offsetLeft;
+    y += n.offsetTop;
+    n = n.offsetParent;
+  }
+  if (n !== box) {
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return { x: r.left - b.left + box.scrollLeft, y: r.top - b.top + box.scrollTop, w: r.width, h: r.height };
+  }
+  return { x, y, w: el.offsetWidth, h: el.offsetHeight };
+}
+function slideIndicator(box, active, key) {
+  if (!box) return;
+  let ind = box.querySelector(':scope > .slide-ind');
+  if (!setting('transitions') || !active || !active.offsetParent) {
+    ind?.remove();
+    box.classList.remove('has-ind');
+    slideObs.get(key)?.disconnect();
+    if (!active) slideMem.delete(key);
+    return;
+  }
+  if (!ind) {
+    ind = document.createElement('div');
+    ind.className = 'slide-ind';
+    box.prepend(ind);
+  }
+  box.classList.add('has-ind');
+  const put = (p) => {
+    ind.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    ind.style.width = `${p.w}px`;
+    ind.style.height = `${p.h}px`;
+  };
+  const to = slidePos(box, active);
+  const from = slideMem.get(key);
+  slideMem.set(key, to);
+  ind.style.transition = 'none';
+  if (from && (Math.abs(from.x - to.x) > 1 || Math.abs(from.y - to.y) > 1 || Math.abs(from.w - to.w) > 1)) {
+    put(from);
+    void ind.offsetWidth;
+    ind.style.transition = '';
+  }
+  put(to);
+  // Riadky sa môžu ešte zmeniť (štatistiky projektov sa dopĺňajú neskôr, zmena šírky okna) –
+  // podklad sa vtedy bez animácie zarovná k vybranej položke.
+  slideObs.get(key)?.disconnect();
+  const ro = new ResizeObserver(() => {
+    if (!active.isConnected) return ro.disconnect();
+    const now = slidePos(box, active);
+    const prev = slideMem.get(key);
+    if (prev && Math.abs(prev.x - now.x) < 1 && Math.abs(prev.y - now.y) < 1 && Math.abs(prev.w - now.w) < 1 && Math.abs(prev.h - now.h) < 1) return;
+    slideMem.set(key, now);
+    ind.style.transition = 'none';
+    put(now);
+  });
+  ro.observe(box);
+  for (const el of box.querySelectorAll('.pr-row, .row, .tab, .s-tab, .s-sub, .pr-head')) ro.observe(el);
+  slideObs.set(key, ro);
+}
+
 // ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
 function inertiaScroll() {
   const node = $('#editor');
@@ -655,7 +762,8 @@ function inertiaScroll() {
   let frame = 0;
   let last = 0;
   const step = (t) => {
-    const dt = Math.min(34, t - last) / 16.67;
+    // čas snímky môže byť starší ako posledné koliesko – nikdy záporný krok
+    const dt = Math.min(34, Math.max(4, t - last)) / 16.67;
     last = t;
     editor.setScrollTop(editor.getScrollTop() + velocity * dt);
     velocity *= Math.pow(0.9, dt);
@@ -719,7 +827,8 @@ function registerSnippets() {
 let lsp;
 function createLanguageClient() {
   lsp = new PythonLanguageClient(monaco, {
-    isLibrary: (uri) => !inside(monaco.Uri.parse(uri).fsPath),
+    // knižnica = mimo koreňa Pyrightu (projekt, alebo priečinok samostatného súboru) – napr. typeshed
+    isLibrary: (uri) => !inside(monaco.Uri.parse(uri).fsPath, lsp?.root || state.workspace),
     onStatus: (status) => {
       state.lspStatus = status;
       renderStatus();
@@ -850,6 +959,8 @@ function placeholderFor(tab) {
 function activate(tab) {
   const prev = activeTab();
   if (prev && prev !== tab) prev.viewState = editor.saveViewState();
+  // editor sa vysunie zo strany, na ktorej je nová karta
+  if (prev !== tab) playTransition($('#editor'), prev ? Math.sign(state.tabs.indexOf(tab) - state.tabs.indexOf(prev)) : 0);
   state.active = tab;
   editor.setModel(tab.model);
   editor.updateOptions({ readOnly: tab.readonly, placeholder: placeholderFor(tab) });
@@ -1038,6 +1149,7 @@ function renderTabs() {
     el.append(div);
     if (tab === state.active) requestAnimationFrame(() => div.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
   }
+  slideIndicator(el, el.querySelector('.tab.active'), 'tabs');
 }
 
 function updateRunGlyphs(tab) {
@@ -1104,6 +1216,11 @@ async function revealInTree(path) {
   renderTree();
 }
 
+// Dlhé hodnoty v kartách štatistík („12 min ago“, „3 h 20 min“) menším písmom, aby sa zmestili celé.
+function fitTiles(box) {
+  for (const b of box?.querySelectorAll('.pj-tile b') || []) b.classList.toggle('pj-long', b.textContent.trim().length > 6);
+}
+
 function renderTree() {
   const el = $('#tree');
   if (!state.workspace) {
@@ -1142,6 +1259,7 @@ function renderTree() {
   walk(state.workspace, 0);
   el.innerHTML = html.join('') || `<div class="tree-empty">${t('This folder is empty.')}<br><button id="tree-new">${t('Create a file')}</button></div>`;
   together?.markTree();
+  slideIndicator(el, el.querySelector('.row.active'), 'tree');
   const newBtn = $('#tree-new');
   if (newBtn) newBtn.onclick = () => newFile();
 }
@@ -1279,6 +1397,27 @@ async function newFolder(dir = targetDir()) {
   }
 }
 
+// Po premenovaní súboru/priečinka: ponúknuť opravu ciest, ktoré naň v kóde ukazujú (refactor.js).
+let refactor = null;
+async function offerPathRefs(oldPath, newPath) {
+  const refs = await refactor?.pathRefs(oldPath, newPath).catch(() => []);
+  if (!refs?.length) return;
+  const n = refs.reduce((a, f) => a + f.ranges.length, 0);
+  const name = basename(oldPath);
+  const msg = refs.length === 1 ? t('Update {n} paths to {name} in 1 file?', { n, name }) : t('Update {n} paths to {name} in {f} files?', { n, name, f: refs.length });
+  toast(msg, 'info', 20000, {
+    label: t('Update'),
+    run: async () => {
+      try {
+        await refactor.apply(refs);
+        toast(t('Updated {n} paths.', { n }), 'ok');
+      } catch (err) {
+        toast(errorText(err), 'error');
+      }
+    },
+  });
+}
+
 async function renameItem(item) {
   const old = basename(item.path);
   const dot = item.dir ? -1 : old.lastIndexOf('.');
@@ -1307,6 +1446,7 @@ async function renameItem(item) {
   state.selected = target;
   await refreshTree();
   renderTabs();
+  offerPathRefs(item.path, target);
 }
 
 async function deleteItem(item) {
@@ -1387,14 +1527,31 @@ async function setWorkspace(dir) {
   together?.onProject();
 }
 
+// Po zmene pamäte/rýchlosti: vzhľad, editor a Python autocomplete hneď podľa nastavení.
+function applyPerformance() {
+  applyCustomization();
+  applyEditorSettings();
+  if (!optOn('optPyAc')) lsp?.stop();
+  else if (state.tabs.some(isPythonTab)) ensureLsp(true);
+  renderStatus();
+}
+
 // ---------- Python autocomplete len na požiadanie ----------
-const isPythonTab = (tab) => tab?.model?.getLanguageId() === 'python' && inside(tab.path);
+// Python súbor v projekte – alebo samostatný súbor (dvojklik na .py), keď projekt otvorený nie je
+const isPythonTab = (tab) => tab?.model?.getLanguageId() === 'python' && !!tab.path && (inside(tab.path) || !state.workspace);
 let lspIdleSince = 0;
+// koreň pre Pyright: projekt, inak priečinok otvoreného Python súboru
+function lspRoot() {
+  if (state.workspace) return state.workspace;
+  const py = isPythonTab(state.active) ? state.active : state.tabs.find(isPythonTab);
+  return py ? dirname(py.path) : null;
+}
 function ensureLsp(force = false) {
-  if (!state.workspace || !lsp) return;
+  const root = lspRoot();
+  if (!root || !lsp || !optOn('optPyAc')) return;
   lspIdleSince = 0;
-  if (!force && lsp.root === state.workspace) return;
-  lsp.start(state.workspace, state.python?.path);
+  if (!force && lsp.root === root) return;
+  lsp.start(root, state.python?.path);
 }
 // Keď dlho nie je otvorený žiadny Python súbor, server sa vypne (v úspornom režime skôr).
 setInterval(() => {
@@ -1404,13 +1561,13 @@ setInterval(() => {
     return;
   }
   lspIdleSince ||= Date.now();
-  if (Date.now() - lspIdleSince > (setting('lite') ? 60e3 : 5 * 60e3)) lsp.stop();
+  if (lspIdleMin() && Date.now() - lspIdleSince > lspIdleMin() * 60e3) lsp.stop();
 }, 30e3);
 
 // ---------- projekty (ako „workspaces“ v Zene) ----------
 // Zoznam nedávnych priečinkov s ikonou podľa obsahu – prepnutie jedným klikom.
 // Ikona typu projektu (Python, web, Java…).
-const KIND_FILE = { python: 'a.py', web: 'a.html', node: 'a.js', java: 'a.java', cpp: 'a.cpp', c: 'a.c', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua' };
+const KIND_FILE = { python: 'a.py', web: 'a.html', node: 'a.js', java: 'a.java', cpp: 'a.cpp', c: 'a.c', go: 'a.go', csharp: 'a.cs', rust: 'a.rs', ruby: 'a.rb', php: 'a.php', lua: 'a.lua', zig: 'a.zig', r: 'a.r', julia: 'a.jl' };
 function kindIcon(kind, size = 16, github = false) {
   const svg = KIND_FILE[kind] ? fileIcon(KIND_FILE[kind]) : icon('folder', 16);
   const out = size === 16 ? svg : svg.replace(/width="16" height="16"/, `width="${size}" height="${size}"`);
@@ -1418,7 +1575,7 @@ function kindIcon(kind, size = 16, github = false) {
   return github ? `<span class="kind-ic" title="GitHub">${out}<i class="kind-gh">${icon('github', Math.max(8, Math.round(size * 0.55)))}</i></span>` : out;
 }
 
-const KIND_LANG_NAMES = { python: 'Python', web: 'HTML/CSS', node: 'JavaScript', java: 'Java', cpp: 'C/C++', go: 'Go', csharp: 'C#', rust: 'Rust', ruby: 'Ruby', php: 'PHP', lua: 'Lua' };
+const KIND_LANG_NAMES = { python: 'Python', web: 'HTML/CSS', node: 'JavaScript', java: 'Java', cpp: 'C/C++', go: 'Go', csharp: 'C#', rust: 'Rust', ruby: 'Ruby', php: 'PHP', lua: 'Lua', zig: 'Zig', r: 'R', julia: 'Julia' };
 // „JavaScript +3“ – hlavný jazyk a koľko ďalších má projekt
 function langLine(p) {
   const langs = (p.langs || []).filter((l) => KIND_LANG_NAMES[l]);
@@ -1451,6 +1608,8 @@ async function renderProjects() {
       ? `<button class="pr-row pr-new pr-hidden${state.showHidden ? ' open' : ''}" data-act="hidden">${icon('chevron', 13)}<span>${t('{n} hidden', { n: hiddenCount })}</span></button>` +
         (state.showHidden ? `<div class="pr-hidden-list">${list.filter((p) => !shown(p)).map(row).join('')}</div>` : '')
       : '');
+  together?.markTree();
+  slideIndicator(el, el.querySelector('.pr-row.active'), 'projects');
   const current = list.find((p) => keyOf(p.dir) === keyOf(state.workspace || ''));
   if (current && state.projectKind !== current.kind) {
     state.projectKind = current.kind;
@@ -1481,6 +1640,9 @@ const PROJECT_KINDS = [
   { id: 'ruby', title: 'Ruby', icon: 'a.rb', tpl: 'rb-main', tool: 'ruby', more: true },
   { id: 'php', title: 'PHP', icon: 'a.php', tpl: 'php-main', tool: 'php', more: true },
   { id: 'lua', title: 'Lua', icon: 'a.lua', tpl: 'lua-main', tool: 'lua', more: true },
+  { id: 'zig', title: 'Zig', icon: 'a.zig', tpl: 'zig-main', tool: 'zig', more: true },
+  { id: 'r', title: 'R', icon: 'a.r', tpl: 'r-main', tool: 'r', more: true },
+  { id: 'julia', title: 'Julia', icon: 'a.jl', tpl: 'jl-main', tool: 'julia', more: true },
   { id: 'ts', title: 'TypeScript', icon: 'a.ts', tpl: 'ts-main', tool: 'node', more: true },
   { id: 'perl', title: 'Perl', icon: 'a.pl', tpl: 'pl-main', tool: 'perl', more: true },
 ];
@@ -1847,7 +2009,7 @@ function createTerminal() {
       for (const m of line.matchAll(/((?:[A-Za-z]:\\|\/)[^\s:()'"]+\.\w+):(\d+)(?::(\d+))?/g)) add(m.index, m[0], m[1], Number(m[2]), m[3] ? Number(m[3]) : undefined);
       // Relatívne cesty (Java „Main.java:5“, Go, Rust „src/main.rs:3:5“, gcc…) – voči priečinku spusteného súboru.
       if (state.runDir)
-        for (const m of line.matchAll(/(?<![\w\\/:.])((?:[\w.-]+[\\/])*[\w.-]+\.(?:java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|lua|ts|pl|py|js|kt|dart)):(\d+)(?::(\d+))?/g)) {
+        for (const m of line.matchAll(/(?<![\w\\/:.])((?:[\w.-]+[\\/])*[\w.-]+\.(?:java|go|rs|c|cc|cpp|h|hpp|cs|rb|php|lua|ts|pl|py|js|kt|dart|zig|r|jl)):(\d+)(?::(\d+))?/g)) {
           const p = join(state.runDir, m[1]);
           if (!links.some((l) => l.range.start.x === m.index + 1)) add(m.index, m[0], p, Number(m[2]), m[3] ? Number(m[3]) : undefined);
         }
@@ -2065,7 +2227,7 @@ function onRunExit({ code, error, ms }) {
   analyzeOutput(code);
   renderRunButton();
   // Po pip install alebo vytvorení venv znova zistiť Python.
-  if (/^(pip install|python -m venv)/.test(state.lastLabel || '')) detectPython().then(() => lsp.start(state.workspace, state.python?.path));
+  if (/^(pip install|python -m venv)/.test(state.lastLabel || '')) detectPython().then(() => ensureLsp(true));
 }
 
 // Tlačidlá sa ukazujú len keď dávajú zmysel: ▶ Spustiť pri Pythone/JS…, Live Server pri webe.
@@ -2506,7 +2668,6 @@ function commands() {
     c(t('Settings'), openSettings, 'Ctrl+,', 'settings', 'settings preferences font'),
     c(t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A', 'command', 'search find all settings'),
     ghOn() && c(t('GitHub: open a repository…'), () => gh.pickRepo(), '', 'github', 'github clone repo'),
-    c(t('AI: open assistant'), () => aiPanel.show(), 'Ctrl+I', 'sparkle', 'ai claude chat assistant'),
     c(t('AI: explain this file'), () => aiPanel.ask(t('Explain this file.')), '', 'sparkle', 'ai claude explain'),
     c(t('AI: fix the errors in this file'), () => aiPanel.ask(t('Find and fix the errors in this file. Show the corrected code.')), '', 'sparkle', 'ai claude fix bug error'),
     c(t('New file from template…'), () => newFile(), 'Ctrl+N', 'template', 'template html python web project'),
@@ -2515,14 +2676,14 @@ function commands() {
     c(t('Python: detect interpreter automatically'), async () => {
       await flux.resetPython();
       await detectPython();
-      lsp.start(state.workspace, state.python?.path);
+      lsp.start(lspRoot(), state.python?.path);
     }, '', 'python'),
     c(t('Python: create virtual environment (.venv)'), createVenv, '', 'python'),
     c(t('Python: install package (pip)…'), async () => {
       const pkg = await promptPalette({ placeholder: t('e.g. requests, numpy, pygame'), note: 'pip install' });
       if (pkg) pipInstall(pkg);
     }, '', 'download'),
-    c(t('Python: restart autocomplete'), () => lsp.start(state.workspace, state.python?.path), '', 'refresh'),
+    c(t('Python: restart autocomplete'), () => lsp.start(lspRoot(), state.python?.path), '', 'refresh'),
     c(t('Replay the intro'), () => onboarding.open(), '', 'sparkle', 'onboarding welcome intro'),
     c(t('Feature tour'), () => onboarding.startTour(), '', 'sparkle', 'tour help'),
     c(t('Show problems in file'), showProblems, '', 'x', 'problems errors'),
@@ -2533,7 +2694,7 @@ function commands() {
 }
 
 function pluginCommands() {
-  return (pluginHost?.commands() || []).map((c) => ({ label: `${c.plugin}: ${c.label}`, run: c.run, kbd: c.key, icon: icon('sparkle', 15), keywords: 'plugin' }));
+  return (pluginHost?.commands() || []).map((c) => ({ label: `${c.plugin}: ${c.label}`, run: c.run, kbd: c.key, icon: icon('puzzle', 15), keywords: 'plugin' }));
 }
 
 function openCommandPalette() {
@@ -2565,7 +2726,7 @@ async function choosePython() {
     if (!info) return;
     state.python = info;
     renderStatus();
-    lsp.start(state.workspace, info.path);
+    lsp.start(lspRoot(), info.path);
     toast(t('Using Python {v}', { v: info.version }));
   } catch (err) {
     toast(errorText(err), 'error');
@@ -2771,11 +2932,14 @@ function openSettings() {
     ['editor', 'code', t('Editor')],
     ['running', 'play', t('Running')],
     ['tools', 'download', t('Languages')],
-    ['plugins', 'sparkle', t('Plugins')],
+    ['plugins', 'puzzle', t('Plugins')],
     ['ai', 'sparkle', t('AI')],
     ghOn() && ['github', 'github', 'GitHub'],
   ].filter(Boolean);
   if (state.settingsTab === 'custom') state.settingsTab = 'appearance';
+  // Skratky a aktualizácie sú teraz časti Všeobecných – staré odkazy skočia na ne.
+  const jumpTo = { keys: 'g-keys', about: 'g-updates' }[state.settingsTab];
+  if (jumpTo) state.settingsTab = 'general';
   const tab = tabs.some(([id]) => id === state.settingsTab) ? state.settingsTab : 'general';
   panel.innerHTML = `
     <div class="s-card" role="dialog" aria-label="${t('Settings')}">
@@ -2784,7 +2948,7 @@ function openSettings() {
         <label class="s-find">${icon('search', 14)}<input id="s-find" placeholder="${t('Search settings…')}" spellcheck="false" autocomplete="off"></label>
         ${tabs.map(([id, ic, label]) => `<button class="s-tab${id === tab ? ' on' : ''}" data-tab="${id}">${icon(ic, 16)}<span>${label}</span></button>`).join('')}
         <div class="grow"></div>
-        <div class="s-ver">Flux ${escapeHtml(state.version || '')}</div>
+        <div class="s-ver">Flux ${escapeHtml(showVer(state.version))}</div>
       </nav>
       <div class="s-main">
         <header class="s-head">${navButtons()}<h2 id="s-title"></h2><button class="icon-btn s-close" data-close title="${t('Close (Esc)')}">${icon('x', 16)}</button></header>
@@ -2850,6 +3014,13 @@ function openSettings() {
             <h3>${t('Window')}</h3>
             <div class="s-group">
               ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
+              ${toggle('inertia', 'Smooth scrolling with inertia', 'the editor, settings, lists and panels keep gliding a bit after you stop the wheel')}
+              ${toggle('transitions', 'Transition animations', 'a soft fade when you switch files, settings pages and screens')}
+              ${toggle('menuBar', 'Menu bar', 'File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo')}
+              ${toggle('showSearch', 'Search button', 'a magnifier at the top that finds files, commands and settings')}
+              ${toggle('searchWide', 'Wide search field', 'a search box at the top instead of just the magnifier')}
+              <label class="s-row"><span><b>${t('Panel position')}</b><small>${t('where output and the terminal are')}</small></span><select data-key="panelPos">${[['bottom', t('Bottom')], ['right', t('Right')], ['left', t('Left')]].map(([v, l]) => opt(v, l, setting('panelPos'))).join('')}</select></label>
+              <label class="s-row"><span><b>${t('Sidebar position')}</b><small>${t('projects and files')}</small></span><select data-key="sidePos">${[['left', t('Left')], ['right', t('Right')]].map(([v, l]) => opt(v, l, setting('sidePos'))).join('')}</select></label>
               <label class="s-row"><span><b>${t('Size of everything')}</b><small id="s-zoom-v">${setting('uiZoom')} %</small></span><input type="range" min="80" max="140" step="5" data-key="uiZoom" value="${setting('uiZoom')}"></label>
               <label class="s-row"><span><b>${t('Density')}</b><small>${t('Compact fits more files, tabs and lines on the screen.')}</small></span><select data-key="density">${opt('comfortable', t('comfortable'), setting('density'))}${opt('compact', t('compact'), setting('density'))}</select></label>
               <label class="s-row"><span><b>${t('Rounded corners')}</b></span><input type="range" min="0" max="26" data-key="cornerRadius" value="${setting('cornerRadius')}"></label>
@@ -2873,7 +3044,6 @@ function openSettings() {
             <div class="s-group">
               ${toggle('minimap', 'Code map', 'small preview of the code on the right')}
               ${toggle('stickyScroll', 'Sticky headers', 'the function or class you are in stays at the top while you scroll')}
-              ${toggle('inertia', 'Smooth scrolling with inertia', 'text keeps gliding a bit after you stop the wheel')}
               ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
               ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
             </div>
@@ -2897,39 +3067,6 @@ function openSettings() {
             </div>
             <div class="tc-list" id="s-tools"><div class="s-loading">${t('Checking what is installed…')}</div></div>
           </section>
-          <section data-pane="general">
-            <div class="s-hero">
-              <div class="s-hero-logo">${icon('code', 22)}</div>
-              <div><b>Flux ${escapeHtml(state.version || '')}</b><small>${t('Code. Run. Create.')}</small></div>
-              <button class="s-btn" data-action="goto-about">${icon('refresh', 13)}${t('Check for updates')}</button>
-            </div>
-            <h3>${t('You')}</h3>
-            <div class="s-group">
-              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
-            </div>
-            <h3>${t('Performance')}</h3>
-            <div class="s-group">
-              <label class="s-row s-lite"><span><b>${t('Power saving (for slower PCs)')}</b><small>${t('Turns off transparency, blur, animations and other effects and uses less memory. Some changes apply after a restart.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
-              <div class="s-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
-            </div>
-            <h3>${t('Language')}</h3>
-            <div class="s-group">
-              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Languages are downloaded from GitHub when you pick them.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
-            </div>
-            <h3>${t('Welcome')}</h3>
-            <div class="s-group">
-              <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
-            </div>
-          </section>
-          <section data-pane="general" class="s-gen-about"><h3>${t('Version & updates')}</h3><div id="s-about"></div></section>
-          <section data-pane="general" class="s-gen-keys">
-            <h3>${t('Shortcuts')}</h3>
-            <div class="s-group s-mb">
-              <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
-            </div>
-            <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
-            <div id="s-keys">${shortcutRows()}</div>
-          </section>
           <section data-pane="ai">
             <p class="s-lead">${t('Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.')}</p>
             <h3>${t('API key')}</h3>
@@ -2952,6 +3089,49 @@ function openSettings() {
           </section>
           ${ghOn() ? '<section data-pane="github" id="s-github"></section>' : ''}
           <section data-pane="plugins" id="s-plugins"></section>
+          <section data-pane="general">
+            <h3 id="g-updates">${t('About & updates')}</h3>
+            <div id="s-about" class="s-about-inline"></div>
+            <h3>${t('You')}</h3>
+            <div class="s-group">
+              <label class="s-row"><span><b>${t('Your name')}</b><small>${t('for the greeting on the home screen')}</small></span><input class="s-text" data-key="userName" value="${escapeAttr(setting('userName'))}" placeholder="${t('e.g. Šimon')}"></label>
+            </div>
+            <h3>${t('Memory & speed')}</h3>
+            <div class="s-group">
+              <div class="s-row s-mem-row"><span><b>${t('Memory used by Flux')}</b><small id="s-mem">${t('Loading…')}</small></span><button class="s-btn" data-action="mem-free">${icon('refresh', 13)}${t('Free memory')}</button></div>
+              <label class="s-row s-lite"><span><b>${t('Save memory')}</b><small>${t('Uses less memory and turns off effects – good for slower PCs. You can change each part under Advanced.')}</small></span><input type="checkbox" class="switch" data-key="lite"${setting('lite') ? ' checked' : ''}></label>
+            </div>
+            <details class="s-adv"${OPT_KEYS.some((k) => state.settings[k] !== undefined) ? ' open' : ''}><summary>${icon('chevron', 12)}${t('Advanced')}</summary>
+              <div class="s-group">
+                ${[
+                  ['optPyAc', t('Python autocomplete'), t('suggestions and error checking for Python (Pyright) – uses the most memory')],
+                  ['optFx', t('Transparency and blur'), t('see-through panels and your blurred wallpaper')],
+                  ['optAnim', t('Animations'), t('windows, menus and cards glide in and out')],
+                  ['optEditorFx', t('Extra editor effects'), t('sticky headers, code map, smooth cursor and highlighting the word under the cursor')],
+                  ['optJsLimit', t('Limit memory of the window'), t('at most 512 MB for the app window – applies after a restart')],
+                ]
+                  .map(([k, label, hint]) => `<label class="s-row"><span><b>${label}</b><small>${hint}</small></span><input type="checkbox" class="switch" data-key="${k}"${(k === 'optJsLimit' ? state.settings[k] ?? !!setting('lite') : optOn(k)) ? ' checked' : ''}></label>`)
+                  .join('')}
+                <label class="s-row"><span><b>${t('Memory for Python autocomplete')}</b><small>${t('more memory helps with big projects')}</small></span><select data-key="pyMemory">${[768, 1024, 2048].map((v) => opt(v, v < 1024 ? `${v} MB` : `${v / 1024} GB`, state.settings.pyMemory ?? (setting('lite') ? 768 : 2048))).join('')}</select></label>
+                <label class="s-row"><span><b>${t('Stop Python autocomplete when not used')}</b><small>${t('frees its memory when no Python file is open')}</small></span><select data-key="lspIdle">${[1, 5, 15, 0].map((v) => opt(v, v ? t('after {n} min', { n: v }) : t('never'), lspIdleMin())).join('')}</select></label>
+                <div class="s-row"><span><b>${t('Reset advanced')}</b><small>${t('every part follows “Save memory” again')}</small></span><button class="s-btn" data-action="opt-reset">${icon('refresh', 13)}${t('Reset')}</button></div>
+              </div>
+            </details>
+            <h3>${t('Language')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('App language')}</b><small>${t('Every language comes with Flux – switching is instant.')}</small></span><div class="lang-pick" id="s-lang"><button class="s-btn lang-cur" type="button">${flag(setting('language') || 'en', 20)}<span>${escapeHtml(setting('language') || 'en')}</span>${icon('chevron', 12)}</button></div></div>
+            </div>
+            <h3>${t('Welcome')}</h3>
+            <div class="s-group">
+              <div class="s-row"><span><b>${t('Intro and tour')}</b><small>${t('Replay the first-start intro or the feature tour.')}</small></span><span class="s-btns"><button class="s-btn" data-action="intro">${t('Intro')}</button><button class="s-btn" data-action="tour">${t('Tour')}</button></span></div>
+            </div>
+            <h3 id="g-keys">${t('Shortcuts')}</h3>
+            <div class="s-group s-mb">
+              <div class="s-row"><span><b>${t('Your own shortcuts')}</b><small>${t('Run any script or command, insert text, chain steps – all in one file.')}</small></span><button class="s-btn" data-action="edit-keys">${icon('edit', 13)}${t('Edit shortcuts.json')}</button></div>
+            </div>
+            <input class="s-search" id="s-keys-q" placeholder="${t('Search shortcuts…')}" spellcheck="false">
+            <div id="s-keys">${shortcutRows()}</div>
+          </section>
         </div>
       </div>
     </div>`;
@@ -3076,18 +3256,16 @@ function openSettings() {
     if (id === 'plugins' && !$('#s-plugins').childElementCount) pluginsUI.render($('#s-plugins'));
     if (id === 'general') {
       showMemory();
-      if (!$('#s-about').childElementCount) updatesUI.render($('#s-about'));
+      if (!$('#s-about').childElementCount) updatesUI.render($('#s-about'), { compact: true });
     }
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+    slideIndicator(panel.querySelector('.s-nav'), panel.querySelector(`.s-tab[data-tab="${id}"]`), 'settings');
     panel.querySelectorAll('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
   };
-  // Dlhý Vzhľad: časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
-  for (const paneId of ['appearance', 'general']) {
-    const panes = [...panel.querySelectorAll(`[data-pane="${paneId}"]`)];
-    const pane = panes[0];
-    if (!pane) continue;
-    const heads = panes.flatMap((p) => [...p.querySelectorAll(':scope > h3')]);
-    const tabBtn = panel.querySelector(`.s-tab[data-tab="${paneId}"]`);
+  // Dlhé karty (Vzhľad, Všeobecné): časti ako podpoložky v ľavom menu (zvýrazní sa tá, ktorú práve vidíš).
+  for (const pane of panel.querySelectorAll('[data-pane="appearance"], [data-pane="general"]')) {
+    const heads = [...pane.querySelectorAll(':scope > h3')];
+    const tabBtn = panel.querySelector(`.s-tab[data-tab="${pane.dataset.pane}"]`);
     if (heads.length < 4 || !tabBtn) continue;
     const sub = document.createElement('div');
     sub.className = 's-sub';
@@ -3097,11 +3275,12 @@ function openSettings() {
       const b = e.target.closest('[data-jump]');
       if (!b) return;
       e.stopPropagation();
-      if (state.settingsTab !== paneId) tabBtn.click();
-      heads[Number(b.dataset.jump)].scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
+      if (state.settingsTab !== pane.dataset.pane) tabBtn.click();
+      heads[Number(b.dataset.jump)].scrollIntoView({ behavior: optOn('optAnim') ? 'smooth' : 'auto', block: 'start' });
     };
     const scroller = pane.closest('.s-body') || pane.parentElement;
     const spy = () => {
+      if (pane.hidden) return;
       const top = scroller.getBoundingClientRect().top + 40;
       let cur = 0;
       heads.forEach((h, i) => {
@@ -3110,24 +3289,139 @@ function openSettings() {
       sub.querySelectorAll('[data-jump]').forEach((b, i) => b.classList.toggle('on', i === cur));
     };
     scroller.addEventListener('scroll', spy, { passive: true });
+    tabBtn.addEventListener('click', () => requestAnimationFrame(spy));
     requestAnimationFrame(spy);
   }
   showTab(tab);
-  // Hľadanie naprieč všetkými záložkami: ukáže len riadky, ktoré sedia.
+  if (jumpTo) requestAnimationFrame(() => $(`#${jumpTo}`)?.scrollIntoView({ block: 'start' }));
+  // Hľadanie naprieč všetkými záložkami – podľa názvu, popisu, časti, záložky aj príbuzných slov,
+  // znesie drobný preklep. Pod poľom ukazuje návrhy (šípky + Enter skočí na nastavenie).
   const ROWS = '.s-row, .theme-card, .tc-row, .ob-row';
-  $('#s-find').oninput = (e) => {
-    const q = e.target.value.toLowerCase().trim();
+  const norm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // príbuzné slová/frázy (oddelené |): hľadanie „terminal“ nájde aj Output a Panel position
+  const SYN = {
+    terminal: 'output|shell|console|panel position', output: 'terminal|panel position', console: 'terminal|output', shell: 'terminal',
+    dark: 'theme|light', light: 'theme|dark', theme: 'dark|light|accent color', color: 'theme|accent', colour: 'color|theme',
+    update: 'version|release', version: 'update|release', release: 'update|version',
+    memory: 'ram|speed|performance', ram: 'memory', slow: 'memory|speed', speed: 'memory', performance: 'memory|speed',
+    font: 'text|letter', 'text': 'font', size: 'zoom|font size', zoom: 'size of everything', bigger: 'size|zoom', smaller: 'size|zoom',
+    shortcut: 'keys|keyboard', shortcuts: 'keys|keyboard', keys: 'shortcut', keyboard: 'shortcut', hotkey: 'shortcut',
+    language: 'translation', translation: 'language', cursor: 'caret|pointer', caret: 'cursor', mouse: 'pointer',
+    ai: 'claude|assistant', claude: 'ai', assistant: 'ai|claude', github: 'git|repository', git: 'github', repo: 'github|repository',
+    python: 'interpreter|pyright|autocomplete', autocomplete: 'suggestions|python', wallpaper: 'background image', background: 'wallpaper',
+    transparent: 'transparency|blur', blur: 'transparency', menu: 'menu bar', sidebar: 'sidebar position', layout: 'position',
+    plugin: 'plugins', extension: 'plugin', addon: 'plugin', autosave: 'auto save', run: 'running|output',
+  };
+  // Riadky a ich texty – postavené raz pri otvorení nastavení.
+  const index = [...panel.querySelectorAll('[data-pane]')].flatMap((sec) => {
+    const tabName = tabs.find(([x]) => x === sec.dataset.pane)?.[2] || '';
+    const heads = [...sec.querySelectorAll('h3')];
+    return [...sec.querySelectorAll(ROWS)].map((el) => {
+      const h = heads.filter((x) => x.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).pop();
+      const head = h ? h.childNodes[0]?.textContent?.trim() || h.textContent.trim() : '';
+      const label = (el.querySelector('b')?.textContent || el.children[1]?.textContent || el.textContent).trim();
+      // texty prvkov oddelené medzerou (textContent by zlepil „Auto save“ + popis do jedného slova)
+      const parts = [];
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) parts.push(walk.currentNode.nodeValue);
+      return { el, tab: sec.dataset.pane, tabName, head, label, labelN: norm(label), all: norm(`${parts.join(' ')} ${head} ${tabName}`) };
+    });
+  });
+  // najviac jeden preklep (chýbajúce, navyše, iné alebo prehodené písmeno)
+  const near = (a, b) => {
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0;
+    let j = 0;
+    let diff = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) {
+        i++;
+        j++;
+        continue;
+      }
+      if (++diff > 1) return false;
+      // prehodené susedné písmená (memroy → memory) = jeden preklep
+      if (a[i] === b[j + 1] && a[i + 1] === b[j]) {
+        i += 2;
+        j += 2;
+      } else if (a.length > b.length) i++;
+      else if (b.length > a.length) j++;
+      else {
+        i++;
+        j++;
+      }
+    }
+    return diff + (a.length - i) + (b.length - j) <= 1;
+  };
+  // preklep proti slovu v texte, jeho začiatku alebo dvom slovám spolu („autsave“ → Auto save)
+  const fuzzy = (r, w) => {
+    r.words ||= r.all.split(/[^a-z0-9]+/).filter(Boolean);
+    return r.words.some((x, i) => {
+      const pair = x + (r.words[i + 1] || '');
+      const fits = (y) => near(w, y) || near(w, y.slice(0, w.length)) || near(w, y.slice(0, w.length + 1));
+      return (x.length >= 3 && fits(x)) || fits(pair);
+    });
+  };
+  const score = (r, words) => {
+    let total = 0;
+    for (const w of words) {
+      let v = 0;
+      if (r.labelN.startsWith(w)) v = 10;
+      else if (r.labelN.includes(w)) v = 7;
+      else if (r.all.includes(w)) v = 4;
+      else if ((SYN[w] || '').split('|').some((x) => x && r.all.includes(x))) v = 2;
+      else if (w.length >= 4 && fuzzy(r, w)) v = 1;
+      if (!v) return 0;
+      total += v;
+    }
+    return total;
+  };
+  const find = $('#s-find');
+  const sugBox = document.createElement('div');
+  sugBox.className = 's-suggest';
+  sugBox.hidden = true;
+  panel.append(sugBox);
+  let sugs = [];
+  let sel = 0;
+  const drawSug = () => {
+    sugBox.hidden = !sugs.length || document.activeElement !== find;
+    if (sugBox.hidden) return;
+    const r = find.closest('.s-find').getBoundingClientRect();
+    Object.assign(sugBox.style, { left: `${r.left}px`, top: `${r.bottom + 4}px`, width: `${Math.max(r.width, 300)}px` });
+    sugBox.innerHTML = sugs
+      .map((x, i) => `<button type="button" class="s-sug${i === sel ? ' on' : ''}" data-sug="${i}"><b>${escapeHtml(x.label)}</b><small>${escapeHtml([x.tabName, x.head].filter(Boolean).join(' › '))}</small></button>`)
+      .join('');
+  };
+  const jump = (r) => {
+    find.value = '';
+    find.oninput({ target: find });
+    showTab(r.tab);
+    const fold = r.el.closest('details');
+    if (fold) fold.open = true;
+    r.el.scrollIntoView({ block: 'center' });
+    r.el.classList.add('flash');
+    setTimeout(() => r.el.classList.remove('flash'), 1400);
+  };
+  find.oninput = (e) => {
+    const words = norm(e.target.value).trim().split(/\s+/).filter(Boolean);
     const sections = panel.querySelectorAll('[data-pane]');
     for (const el of panel.querySelectorAll(ROWS + ', .s-group, .s-body h3, .s-lead, .s-keycat, .s-jump')) el.style.display = '';
-    if (!q) return showTab(state.settingsTab || 'appearance');
+    $('#s-noresult')?.remove();
+    if (!words.length) {
+      sugs = [];
+      drawSug();
+      return showTab(state.settingsTab || 'appearance');
+    }
+    panel.querySelectorAll('details.s-adv').forEach((d) => (d.open = true));
     $('#s-title').textContent = t('Search results');
     panel.querySelectorAll('[data-tab]').forEach((b) => b.classList.remove('on'));
+    const scored = index.map((r) => ({ r, v: score(r, words) }));
+    const hit = new Set(scored.filter((x) => x.v).map((x) => x.r.el));
     let any = false;
     for (const sec of sections) {
-      const tabName = tabs.find(([x]) => x === sec.dataset.pane)?.[2]?.toLowerCase() || '';
       let hits = 0;
       for (const r of sec.querySelectorAll(ROWS)) {
-        const ok = tabName.includes(q) || r.textContent.toLowerCase().includes(q);
+        const ok = hit.has(r);
         r.style.display = ok ? '' : 'none';
         if (ok) hits++;
       }
@@ -3139,10 +3433,41 @@ function openSettings() {
       sec.hidden = !hits;
       any ||= !!hits;
     }
-    $('#s-noresult')?.remove();
     if (!any) panel.querySelector('.s-body').insertAdjacentHTML('beforeend', `<div class="s-loading" id="s-noresult">${t('Nothing found')}</div>`);
+    const seen = new Set();
+    sugs = scored
+      .filter((x) => x.v)
+      .sort((a, b) => b.v - a.v)
+      .map((x) => x.r)
+      .filter((r) => !seen.has(r.label + r.tab) && seen.add(r.label + r.tab))
+      .slice(0, 8);
+    sel = 0;
+    drawSug();
+  };
+  find.onkeydown = (e) => {
+    if (sugBox.hidden || !sugs.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      sel = (sel + (e.key === 'ArrowDown' ? 1 : sugs.length - 1)) % sugs.length;
+      drawSug();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      jump(sugs[sel]);
+    }
+  };
+  find.onfocus = drawSug;
+  find.onblur = () => setTimeout(() => (sugBox.hidden = true), 120);
+  // pointerdown len podrží fokus v poli; skok až pri kliknutí – keby návrhy zmizli už pri stlačení,
+  // klik by dopadol na pozadie nastavení a zavrel ich
+  sugBox.onpointerdown = (e) => e.preventDefault();
+  sugBox.onclick = (e) => {
+    e.stopPropagation();
+    const b = e.target.closest('[data-sug]');
+    if (b) jump(sugs[Number(b.dataset.sug)]);
   };
   requestAnimationFrame(() => $('#s-find')?.focus());
+  // Otvorené z domovskej obrazovky (koliesko, Ctrl+,): domov ide pod nastavenia, inak by ich zakryl.
+  $('#start').classList.add('under-settings');
   // Zoznam jazykov z GitHubu.
   flux.i18nList().then((list) => {
     const box = $('#s-lang');
@@ -3237,14 +3562,15 @@ function openSettings() {
       await saveSettings({ pointer: ptr.dataset.pointer });
       return applyCustomization();
     }
-    if (e.target.closest('[data-action="goto-about"]')) {
-      $('#s-about')?.previousElementSibling?.scrollIntoView({ behavior: setting('lite') ? 'auto' : 'smooth', block: 'start' });
-      return flux.updateCheck();
-    }
     if (e.target.closest('[data-action="mem-free"]')) {
       if (!state.tabs.some(isPythonTab)) lsp.stop();
       await flux.freeMemory?.();
       return showMemory();
+    }
+    if (e.target.closest('[data-action="opt-reset"]')) {
+      await saveSettings(Object.fromEntries(OPT_KEYS.map((k) => [k, undefined])));
+      applyPerformance();
+      return rerenderSettings();
     }
     const cr = e.target.closest('[data-color-reset]');
     if (cr) {
@@ -3347,8 +3673,16 @@ function openSettings() {
     const key = el.dataset.key;
     if (!key) return;
     let value = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.type === 'number' || el.type === 'range' || key === 'lineHeight') value = Number(value);
+    if (el.type === 'number' || el.type === 'range' || ['lineHeight', 'pyMemory', 'lspIdle'].includes(key)) value = Number(value);
     await saveSettings({ [key]: value });
+    // Hlavný prepínač pamäte: všetky časti v Advanced sa zase riadia ním.
+    if (key === 'lite') {
+      await saveSettings(Object.fromEntries(OPT_KEYS.map((k) => [k, undefined])));
+      applyPerformance();
+      rerenderSettings();
+    }
+    if (OPT_KEYS.includes(key)) applyPerformance();
+    if (['menuBar', 'showSearch', 'searchWide', 'panelPos', 'sidePos'].includes(key)) setLayout({});
     if (key === 'suggestDetails') showSuggestDetails(value);
     if (key === 'material') await saveSettings({ translucent: true });
     applyEditorSettings();
@@ -3365,12 +3699,19 @@ function settingsIndex() {
   const out = [];
   for (const sec of $('#settings').querySelectorAll('[data-pane]')) {
     // Skratky sú v hľadaní ako príkazy, nie ako nastavenia.
-    for (const el of sec.querySelectorAll('.s-row:not(.s-key) > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
+    // aj nadpisy častí (Accent color, Code theme…), nielen riadky
+    for (const el of sec.querySelectorAll(':scope > h3, .s-row:not(.s-key) > span:first-child > b, .theme-card > span:nth-child(2), .tc-text > b')) {
       const label = el.firstChild?.textContent?.trim() || el.textContent.trim();
       if (label && !out.some((o) => o.label === label)) out.push({ tab: sec.dataset.pane, label });
     }
   }
-  if (wasHidden) $('#settings').hidden = true;
+  // Aktualizácie sa do Všeobecných dokresľujú až neskôr (updatesUI) – ich riadky pridáme ručne.
+  for (const label of [t('Check for updates'), t('Update automatically'), t('All versions'), t('Release notes')])
+    if (!out.some((o) => o.label === label)) out.push({ tab: 'general', label });
+  if (wasHidden) {
+    $('#settings').hidden = true;
+    $('#start').classList.remove('under-settings');
+  }
   settingsIndexCache = out;
   return out;
 }
@@ -3387,13 +3728,18 @@ async function searchEverything() {
     run: () => {
       state.settingsTab = x.tab;
       openSettings();
-      // Nájdený riadok zablikne.
-      const row = [...$('#settings').querySelectorAll('.s-row, .theme-card, .tc-row')].find((r) => r.textContent.includes(x.label));
-      if (row) {
-        row.scrollIntoView({ block: 'center' });
+      // Nájdený riadok zablikne (riadky aktualizácií sa dokreslia o chvíľu – skúsi sa znova).
+      const find = (retry) => {
+        const pane = $(`#settings [data-pane="${x.tab}"]`);
+        const row = [...(pane || $('#settings')).querySelectorAll('.s-row, .theme-card, .tc-row, h3, .up-notes-fold')].find((r) => r.textContent.includes(x.label));
+        if (!row) return retry && setTimeout(() => find(false), 500);
+        const fold = row.closest('details');
+        if (fold) fold.open = true;
+        row.scrollIntoView({ block: row.tagName === 'H3' ? 'start' : 'center' });
         row.classList.add('flash');
         setTimeout(() => row.classList.remove('flash'), 1400);
-      }
+      };
+      find(true);
     },
   }));
   const projects = (state.projectList || []).map((p) => ({
@@ -3487,6 +3833,7 @@ function rerenderSettings() {
 
 function closeSettings() {
   $('#settings').hidden = true;
+  $('#start').classList.remove('under-settings');
   navNote();
   if (state.active) editor.focus();
 }
@@ -3724,7 +4071,7 @@ async function openStart() {
   const noProjects = !pinned.length && !recent.length;
   el.innerHTML = `
     <div class="ob-aurora"><i></i><i></i><i></i></div><div class="ob-grain"></div>
-    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span>${navButtons()}<div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
+    <div class="st-top drag"><div class="brand-mark">${icon('code', 15)}</div><span>flux</span><button class="icon-btn no-drag" data-act="menu" data-menu-trigger title="${t('Menu')}">${icon('menu', 16)}</button>${navButtons()}<div class="grow"></div><button class="icon-btn no-drag hm-top-btn" data-act="settings" title="${t('Settings')}">${icon('settings', 16)}</button></div>
     <div class="st-scroll"><div class="st-inner hm">
       <header class="hm-hero">
         <div><small class="hm-date">${escapeHtml(date)}</small><h1>${greet}</h1><p class="st-sub">${t('What do you want to work on?')}</p></div>
@@ -3786,6 +4133,7 @@ async function openStart() {
     const ok = all.filter(Boolean);
     const time = ok.reduce((n, st) => n + (st.time || 0), 0);
     box.querySelector('[data-k="time"]').textContent = time >= 60 ? formatTime(time) : '0 min';
+    fitTiles(box);
     countUp(box.querySelector('[data-k="lines"]'), ok.reduce((n, st) => n + (st.lines || 0), 0));
     countUp(box.querySelector('[data-k="runs"]'), list.reduce((n, p) => n + (activity.runs(p.dir) || 0), 0));
   });
@@ -3810,6 +4158,7 @@ async function openStart() {
     if (!b) return;
     if (b.dataset.act === 'back') return closeStart();
     if (b.dataset.act === 'settings') return openSettings();
+    if (b.dataset.act === 'menu') return menubar?.openAt(b);
     if (b.dataset.dir) {
       closeStart();
       if (keyOf(b.dataset.dir) !== keyOf(state.workspace || '')) await setWorkspace(b.dataset.dir);
@@ -3960,6 +4309,7 @@ function renderWelcome() {
       countUp(q('files'), st.files);
       countUp(q('runs'), runs);
       q('changed').textContent = st.lastModified ? timeAgo(st.lastModified) : '–';
+      fitTiles($('#wl-stats'));
     });
     // Hlavné súbory projektu (pri webe stránky .html) na jeden klik.
     flux.listAll().then((files) => {
@@ -4013,7 +4363,7 @@ function renderWelcome() {
 }
 
 // Hlavný súbor projektu: index.html, main.py, Main.java…
-const MAIN_EXT = { python: ['py'], web: ['html', 'htm'], node: ['js', 'mjs'], java: ['java'], cpp: ['cpp', 'c'], go: ['go'], csharp: ['cs'], rust: ['rs'], ruby: ['rb'], php: ['php'], lua: ['lua'] };
+const MAIN_EXT = { python: ['py'], web: ['html', 'htm'], node: ['js', 'mjs'], java: ['java'], cpp: ['cpp', 'c'], go: ['go'], csharp: ['cs'], rust: ['rs'], ruby: ['rb'], php: ['php'], lua: ['lua'], zig: ['zig'], r: ['r'], julia: ['jl'] };
 function mainFileOf(files, kind) {
   const exts = MAIN_EXT[kind];
   if (!exts) return null;
@@ -4131,6 +4481,8 @@ function keybindings() {
     'keydown',
     (e) => {
       if (window.fluxRecordingKeys) return;
+      // náhľad screenshotu pluginu má vlastné klávesy (Esc, šípky) – nastavenia pod ním ostanú otvorené
+      if (document.querySelector('.pl-lightbox')) return;
       if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !palette && $('#onboard').hidden) {
         e.preventDefault();
         e.stopPropagation();
@@ -4165,18 +4517,30 @@ function keybindings() {
         }
         return;
       }
-      if (!$('#start').hidden) {
-        if (e.key === 'Escape' && state.workspace) {
-          e.preventDefault();
-          closeStart();
-        }
-        return;
-      }
+      // Nastavenia môžu byť otvorené aj nad domovskou obrazovkou – Esc zavrie najprv ich.
       if (!$('#settings').hidden) {
         if (e.key === 'Escape') {
           e.preventDefault();
           closeSettings();
         }
+        return;
+      }
+      if (!$('#start').hidden) {
+        // Na domovskej obrazovke fungujú skratky, ktoré sú na nej napísané.
+        const ctrl = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
+        let used = true;
+        if (e.key === 'Escape' && state.workspace) closeStart();
+        else if (ctrl && e.shiftKey && key === 'n') {
+          closeStart();
+          newProject();
+        } else if (ctrl && e.altKey && e.code === 'KeyO') openFileDialog();
+        else if (ctrl && !e.shiftKey && key === 'o') openFolderDialog();
+        else if (ctrl && e.shiftKey && key === 'a') searchEverything();
+        else if (ctrl && e.shiftKey && key === 'p') openCommandPalette();
+        else if (ctrl && e.key === ',') openSettings();
+        else used = false;
+        if (used) e.preventDefault();
         return;
       }
       const ctrl = e.ctrlKey || e.metaKey;
@@ -4228,6 +4592,125 @@ function keybindings() {
   });
 }
 
+// ---------- ponuka a hľadanie v hornej lište ----------
+async function setLayout(patch) {
+  await saveSettings(patch);
+  applyCustomization();
+  // editor, terminál a náhľad sa prispôsobia novému miestu
+  requestAnimationFrame(() => {
+    editor?.layout();
+    showPanel(!$('#panel').classList.contains('collapsed'));
+  });
+}
+function appMenus() {
+  const panelOpen = !$('#panel').classList.contains('collapsed');
+  const ed = (id) => () => {
+    editor.focus();
+    editor.getAction(id)?.run();
+  };
+  return [
+    { id: 'home', label: t('Home'), icon: 'template', run: () => openStart() },
+    {
+      id: 'file',
+      label: t('File'),
+      items: [
+        [t('New file…'), () => newFile(), 'Ctrl+N'],
+        [t('New project…'), () => (closeStart(), newProject()), 'Ctrl+Shift+N'],
+        [t('New folder…'), () => newFolder()],
+        '-',
+        [t('Open folder…'), openFolderDialog, 'Ctrl+O'],
+        [t('Open file…'), openFileDialog, 'Ctrl+Alt+O'],
+        [t('Quick open file…'), quickOpen, 'Ctrl+P'],
+        '-',
+        [t('Save'), () => saveTab(activeTab()), 'Ctrl+S', { disabled: !state.active }],
+        [t('Save all'), saveAll, 'Ctrl+Shift+S'],
+        [t('Close file'), () => state.active && closeTab(state.active), 'Ctrl+W', { disabled: !state.active }],
+        '-',
+        [t('Settings'), openSettings, 'Ctrl+,'],
+      ],
+    },
+    {
+      id: 'edit',
+      label: t('Edit'),
+      items: [
+        [t('Undo'), ed('undo'), 'Ctrl+Z', { disabled: !state.active }],
+        [t('Redo'), ed('redo'), 'Ctrl+Y', { disabled: !state.active }],
+        '-',
+        [t('Find'), ed('actions.find'), 'Ctrl+F', { disabled: !state.active }],
+        [t('Replace'), ed('editor.action.startFindReplaceAction'), 'Ctrl+H', { disabled: !state.active }],
+        '-',
+        [t('Toggle comment'), ed('editor.action.commentLine'), 'Ctrl+/', { disabled: !state.active }],
+        [t('Format document'), ed('editor.action.formatDocument'), 'Shift+Alt+F', { disabled: !state.active }],
+      ],
+    },
+    {
+      id: 'view',
+      label: t('View'),
+      items: [
+        [t('Search everything…'), () => searchEverything(), 'Ctrl+Shift+A'],
+        [t('Commands'), openCommandPalette, 'Ctrl+Shift+P'],
+        '-',
+        [t('Sidebar'), toggleCompact, 'Ctrl+B', { checked: !document.body.classList.contains('compact') }],
+        [t('Panel'), () => showPanel(!panelOpen), 'Ctrl+J', { checked: panelOpen }],
+        [t('AI assistant'), () => aiPanel.toggle(), 'Ctrl+I', { checked: !$('#ai').hidden }],
+        [t('Focus mode (only the code)'), toggleFocus, 'F11'],
+        '-',
+        t('Panel position'),
+        ...[['bottom', t('Bottom')], ['right', t('Right')], ['left', t('Left')]].map(([v, l]) => [l, () => setLayout({ panelPos: v }), '', { checked: setting('panelPos') === v, radio: true }]),
+        t('Sidebar position'),
+        ...[['left', t('Left')], ['right', t('Right')]].map(([v, l]) => [l, () => setLayout({ sidePos: v }), '', { checked: setting('sidePos') === v, radio: true }]),
+        '-',
+        [t('Menu bar'), () => setLayout({ menuBar: !setting('menuBar') }), '', { checked: !!setting('menuBar') }],
+        [t('Search button'), () => setLayout({ showSearch: !setting('showSearch') }), '', { checked: !!setting('showSearch') }],
+        [t('Wide search field'), () => setLayout({ showSearch: true, searchWide: !setting('searchWide') }), '', { checked: !!setting('showSearch') && !!setting('searchWide') }],
+        '-',
+        [t('Toggle light / dark theme'), toggleTheme],
+      ],
+    },
+    {
+      id: 'run',
+      label: t('Run'),
+      items: [
+        [t('Run current file'), run, 'F5', { disabled: !state.active }],
+        [t('Stop program'), stop, 'Shift+F5'],
+        '-',
+        [t('Live Server'), toggleLive, 'Alt+L'],
+        [t('Terminal'), () => showPanelTab('shell')],
+      ],
+    },
+    {
+      id: 'help',
+      label: t('Help'),
+      items: [
+        [t('Feature tour'), () => onboarding.startTour()],
+        [t('Shortcuts'), () => ((state.settingsTab = 'keys'), openSettings())],
+        [t('Release notes'), () => ((state.settingsTab = 'about'), openSettings())],
+        '-',
+        [t('Website'), () => flux.openExternal('https://pantr1x.github.io/Flux/')],
+        [t('Star Flux on GitHub'), () => flux.openExternal('https://github.com/pantr1x/Flux')],
+        [t('Report a problem'), () => flux.openExternal('https://github.com/pantr1x/Flux/issues/new')],
+      ],
+    },
+  ];
+}
+function setupMenubar() {
+  // Logo „flux“ = domovská obrazovka, ☰ vedľa neho = menu (v hornej lište, keď je bočný panel skrytý).
+  // Riadok File/Edit/View… je voliteľný.
+  $('.brand').onclick = openStart;
+  $('.brand').title = t('Start screen');
+  for (const b of [$('#btn-appmenu'), $('#btn-menu')]) {
+    b.innerHTML = icon('menu', 16);
+    b.title = t('Menu');
+  }
+  menubar = createMenubar({ bar: $('#menubar'), triggers: [$('#btn-appmenu'), $('#btn-menu')], icon, esc: escapeHtml, getMenus: appMenus });
+  menubar.render();
+  const s = $('#topsearch');
+  // lupa, alebo (searchWide) roztiahnuté pole – klik otvorí to isté hľadanie
+  s.innerHTML = `${icon('search', 16)}<span class="ts-text">${escapeHtml(t('Search'))}</span><kbd class="ts-key">Ctrl+Shift+A</kbd>`;
+  s.title = `${t('Search files, commands, settings and projects')} (Ctrl+Shift+A)`;
+  s.onclick = () => searchEverything();
+}
+
 // ---------- zmena veľkosti panelov ----------
 function resizer(handle, onMove, onEnd) {
   handle.addEventListener('pointerdown', (e) => {
@@ -4251,7 +4734,7 @@ function layoutEvents() {
   if (state.settings.sideWidth) root.style.setProperty('--side-w', `${state.settings.sideWidth}px`);
   resizer(
     $('#side-resizer'),
-    (e) => root.style.setProperty('--side-w', `${Math.min(480, Math.max(180, e.clientX))}px`),
+    (e) => root.style.setProperty('--side-w', `${Math.min(480, Math.max(180, setting('sidePos') === 'right' ? innerWidth - e.clientX : e.clientX))}px`),
     () => saveSettings({ sideWidth: parseInt(getComputedStyle(root).getPropertyValue('--side-w')) }),
   );
   resizer($('#preview-resizer'), (e) => {
@@ -4287,11 +4770,18 @@ function layoutEvents() {
   if (state.settings.aiWidth) $('#ai').style.width = `${state.settings.aiWidth}px`;
   resizer($('#panel-resizer'), (e) => {
     const rect = $('#card').getBoundingClientRect();
-    const h = Math.min(rect.height - 120, Math.max(90, rect.bottom - 28 - e.clientY));
     showPanel(true);
+    // Panel vpravo / vľavo: mení sa šírka, dole výška.
+    if (setting('panelPos') !== 'bottom') {
+      const w = Math.min(rect.width - 320, Math.max(240, setting('panelPos') === 'right' ? rect.right - e.clientX : e.clientX - rect.left));
+      return document.documentElement.style.setProperty('--panel-w', `${w}px`);
+    }
+    const h = Math.min(rect.height - 120, Math.max(90, rect.bottom - 28 - e.clientY));
     $('#panel').style.height = `${h}px`;
-  }, () => saveSettings({ panelHeight: parseInt($('#panel').style.height) }));
+  }, () => (setting('panelPos') !== 'bottom' ? saveSettings({ panelWidth: parseInt(getComputedStyle(root).getPropertyValue('--panel-w')) }) : saveSettings({ panelHeight: parseInt($('#panel').style.height) })));
   if (state.settings.panelHeight) $('#panel').style.height = `${state.settings.panelHeight}px`;
+  if (state.settings.panelWidth) root.style.setProperty('--panel-w', `${state.settings.panelWidth}px`);
+  setupMenubar();
 
   // Kompaktný režim: panel sa vysunie pri nabehnutí k ľavému okraju.
   $('#peek-zone').addEventListener('mouseenter', () => document.body.classList.add('peek'));
@@ -4303,8 +4793,6 @@ function layoutEvents() {
   $('#btn-theme').onclick = toggleTheme;
   $('#btn-palette').onclick = openCommandPalette;
   $('#btn-settings').onclick = openSettings;
-  $('.brand').onclick = openStart;
-  $('.brand').title = t('Start screen');
   $('#btn-run').onclick = run;
   $('#btn-stop').onclick = stop;
   $('#btn-live').onclick = toggleLive;
@@ -4494,6 +4982,13 @@ async function main() {
         icon: 'github',
         needs: t('needs Git'),
         description: t('Sign in with GitHub, open your repositories as projects, save changes with commit & push and publish new projects. Installs Git if it is missing.'),
+        details: [
+          t('Sign in with your GitHub account – Flux shows a short code you enter on github.com.'),
+          t('Open any of your repositories as a project with one click.'),
+          t('Save your changes with commit & push right from the sidebar.'),
+          t('Publish a new project to GitHub with one click.'),
+          t('If Git is missing on your computer, Flux installs it for you.'),
+        ],
         enabled: ghOn,
         set: setGitHubPlugin,
       },
@@ -4503,6 +4998,13 @@ async function main() {
         icon: 'globe',
         needs: t('same Wi-Fi'),
         description: t('Work together with friends on the same Wi-Fi: see who has which file open, where their cursor is and what they are typing – live. Nothing goes to the internet.'),
+        details: [
+          t('Everyone on the same Wi-Fi enters the same room code – that is all.'),
+          t('A green dot shows where your friends are working: next to the project, every folder on the way and the file.'),
+          t('See which file each friend has open, on which line and what they are typing – live.'),
+          t('Click a friend to jump to their file and line.'),
+          t('It connects directly inside your network – nothing goes to the internet and there are no limits.'),
+        ],
         enabled: () => setting('togetherPlugin') === true,
         set: async (on) => {
           if (!on) await together?.stop();
@@ -4612,6 +5114,8 @@ async function main() {
   trackTime();
   keybindings();
   layoutEvents();
+  // Hneď pri štarte: rozloženie (menu, panel, bočný panel) a úspory pamäte – nielen po zmene nastavení.
+  applyCustomization();
   renderRunButton();
   renderLive();
   renderStatus();
