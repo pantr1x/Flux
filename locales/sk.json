@@ -376,6 +376,8 @@
  "Just exploring": "Len sa rozhliadam",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Len na pozdrav na domovskej obrazovke. Môžeš to preskočiť alebo zmeniť neskôr.",
  "Keep a backup online and share it with a link.": "Záloha online a zdieľanie cez odkaz.",
+ "Keep my changes": "Ponechať moje zmeny",
+ "Keep my old version": "Nechať starú verziu",
  "Keywords (if, for, return)": "Kľúčové slová (if, for, return)",
  "Language": "Jazyk",
  "Language & intro": "Jazyk a úvod",
@@ -403,6 +405,7 @@
  "Live preview": "Živý náhľad",
  "Ln {line}, Col {col}": "Riadok {line} · Stĺpec {col}",
  "Load from folder…": "Načítať z priečinka…",
+ "Load the new version from disk": "Načítať novú verziu z disku",
  "Loaded from folders": "Načítané z priečinkov",
  "Loading…": "Načítavam…",
  "Loads plugin.json from a folder – press Reload after every change.": "Načíta plugin.json z priečinka – po každej zmene stlač Znova načítať.",
@@ -1072,7 +1075,10 @@
  "{size} download": "{size} na stiahnutie",
  "{xp} XP": "{xp} XP",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "„Tapeta“ ostane priesvitná aj keď okno nie je aktívne. Pri Acrylic/Mica Windows neaktívne okno zosivie.",
+ "“{file}” changed on disk – the editor now shows the new version.": "„{file}“ sa zmenil na disku – editor už ukazuje novú verziu.",
  "“{file}” has unsaved changes.": "„{file}“ má neuložené zmeny.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "„{file}“ sa zmenil mimo Fluxu a ty máš neuložené zmeny.",
+ "“{file}” was reloaded from disk.": "„{file}“ sa načítal znova z disku.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "„{name}“ je skrytý z bočného panela. Nájdeš ho na domovskej obrazovke.",
  "“{name}” was moved to the Recycle Bin.": "„{name}“ je v Koši."
 }

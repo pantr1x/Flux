@@ -845,6 +845,8 @@ function createTab(path, model, readonly) {
   const lang = model.getLanguageId();
   model.updateOptions({ tabSize: ['python', 'java', 'csharp', 'rust', 'go', 'c', 'cpp'].includes(lang) ? 4 : 2, insertSpaces: true });
   const tab = { isNew: true, path, model, readonly, viewState: null, savedVersion: model.getAlternativeVersionId(), runLines: [], decorations: null };
+  // Posledný obsah, ktorý sme videli na disku – podľa neho spoznáme zmenu zvonku.
+  tab.disk = model.getValue();
   model.onDidChangeContent(() => {
     if (!extOf(path) && model.getLanguageId() === 'plaintext') {
       const lang = guessLang(model.getValue());
@@ -918,6 +920,9 @@ async function openFile(path, { line, column, focus = true } = {}) {
     }
     tab = findTab(path) || createTab(path, model, false);
     fillEmptyHtml(tab);
+  } else {
+    // Karta už je otvorená – súbor sa medzitým mohol zmeniť na disku.
+    syncOpenTabs(tab);
   }
   activate(tab);
   if (line) {
@@ -1037,9 +1042,13 @@ async function saveTab(tab) {
   if (!tab || tab.readonly) return true;
   if (!isDirty(tab)) return true;
   const version = tab.model.getAlternativeVersionId();
+  const text = tab.model.getValue();
+  const prevDisk = tab.disk;
+  tab.disk = text; // skôr než príde správa od watchera o našom vlastnom zápise
   try {
-    await flux.write(tab.path, tab.model.getValue());
+    await flux.write(tab.path, text);
   } catch (err) {
+    tab.disk = prevDisk;
     toast(`${t('Could not save')}: ${errorText(err)}`, 'error');
     return false;
   }
@@ -1463,23 +1472,66 @@ async function deleteItem(item) {
   await refreshTree();
 }
 
-// Súbor sa zmenil mimo editora (napr. ho prepísal tvoj program) → načítať novú verziu.
-async function syncOpenTabs() {
-  for (const tab of state.tabs) {
-    if (tab.readonly || isDirty(tab)) continue;
+// Súbor sa zmenil mimo editora (iný program, git, znovu otvorený cez „Otvoriť v programe → Flux“).
+// Bez neuložených zmien → nová verzia sa načíta hneď a upozornenie ponúkne „Vrátiť späť“.
+// S neuloženými zmenami → Flux sa opýta, ktorú verziu chceš.
+let syncing = null;
+function syncOpenTabs(only) {
+  // Viac podnetov naraz (watcher, fokus okna, otvorenie) → jedna kontrola za druhou.
+  syncing = (syncing || Promise.resolve()).then(() => syncTabs(only)).catch(() => {});
+  return syncing;
+}
+
+async function syncTabs(only) {
+  for (const tab of [...state.tabs]) {
+    if (tab.readonly || tab.model.isDisposed() || (only && (typeof only === 'function' ? !only(tab) : tab !== only))) continue;
     let text;
     try {
       text = await flux.read(tab.path);
     } catch {
       continue;
     }
-    if (tab.model.isDisposed() || isDirty(tab) || text === tab.model.getValue()) continue;
-    const view = tab === state.active ? editor.saveViewState() : null;
-    tab.model.pushEditOperations([], [{ range: tab.model.getFullModelRange(), text }], () => null);
-    tab.savedVersion = tab.model.getAlternativeVersionId();
-    if (view) editor.restoreViewState(view);
-    renderTabs();
+    if (tab.model.isDisposed() || !state.tabs.includes(tab)) continue;
+    if (text === tab.model.getValue()) {
+      tab.disk = text;
+      continue;
+    }
+    if (text === tab.disk) continue; // na disku nič nové, rozdiel sú len tvoje úpravy
+    const name = basename(tab.path);
+    if (isDirty(tab)) {
+      tab.disk = text; // na tú istú zmenu sa pýtame len raz
+      const pick = await confirmPalette(t('“{file}” was changed outside Flux, and you have unsaved changes.', { file: name }), [
+        { label: t('Load the new version from disk'), value: 'disk' },
+        { label: t('Keep my changes'), value: 'mine' },
+      ]);
+      if (pick !== 'disk' || tab.model.isDisposed()) continue;
+      replaceTabText(tab, text);
+      toast(t('“{file}” was reloaded from disk.', { file: name }), 'info', 5000);
+      continue;
+    }
+    const before = tab.model.getValue();
+    replaceTabText(tab, text);
+    tab.disk = text;
+    toast(t('“{file}” changed on disk – the editor now shows the new version.', { file: name }), 'info', 9000, {
+      label: t('Keep my old version'),
+      run: () => {
+        if (tab.model.isDisposed()) return;
+        // Starý text sa vráti ako neuložená zmena – Ctrl+S ním prepíše súbor.
+        tab.model.pushEditOperations([], [{ range: tab.model.getFullModelRange(), text: before }], () => null);
+        renderTabs();
+        reportDirty();
+      },
+    });
   }
+}
+
+function replaceTabText(tab, text) {
+  const view = tab === state.active ? editor.saveViewState() : null;
+  tab.model.pushEditOperations([], [{ range: tab.model.getFullModelRange(), text }], () => null);
+  tab.savedVersion = tab.model.getAlternativeVersionId();
+  if (view) editor.restoreViewState(view);
+  renderTabs();
+  reportDirty();
 }
 
 // ---------- priečinok ----------
@@ -5157,6 +5209,11 @@ async function main() {
   setupNav();
   setupLooseFiles();
   flux.onOpenFiles((files) => openStandalone(files));
+  // Súbory mimo projektu nesleduje watcher → skontrolujú sa, keď sa vrátiš do okna.
+  window.addEventListener('focus', () => state.tabs.length && syncOpenTabs());
+  setInterval(() => {
+    if (document.hasFocus() && state.tabs.some((x) => !inside(x.path))) syncOpenTabs((x) => !inside(x.path));
+  }, 5000);
   flux.startupFiles().then((files) => files.length && setTimeout(() => openStandalone(files), 600));
   flux.onSaveAllAndClose(async () => {
     await saveAll();

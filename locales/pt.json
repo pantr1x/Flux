@@ -349,6 +349,8 @@
  "Just exploring": "Só explorando",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Só para a saudação na tela inicial. Você pode pular ou alterar depois.",
  "Keep a backup online and share it with a link.": "Mantenha um backup online e compartilhe com um link.",
+ "Keep my changes": "Manter minhas alterações",
+ "Keep my old version": "Manter a versão antiga",
  "Keywords (if, for, return)": "Palavras-chave (if, for, return)",
  "Language": "Idioma",
  "Language & intro": "Idioma e introdução",
@@ -372,6 +374,7 @@
  "Live preview": "Prévia ao vivo",
  "Ln {line}, Col {col}": "Ln {line}, Col {col}",
  "Load from folder…": "Carregar de uma pasta…",
+ "Load the new version from disk": "Carregar a nova versão do disco",
  "Loading…": "Carregando…",
  "Loads plugin.json from a folder – press Reload after every change.": "Carrega o plugin.json de uma pasta – pressione Recarregar após cada alteração.",
  "Local repository": "Repositório local",
@@ -999,7 +1002,10 @@
  "{repo} is ready.": "{repo} está pronto.",
  "{size} download": "{size} para baixar",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "O “Papel de parede” continua translúcido mesmo quando a janela não está ativa. Com Acrylic/Mica, o Windows deixa a janela cinza quando inativa.",
+ "“{file}” changed on disk – the editor now shows the new version.": "“{file}” mudou no disco – o editor já mostra a nova versão.",
  "“{file}” has unsaved changes.": "“{file}” tem alterações não salvas.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "“{file}” foi alterado fora do Flux e você tem alterações não salvas.",
+ "“{file}” was reloaded from disk.": "“{file}” foi recarregado do disco.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "“{name}” foi ocultado da barra lateral. Você o encontra na tela inicial.",
  "“{name}” was moved to the Recycle Bin.": "“{name}” foi movido para a Lixeira."
 }

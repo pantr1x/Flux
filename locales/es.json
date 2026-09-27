@@ -373,6 +373,8 @@
  "Just exploring": "Solo explorando",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Solo para el saludo de la pantalla de inicio. Puedes saltarlo o cambiarlo después.",
  "Keep a backup online and share it with a link.": "Copia de seguridad en línea y compartir con un enlace.",
+ "Keep my changes": "Mantener mis cambios",
+ "Keep my old version": "Mantener la versión anterior",
  "Keywords (if, for, return)": "Palabras clave (if, for, return)",
  "Language": "Idioma",
  "Language & intro": "Idioma e introducción",
@@ -400,6 +402,7 @@
  "Live preview": "Vista previa en vivo",
  "Ln {line}, Col {col}": "Lín {line}, Col {col}",
  "Load from folder…": "Cargar desde carpeta…",
+ "Load the new version from disk": "Cargar la nueva versión del disco",
  "Loaded from folders": "Cargados desde carpetas",
  "Loading…": "Cargando…",
  "Loads plugin.json from a folder – press Reload after every change.": "Carga plugin.json desde una carpeta – pulsa Recargar tras cada cambio.",
@@ -1066,7 +1069,10 @@
  "{repo} is ready.": "{repo} está listo.",
  "{size} download": "{size} de descarga",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "«Fondo de pantalla» sigue siendo translúcido aunque la ventana no esté activa. Con Acrylic/Mica, Windows la vuelve gris.",
+ "“{file}” changed on disk – the editor now shows the new version.": "«{file}» cambió en el disco: el editor ya muestra la nueva versión.",
  "“{file}” has unsaved changes.": "«{file}» tiene cambios sin guardar.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "«{file}» se cambió fuera de Flux y tienes cambios sin guardar.",
+ "“{file}” was reloaded from disk.": "«{file}» se recargó desde el disco.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "«{name}» está oculto en la barra lateral. Lo encontrarás en la pantalla de inicio.",
  "“{name}” was moved to the Recycle Bin.": "«{name}» se movió a la Papelera."
 }

@@ -352,6 +352,8 @@
  "Just exploring": "Sto solo esplorando",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Solo per il saluto nella schermata iniziale. Puoi saltare o cambiarlo più tardi.",
  "Keep a backup online and share it with a link.": "Tieni un backup online e condividilo con un link.",
+ "Keep my changes": "Mantieni le mie modifiche",
+ "Keep my old version": "Mantieni la versione precedente",
  "Keywords (if, for, return)": "Parole chiave (if, for, return)",
  "Language": "Lingua",
  "Language & intro": "Lingua e intro",
@@ -375,6 +377,7 @@
  "Live preview": "Anteprima dal vivo",
  "Ln {line}, Col {col}": "Rg {line}, Col {col}",
  "Load from folder…": "Carica da cartella…",
+ "Load the new version from disk": "Carica la nuova versione dal disco",
  "Loaded from folders": "Caricati da cartelle",
  "Loading…": "Caricamento…",
  "Loads plugin.json from a folder – press Reload after every change.": "Carica plugin.json da una cartella – premi Ricarica dopo ogni modifica.",
@@ -1019,7 +1022,10 @@
  "{repo} is ready.": "{repo} è pronto.",
  "{size} download": "{size} da scaricare",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "“Sfondo” resta trasparente anche quando la finestra non è attiva. Con Acrylic/Mica, Windows rende grigia la finestra inattiva.",
+ "“{file}” changed on disk – the editor now shows the new version.": "«{file}» è cambiato sul disco – l’editor ora mostra la nuova versione.",
  "“{file}” has unsaved changes.": "“{file}” ha modifiche non salvate.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "«{file}» è stato modificato fuori da Flux e hai modifiche non salvate.",
+ "“{file}” was reloaded from disk.": "«{file}» è stato ricaricato dal disco.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "«{name}» è nascosto dalla barra laterale. Lo trovi nella schermata iniziale.",
  "“{name}” was moved to the Recycle Bin.": "«{name}» è stato spostato nel Cestino."
 }

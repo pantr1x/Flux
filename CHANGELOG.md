@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.15 – 2026-09-27
+
+### Files changed outside Flux
+- **When a file you have open changes on disk, the editor now shows the new version.** For example, another program saves it, Git changes it, or you open it again with **Open with → Flux**.
+  - A message tells you the file changed. Press **Keep my old version** if you want your version back. Then press Ctrl+S to save it over the file.
+  - If you have **unsaved changes** in that file, Flux asks you first: **Load the new version from disk** or **Keep my changes**.
+- This also works for single files you open without a project. Flux checks them when you come back to the window.
+
 ## 1.4.13 – 2026-09-25
 
 ### Python

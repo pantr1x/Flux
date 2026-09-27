@@ -352,6 +352,8 @@
  "Just exploring": "Tylko się rozglądam",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Tylko do powitania na ekranie głównym. Możesz to pominąć lub zmienić później.",
  "Keep a backup online and share it with a link.": "Trzymaj kopię online i udostępniaj ją linkiem.",
+ "Keep my changes": "Zachowaj moje zmiany",
+ "Keep my old version": "Zostaw starą wersję",
  "Keywords (if, for, return)": "Słowa kluczowe (if, for, return)",
  "Language": "Język",
  "Language & intro": "Język i wprowadzenie",
@@ -375,6 +377,7 @@
  "Live preview": "Podgląd na żywo",
  "Ln {line}, Col {col}": "Wrs {line}, Kol {col}",
  "Load from folder…": "Wczytaj z folderu…",
+ "Load the new version from disk": "Wczytaj nową wersję z dysku",
  "Loaded from folders": "Wczytane z folderów",
  "Loading…": "Ładowanie…",
  "Loads plugin.json from a folder – press Reload after every change.": "Wczytuje plugin.json z folderu – po każdej zmianie naciśnij Przeładuj.",
@@ -1019,7 +1022,10 @@
  "{repo} is ready.": "{repo} jest gotowe.",
  "{size} download": "{size} do pobrania",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "„Tapeta” pozostaje przezroczysta także, gdy okno jest nieaktywne. Z Acrylic/Mica Windows szarzy nieaktywne okno.",
+ "“{file}” changed on disk – the editor now shows the new version.": "„{file}” zmienił się na dysku – edytor pokazuje już nową wersję.",
  "“{file}” has unsaved changes.": "„{file}” ma niezapisane zmiany.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "„{file}” zmienił się poza Fluxem, a ty masz niezapisane zmiany.",
+ "“{file}” was reloaded from disk.": "„{file}” wczytano ponownie z dysku.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "„{name}” ukryto z paska bocznego. Znajdziesz go na ekranie głównym.",
  "“{name}” was moved to the Recycle Bin.": "„{name}” przeniesiono do Kosza."
 }

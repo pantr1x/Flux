@@ -349,6 +349,8 @@
  "Just exploring": "Просто досліджую",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Лише для привітання на головному екрані. Можна пропустити або змінити пізніше.",
  "Keep a backup online and share it with a link.": "Зберігайте резервну копію онлайн і діліться посиланням.",
+ "Keep my changes": "Залишити мої зміни",
+ "Keep my old version": "Залишити стару версію",
  "Keywords (if, for, return)": "Ключові слова (if, for, return)",
  "Language": "Мова",
  "Language & intro": "Мова та вступ",
@@ -372,6 +374,7 @@
  "Live preview": "Попередній перегляд наживо",
  "Ln {line}, Col {col}": "Рд {line}, Ст {col}",
  "Load from folder…": "Завантажити з папки…",
+ "Load the new version from disk": "Завантажити нову версію з диска",
  "Loading…": "Завантаження…",
  "Loads plugin.json from a folder – press Reload after every change.": "Завантажує plugin.json із папки – натискайте «Перезавантажити» після кожної зміни.",
  "Local repository": "Локальний репозиторій",
@@ -999,7 +1002,10 @@
  "{repo} is ready.": "{repo} готовий.",
  "{size} download": "завантаження {size}",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "«Шпалери» залишаються напівпрозорими, навіть коли вікно неактивне. З Acrylic/Mica Windows робить неактивне вікно сірим.",
+ "“{file}” changed on disk – the editor now shows the new version.": "«{file}» змінився на диску – редактор уже показує нову версію.",
  "“{file}” has unsaved changes.": "«{file}» має незбережені зміни.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "«{file}» змінено поза Flux, а в тебе є незбережені зміни.",
+ "“{file}” was reloaded from disk.": "«{file}» перезавантажено з диска.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "«{name}» приховано з бічної панелі. Ви знайдете його на головному екрані.",
  "“{name}” was moved to the Recycle Bin.": "«{name}» переміщено в Кошик."
 }

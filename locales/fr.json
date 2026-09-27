@@ -352,6 +352,8 @@
  "Just exploring": "Je découvre",
  "Just for the greeting on the home screen. You can skip this or change it later.": "Juste pour le message d’accueil. Vous pouvez passer cette étape ou la modifier plus tard.",
  "Keep a backup online and share it with a link.": "Gardez une sauvegarde en ligne et partagez-la avec un lien.",
+ "Keep my changes": "Garder mes modifications",
+ "Keep my old version": "Garder l’ancienne version",
  "Keywords (if, for, return)": "Mots-clés (if, for, return)",
  "Language": "Langue",
  "Language & intro": "Langue et intro",
@@ -375,6 +377,7 @@
  "Live preview": "Aperçu en direct",
  "Ln {line}, Col {col}": "Ln {line}, Col {col}",
  "Load from folder…": "Charger depuis un dossier…",
+ "Load the new version from disk": "Charger la nouvelle version depuis le disque",
  "Loaded from folders": "Chargés depuis des dossiers",
  "Loading…": "Chargement…",
  "Loads plugin.json from a folder – press Reload after every change.": "Charge plugin.json depuis un dossier – appuyez sur Recharger après chaque modification.",
@@ -1019,7 +1022,10 @@
  "{repo} is ready.": "{repo} est prêt.",
  "{size} download": "{size} à télécharger",
  "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.": "« Fond d'écran » reste translucide même quand la fenêtre est inactive. Avec Acrylic/Mica, Windows grise la fenêtre inactive.",
+ "“{file}” changed on disk – the editor now shows the new version.": "« {file} » a changé sur le disque – l’éditeur affiche maintenant la nouvelle version.",
  "“{file}” has unsaved changes.": "« {file} » a des modifications non enregistrées.",
+ "“{file}” was changed outside Flux, and you have unsaved changes.": "« {file} » a été modifié en dehors de Flux, et tu as des modifications non enregistrées.",
+ "“{file}” was reloaded from disk.": "« {file} » a été rechargé depuis le disque.",
  "“{name}” is hidden from the sidebar. You find it on the home screen.": "« {name} » est masqué de la barre latérale. Vous le trouverez sur l’écran d’accueil.",
  "“{name}” was moved to the Recycle Bin.": "« {name} » a été déplacé dans la Corbeille."
 }
