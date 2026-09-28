@@ -433,6 +433,16 @@ function createWindow() {
   win.on('closed', () => {
     win = null;
   });
+  // Po 2 minútach bez aktivity okna (iný program, minimalizované) uvoľniť vyrovnávacie pamäte.
+  let trimTimer = null;
+  win.on('blur', () => {
+    clearTimeout(trimTimer);
+    trimTimer = setTimeout(() => {
+      win?.webContents.session.clearCache().catch(() => {});
+      send('app:trim');
+    }, 120e3);
+  });
+  win.on('focus', () => clearTimeout(trimTimer));
   for (const ev of ['move', 'resize', 'maximize', 'unmaximize', 'restore']) win.on(ev, sendBounds);
   win.webContents.on('did-finish-load', sendBounds);
 }
@@ -1416,7 +1426,9 @@ function registerIpc() {
         }
       } catch {}
     }
-    return { total: Math.round((total + lspKb) / 1024), lsp: Math.round(lspKb / 1024) };
+    // rozpis podľa druhu procesu (Správca úloh ukazuje len súčet „Flux (5)“)
+    const by = (types) => Math.round(app.getAppMetrics().filter((m) => types.includes(m.type)).reduce((n, m) => n + (m.memory?.workingSetSize || 0), 0) / 1024);
+    return { total: Math.round((total + lspKb) / 1024), lsp: Math.round(lspKb / 1024), window: by(['Tab']), gpu: by(['GPU']), core: by(['Browser']), network: by(['Utility']) };
   });
   ipcMain.handle('app:free-memory', async () => {
     await win?.webContents.session.clearCache().catch(() => {});
@@ -1568,6 +1580,8 @@ if (settings.lite === undefined) {
   saveSettings();
 }
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
+// Sieťová služba beží v hlavnom procese namiesto vlastného – o jeden proces (a desiatky MB) menej.
+app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
 // Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
 if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');

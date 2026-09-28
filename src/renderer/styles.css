@@ -8615,7 +8615,7 @@ body.accent-mono .hm-tip-ic {
   transform-origin: 0 0;
   opacity: var(--wall-opacity, 0.55);
 }
-.wall-media video,
+.wall-media canvas,
 .wall-media img {
   width: 100%;
   height: 100%;
@@ -8701,4 +8701,23 @@ body.theme-light .wall-media {
 }
 .bg-item:hover .bg-x {
   opacity: 1;
+}
+
+/* Zdrojové video pre plátno – musí „hrať“, ale nemá sa kresliť. */
+.wall-media .wall-src {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0.01;
+  pointer-events: none;
+}
+.wall-media canvas {
+  display: block;
+}
+/* Pohyblivé pozadie: panely bez backdrop-filter (inak by sa rozmazávali každý snímok videa). */
+body.moving-bg *,
+body.moving-bg *::before,
+body.moving-bg *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }

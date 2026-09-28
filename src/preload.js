@@ -1,5 +1,7 @@
 // Bezpečný most medzi oknom (UI) a hlavným procesom – UI nemá priamy prístup k Node.js.
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
+// Uvoľnenie cache obrázkov a skriptov okna, keď s Fluxom dlhšie nepracuješ (hlavný proces pošle app:trim).
+ipcRenderer.on('app:trim', () => webFrame.clearCache());
 
 const on = (channel) => (callback) => {
   const listener = (_e, payload) => callback(payload);

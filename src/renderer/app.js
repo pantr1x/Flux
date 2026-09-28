@@ -538,23 +538,53 @@ async function setupWallpaper() {
     mediaKey = key;
     layer.querySelector('.wall-media')?.remove();
     layer.classList.toggle('moving', !!key);
+    // Za pohybujúcim sa pozadím by každý panel s backdrop-filter musel rozmazávať znova každý snímok –
+    // pozadie je už rozmazané samo, panely preto rozmazanie vypnú (styles.css → body.moving-bg).
+    document.body.classList.toggle('moving-bg', !!key);
     if (!key) return;
     const box = document.createElement('div');
     box.className = 'wall-media';
     if (info.type === 'video') {
+      // Video sa neukazuje priamo: snímky sa kreslia do malého plátna (1/8 obrazovky) najviac 15× za sekundu.
+      // Rozmazaná vrstva sa tak prekresľuje menej často a je malá – video samo ostane skryté (1×1 px).
       const v = document.createElement('video');
       Object.assign(v, { src: info.url, autoplay: true, muted: true, loop: true, playsInline: true });
-      // farby podľa videa: prvý snímok a potom raz za 4 s
+      v.className = 'wall-src';
+      const cv = document.createElement('canvas');
+      const ctx = cv.getContext('2d', { alpha: false });
+      let last = 0;
+      const draw = () => {
+        if (!v.videoWidth) return;
+        const W = Math.max(64, Math.round((bounds?.dw || innerWidth) / 8));
+        const H = Math.max(36, Math.round((bounds?.dh || innerHeight) / 8));
+        if (cv.width !== W || cv.height !== H) Object.assign(cv, { width: W, height: H });
+        // ako object-fit: cover
+        const k = Math.max(W / v.videoWidth, H / v.videoHeight);
+        const sw = W / k;
+        const sh = H / k;
+        ctx.drawImage(v, (v.videoWidth - sw) / 2, (v.videoHeight - sh) / 2, sw, sh, 0, 0, W, H);
+      };
+      const frame = (now) => {
+        if (!v.isConnected) return;
+        if (now - last >= 66) {
+          last = now;
+          draw();
+        }
+        v.requestVideoFrameCallback(frame);
+      };
       v.addEventListener(
         'loadeddata',
         () => {
-          sampleTone(v);
+          draw();
+          sampleTone(cv);
           syncVideo();
+          v.requestVideoFrameCallback(frame);
         },
         { once: true },
       );
-      const iv = setInterval(() => (v.isConnected ? !v.paused && sampleTone(v) : clearInterval(iv)), 4000);
-      box.append(v);
+      // farby podľa videa raz za 4 s (z malého plátna – nič navyše sa nekreslí)
+      const iv = setInterval(() => (v.isConnected ? !v.paused && sampleTone(cv) : clearInterval(iv)), 4000);
+      box.append(cv, v);
     } else if (info.type === 'gif') {
       const im = document.createElement('img');
       im.onload = () => sampleTone(im);
@@ -1927,8 +1957,17 @@ function ensureLsp(force = false) {
   lsp.start(root, state.python?.path);
 }
 // Keď dlho nie je otvorený žiadny Python súbor, server sa vypne (v úspornom režime skôr).
+// Keď s Fluxom dlhšie nepracuješ (okno nie je aktívne 5 min), vypne sa aj pri otvorenom Python súbore –
+// po návrate sa sám znova zapne (ensureLsp pri fokuse).
+let blurredAt = 0;
+window.addEventListener('blur', () => (blurredAt = Date.now()));
+window.addEventListener('focus', () => {
+  blurredAt = 0;
+  if (!lsp?.root && isPythonTab(state.active)) ensureLsp();
+});
 setInterval(() => {
   if (!lsp?.root) return;
+  if (blurredAt && Date.now() - blurredAt > 5 * 60e3) return lsp.stop();
   if (state.tabs.some(isPythonTab)) {
     lspIdleSince = 0;
     return;
@@ -4280,7 +4319,14 @@ async function showMemory() {
   if (!el) return;
   try {
     const m = await flux.memory();
-    el.textContent = `${m.total} MB${m.lsp ? ` · ${t('Python autocomplete: {mb} MB', { mb: m.lsp })}` : ` · ${t('Python autocomplete is off')}`}`;
+    const parts = [
+      [t('window'), m.window],
+      [t('graphics'), m.gpu],
+      [t('app core'), m.core],
+      [t('network'), m.network],
+      [t('Python autocomplete'), m.lsp],
+    ].filter(([, mb]) => mb > 0);
+    el.textContent = `${m.total} MB · ${parts.map(([n, mb]) => `${n} ${mb} MB`).join(' · ')}${m.lsp ? '' : ` · ${t('Python autocomplete is off')}`}`;
   } catch {
     el.textContent = '';
   }

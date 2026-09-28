@@ -193,3 +193,13 @@ _V19H = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19H.items()})
+
+# 1.4.33 – rozpis pamäte.
+_V19I = {
+    'app core': ('jadro aplikácie', 'App-Kern', 'núcleo de la app', 'cœur de l’app', 'nucleo dell’app', 'rdzeń aplikacji', 'núcleo do app', 'ядро застосунку'),
+    'graphics': ('grafika', 'Grafik', 'gráficos', 'graphismes', 'grafica', 'grafika', 'gráficos', 'графіка'),
+    'network': ('sieť', 'Netzwerk', 'red', 'réseau', 'rete', 'sieć', 'rede', 'мережа'),
+    'window': ('okno', 'Fenster', 'ventana', 'fenêtre', 'finestra', 'okno', 'janela', 'вікно'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19I.items()})

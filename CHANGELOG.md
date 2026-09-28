@@ -2,6 +2,18 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.33 – 2026-09-30
+
+### Much lighter moving backgrounds, one process less
+- **Video backgrounds and live wallpapers are much cheaper.**
+  - The video is drawn into a tiny picture, an eighth of the screen, at most 15 times a second.
+  - The panels in front of it no longer blur again on every video frame. The background is already blurred, so they look the same.
+- **Flux runs one process less.** The part that handles the internet now runs inside Flux's main process instead of its own. That saves around 70 MB.
+- **When you don't use Flux for a while, it frees memory by itself.**
+  - After 2 minutes in another program, Flux empties its caches.
+  - After 5 minutes, Python autocomplete turns off, even if a Python file is open. It starts again when you come back.
+- **See where the memory goes:** **Settings → General → Memory & speed** now splits the number into the window, graphics, app core, network and Python autocomplete.
+
 ## 1.4.32 – 2026-09-30
 
 ### Less memory and CPU
