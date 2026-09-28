@@ -545,7 +545,14 @@ async function setupWallpaper() {
       const v = document.createElement('video');
       Object.assign(v, { src: info.url, autoplay: true, muted: true, loop: true, playsInline: true });
       // farby podľa videa: prvý snímok a potom raz za 4 s
-      v.addEventListener('loadeddata', () => sampleTone(v), { once: true });
+      v.addEventListener(
+        'loadeddata',
+        () => {
+          sampleTone(v);
+          syncVideo();
+        },
+        { once: true },
+      );
       const iv = setInterval(() => (v.isConnected ? !v.paused && sampleTone(v) : clearInterval(iv)), 4000);
       box.append(v);
     } else if (info.type === 'gif') {
@@ -554,6 +561,12 @@ async function setupWallpaper() {
       im.src = info.url;
       im.alt = '';
       box.append(im);
+    } else if (info.type === 'youtube' && !optOn('optAnim')) {
+      const im = document.createElement('img');
+      im.src = `https://i.ytimg.com/vi/${info.id}/hqdefault.jpg`;
+      im.alt = '';
+      box.append(im);
+      toneFromUrl(im.src);
     } else if (info.type === 'youtube') {
       const f = document.createElement('iframe');
       const q = `autoplay=1&mute=1&loop=1&playlist=${info.id}&controls=0&disablekb=1&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3`;
@@ -566,11 +579,18 @@ async function setupWallpaper() {
     layer.append(box);
     place(box);
   };
-  // Minimalizované okno: video netreba prehrávať.
-  document.addEventListener('visibilitychange', () => {
+  // Video v pozadí hrá len keď sa naň pozeráš: pri minimalizovanom okne a keď Flux nie je aktívny
+  // (pracuješ v inom programe) sa zastaví – šetrí procesor aj grafickú kartu. Bez animácií (Pamäť a rýchlosť)
+  // ostane stáť na prvom snímku.
+  const syncVideo = () => {
     const v = layer.querySelector('.wall-media video');
-    if (v) document.hidden ? v.pause() : v.play().catch(() => {});
-  });
+    if (!v) return;
+    const play = !document.hidden && document.hasFocus() && optOn('optAnim');
+    play ? v.play().catch(() => {}) : v.pause();
+  };
+  document.addEventListener('visibilitychange', syncVideo);
+  window.addEventListener('focus', syncVideo);
+  window.addEventListener('blur', () => setTimeout(syncVideo, 1500));
   flux.onBackground((info) => {
     wallpaperUrl = null;
     setMedia(info);
@@ -591,13 +611,18 @@ async function setupWallpaper() {
   // Tapeta aj pohyblivé pozadie majú veľkosť celej obrazovky a posúvajú sa opačne ako okno –
   // vyzerá to, akoby okno bolo priesvitné a pod ním bola plocha (aj pri živej tapete).
   let bounds = null;
+  // Šetrenie pamäte a výkonu: pozadie je aj tak rozmazané, preto sa kreslí v 1/4 veľkosti a zväčší sa
+  // (textúra na grafickej karte je 16× menšia, rozmazanie lacnejšie; YouTube si vyberie nižšiu kvalitu).
+  const S = 4;
   const place = (el) => {
     if (!el || !bounds) return;
-    el.style.width = `${bounds.dw}px`;
-    el.style.height = `${bounds.dh}px`;
-    el.style.transform = `translate(${-bounds.x}px, ${-bounds.y}px)`;
-    el.style.setProperty('--wall-w', `${bounds.dw}px`);
-    el.style.setProperty('--wall-h', `${bounds.dh}px`);
+    const w = Math.ceil(bounds.dw / S);
+    const h = Math.ceil(bounds.dh / S);
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    el.style.transform = `translate(${-bounds.x}px, ${-bounds.y}px) scale(${S})`;
+    el.style.setProperty('--wall-w', `${w}px`);
+    el.style.setProperty('--wall-h', `${h}px`);
   };
   flux.onBounds((b) => {
     bounds = b;

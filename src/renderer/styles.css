@@ -2150,7 +2150,8 @@ body.wallpaper #wall {
   top: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(var(--wall-blur, 40px)) saturate(1.35);
+  filter: blur(calc(var(--wall-blur, 40px) / 4)) saturate(1.35);
+  transform-origin: 0 0;
   opacity: var(--wall-opacity, 0.55);
   will-change: transform;
   image-rendering: auto;
@@ -8610,7 +8611,8 @@ body.accent-mono .hm-tip-ic {
   overflow: hidden;
   will-change: transform;
   pointer-events: none;
-  filter: blur(var(--wall-blur, 40px)) saturate(1.35);
+  filter: blur(calc(var(--wall-blur, 40px) / 4)) saturate(1.35);
+  transform-origin: 0 0;
   opacity: var(--wall-opacity, 0.55);
 }
 .wall-media video,

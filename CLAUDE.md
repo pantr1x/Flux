@@ -213,6 +213,7 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 - **Renderer:**
   - `setupWallpaper()` → `setMedia()` puts a `<video>` or a YouTube `<iframe>` into `#wall .wall-media` (`#wall.moving` hides the image layer). The CSP allows `frame-src https://www.youtube-nocookie.com` and `media-src 'self' blob:`.
   - `renderBgHistory()` draws the thumbnails.
+  - **Performance:** both wall layers (`.wall-img`, `.wall-media`) are laid out at 1/4 of the display size and scaled up 4× (`place()` in `setupWallpaper()`), with the blur divided by 4 in CSS. A background video plays only while the window is visible and focused (`syncVideo()`). Without `optAnim` it shows a still frame, and YouTube shows its thumbnail.
 - **Live wallpapers:** `src/main/liveWallpaper.js` → `detect()`.
   - **When it runs:** only when there is no own background and `liveWallpaper` is not off. The result is cached for 10 s.
   - **Lively Wallpaper:** it reads `%LOCALAPPDATA%\Lively Wallpaper\WallpaperLayout.json`, or the Store package path, and then each `LivelyInfo.json`.

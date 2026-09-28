@@ -1,7 +1,9 @@
 // AI asistent (Claude) v hlavnom procese: kľúč a MCP servery sú v nastaveniach zašifrované
 // (Electron safeStorage), odpoveď sa streamuje do okna po kúskoch.
 const { safeStorage } = require('electron');
-const Anthropic = require('@anthropic-ai/sdk').default || require('@anthropic-ai/sdk');
+// SDK sa načíta až pri prvej otázke pre AI – inak by zbytočne zaberal pamäť hlavného procesu.
+let sdk = null;
+const anthropic = () => (sdk ??= require('@anthropic-ai/sdk').default || require('@anthropic-ai/sdk'));
 const { t } = require('./i18n');
 
 const MODELS = [
@@ -119,6 +121,7 @@ function createAI({ getSettings, saveSettings, send, project }) {
     const ai = getSettings().ai || {};
     const apiKey = dec(ai.key);
     if (!apiKey) throw new Error(t('Add your Anthropic API key in Settings → AI first.'));
+    const Anthropic = anthropic();
     const client = new Anthropic({ apiKey });
     const model = ai.model || DEFAULT_MODEL;
     const servers = (ai.mcp || []).filter((m) => m.enabled !== false && m.url && m.name);
@@ -189,11 +192,11 @@ function createAI({ getSettings, saveSettings, send, project }) {
       };
     } catch (err) {
       if (changed) send('project:meta-changed');
-      if (err instanceof Anthropic.AuthenticationError) throw new Error(t('The API key was rejected. Check it in Settings → AI.'));
-      if (err instanceof Anthropic.RateLimitError) throw new Error(t('Too many requests – wait a moment and try again.'));
-      if (err instanceof Anthropic.APIUserAbortError) return { aborted: true, added: [] };
-      if (err instanceof Anthropic.APIError) throw new Error(`${t('AI error')} ${err.status ?? ''}: ${err.message}`);
-      if (err instanceof Anthropic.APIConnectionError) throw new Error(t('Could not reach the AI service. Check your internet connection.'));
+      if (err instanceof anthropic().AuthenticationError) throw new Error(t('The API key was rejected. Check it in Settings → AI.'));
+      if (err instanceof anthropic().RateLimitError) throw new Error(t('Too many requests – wait a moment and try again.'));
+      if (err instanceof anthropic().APIUserAbortError) return { aborted: true, added: [] };
+      if (err instanceof anthropic().APIError) throw new Error(`${t('AI error')} ${err.status ?? ''}: ${err.message}`);
+      if (err instanceof anthropic().APIConnectionError) throw new Error(t('Could not reach the AI service. Check your internet connection.'));
       throw err;
     } finally {
       running.delete(id);

@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.32 – 2026-09-30
+
+### Less memory and CPU
+- **The blurred background is drawn at a quarter of the size and then stretched.** It is blurred anyway, so it looks the same, but the graphics card needs about 16 times less memory for it. This covers the wallpaper, your own picture or video, YouTube and live wallpapers. A YouTube background also plays in lower quality now, which uses less of your connection and CPU.
+- **A video background only plays while you look at Flux.** It stops when Flux is minimized or when you work in another program, and continues when you come back.
+- With animations turned off in **Settings → General → Memory & speed**, a video background shows a still frame, and YouTube shows its picture instead of the video.
+- The part of Flux that talks to Claude AI now loads only the first time you ask the AI something.
+
 ## 1.4.31 – 2026-09-29
 
 ### Colors that follow your background
