@@ -42,7 +42,7 @@ Within a minute or two the **Plugin review** check runs and writes its result as
 - The `flux.` prefix, the publisher *Flux* and `"verified": true` are reserved for the Flux team.
 - Network requests and browser storage give a warning. Explain them in your README.
 
-**AI review.** Claude reads the whole plugin and looks for:
+**AI review.** An AI reads the whole plugin and looks for these things. It uses Claude when an API key is set, and otherwise the free GitHub Models, so it always runs:
 
 - stealing code, files, passwords or tokens,
 - hidden network requests and keyloggers,

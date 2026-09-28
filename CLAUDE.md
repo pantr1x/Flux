@@ -14,7 +14,7 @@ Flux is a small code editor for Windows 10/11, built with Electron and Monaco. I
 | `site/` | The website (a single `index.html`, no build step). |
 | `build/` | Installer assets; `release-notes.md` is generated during a release. |
 | `scripts/` | `build.mjs` (esbuild → `dist/renderer`), `release-notes.mjs`, `extract-strings.mjs`, `build-locales.py` + `locales_*.py`. |
-| `.github/workflows/` | `release.yml`, `pages.yml`, `windows-build.yml`, `plugin-review.yml` (safety review of plugin pull requests: `scripts/plugin-review.mjs`, rules + Claude, needs the `ANTHROPIC_API_KEY` secret; PR code is only read, never run), `wiki.yml` (publishes `docs/wiki/*.md` to the GitHub wiki – edit those files, not the wiki). |
+| `.github/workflows/` | `release.yml`, `pages.yml`, `windows-build.yml`, `plugin-review.yml` (safety review of plugin pull requests: `scripts/plugin-review.mjs`, rules + AI: Claude with the `ANTHROPIC_API_KEY` secret, otherwise free GitHub Models via `GITHUB_TOKEN` (`models: read`); manual run for one plugin via *Run workflow*; PR code is only read, never run), `wiki.yml` (publishes `docs/wiki/*.md` to the GitHub wiki – edit those files, not the wiki). |
 
 ## Build and check
 

@@ -102,7 +102,7 @@ Plugins are published with a **fork** and a **pull request**. You never need wri
 
 - **Automatic review.** The *Plugin review* check runs within a minute or two and writes its result as a comment in the pull request.
   - **Rules.** It checks the files against the rules below: forbidden APIs, obfuscated code, files outside `plugins/`, and `plugin.json` against `index.json`.
-  - **AI review.** Claude reads the whole plugin and looks for malware: stealing code, files or tokens, hidden network requests, remote code, keyloggers, and plugins that do something different than they say.
+  - **AI review.** An AI reads the whole plugin and looks for malware: stealing code, files or tokens, hidden network requests, remote code, keyloggers, and plugins that do something different than they say. It uses Claude when the repository has an API key, and otherwise the free models from GitHub Models.
   - **Only read, never run.** Your code is never run and never installed during the review.
 - **Fixing problems.** If something is wrong, the check is red and the comment says what to fix. Push a fix to the same branch and the review runs again.
 - **Final OK.** When the check is green, a maintainer looks at it once more and merges it. From then on it shows up in **Settings → Plugins → Community** for everyone.

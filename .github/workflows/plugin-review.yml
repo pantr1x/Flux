@@ -9,13 +9,20 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - 'plugins/**'
+  # Ručná kontrola pluginu, ktorý už je v repozitári (Actions → Plugin review → Run workflow).
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin folder in plugins/, e.g. flux.word-count'
+        required: true
 
 permissions:
   contents: read
   pull-requests: write
+  models: read # AI kontrola zadarmo cez GitHub Models, keď nie je ANTHROPIC_API_KEY
 
 concurrency:
-  group: plugin-review-${{ github.event.pull_request.number }}
+  group: plugin-review-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -29,6 +36,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout the pull request (read only)
+        if: github.event_name == 'pull_request_target'
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
@@ -44,9 +52,20 @@ jobs:
         run: npm install --no-save --no-package-lock --prefix "$RUNNER_TEMP/sdk" @anthropic-ai/sdk@^0.128.0
 
       - name: List changed files
+        if: github.event_name == 'pull_request_target'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename' > "$RUNNER_TEMP/changed.txt"
+
+      - name: List plugin files (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PLUGIN: ${{ inputs.plugin }}
+        run: |
+          case "$PLUGIN" in *[!a-z0-9.-]*|'') echo "::error::Invalid plugin name"; exit 1;; esac
+          [ -d "base/plugins/$PLUGIN" ] || { echo "::error::plugins/$PLUGIN does not exist"; exit 1; }
+          ln -s "$GITHUB_WORKSPACE/base" "$GITHUB_WORKSPACE/pr"
+          (cd base && git ls-files "plugins/$PLUGIN" && echo plugins/index.json) > "$RUNNER_TEMP/changed.txt"
 
       - name: Review
         id: review
@@ -56,15 +75,17 @@ jobs:
           CHANGED: ${{ runner.temp }}/changed.txt
           OUT: ${{ runner.temp }}/review.md
           SDK_DIR: ${{ runner.temp }}/sdk
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || github.repository_owner }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           node scripts/plugin-review.mjs
           echo "code=$?" >> "$GITHUB_OUTPUT"
+          [ -f "$OUT" ] && cat "$OUT" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on the pull request
-        if: always()
+        if: always() && github.event_name == 'pull_request_target'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}

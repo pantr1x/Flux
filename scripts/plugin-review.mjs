@@ -102,24 +102,34 @@ for (const dir of dirs) {
 }
 
 // ---------- AI kontrola ----------
-let ai = null;
-let aiNote = '';
-if (!process.env.ANTHROPIC_API_KEY) aiNote = 'AI review skipped – the repository has no `ANTHROPIC_API_KEY` secret.';
-else if (!files.length) aiNote = 'AI review skipped – no plugin code changed.';
-else {
-  try {
-    ai = await aiReview(files);
-  } catch (err) {
-    aiNote = `AI review failed: ${err.message}. A person has to review this plugin.`;
-  }
-}
-
-async function aiReview(list) {
-  const req = createRequire(join(process.env.SDK_DIR || process.cwd(), 'noop.js'));
-  const { default: Anthropic } = await import(pathToFileURL(req.resolve('@anthropic-ai/sdk')).href);
-  const client = new Anthropic();
-  const docs = existsSync('docs/PLUGINS.md') ? readFileSync('docs/PLUGINS.md', 'utf8') : '';
-  const system = `You review plugins submitted to Flux, a small code editor (Electron + Monaco) used mostly by beginners.
+// 1) Claude, ak má repozitár tajomstvo ANTHROPIC_API_KEY.
+// 2) Inak GitHub Models – zadarmo cez GITHUB_TOKEN (workflow má `models: read`), žiadny kľúč netreba.
+//    Bezplatná úroveň má limit ~8000 tokenov na požiadavku, preto sa veľké pluginy posielajú po častiach.
+const SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'summary', 'findings'],
+  properties: {
+    verdict: { type: 'string', enum: ['safe', 'suspicious', 'malicious'] },
+    summary: { type: 'string', description: 'Two or three plain sentences for the maintainer.' },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['file', 'line', 'severity', 'issue'],
+        properties: {
+          file: { type: 'string' },
+          line: { type: 'integer', description: '0 when it is about the whole file' },
+          severity: { type: 'string', enum: ['critical', 'high', 'medium', 'info'] },
+          issue: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+const guide = existsSync('docs/PLUGINS.md') ? readFileSync('docs/PLUGINS.md', 'utf8') : '';
+const systemPrompt = (withGuide) => `You review plugins submitted to Flux, a small code editor (Electron + Monaco) used mostly by beginners.
 A plugin is a JavaScript module that gets a \`flux\` API object (commands, status bar, editor, snippets, styles, storage).
 Plugins run inside the editor window, so malicious code could read the user's code, steal tokens, or damage files.
 
@@ -136,41 +146,46 @@ Verdicts: "safe" = can be published; "suspicious" = a person must look before me
 
 The plugin developer guide (what plugins are allowed to do):
 <guide>
-${docs}
+${withGuide ? guide : 'Plugins may only use the `flux` object passed to activate(flux). Forbidden: window.flux, Node.js (require, process), Electron, eval/new Function, remote code, hidden network requests, obfuscated or minified code.'}
 </guide>`;
-  const body = list.map((f) => `<file path="${f.path}">\n${f.text}\n</file>`).join('\n\n');
-  const schema = {
-    type: 'object',
-    additionalProperties: false,
-    required: ['verdict', 'summary', 'findings'],
-    properties: {
-      verdict: { type: 'string', enum: ['safe', 'suspicious', 'malicious'] },
-      summary: { type: 'string', description: 'Two or three plain sentences for the maintainer.' },
-      findings: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['file', 'line', 'severity', 'issue'],
-          properties: {
-            file: { type: 'string' },
-            line: { type: 'integer', description: '0 when it is about the whole file' },
-            severity: { type: 'string', enum: ['critical', 'high', 'medium', 'info'] },
-            issue: { type: 'string' },
-          },
-        },
-      },
-    },
-  };
+const userPrompt = (list) => `Review this plugin pull request. Changed files:\n\n${list.map((f) => `<file path="${f.path}">\n${f.text}\n</file>`).join('\n\n')}`;
+
+let ai = null;
+let aiNote = '';
+let aiBy = '';
+if (!files.length) aiNote = 'AI review skipped – no plugin code changed.';
+else if (process.env.ANTHROPIC_API_KEY) {
+  try {
+    ai = await claudeReview(files);
+    aiBy = 'Claude';
+  } catch (err) {
+    aiNote = `Claude review failed (${err.message}).`;
+  }
+}
+if (!ai && files.length && process.env.GITHUB_TOKEN) {
+  try {
+    ai = await githubModelsReview(files);
+    aiBy = `GitHub Models (${ai.model})`;
+    aiNote = '';
+  } catch (err) {
+    aiNote = `${aiNote ? `${aiNote} ` : ''}GitHub Models review failed (${err.message}).`;
+  }
+}
+if (!ai && files.length) aiNote = `${aiNote || 'No AI is available.'} A person has to review this plugin.`;
+
+async function claudeReview(list) {
+  const req = createRequire(join(process.env.SDK_DIR || process.cwd(), 'noop.js'));
+  const { default: Anthropic } = await import(pathToFileURL(req.resolve('@anthropic-ai/sdk')).href);
+  const client = new Anthropic();
   const response = await client.beta.messages.create({
     model: 'claude-opus-5',
     max_tokens: 16000,
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     thinking: { type: 'adaptive' },
-    output_config: { effort: 'high', format: { type: 'json_schema', schema } },
-    system,
-    messages: [{ role: 'user', content: `Review this plugin pull request. Changed files:\n\n${body}` }],
+    output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
+    system: systemPrompt(true),
+    messages: [{ role: 'user', content: userPrompt(list) }],
   });
   if (response.stop_reason === 'refusal') throw new Error('the model declined to review this code');
   const text = response.content.find((b) => b.type === 'text')?.text;
@@ -178,11 +193,91 @@ ${docs}
   return JSON.parse(text);
 }
 
+// Súbory rozdelené do dávok, ktoré sa zmestia do limitu bezplatnej úrovne (~4 znaky = 1 token).
+function batches(list, maxChars = 14000) {
+  const out = [];
+  let cur = [];
+  let size = 0;
+  for (const f of list) {
+    const parts = [];
+    for (let i = 0; i < f.text.length; i += maxChars) parts.push(f.text.slice(i, i + maxChars));
+    parts.forEach((text, i) => {
+      const item = { path: parts.length > 1 ? `${f.path} (part ${i + 1}/${parts.length})` : f.path, text };
+      if (size + text.length > maxChars && cur.length) {
+        out.push(cur);
+        cur = [];
+        size = 0;
+      }
+      cur.push(item);
+      size += text.length;
+    });
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+async function githubModelsReview(list) {
+  const MODELS = ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini'];
+  const ask = async (model, chunk, strict) => {
+    const res = await fetch('https://models.github.ai/inference/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 3000,
+        messages: [
+          { role: 'system', content: systemPrompt(false) + (strict ? '' : `\n\nAnswer with JSON only, matching this schema: ${JSON.stringify(SCHEMA)}`) },
+          { role: 'user', content: userPrompt(chunk) },
+        ],
+        ...(strict ? { response_format: { type: 'json_schema', json_schema: { name: 'plugin_review', strict: true, schema: SCHEMA } } } : { response_format: { type: 'json_object' } }),
+      }),
+    });
+    if (!res.ok) {
+      const err = new Error(`${model}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+      err.status = res.status;
+      throw err;
+    }
+    const text = (await res.json()).choices?.[0]?.message?.content || '';
+    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+  };
+  const chunks = batches(list);
+  let lastErr;
+  // Model po modeli: pri limite (429) alebo nedostupnom modeli skúsi ďalší.
+  for (const model of MODELS) {
+    try {
+      const results = [];
+      for (const chunk of chunks) {
+        let r;
+        try {
+          r = await ask(model, chunk, true);
+        } catch (err) {
+          if (err.status !== 400) throw err;
+          r = await ask(model, chunk, false); // model bez json_schema
+        }
+        results.push(r);
+      }
+      // Najhorší verdikt zo všetkých dávok vyhráva.
+      const rank = { safe: 0, suspicious: 1, malicious: 2 };
+      const worst = results.reduce((w, r) => ((rank[r.verdict] ?? 1) > (rank[w.verdict] ?? 1) ? r : w), results[0]);
+      return {
+        model,
+        verdict: rank[worst.verdict] === undefined ? 'suspicious' : worst.verdict,
+        summary: results.map((r) => r.summary).filter(Boolean).join(' '),
+        findings: results.flatMap((r) => r.findings || []),
+      };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 // ---------- správa ----------
 const blocks = problems.filter((p) => p.level === 'block');
 const warns = problems.filter((p) => p.level === 'warn');
 const aiBad = ai && ai.verdict !== 'safe';
-const failed = blocks.length > 0 || aiBad || (!ai && files.length > 0 && !!process.env.ANTHROPIC_API_KEY);
+const failed = blocks.length > 0 || aiBad || (!ai && files.length > 0);
 const where = (p) => `\`${p.file}${p.line ? `:${p.line}` : ''}\``;
 const icon = { critical: '🔴', high: '🟠', medium: '🟡', info: '⚪' };
 
@@ -197,7 +292,7 @@ for (const p of warns) md += `- ⚠️ ${where(p)} – ${p.text}\n`;
 if (problems.length) md += '\n';
 md += `### AI review\n\n`;
 if (ai) {
-  md += `**Verdict: ${ai.verdict}**\n\n${ai.summary}\n\n`;
+  md += `**Verdict: ${ai.verdict}** <sub>(${aiBy})</sub>\n\n${ai.summary}\n\n`;
   for (const f of ai.findings) md += `- ${icon[f.severity] || '⚪'} \`${f.file}${f.line ? `:${f.line}` : ''}\` – ${f.issue}\n`;
 } else md += `${aiNote}\n`;
 md += `\n<sub>The plugin code is only read, never run. Rules: [docs/PLUGINS.md](../blob/HEAD/docs/PLUGINS.md#rules).</sub>\n`;
