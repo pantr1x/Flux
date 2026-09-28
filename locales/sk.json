@@ -257,6 +257,7 @@
  "F5 runs Python instantly. For websites you get a live preview that reloads on save.": "F5 hneď spustí Python. Pri weboch máš živý náhľad, ktorý sa obnoví po uložení.",
  "Feature tour": "Prehliadka funkcií",
  "File": "Súbor",
+ "File changed outside Flux": "Súbor sa zmenil mimo Fluxu",
  "File name": "Názov súboru",
  "File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo": "Súbor, Úpravy, Zobraziť, Spustiť a Pomoc ako riadok hore – inak sa otvárajú z loga flux",
  "Files": "Súbory",

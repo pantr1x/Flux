@@ -243,6 +243,7 @@
  "F5 runs Python instantly. For websites you get a live preview that reloads on save.": "F5 executa Python na hora. Para sites você tem uma prévia ao vivo que recarrega ao salvar.",
  "Feature tour": "Tour de recursos",
  "File": "Arquivo",
+ "File changed outside Flux": "Arquivo alterado fora do Flux",
  "File name": "Nome do arquivo",
  "File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo": "Arquivo, Editar, Exibir, Executar e Ajuda como linha no topo – senão abrem pelo logo do flux",
  "Files": "Arquivos",

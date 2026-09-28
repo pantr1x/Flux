@@ -1125,10 +1125,15 @@ async function saveTab(tab, { auto = false } = {}) {
       syncOpenTabs(tab);
       return false;
     }
-    const pick = await confirmPalette(t('“{file}” was changed outside Flux. Save your version over it?', { file: basename(tab.path) }), [
-      { label: t('Save my version over it'), value: 'mine' },
-      { label: t('Load the new version from disk'), value: 'disk' },
-    ]);
+    const pick = await askDialog({
+      title: t('File changed outside Flux'),
+      detail: tab.path,
+      message: t('“{file}” was changed outside Flux. Save your version over it?', { file: basename(tab.path) }),
+      buttons: [
+        { label: t('Save my version over it'), value: 'mine' },
+        { label: t('Load the new version from disk'), value: 'disk', primary: true },
+      ],
+    });
     if (tab.model.isDisposed()) return false;
     if (pick === 'disk') {
       tab.disk = onDisk;
@@ -1597,10 +1602,15 @@ async function syncTabs(only) {
     // Zrušená otázka (Esc, klik vedľa) = rozhodneš sa neskôr: nič sa nemení, tab.disk ostáva starý,
     // takže automatické ukladanie súbor neprepíše (saveTab to stráži) a pri ďalšej zmene sa Flux opýta znova.
     if (isDirty(tab)) {
-      const pick = await confirmPalette(t('“{file}” was changed outside Flux, and you have unsaved changes.', { file: name }), [
-        { label: t('Load the new version from disk'), value: 'disk' },
-        { label: t('Keep my changes'), value: 'mine' },
-      ]);
+      const pick = await askDialog({
+        title: t('File changed outside Flux'),
+        detail: tab.path,
+        message: t('“{file}” was changed outside Flux, and you have unsaved changes.', { file: name }),
+        buttons: [
+          { label: t('Keep my changes'), value: 'mine' },
+          { label: t('Load the new version from disk'), value: 'disk', primary: true },
+        ],
+      });
       if (!pick || tab.model.isDisposed()) continue;
       tab.disk = text;
       if (pick === 'mine') {
@@ -1612,12 +1622,18 @@ async function syncTabs(only) {
       continue;
     }
     if (!setting('autoReload')) {
-      const pick = await confirmPalette(t('“{file}” was changed outside Flux. Show the new version?', { file: name }), [
-        { label: t('Load the new version'), value: 'disk' },
-        { label: t('Keep what is in the editor'), value: 'mine' },
-        { label: t('Always load automatically – don’t ask again'), value: 'always' },
-      ]);
-      if (!pick || tab.model.isDisposed()) continue;
+      const res = await askDialog({
+        title: t('File changed outside Flux'),
+        detail: tab.path,
+        message: t('“{file}” was changed outside Flux. Show the new version?', { file: name }),
+        buttons: [
+          { label: t('Keep what is in the editor'), value: 'mine' },
+          { label: t('Load the new version'), value: 'disk', primary: true },
+        ],
+        check: { label: t('Always load automatically – don’t ask again') },
+      });
+      if (!res || tab.model.isDisposed()) continue;
+      const pick = res.value === 'disk' && res.checked ? 'always' : res.value;
       tab.disk = text;
       if (pick === 'mine') {
         // Text v editore sa od disku líši → ber ho ako neuložený (Ctrl+S / automatické ukladanie ním prepíše súbor).
@@ -2761,6 +2777,63 @@ function closePalette(picked = false) {
   $('#overlay').hidden = true;
   if (!picked) p.onCancel?.();
   if (state.active) editor.focus();
+}
+
+// Dôležitá otázka (napr. súbor sa zmenil mimo Fluxu) – samostatné okno uprostred s tlačidlami,
+// nie paleta s vyhľadávaním. Vráti hodnotu tlačidla, alebo null (Esc / klik mimo = rozhodneš sa neskôr).
+// check: { label } pridá zaškrtávacie políčko – výsledok potom príde ako { value, checked }.
+let askClose = null;
+function askDialog({ title, message, detail = '', icon: ic = 'file', buttons, check = null }) {
+  askClose?.(null);
+  return new Promise((resolve) => {
+    const back = document.createElement('div');
+    back.className = 'ask-back';
+    back.innerHTML = `<div class="ask-card" role="alertdialog" aria-modal="true">
+      <div class="ask-head"><span class="ask-ic">${icon(ic, 18)}</span><div class="ask-titles"><b></b>${detail ? '<small></small>' : ''}</div></div>
+      <p class="ask-msg"></p>
+      ${check ? '<label class="ask-check"><input type="checkbox"><span></span></label>' : ''}
+      <div class="ask-btns"></div>
+    </div>`;
+    back.querySelector('.ask-titles b').textContent = title;
+    if (detail) {
+      const dir = detail.replace(/[\\/][^\\/]*$/, '');
+      back.querySelector('.ask-titles small').textContent = dir.length > 40 ? `…${dir.slice(-38)}` : dir;
+      back.querySelector('.ask-titles small').title = detail;
+    }
+    back.querySelector('.ask-msg').textContent = message;
+    if (check) back.querySelector('.ask-check span').textContent = check.label;
+    const box = back.querySelector('.ask-btns');
+    for (const b of buttons) {
+      const el = document.createElement('button');
+      el.className = `ask-btn${b.primary ? ' primary' : ''}`;
+      el.textContent = b.label;
+      el.onclick = () => done(b.value);
+      box.append(el);
+    }
+    const onKey = (e) => {
+      // Klávesy patria oknu – nech sa neotvorí nič iné a Esc nezavrie niečo pod ním.
+      if (e.key === 'Escape') done(null);
+      else if (e.key === 'Enter' && !e.target.closest?.('.ask-btn')) done(buttons.find((b) => b.primary)?.value ?? null);
+      else if (e.key === 'Tab' || e.key === ' ' || e.key === 'Enter') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    const done = (value) => {
+      if (!back.isConnected) return;
+      const checked = !!back.querySelector('.ask-check input')?.checked;
+      window.removeEventListener('keydown', onKey, true);
+      askClose = null;
+      back.classList.add('out');
+      setTimeout(() => back.remove(), 160);
+      if (state.active) editor.focus();
+      resolve(check ? (value == null ? null : { value, checked }) : value);
+    };
+    askClose = done;
+    back.addEventListener('mousedown', (e) => e.target === back && done(null));
+    window.addEventListener('keydown', onKey, true);
+    document.body.append(back);
+    (box.querySelector('.primary') || box.lastElementChild)?.focus();
+  });
 }
 
 function promptPalette(opts) {

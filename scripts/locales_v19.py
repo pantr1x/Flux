@@ -99,3 +99,12 @@ _V19C = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19C.items()})
+
+# 1.4.20 – okno s otázkou.
+_V19D = {
+    'File changed outside Flux': (
+        'Súbor sa zmenil mimo Fluxu', 'Datei außerhalb von Flux geändert', 'Archivo cambiado fuera de Flux', 'Fichier modifié en dehors de Flux',
+        'File modificato fuori da Flux', 'Plik zmieniony poza Fluxem', 'Arquivo alterado fora do Flux', 'Файл змінено поза Flux'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19D.items()})

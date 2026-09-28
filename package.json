@@ -2,7 +2,7 @@
   "name": "flux",
   "productName": "Flux",
   "desktopName": "flux.desktop",
-  "version": "1.4.19",
+  "version": "1.4.20",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,

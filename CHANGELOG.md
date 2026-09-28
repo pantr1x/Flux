@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.20 – 2026-09-28
+
+### Clearer question when a file changed outside Flux
+- The question is now a **real window in the middle** with clear buttons, not a search bar.
+  - It shows the file name and folder, **Keep what is in the editor**, and **Load the new version**.
+  - Enter picks the highlighted button. Esc or a click next to the window means *decide later*.
+- **Always load automatically – don’t ask again** is now a checkbox under the question.
+
 ## 1.4.19 – 2026-09-28
 
 ### Fixes
