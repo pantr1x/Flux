@@ -167,6 +167,8 @@ export class PythonLanguageClient {
         typeCheckingMode: 'basic',
         inlayHints: { variableTypes: false, callArgumentNames: false, functionReturnTypes: false, genericTypes: false },
         diagnosticMode: 'openFilesOnly',
+        // neindexovať celý projekt na pozadí – Pyright číta len otvorené súbory a to, čo importujú
+        indexing: false,
         autoImportCompletions: true,
         useLibraryCodeForTypes: true,
         autoSearchPaths: true,

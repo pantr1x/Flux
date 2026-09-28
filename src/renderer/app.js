@@ -1094,22 +1094,35 @@ function slideIndicator(box, active, key) {
 }
 
 // ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
+// Plynulé posúvanie editora: koliesko posúva cieľ a editor sa k nemu plynule dobehne (ako web) –
+// rýchlosť sa tak pri ďalšom zúbku neskokovo nemení a pohyb nie je sekaný.
+let scrollAnimating = false;
 function inertiaScroll() {
   const node = $('#editor');
-  let velocity = 0;
+  let goal = 0; // cieľ bez zaokrúhlenia (touchpad posúva po pár px)
+  let target = 0;
+  let pos = 0;
   let frame = 0;
   let last = 0;
-  const step = (t) => {
+  const stickyOn = () => {
+    const w = node.querySelector('.sticky-widget');
+    return !!w && w.style.display !== 'none' && w.offsetHeight > 0;
+  };
+  const stop = () => {
+    frame = 0;
+    scrollAnimating = false;
+  };
+  const step = () => {
+    const now = performance.now();
     // čas snímky môže byť starší ako posledné koliesko – nikdy záporný krok
-    const dt = Math.min(34, Math.max(4, t - last)) / 16.67;
-    last = t;
-    editor.setScrollTop(editor.getScrollTop() + velocity * dt);
-    velocity *= Math.pow(0.9, dt);
-    if (Math.abs(velocity) < 0.25) {
-      velocity = 0;
-      frame = 0;
-      return;
-    }
+    const dt = Math.min(50, Math.max(0, now - last));
+    last = now;
+    // niekto iný posunul editor (posuvník, klávesnica, skok na riadok) – nechať ho tak
+    if (Math.abs(editor.getScrollTop() - Math.round(pos)) > 2) return stop();
+    pos += (target - pos) * (1 - Math.exp(-dt / 90));
+    if (Math.abs(target - pos) < 0.5) pos = target;
+    editor.setScrollTop(pos);
+    if (pos === target) return stop();
     frame = requestAnimationFrame(step);
   };
   node.addEventListener(
@@ -1119,12 +1132,22 @@ function inertiaScroll() {
       if (e.target.closest('.suggest-widget, .monaco-hover, .parameter-hints-widget, .find-widget')) return;
       e.preventDefault();
       e.stopPropagation();
-      const dy = e.deltaMode === 1 ? e.deltaY * editor.getOption(monaco.editor.EditorOption.lineHeight) : e.deltaY;
-      // Zmena smeru zastaví pohyb hneď.
-      if (Math.sign(dy) !== Math.sign(velocity)) velocity = 0;
-      velocity += dy * 0.14;
+      const lh = editor.getOption(monaco.editor.EditorOption.lineHeight);
+      const dy = (e.deltaMode === 1 ? e.deltaY * lh : e.deltaMode === 2 ? e.deltaY * node.clientHeight : e.deltaY) * 1.3;
+      const max = Math.max(0, editor.getScrollHeight() - editor.getLayoutInfo().height);
       if (!frame) {
+        pos = editor.getScrollTop();
+        goal = pos;
+      }
+      // zmena smeru zastaví pohyb hneď
+      if (frame && Math.sign(dy) !== Math.sign(target - pos)) goal = pos;
+      goal = Math.max(0, Math.min(max, goal + dy));
+      // s prilepenými riadkami hore dobehne na celý riadok – netreba ho potom dorovnávať
+      const top0 = editor.getTopForLineNumber(1); // riadky začínajú s malým odsadením
+      target = stickyOn() && goal > top0 ? Math.min(max, top0 + Math.round((goal - top0) / lh) * lh) : goal;
+      if (!frame && target !== pos) {
         last = performance.now();
+        scrollAnimating = true;
         frame = requestAnimationFrame(step);
       }
     },
@@ -1162,7 +1185,7 @@ function stickyFix() {
     anim = requestAnimationFrame(step);
   };
   const snap = () => {
-    if (pressed || !editor.getModel() || !stickyH()) return;
+    if (pressed || scrollAnimating || !editor.getModel() || !stickyH()) return;
     const top = editor.getScrollTop();
     const l = lineAtTop(top);
     const a = editor.getTopForLineNumber(l);

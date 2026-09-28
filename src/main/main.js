@@ -183,6 +183,7 @@ function sendBounds() {
 let win = null;
 let workspace = null;
 let workspaceWatcher = null;
+let listCache = null; // fs:list-all pre otvorený projekt
 let dirtyCount = 0;
 let allowClose = false;
 
@@ -492,6 +493,7 @@ function setWorkspace(dir) {
   try {
     workspaceWatcher = fs.watch(dir, { recursive: true }, (_e, file) => {
       if (file && file.split(/[\\/]/).some((p) => IGNORED_DIRS.has(p))) return;
+      listCache = null;
       clearTimeout(timer);
       timer = setTimeout(() => send('fs:changed'), 150);
     });
@@ -897,7 +899,10 @@ function registerIpc() {
         else out.push(p);
       }
     };
+    // zoznam sa pamätá, kým sa v projekte niečo nezmení (watcher projektu ho zahodí)
+    if (listCache?.dir === workspace) return listCache.out;
     if (workspace) await walk(workspace, 0);
+    listCache = { dir: workspace, out };
     return out;
   });
   ipcMain.handle('fs:read', async (_e, file) => {
@@ -1558,8 +1563,10 @@ async function projectKind(dir) {
 
 // Štatistiky projektu: súbory, riadky, znaky, čas.
 const statsCache = new Map();
+let statsReads = 0; // koľko súborov sa naozaj prečítalo (test: FLUX_STATS_DEBUG)
 // Po zmene súboru zahodíme štatistiky projektov, ktoré ho obsahujú.
 function staleStats(file) {
+  listCache = null;
   for (const dir of statsCache.keys()) if (String(file).startsWith(dir)) statsCache.delete(dir);
 }
 const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql|zig|r|jl)$/i;
@@ -1618,18 +1625,31 @@ async function projectStats(dir) {
         const st = await fsp.stat(p);
         lastModified = Math.max(lastModified, st.mtimeMs);
         if (TEXT_EXT.test(e.name) && st.size < 2 * 1024 * 1024) {
-          const text = await fsp.readFile(p, 'utf8');
-          chars += text.length;
-          lines += text ? text.split('\n').length : 0;
+          // súbor sa číta len keď sa zmenil (čas úpravy / veľkosť) – inak čísla z minula
+          let c = known[p];
+          if (!c || c[0] !== st.mtimeMs || c[1] !== st.size) {
+            const text = await fsp.readFile(p, 'utf8');
+            statsReads++;
+            c = [st.mtimeMs, st.size, text ? text.split('\n').length : 0, text.length];
+          }
+          seen[p] = c;
+          lines += c[2];
+          chars += c[3];
         }
       } catch {}
     }
   };
+  // riadky a znaky každého súboru z minulého prehľadania (userData/project-stats.json → files)
+  const store = loadSavedStats();
+  store.files ??= {};
+  const known = store.files[dir] || {};
+  const seen = {};
   await walk(dir, 0);
+  store.files = { [dir]: seen }; // pamätá sa len otvorený projekt
   const data = { files, lines, chars, lastModified, kinds };
   statsCache.set(dir, { at: Date.now(), data });
   keepStats(dir, data);
-  return { ...data, time: settings.projectTime?.[dir] || 0 };
+  return { ...data, time: settings.projectTime?.[dir] || 0, ...(process.env.FLUX_STATS_DEBUG ? { reads: statsReads } : {}) };
 }
 
 // ---------- štart ----------

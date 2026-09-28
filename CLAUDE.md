@@ -237,7 +237,7 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 
 ## Smooth scrolling and transitions
 
-- `inertia` (*Smooth scrolling with inertia*, Appearance → Window) controls both the editor (`inertiaScroll()` in `app.js`, a capture wheel listener on `#editor`) and every other scrollable element (`src/renderer/smoothScroll.js` – a global wheel listener that moves the nearest scrollable parent with velocity + friction). Elements that must keep native scrolling: add class `no-smooth` (Monaco, xterm, iframes, selects and range inputs are skipped already).
+- `inertia` (*Smooth scrolling with inertia*, Appearance → Window) controls both the editor (`inertiaScroll()` in `app.js`, a capture wheel listener on `#editor`) and every other scrollable element (`src/renderer/smoothScroll.js` – a global wheel listener on the nearest scrollable parent). Both use **target easing**: the wheel moves a target and the position eases to it with `1 - exp(-dt/90)`. The old velocity + friction model felt choppy. In the editor, while the sticky header is shown, the target is rounded to a whole line (from `getTopForLineNumber(1)`, since lines have a top padding), and `stickyFix()` → `snap()` skips while `scrollAnimating`, so the view does not jump once more at the end. Elements that must keep native scrolling: add class `no-smooth` (Monaco, xterm, iframes, selects and range inputs are skipped already).
 - `transitions` (*Transition animations*) sets `body.fx-trans`; CSS plays `fx-in`/`fx-fade` when settings panes, Output/Terminal or the project page appear, and `playTransition(el, dir)` restarts the animation (in `activate()` the editor slides in from the side of the new tab). `slideIndicator(box, activeEl, key)` draws a `.slide-ind` highlight that glides to the selected item (file tabs, tree, projects, settings menu); call it after re-rendering such a list. Its position comes from the `offsetLeft/Top` chain (not affected by running animations) and a `ResizeObserver` re-aligns it when rows change size later (e.g. project stats load async).
 - Anything that only becomes visible through an animation (`forwards`, e.g. the intro logo `.ob-draw`) needs a `body.no-anim` rule with its final state – `no-anim` removes all animations.
 - Animation loops: the `requestAnimationFrame` timestamp can be older than the `performance.now()` taken at the last wheel event – clamp `dt` so it is never negative (see `inertiaScroll()` and the website). `body.no-anim` (Memory & speed) wins over it.
@@ -260,7 +260,11 @@ Always on, whatever the settings:
 - **Network service in the main process:** `enable-features=NetworkServiceInProcess2`, so there is no separate Utility process.
 - **Idle trimming:** 2 minutes after the window loses focus, the session cache is cleared and `webFrame.clearCache()` runs (`app:trim`).
 - **Pyright** stops after 5 minutes of the window being unfocused.
-- **Project stats:** `projectStats()` in `main.js` reads files only for the open project (`workspace`); other projects get the numbers saved at their last visit (`userData/project-stats.json`, `files: null` when never scanned).
+- **Project stats:** `projectStats()` in `main.js` scans only the open project (`workspace`). Other projects get the numbers saved at their last visit (`userData/project-stats.json`, `files: null` when never scanned).
+  - Inside the open project, a file is read only when its mtime or size changed. The per-file lines and chars live in `project-stats.json` → `files[dir]`.
+  - `FLUX_STATS_DEBUG=1` adds a `reads` counter to the result, for tests.
+- **File list:** `fs:list-all` is cached (`listCache`) until the project watcher or a Flux file operation (`staleStats`) sees a change.
+- **Pyright** runs with `diagnosticMode: 'openFilesOnly'` and `indexing: false`. It reads the open files and what they import, and does not index the whole project.
 - **Memory breakdown:** `app:memory` returns a breakdown by process type, which the settings show.
 
 Changing `lite` or pressing *Reset advanced* clears all these keys. Use `optOn()` for new savings, never `setting('lite')` directly.
