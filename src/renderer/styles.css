@@ -8721,3 +8721,19 @@ body.moving-bg *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* Upečené pozadie je už rozmazané – netreba filter, len sa roztiahne. */
+.wall-media.baked {
+  filter: none;
+}
+.wall-media.baked video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* V hlavnej karte je pozadie skoro nepriehľadné – rozmazanie pod dlaždicami by nebolo vidieť, len by stálo výkon. */
+#card .pj-tile,
+#card .pj-panel {
+  backdrop-filter: none;
+}

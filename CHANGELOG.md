@@ -2,6 +2,18 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.34 – 2026-09-30
+
+### Video backgrounds are pre-made, so they cost almost nothing
+- **Flux now plays a video background (your own video, or a Lively Wallpaper / Wallpaper Engine video) once in the background and saves a tiny copy that is already blurred.** After that, Flux plays only this small copy.
+  - It no longer has to decode the big video or blur every frame.
+  - The first time takes as long as the video. Until then, the background looks the same as before.
+  - The copy is made again when you change the blur, and Flux keeps up to 3 of them.
+- The tiles and panels inside the editor area no longer blur what is behind them. You could not see that blur anyway, but it cost graphics memory.
+
+### Fixes
+- **Windows wallpaper** now really shows the Windows wallpaper, even when Lively Wallpaper or Wallpaper Engine is running. You can switch the live wallpaper back on with **Use Lively Wallpaper and Wallpaper Engine**.
+
 ## 1.4.33 – 2026-09-30
 
 ### Much lighter moving backgrounds, one process less

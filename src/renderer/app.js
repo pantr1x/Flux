@@ -533,7 +533,7 @@ async function setupWallpaper() {
   // Pohyblivé pozadie (vlastné video alebo YouTube) – vrstva cez celé okno namiesto tapety.
   let mediaKey = '';
   const setMedia = (info) => {
-    const key = info && info.type !== 'image' && state.material === 'wallpaper' ? `${info.type}:${info.url || info.id}` : '';
+    const key = info && info.type !== 'image' && state.material === 'wallpaper' ? `${info.type}:${info.url || info.id}:${setting('wallBlur')}` : '';
     if (key === mediaKey) return;
     mediaKey = key;
     layer.querySelector('.wall-media')?.remove();
@@ -585,6 +585,7 @@ async function setupWallpaper() {
       // farby podľa videa raz za 4 s (z malého plátna – nič navyše sa nekreslí)
       const iv = setInterval(() => (v.isConnected ? !v.paused && sampleTone(cv) : clearInterval(iv)), 4000);
       box.append(cv, v);
+      useBaked(box, info.url, v);
     } else if (info.type === 'gif') {
       const im = document.createElement('img');
       im.onload = () => sampleTone(im);
@@ -609,6 +610,93 @@ async function setupWallpaper() {
     layer.append(box);
     place(box);
   };
+  // „Upečené“ pozadie: video sa raz prehrá do malého, už rozmazaného webm (MediaRecorder z plátna).
+  // Potom sa prehráva len tá malá kópia – žiadne dekódovanie veľkého videa ani rozmazávanie každý snímok.
+  const bakeKey = (url) => {
+    let h = 2166136261;
+    const str = `${url}|${Number(setting('wallBlur')) || 40}|${bounds?.dw || 0}x${bounds?.dh || 0}`;
+    for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+    return `b${(h >>> 0).toString(36)}`;
+  };
+  const showBaked = (box, url, live) => {
+    const bv = document.createElement('video');
+    Object.assign(bv, { src: url, autoplay: true, muted: true, loop: true, playsInline: true });
+    bv.addEventListener('loadeddata', () => (sampleTone(bv), syncVideo()), { once: true });
+    const iv = setInterval(() => (bv.isConnected ? !bv.paused && sampleTone(bv) : clearInterval(iv)), 4000);
+    // živé video a plátno preč – uvoľní dekodér veľkého videa
+    live.removeAttribute('src');
+    live.load();
+    box.replaceChildren(bv);
+    box.classList.add('baked');
+  };
+  const useBaked = async (box, url, live) => {
+    const key = bakeKey(url);
+    const ready = await flux.bakedBackground(key).catch(() => null);
+    if (!box.isConnected) return;
+    if (ready) return showBaked(box, ready, live);
+    bake(url, key, box, live);
+  };
+  let baking = null;
+  const bake = (url, key, box, live) => {
+    if (baking === key || typeof MediaRecorder === 'undefined') return;
+    baking = key;
+    const src = document.createElement('video');
+    Object.assign(src, { src: url, muted: true, playsInline: true, preload: 'auto' });
+    src.className = 'wall-src';
+    const W = Math.max(96, Math.round((bounds?.dw || innerWidth) / 8));
+    const H = Math.max(54, Math.round((bounds?.dh || innerHeight) / 8));
+    const cv = Object.assign(document.createElement('canvas'), { width: W, height: H });
+    const ctx = cv.getContext('2d', { alpha: false });
+    const blur = (Number(setting('wallBlur')) || 40) / 8;
+    const stop = (save) => {
+      baking = null;
+      if (rec.state !== 'inactive') {
+        rec.onstop = save ? rec.onstop : null;
+        rec.stop();
+      }
+      src.remove();
+    };
+    const rec = new MediaRecorder(cv.captureStream(15), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 350000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = async () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      if (!blob.size) return;
+      const saved = await flux.saveBakedBackground(key, await blob.arrayBuffer()).catch(() => null);
+      if (saved && box.isConnected) showBaked(box, saved, live);
+    };
+    let last = 0;
+    const frame = (now) => {
+      if (!box.isConnected) return stop(false); // pozadie sa medzitým zmenilo
+      if (now - last >= 60) {
+        last = now;
+        // o kúsok väčšie ako plátno, aby rozmazané okraje neboli tmavé
+        const pad = blur * 2;
+        const k = Math.max((W + pad * 2) / src.videoWidth, (H + pad * 2) / src.videoHeight);
+        const dw = src.videoWidth * k;
+        const dh = src.videoHeight * k;
+        ctx.filter = `blur(${blur}px) saturate(1.35)`;
+        ctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      }
+      if (!src.ended) src.requestVideoFrameCallback(frame);
+    };
+    src.addEventListener('ended', () => stop(true), { once: true });
+    src.addEventListener('error', () => stop(false), { once: true });
+    src.addEventListener(
+      'loadedmetadata',
+      () => {
+        // veľmi dlhé videá (viac ako 10 min) sa nepečú – hrajú sa ako doteraz
+        if (Number.isFinite(src.duration) && src.duration > 600) return stop(false);
+        if (!Number.isFinite(src.duration)) setTimeout(() => baking === key && stop(false), 600e3);
+        rec.start(1000);
+        src.requestVideoFrameCallback(frame);
+        src.play().catch(() => stop(false));
+      },
+      { once: true },
+    );
+    layer.append(src);
+  };
+
   // Video v pozadí hrá len keď sa naň pozeráš: pri minimalizovanom okne a keď Flux nie je aktívny
   // (pracuješ v inom programe) sa zastaví – šetrí procesor aj grafickú kartu. Bez animácií (Pamäť a rýchlosť)
   // ostane stáť na prvom snímku.
@@ -4114,7 +4202,10 @@ function openSettings() {
     }
     if (e.target.closest('[data-action="bg-reset"]')) {
       await flux.resetBackground();
+      state.settings = await flux.setSettings({ liveWallpaper: false });
       wallpaperUrl = null;
+      const live = $('[data-key="liveWallpaper"]');
+      if (live) live.checked = false;
       return renderBgHistory();
     }
     const forget = e.target.closest('[data-bg-forget]');

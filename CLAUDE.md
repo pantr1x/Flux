@@ -216,6 +216,10 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
   - **Moving backgrounds:**
     - A video is not shown directly: it stays a hidden 1×1 `.wall-src` and is drawn into a small `<canvas>` (1/8 of the display, at most 15 fps, `requestVideoFrameCallback`).
     - `body.moving-bg` turns off every `backdrop-filter`, because the panels would re-blur on each frame.
+    - **Baked video:** `bake()` in `setupWallpaper()` plays the video once into a MediaRecorder on a blurred 1/8-size canvas. It saves the result with `bg:save-baked` to `userData/backgrounds/baked/<key>.webm` (the newest 3 are kept), served as `app://flux/baked/…`.
+      - `useBaked()` plays that small webm directly, with `.wall-media.baked` = no CSS filter.
+      - The key is a hash of the video URL, `wallBlur` and the display size.
+    - The *Windows wallpaper* button (`app:reset-background`) also sets `liveWallpaper: false`.
   - **Performance:** both wall layers (`.wall-img`, `.wall-media`) are laid out at 1/4 of the display size and scaled up 4× (`place()` in `setupWallpaper()`), with the blur divided by 4 in CSS. A background video plays only while the window is visible and focused (`syncVideo()`). Without `optAnim` it shows a still frame, and YouTube shows its thumbnail.
 - **Live wallpapers:** `src/main/liveWallpaper.js` → `detect()`.
   - **When it runs:** only when there is no own background and `liveWallpaper` is not off. The result is cached for 10 s.

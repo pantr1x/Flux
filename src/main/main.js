@@ -106,6 +106,11 @@ function backgroundInfo() {
   return null;
 }
 
+// Rozmazané video pozadia „upečené“ vopred (renderer ho raz nahrá do malého webm) – prehráva sa len táto
+// malá kópia, bez dekódovania veľkého videa a bez rozmazávania pri každom snímku. Najviac 3 súbory.
+const bakedDir = () => path.join(bgDir(), 'baked');
+const bakedFile = (key) => path.join(bakedDir(), `${String(key).replace(/[^\w-]/g, '')}.webm`);
+
 // YouTube odkaz → id videa (youtu.be/ID, watch?v=ID, shorts/ID, embed/ID alebo samotné id).
 function youtubeId(text) {
   const s = String(text || '').trim();
@@ -1235,6 +1240,14 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('app:background', () => backgroundInfo());
+  ipcMain.handle('bg:baked', (_e, key) => (fs.existsSync(bakedFile(key)) ? `app://flux/baked/${encodeURIComponent(key)}` : null));
+  ipcMain.handle('bg:save-baked', async (_e, key, data) => {
+    await fsp.mkdir(bakedDir(), { recursive: true });
+    await fsp.writeFile(bakedFile(key), Buffer.from(data));
+    const files = (await fsp.readdir(bakedDir())).map((f) => ({ f, t: fs.statSync(path.join(bakedDir(), f)).mtimeMs })).sort((a, b) => b.t - a.t);
+    for (const { f } of files.slice(3)) await fsp.rm(path.join(bakedDir(), f), { force: true });
+    return `app://flux/baked/${encodeURIComponent(key)}`;
+  });
   ipcMain.handle('app:background-history', () =>
     (settings.bgHistory || [])
       .filter((b) => b.type === 'youtube' || (b.file && fs.existsSync(bgFile(b.file))))
@@ -1279,6 +1292,8 @@ function registerIpc() {
   ipcMain.handle('app:reset-background', () => {
     delete settings.bgImage;
     delete settings.bg;
+    // „Tapeta Windows“ = naozaj obyčajná tapeta, nie živá z Lively / Wallpaper Engine (dá sa zapnúť prepínačom).
+    settings.liveWallpaper = false;
     saveSettings();
     applyMaterial();
     send('app:background', null);
@@ -1620,9 +1635,14 @@ app.whenReady().then(() => {
       return net.fetch(pathToFileURL(file).toString());
     }
     // Vlastné pozadie (obrázok / video): app://flux/bg/<súbor> – s Range, aby sa video dalo prehrávať dookola.
-    if (pathname.startsWith('/bg/') || pathname.startsWith('/live/')) {
+    if (pathname.startsWith('/bg/') || pathname.startsWith('/live/') || pathname.startsWith('/baked/')) {
       // /live/ = súbor z Lively Wallpaper / Wallpaper Engine; povolený je len ten, ktorý je práve nastavený.
-      const file = pathname.startsWith('/live/') ? liveWall()?.file || '' : bgFile(decodeURIComponent(pathname.slice('/bg/'.length)));
+      // /baked/ = malá, už rozmazaná kópia videa pozadia (bakedFile).
+      const file = pathname.startsWith('/live/')
+        ? liveWall()?.file || ''
+        : pathname.startsWith('/baked/')
+          ? bakedFile(decodeURIComponent(pathname.slice('/baked/'.length)))
+          : bgFile(decodeURIComponent(pathname.slice('/bg/'.length)));
       let st;
       try {
         st = fs.statSync(file);

@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('flux', {
   resetBackground: () => ipcRenderer.invoke('app:reset-background'),
   backgroundYoutube: (link) => ipcRenderer.invoke('app:background-youtube', link),
   background: () => ipcRenderer.invoke('app:background'),
+  bakedBackground: (key) => ipcRenderer.invoke('bg:baked', key),
+  saveBakedBackground: (key, data) => ipcRenderer.invoke('bg:save-baked', key, data),
   backgroundHistory: () => ipcRenderer.invoke('app:background-history'),
   useBackground: (key) => ipcRenderer.invoke('app:background-use', key),
   forgetBackground: (key) => ipcRenderer.invoke('app:background-forget', key),
