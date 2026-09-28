@@ -218,8 +218,25 @@ function batches(list, maxChars = 14000) {
 
 async function githubModelsReview(list) {
   const MODELS = ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini'];
+  // Dve adresy GitHub Models (nová a staršia z Azure) – ak jedna neodpovie JSONom, skúsi sa druhá.
+  const ENDPOINTS = [
+    ['https://models.github.ai/inference/chat/completions', (m) => m],
+    ['https://models.inference.ai.azure.com/chat/completions', (m) => m.replace(/^openai\//, '')],
+  ];
   const ask = async (model, chunk, strict) => {
-    const res = await fetch('https://models.github.ai/inference/chat/completions', {
+    let lastErr;
+    for (const [url, name] of ENDPOINTS) {
+      try {
+        return await askAt(url, name(model), chunk, strict);
+      } catch (err) {
+        lastErr = err;
+        if (err.status === 429) throw err; // limit platí pre obe adresy
+      }
+    }
+    throw lastErr;
+  };
+  const askAt = async (url, model, chunk, strict) => {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({
@@ -238,7 +255,16 @@ async function githubModelsReview(list) {
       err.status = res.status;
       throw err;
     }
-    const data = await res.json();
+    const raw = await res.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      console.error(`[${url}] HTTP ${res.status}, not JSON: ${raw.slice(0, 300)}`);
+      const err = new Error(`${model}: ${url} answered HTTP ${res.status} without JSON`);
+      err.status = 502;
+      throw err;
+    }
     const text = data.choices?.[0]?.message?.content || '';
     try {
       return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
