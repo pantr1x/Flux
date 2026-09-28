@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.30 – 2026-09-29
+
+### Fixes
+- **Moving backgrounds now look see-through, too.** Live wallpapers, videos and YouTube backgrounds are now sized to your whole screen and shift when you move the Flux window, like the normal wallpaper. Before, they stayed fixed inside the window.
+
 ## 1.4.29 – 2026-09-29
 
 ### Live wallpapers

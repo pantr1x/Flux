@@ -8603,8 +8603,12 @@ body.accent-mono .hm-tip-ic {
 }
 .wall-media {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
+  will-change: transform;
   pointer-events: none;
   filter: blur(var(--wall-blur, 40px)) saturate(1.35);
   opacity: var(--wall-opacity, 0.55);
@@ -8620,8 +8624,9 @@ body.accent-mono .hm-tip-ic {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: max(100vw, 177.78vh);
-  height: max(100vh, 56.25vw);
+  /* cover pre celú obrazovku (rozmer .wall-media = obrazovka) */
+  width: max(100%, calc(var(--wall-h, 100vh) * 1.7778));
+  height: max(100%, calc(var(--wall-w, 100vw) * 0.5625));
   transform: translate(-50%, -50%) scale(1.15);
   border: 0;
 }

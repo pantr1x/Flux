@@ -508,6 +508,7 @@ async function setupWallpaper() {
       box.append(f);
     }
     layer.append(box);
+    place(box);
   };
   // Minimalizované okno: video netreba prehrávať.
   document.addEventListener('visibilitychange', () => {
@@ -530,10 +531,21 @@ async function setupWallpaper() {
       img.style.backgroundImage = `url("${url}")`;
     }
   };
-  flux.onBounds(({ x, y, dw, dh }) => {
-    img.style.width = `${dw}px`;
-    img.style.height = `${dh}px`;
-    img.style.transform = `translate(${-x}px, ${-y}px)`;
+  // Tapeta aj pohyblivé pozadie majú veľkosť celej obrazovky a posúvajú sa opačne ako okno –
+  // vyzerá to, akoby okno bolo priesvitné a pod ním bola plocha (aj pri živej tapete).
+  let bounds = null;
+  const place = (el) => {
+    if (!el || !bounds) return;
+    el.style.width = `${bounds.dw}px`;
+    el.style.height = `${bounds.dh}px`;
+    el.style.transform = `translate(${-bounds.x}px, ${-bounds.y}px)`;
+    el.style.setProperty('--wall-w', `${bounds.dw}px`);
+    el.style.setProperty('--wall-h', `${bounds.dh}px`);
+  };
+  flux.onBounds((b) => {
+    bounds = b;
+    place(img);
+    place(layer.querySelector('.wall-media'));
   });
   flux.onMaterial((m) => {
     state.material = m;
