@@ -1540,9 +1540,34 @@ function staleStats(file) {
   for (const dir of statsCache.keys()) if (String(file).startsWith(dir)) statsCache.delete(dir);
 }
 const TEXT_EXT = /\.(py|pyw|pyi|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|json|md|txt|csv|xml|svg|yml|yaml|toml|ini|cfg|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|go|rs|php|rb|lua|sql|zig|r|jl)$/i;
+// Prehľadáva sa (číta každý súbor) len práve otvorený projekt. Ostatné ukážu čísla z poslednej návštevy
+// (userData/project-stats.json) – zoznam projektov tak nečíta tisíce súborov z projektov, ktoré nemáš otvorené.
+const statsFile = () => path.join(app.getPath('userData'), 'project-stats.json');
+let savedStats = null;
+let statsTimer = null;
+function loadSavedStats() {
+  if (!savedStats) {
+    try {
+      savedStats = JSON.parse(fs.readFileSync(statsFile(), 'utf8'));
+    } catch {
+      savedStats = {};
+    }
+  }
+  return savedStats;
+}
+function keepStats(dir, data) {
+  loadSavedStats()[dir] = data;
+  clearTimeout(statsTimer);
+  statsTimer = setTimeout(() => fsp.writeFile(statsFile(), JSON.stringify(savedStats)).catch(() => {}), 2000);
+}
+const sameDir = (a, b) => !!a && !!b && (process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b));
 async function projectStats(dir) {
   const cached = statsCache.get(dir);
   if (cached && Date.now() - cached.at < 20000) return { ...cached.data, time: settings.projectTime?.[dir] || 0 };
+  if (!sameDir(dir, workspace)) {
+    const old = loadSavedStats()[dir];
+    return { files: null, lines: 0, chars: 0, lastModified: 0, kinds: {}, ...old, time: settings.projectTime?.[dir] || 0 };
+  }
   let files = 0;
   let lines = 0;
   let chars = 0;
@@ -1580,6 +1605,7 @@ async function projectStats(dir) {
   await walk(dir, 0);
   const data = { files, lines, chars, lastModified, kinds };
   statsCache.set(dir, { at: Date.now(), data });
+  keepStats(dir, data);
   return { ...data, time: settings.projectTime?.[dir] || 0 };
 }
 

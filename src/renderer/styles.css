@@ -8731,6 +8731,12 @@ body.moving-bg *::after {
   height: 100%;
   object-fit: cover;
   display: block;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+/* objaví sa plynulo nad živým videom */
+.wall-media.baked.in video {
+  opacity: 1;
 }
 /* V hlavnej karte je pozadie skoro nepriehľadné – rozmazanie pod dlaždicami by nebolo vidieť, len by stálo výkon. */
 #card .pj-tile,

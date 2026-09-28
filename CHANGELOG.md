@@ -2,6 +2,16 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.35 – 2026-09-30
+
+### Video backgrounds: less memory and the right size
+- **Making the small copy of a video background now uses much less memory.** Before, Flux played the video twice while it made the copy, which could take almost 1 GB with a big Lively Wallpaper video. Now it records from the video that is already playing.
+- **The copy now lines up exactly with your desktop.** Before, it could be made in the size of the window instead of the screen, so it looked zoomed or cut off. Copies made by 1.4.34 are made again once.
+- The switch to the copy is a soft fade, the copy no longer starts with a dark frame, and it no longer has frozen parts when you were in another app while it was being made.
+
+### Projects you do not have open are not read anymore
+- Before, the project list and the start screen read every file of every project just to count files and lines. Now Flux reads only the project you have open. Other projects show the numbers from the last time you had them open.
+
 ## 1.4.34 – 2026-09-30
 
 ### Video backgrounds are pre-made, so they cost almost nothing

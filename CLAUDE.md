@@ -216,7 +216,7 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
   - **Moving backgrounds:**
     - A video is not shown directly: it stays a hidden 1×1 `.wall-src` and is drawn into a small `<canvas>` (1/8 of the display, at most 15 fps, `requestVideoFrameCallback`).
     - `body.moving-bg` turns off every `backdrop-filter`, because the panels would re-blur on each frame.
-    - **Baked video:** `bake()` in `setupWallpaper()` plays the video once into a MediaRecorder on a blurred 1/8-size canvas. It saves the result with `bg:save-baked` to `userData/backgrounds/baked/<key>.webm` (the newest 3 are kept), served as `app://flux/baked/…`.
+    - **Baked video:** `bake()` in `setupWallpaper()` records one loop of the *live* video (no second decoder) into a MediaRecorder on a blurred 1/8-size canvas (same cover crop as the live canvas, `blur(wallBlur/8) saturate(1.35)` = the `.wall-media` CSS). It waits for `bounds` (`pendingBake`), so the copy has the screen's size; recording pauses with the video. It saves the result with `bg:save-baked` to `userData/backgrounds/baked/<key>.webm` (the newest 3 are kept, key starts with `v2|`), served as `app://flux/baked/…`. `showBaked()` fades a new `.wall-media.baked` box in, then removes the live one.
       - `useBaked()` plays that small webm directly, with `.wall-media.baked` = no CSS filter.
       - The key is a hash of the video URL, `wallBlur` and the display size.
     - The *Windows wallpaper* button (`app:reset-background`) also sets `liveWallpaper: false`.
@@ -254,6 +254,7 @@ Always on, whatever the settings:
 - **Network service in the main process:** `enable-features=NetworkServiceInProcess2`, so there is no separate Utility process.
 - **Idle trimming:** 2 minutes after the window loses focus, the session cache is cleared and `webFrame.clearCache()` runs (`app:trim`).
 - **Pyright** stops after 5 minutes of the window being unfocused.
+- **Project stats:** `projectStats()` in `main.js` reads files only for the open project (`workspace`); other projects get the numbers saved at their last visit (`userData/project-stats.json`, `files: null` when never scanned).
 - **Memory breakdown:** `app:memory` returns a breakdown by process type, which the settings show.
 
 Changing `lite` or pressing *Reset advanced* clears all these keys. Use `optOn()` for new savings, never `setting('lite')` directly.

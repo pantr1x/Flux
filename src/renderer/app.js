@@ -536,7 +536,8 @@ async function setupWallpaper() {
     const key = info && info.type !== 'image' && state.material === 'wallpaper' ? `${info.type}:${info.url || info.id}:${setting('wallBlur')}` : '';
     if (key === mediaKey) return;
     mediaKey = key;
-    layer.querySelector('.wall-media')?.remove();
+    for (const el of layer.querySelectorAll('.wall-media')) el.remove();
+    pendingBake = null;
     layer.classList.toggle('moving', !!key);
     // Za pohybujúcim sa pozadím by každý panel s backdrop-filter musel rozmazávať znova každý snímok –
     // pozadie je už rozmazané samo, panely preto rozmazanie vypnú (styles.css → body.moving-bg).
@@ -555,8 +556,7 @@ async function setupWallpaper() {
       let last = 0;
       const draw = () => {
         if (!v.videoWidth) return;
-        const W = Math.max(64, Math.round((bounds?.dw || innerWidth) / 8));
-        const H = Math.max(36, Math.round((bounds?.dh || innerHeight) / 8));
+        const { W, H } = wallSize();
         if (cv.width !== W || cv.height !== H) Object.assign(cv, { width: W, height: H });
         // ako object-fit: cover
         const k = Math.max(W / v.videoWidth, H / v.videoHeight);
@@ -612,99 +612,134 @@ async function setupWallpaper() {
   };
   // „Upečené“ pozadie: video sa raz prehrá do malého, už rozmazaného webm (MediaRecorder z plátna).
   // Potom sa prehráva len tá malá kópia – žiadne dekódovanie veľkého videa ani rozmazávanie každý snímok.
+  // v2: kópie z 1.4.34 mali často rozmer okna namiesto obrazovky (bounds ešte neboli známe) – nepoužiť.
   const bakeKey = (url) => {
     let h = 2166136261;
-    const str = `${url}|${Number(setting('wallBlur')) || 40}|${bounds?.dw || 0}x${bounds?.dh || 0}`;
+    const str = `v2|${url}|${Number(setting('wallBlur')) || 40}|${bounds.dw}x${bounds.dh}`;
     for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
     return `b${(h >>> 0).toString(36)}`;
   };
+  // Upečená kópia sa objaví plynulo nad živým videom; živé video sa uvoľní až potom.
   const showBaked = (box, url, live) => {
+    const nb = document.createElement('div');
+    nb.className = 'wall-media baked';
     const bv = document.createElement('video');
     Object.assign(bv, { src: url, autoplay: true, muted: true, loop: true, playsInline: true });
-    bv.addEventListener('loadeddata', () => (sampleTone(bv), syncVideo()), { once: true });
+    bv.addEventListener(
+      'loadeddata',
+      () => {
+        if (!box.isConnected) return nb.remove();
+        sampleTone(bv);
+        syncVideo();
+        requestAnimationFrame(() => nb.classList.add('in'));
+        setTimeout(() => {
+          live.removeAttribute('src');
+          live.load();
+          box.remove();
+        }, 450);
+      },
+      { once: true },
+    );
+    bv.addEventListener('error', () => nb.remove(), { once: true });
     const iv = setInterval(() => (bv.isConnected ? !bv.paused && sampleTone(bv) : clearInterval(iv)), 4000);
-    // živé video a plátno preč – uvoľní dekodér veľkého videa
-    live.removeAttribute('src');
-    live.load();
-    box.replaceChildren(bv);
-    box.classList.add('baked');
+    nb.append(bv);
+    layer.append(nb);
+    place(nb);
   };
+  // Pečie sa až keď je známa poloha a veľkosť obrazovky (inak by kópia mala pomer strán okna).
+  let pendingBake = null;
   const useBaked = async (box, url, live) => {
+    if (!bounds) return (pendingBake = () => useBaked(box, url, live));
     const key = bakeKey(url);
     const ready = await flux.bakedBackground(key).catch(() => null);
     if (!box.isConnected) return;
     if (ready) return showBaked(box, ready, live);
-    bake(url, key, box, live);
+    if (live.readyState >= 2) bake(key, box, live);
+    else live.addEventListener('loadeddata', () => bake(key, box, live), { once: true });
   };
+  // Nahráva sa z toho istého videa, ktoré práve hrá (jeden dekodér), s rovnakým orezom ako živé plátno
+  // a rovnakým rozmazaním ako CSS na .wall-media. Keď video stojí (okno nie je aktívne), stojí aj nahrávanie.
   let baking = null;
-  const bake = (url, key, box, live) => {
-    if (baking === key || typeof MediaRecorder === 'undefined') return;
+  const bake = (key, box, v) => {
+    if (baking === key || typeof MediaRecorder === 'undefined' || !box.isConnected) return;
+    // veľmi dlhé videá (viac ako 10 min) sa nepečú – hrajú sa ako doteraz
+    if (Number.isFinite(v.duration) && v.duration > 600) return;
     baking = key;
-    const src = document.createElement('video');
-    Object.assign(src, { src: url, muted: true, playsInline: true, preload: 'auto' });
-    src.className = 'wall-src';
-    const W = Math.max(96, Math.round((bounds?.dw || innerWidth) / 8));
-    const H = Math.max(54, Math.round((bounds?.dh || innerHeight) / 8));
+    const { W, H } = wallSize();
     const cv = Object.assign(document.createElement('canvas'), { width: W, height: H });
     const ctx = cv.getContext('2d', { alpha: false });
     const blur = (Number(setting('wallBlur')) || 40) / 8;
-    const stop = (save) => {
-      baking = null;
-      if (rec.state !== 'inactive') {
-        rec.onstop = save ? rec.onstop : null;
-        rec.stop();
-      }
-      src.remove();
+    const draw = () => {
+      const k = Math.max(W / v.videoWidth, H / v.videoHeight);
+      const sw = W / k;
+      const sh = H / k;
+      const sx = (v.videoWidth - sw) / 2;
+      const sy = (v.videoHeight - sh) / 2;
+      // najprv bez rozmazania ako podklad – rozmazané okraje potom nie sú tmavé a nič sa nepribližuje
+      ctx.filter = 'saturate(1.35)';
+      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, W, H);
+      ctx.filter = `blur(${blur}px) saturate(1.35)`;
+      ctx.drawImage(v, sx, sy, sw, sh, 0, 0, W, H);
     };
     const rec = new MediaRecorder(cv.captureStream(15), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 350000 });
     const chunks = [];
+    const ac = new AbortController();
+    let timer = 0;
+    const stop = (save) => {
+      if (baking === key) baking = null;
+      ac.abort();
+      clearTimeout(timer);
+      if (rec.state !== 'inactive') {
+        if (!save) rec.onstop = null;
+        rec.stop();
+      }
+    };
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     rec.onstop = async () => {
       const blob = new Blob(chunks, { type: 'video/webm' });
       if (!blob.size) return;
       const saved = await flux.saveBakedBackground(key, await blob.arrayBuffer()).catch(() => null);
-      if (saved && box.isConnected) showBaked(box, saved, live);
+      if (saved && box.isConnected) showBaked(box, saved, v);
     };
+    v.addEventListener('pause', () => rec.state === 'recording' && rec.pause(), { signal: ac.signal });
+    v.addEventListener('play', () => rec.state === 'paused' && rec.resume(), { signal: ac.signal });
+    v.addEventListener('error', () => stop(false), { signal: ac.signal });
     let last = 0;
-    const frame = (now) => {
+    let lastTime = -1;
+    const frame = (now, meta) => {
+      if (ac.signal.aborted) return;
       if (!box.isConnected) return stop(false); // pozadie sa medzitým zmenilo
-      if (now - last >= 60) {
-        last = now;
-        // o kúsok väčšie ako plátno, aby rozmazané okraje neboli tmavé
-        const pad = blur * 2;
-        const k = Math.max((W + pad * 2) / src.videoWidth, (H + pad * 2) / src.videoHeight);
-        const dw = src.videoWidth * k;
-        const dh = src.videoHeight * k;
-        ctx.filter = `blur(${blur}px) saturate(1.35)`;
-        ctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
-      }
-      if (!src.ended) src.requestVideoFrameCallback(frame);
-    };
-    src.addEventListener('ended', () => stop(true), { once: true });
-    src.addEventListener('error', () => stop(false), { once: true });
-    src.addEventListener(
-      'loadedmetadata',
-      () => {
-        // veľmi dlhé videá (viac ako 10 min) sa nepečú – hrajú sa ako doteraz
-        if (Number.isFinite(src.duration) && src.duration > 600) return stop(false);
-        if (!Number.isFinite(src.duration)) setTimeout(() => baking === key && stop(false), 600e3);
+      // video došlo na koniec a začalo odznova → jedna celá slučka je nahratá
+      if (meta.mediaTime + 0.3 < lastTime) return stop(true);
+      lastTime = meta.mediaTime;
+      if (rec.state === 'inactive') {
+        // prvý snímok sa nakreslí ešte pred začiatkom nahrávania – kópia nezačína čiernym snímkom
+        draw();
         rec.start(1000);
-        src.requestVideoFrameCallback(frame);
-        src.play().catch(() => stop(false));
-      },
-      { once: true },
-    );
-    layer.append(src);
+        if (v.paused) rec.pause();
+        last = now;
+      } else if (now - last >= 60) {
+        last = now;
+        draw();
+      }
+      v.requestVideoFrameCallback(frame);
+    };
+    const begin = () => !ac.signal.aborted && v.requestVideoFrameCallback(frame);
+    // od začiatku videa
+    if (v.currentTime > 0.05) {
+      v.addEventListener('seeked', begin, { once: true, signal: ac.signal });
+      v.currentTime = 0;
+    } else begin();
+    // video bez známej dĺžky (stream) – najviac 10 min
+    if (!Number.isFinite(v.duration)) timer = setTimeout(() => stop(true), 600e3);
   };
 
   // Video v pozadí hrá len keď sa naň pozeráš: pri minimalizovanom okne a keď Flux nie je aktívny
   // (pracuješ v inom programe) sa zastaví – šetrí procesor aj grafickú kartu. Bez animácií (Pamäť a rýchlosť)
   // ostane stáť na prvom snímku.
   const syncVideo = () => {
-    const v = layer.querySelector('.wall-media video');
-    if (!v) return;
     const play = !document.hidden && document.hasFocus() && optOn('optAnim');
-    play ? v.play().catch(() => {}) : v.pause();
+    for (const v of layer.querySelectorAll('.wall-media video')) if (v.getAttribute('src')) play ? v.play().catch(() => {}) : v.pause();
   };
   document.addEventListener('visibilitychange', syncVideo);
   window.addEventListener('focus', syncVideo);
@@ -732,6 +767,8 @@ async function setupWallpaper() {
   // Šetrenie pamäte a výkonu: pozadie je aj tak rozmazané, preto sa kreslí v 1/4 veľkosti a zväčší sa
   // (textúra na grafickej karte je 16× menšia, rozmazanie lacnejšie; YouTube si vyberie nižšiu kvalitu).
   const S = 4;
+  // plátno videa: 1/8 obrazovky (živé aj upečené – rovnaký rozmer a orez)
+  const wallSize = () => ({ W: Math.max(64, Math.round((bounds?.dw || innerWidth) / 8)), H: Math.max(36, Math.round((bounds?.dh || innerHeight) / 8)) });
   const place = (el) => {
     if (!el || !bounds) return;
     const w = Math.ceil(bounds.dw / S);
@@ -745,7 +782,10 @@ async function setupWallpaper() {
   flux.onBounds((b) => {
     bounds = b;
     place(img);
-    place(layer.querySelector('.wall-media'));
+    for (const el of layer.querySelectorAll('.wall-media')) place(el);
+    const run = pendingBake;
+    pendingBake = null;
+    run?.();
   });
   flux.onMaterial((m) => {
     state.material = m;
@@ -762,8 +802,8 @@ async function setupWallpaper() {
   // Animácie pozadia stoja, keď okno nie je aktívne.
   window.addEventListener('blur', () => document.body.classList.add('idle'));
   window.addEventListener('focus', () => document.body.classList.remove('idle'));
-  await load();
   flux.requestBounds();
+  await load();
 }
 
 // Čas v projekte: každých 30 s, ak je okno aktívne a za posledné 2 minúty si niečo robil.
@@ -2119,7 +2159,7 @@ async function renderProjects() {
   for (const p of list) {
     flux.projectStats(p.dir).then((st) => {
       const sub = [...el.querySelectorAll('.pr-sub')].find((x) => x.dataset.stats === p.dir);
-      if (sub) sub.textContent = [langLine(p), `${st.files} ${st.files === 1 ? t('file') : t('files')}`, st.time >= 60 ? formatTime(st.time) : ''].filter(Boolean).join(' · ');
+      if (sub) sub.textContent = [langLine(p), st.files != null ? `${st.files} ${st.files === 1 ? t('file') : t('files')}` : '', st.time >= 60 ? formatTime(st.time) : ''].filter(Boolean).join(' · ');
     });
   }
 }
@@ -4742,7 +4782,7 @@ async function openStart() {
   for (const p of [...pinned, ...recent]) {
     flux.projectStats(p.dir).then((st) => {
       for (const x of el.querySelectorAll('.hm-stat')) {
-        if (x.dataset.stats === p.dir) x.textContent = [langLine(p), `${st.files} ${st.files === 1 ? t('file') : t('files')}`, st.lastModified ? timeAgo(st.lastModified) : ''].filter(Boolean).join(' · ');
+        if (x.dataset.stats === p.dir) x.textContent = [langLine(p), st.files != null ? `${st.files} ${st.files === 1 ? t('file') : t('files')}` : '', st.lastModified ? timeAgo(st.lastModified) : ''].filter(Boolean).join(' · ');
       }
     });
   }
