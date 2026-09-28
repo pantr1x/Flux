@@ -2,7 +2,7 @@
   "name": "flux",
   "productName": "Flux",
   "desktopName": "flux.desktop",
-  "version": "1.4.21",
+  "version": "1.4.22",
   "description": "A modern mini IDE: one-click Python, Live Server and autocomplete.",
   "main": "src/main/main.js",
   "private": true,
@@ -38,13 +38,6 @@
       "node_modules/@lydell/**/*"
     ],
     "extraResources": [
-      {
-        "from": "build/file-icons",
-        "to": "file-icons",
-        "filter": [
-          "*.ico"
-        ]
-      },
       {
         "from": "build/pyright",
         "to": ".",

@@ -423,7 +423,18 @@ function allowFile(p) {
   return abs;
 }
 // Súbory z príkazového riadku („Otvoriť v programe → Flux“, pretiahnutie na ikonu).
-const filesFromArgv = (argv) => argv.slice(1).filter((a) => !a.startsWith('-') && /\.[\w]+$/.test(a) && fs.existsSync(a) && fs.statSync(a).isFile() && path.resolve(a) !== path.resolve(process.argv[1] || ''));
+// Súbory z príkazového riadku („Otvoriť v programe → Flux“, dvojklik v Prieskumníkovi).
+// Pozor: v nainštalovanom Fluxe je argv[1] už súbor, s ktorým sa Flux spustil – nesmie sa preto
+// vyraďovať (inak by opätovné otvorenie toho istého súboru nič neurobilo); argv[1] = priečinok
+// aplikácie platí len pri `electron .` počas vývoja. Relatívne cesty sú voči priečinku druhej inštancie.
+const filesFromArgv = (argv, cwd = process.cwd()) => {
+  const appDir = app.isPackaged ? '' : path.resolve(process.argv[1] || '');
+  return argv
+    .slice(1)
+    .filter((a) => a && !a.startsWith('-'))
+    .map((a) => path.resolve(cwd, a))
+    .filter((a) => a !== appDir && /\.[\w]+$/.test(a) && fs.existsSync(a) && fs.statSync(a).isFile());
+};
 
 const looseWatch = new Map();
 
@@ -1443,9 +1454,9 @@ app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess
 // Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
 if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');
-app.on('second-instance', (_e, argv) => {
+app.on('second-instance', (_e, argv, cwd) => {
   if (!win) return;
-  const files = filesFromArgv(argv).map(allowFile).filter(Boolean);
+  const files = filesFromArgv(argv, cwd).map(allowFile).filter(Boolean);
   if (files.length) send('open-files', files);
   if (win.isMinimized()) win.restore();
   // Windows nedovolí oknu len tak „ukradnúť“ popredie (iba zabliká v paneli úloh) –

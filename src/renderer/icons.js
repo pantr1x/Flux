@@ -146,7 +146,12 @@ const EXT_ICON = {
 const LANG_ICON = { python: 'python', html: 'html', css: 'css', javascript: 'javascript', typescript: 'typescript', json: 'json', markdown: 'markdown', shell: 'shell' };
 
 // Ikona podľa prípony; pri súbore bez prípony podľa rozpoznaného jazyka.
+// Dvojitá prípona, ktorá nie je bežná (napr. „mod.wh.cpp“ pre Windhawk) = iný formát než čistý jazyk
+// → všeobecná ikona súboru. Známe tvary ako „app.min.js“, „vite.config.ts“ či „x.d.ts“ ostávajú.
+const COMMON_MID = new Set(['min', 'test', 'spec', 'd', 'config', 'module', 'stories', 'esm', 'cjs', 'umd', 'prod', 'dev', 'local', 'bundle', 'page', 'layout', 'server', 'client', 'service', 'component', 'routes', 'types', 'schema', 'setup', 'story', 'e2e']);
 export function fileIcon(name, lang) {
+  const parts = name.replace(/^\.+/, '').toLowerCase().split('.');
+  if (parts.length >= 3 && /^[a-z]{1,3}$/.test(parts.at(-2)) && !COMMON_MID.has(parts.at(-2))) return FILE_ICONS.file;
   const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
   const key = EXT_ICON[ext] || (!ext && LANG_ICON[lang]) || 'file';
   return FILE_ICONS[key];

@@ -170,11 +170,10 @@
   !insertmacro ${M} pl
 !macroend
 
-; Každá prípona má vlastný typ Flux.<prípona> s ikonou dokumentu (build/file-icons, scripts/file-icons.mjs),
-; takže súbory otvárané Fluxom nemajú ikonu aplikácie. Flux.File ostáva pre staršie priradenia (ikona bez prípony).
+; Každá prípona má vlastný typ Flux.<prípona> (s ikonou aplikácie). Flux.File ostáva pre staršie priradenia.
 !macro FluxAddType EXT
   WriteRegStr SHCTX "Software\Classes\Flux.${EXT}" "" "${EXT} file (Flux)"
-  WriteRegStr SHCTX "Software\Classes\Flux.${EXT}\DefaultIcon" "" "$INSTDIR\resources\file-icons\${EXT}.ico"
+  WriteRegStr SHCTX "Software\Classes\Flux.${EXT}\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
   WriteRegStr SHCTX "Software\Classes\Flux.${EXT}\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
   WriteRegStr SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "Flux.${EXT}" ""
   DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "Flux.File"
@@ -189,10 +188,10 @@
 
 !macro customInstall
   WriteRegStr SHCTX "Software\Classes\Flux.File" "" "Flux file"
-  WriteRegStr SHCTX "Software\Classes\Flux.File\DefaultIcon" "" "$INSTDIR\resources\file-icons\file.ico"
+  WriteRegStr SHCTX "Software\Classes\Flux.File\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
   WriteRegStr SHCTX "Software\Classes\Flux.File\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}" "FriendlyAppName" "Flux"
-  WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\DefaultIcon" "" "$INSTDIR\resources\file-icons\file.ico"
+  WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
   WriteRegStr SHCTX "Software\Classes\Applications\${APP_EXECUTABLE_FILENAME}\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
   !insertmacro FluxTypes FluxAddType
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'

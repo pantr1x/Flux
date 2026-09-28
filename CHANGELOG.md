@@ -2,6 +2,13 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.22 – 2026-09-28
+
+### Fixes
+- **Opening the same file again from File Explorer works.** Before, when Flux had started with that file, a second double-click on it only brought Flux forward. You stayed in the project you had open.
+- **Files in File Explorer have the Flux icon again.** The page icons from 1.4.21 are gone.
+- **Files with an unusual double extension get a plain file icon.** For example, `mod.wh.cpp` for Windhawk. Common ones like `app.min.js` or `vite.config.ts` keep their language icon.
+
 ## 1.4.21 – 2026-09-28
 
 ### Opening files from File Explorer
