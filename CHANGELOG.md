@@ -2,6 +2,15 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.19 – 2026-09-28
+
+### Fixes
+- **Open with → Flux opens the file.** Before, when Flux was starting, you sometimes landed on the home screen instead of the file.
+- **Flux no longer overwrites a file that changed outside Flux.** For example, you save new code over the file with **Save as** in another program.
+  - Before, auto save could write the old text from the editor back over the new file. This happened when you closed the question with Esc or by clicking next to it.
+  - Now closing the question means *decide later*. Nothing is saved over the file, and Flux asks again.
+  - Ctrl+S on such a file asks first: **Save my version over it** or **Load the new version from disk**.
+
 ## 1.4.18 – 2026-09-28
 
 ### Sticky headers are back, without the glitches

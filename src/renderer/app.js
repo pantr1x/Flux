@@ -1112,9 +1112,31 @@ async function closeTab(tab, { force = false } = {}) {
   reportDirty();
 }
 
-async function saveTab(tab) {
+async function saveTab(tab, { auto = false } = {}) {
   if (!tab || tab.readonly) return true;
   if (!isDirty(tab)) return true;
+  // Súbor sa medzitým zmenil zvonku (iný program, „Uložiť ako“ cez neho…) → neprepísať ho naslepo.
+  let onDisk = null;
+  try {
+    onDisk = await flux.read(tab.path);
+  } catch {}
+  if (onDisk !== null && onDisk !== tab.disk && onDisk !== tab.model.getValue()) {
+    if (auto) {
+      syncOpenTabs(tab);
+      return false;
+    }
+    const pick = await confirmPalette(t('“{file}” was changed outside Flux. Save your version over it?', { file: basename(tab.path) }), [
+      { label: t('Save my version over it'), value: 'mine' },
+      { label: t('Load the new version from disk'), value: 'disk' },
+    ]);
+    if (tab.model.isDisposed()) return false;
+    if (pick === 'disk') {
+      tab.disk = onDisk;
+      replaceTabText(tab, onDisk);
+      return true;
+    }
+    if (pick !== 'mine') return false;
+  }
   const version = tab.model.getAlternativeVersionId();
   const text = tab.model.getValue();
   const prevDisk = tab.disk;
@@ -1145,7 +1167,7 @@ async function saveAll() {
 function scheduleAutosave(tab) {
   if (!setting('autosave') || tab.readonly) return;
   clearTimeout(tab.autosaveTimer);
-  tab.autosaveTimer = setTimeout(() => saveTab(tab), 700);
+  tab.autosaveTimer = setTimeout(() => saveTab(tab, { auto: true }), 700);
 }
 
 function reportDirty() {
@@ -1572,27 +1594,33 @@ async function syncTabs(only) {
     }
     if (text === tab.disk) continue; // na disku nič nové, rozdiel sú len tvoje úpravy
     const name = basename(tab.path);
+    // Zrušená otázka (Esc, klik vedľa) = rozhodneš sa neskôr: nič sa nemení, tab.disk ostáva starý,
+    // takže automatické ukladanie súbor neprepíše (saveTab to stráži) a pri ďalšej zmene sa Flux opýta znova.
     if (isDirty(tab)) {
-      tab.disk = text; // na tú istú zmenu sa pýtame len raz
       const pick = await confirmPalette(t('“{file}” was changed outside Flux, and you have unsaved changes.', { file: name }), [
         { label: t('Load the new version from disk'), value: 'disk' },
         { label: t('Keep my changes'), value: 'mine' },
       ]);
-      if (pick !== 'disk' || tab.model.isDisposed()) continue;
+      if (!pick || tab.model.isDisposed()) continue;
+      tab.disk = text;
+      if (pick === 'mine') {
+        scheduleAutosave(tab);
+        continue;
+      }
       replaceTabText(tab, text);
       toast(t('“{file}” was reloaded from disk.', { file: name }), 'info', 5000);
       continue;
     }
-    tab.disk = text;
     if (!setting('autoReload')) {
       const pick = await confirmPalette(t('“{file}” was changed outside Flux. Show the new version?', { file: name }), [
         { label: t('Load the new version'), value: 'disk' },
         { label: t('Keep what is in the editor'), value: 'mine' },
         { label: t('Always load automatically – don’t ask again'), value: 'always' },
       ]);
-      if (tab.model.isDisposed()) continue;
-      if (pick !== 'disk' && pick !== 'always') {
-        // Text v editore sa od disku líši → ber ho ako neuložený (Ctrl+S ním prepíše súbor).
+      if (!pick || tab.model.isDisposed()) continue;
+      tab.disk = text;
+      if (pick === 'mine') {
+        // Text v editore sa od disku líši → ber ho ako neuložený (Ctrl+S / automatické ukladanie ním prepíše súbor).
         if (tab.model.getValue() !== text) {
           tab.savedVersion = -1;
           scheduleAutosave(tab);
@@ -1608,6 +1636,7 @@ async function syncTabs(only) {
       if (tab.model.getValue() !== text) replaceTabText(tab, text);
       continue;
     }
+    tab.disk = text;
     const before = tab.model.getValue();
     replaceTabText(tab, text);
     toast(t('“{file}” changed on disk – the editor now shows the new version.', { file: name }), 'info', 9000, {
@@ -5310,7 +5339,6 @@ async function main() {
   flux.onOpenFiles((files) => openStandalone(files));
   // Pre istotu aj po návrate do okna (sieťové disky a pod. nemusia hlásiť zmeny).
   window.addEventListener('focus', () => state.tabs.length && syncOpenTabs());
-  flux.startupFiles().then((files) => files.length && setTimeout(() => openStandalone(files), 600));
   flux.onSaveAllAndClose(async () => {
     await saveAll();
     flux.close();
@@ -5324,6 +5352,10 @@ async function main() {
     detectPython();
     if (state.settings.onboarded) openStart();
   }
+  // Súbory, s ktorými sa Flux spustil („Otvoriť v programe → Flux“) – až po otvorení projektu
+  // a domovskej obrazovky, inak by ich setWorkspace zavrel alebo prekryla domovská obrazovka.
+  const startFiles = await flux.startupFiles();
+  if (startFiles.length) await openStandalone(startFiles);
 }
 
 main();

@@ -81,3 +81,21 @@ _V19B = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19B.items()})
+
+# 1.4.19 – ukladanie cez súbor zmenený zvonku.
+_V19C = {
+    '“{file}” was changed outside Flux. Save your version over it?': (
+        '„{file}“ sa zmenil mimo Fluxu. Uložiť cez neho tvoju verziu?',
+        '„{file}“ wurde außerhalb von Flux geändert. Deine Version darüber speichern?',
+        '«{file}» se cambió fuera de Flux. ¿Guardar tu versión encima?',
+        '« {file} » a été modifié en dehors de Flux. Enregistrer ta version par-dessus ?',
+        '«{file}» è stato modificato fuori da Flux. Salvare la tua versione sopra?',
+        '„{file}” zmienił się poza Fluxem. Zapisać na nim twoją wersję?',
+        '“{file}” foi alterado fora do Flux. Salvar a sua versão por cima?',
+        '«{file}» змінено поза Flux. Зберегти поверх нього твою версію?'),
+    'Save my version over it': (
+        'Uložiť moju verziu cez neho', 'Meine Version darüber speichern', 'Guardar mi versión encima', 'Enregistrer ma version par-dessus',
+        'Salva la mia versione sopra', 'Zapisz moją wersję na nim', 'Salvar a minha versão por cima', 'Зберегти мою версію поверх'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19C.items()})
