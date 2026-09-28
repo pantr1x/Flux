@@ -13,6 +13,7 @@ const { createAI } = require('./ai');
 const { createGitHub } = require('./github');
 const { createPlugins, pluginsDir } = require('./plugins');
 const { createUpdater } = require('./updater');
+const liveWallpaper = require('./liveWallpaper');
 const { createMcpServer } = require('./mcpServer');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
@@ -53,7 +54,13 @@ const BG_MAX = 12;
 const bgDir = () => path.join(app.getPath('userData'), 'backgrounds');
 const bgFile = (name) => path.join(bgDir(), path.basename(String(name)));
 const bgKey = (b) => (b.type === 'youtube' ? `yt:${b.id}` : `f:${b.file}`);
-const movingBackground = () => (settings.bg?.type === 'video' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) || (settings.bg?.type === 'youtube' && !!settings.bg.id);
+// Lively Wallpaper / Wallpaper Engine – len keď nemáš vlastné pozadie a je to zapnuté (liveWallpaper).
+const liveWall = () => (!settings.bg && settings.liveWallpaper !== false ? liveWallpaper.detect() : null);
+const movingBackground = () => {
+  if (settings.bg) return (settings.bg.type === 'video' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) || (settings.bg.type === 'youtube' && !!settings.bg.id);
+  const live = liveWall();
+  return !!live && live.kind !== 'image';
+};
 
 // Staršie verzie mali jeden súbor userData/background.<ext> v settings.bgImage.
 function migrateBackground() {
@@ -87,7 +94,13 @@ function useBackground(bg) {
 
 function backgroundInfo() {
   const bg = settings.bg;
-  if (!bg) return null;
+  if (!bg) {
+    const live = liveWall();
+    if (!live) return null;
+    const info = { type: live.kind === 'image' ? 'image' : live.kind === 'gif' ? 'gif' : 'video', live: live.source, title: live.title };
+    if (live.kind !== 'image') info.url = `app://flux/live/${encodeURIComponent(path.basename(live.file))}?v=${encodeURIComponent(live.file.length + ':' + live.file)}`;
+    return info;
+  }
   if (bg.type === 'youtube') return { type: 'youtube', id: bg.id };
   if (bg.file && fs.existsSync(bgFile(bg.file))) return { type: bg.type, url: `app://flux/bg/${encodeURIComponent(bg.file)}` };
   return null;
@@ -107,6 +120,8 @@ function youtubeId(text) {
 function wallpaperPath() {
   // Vlastný obrázok pozadia (Nastavenia → Personalize) má prednosť.
   if (settings.bg?.type === 'image' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) return bgFile(settings.bg.file);
+  const live = liveWall();
+  if (live?.kind === 'image') return live.file;
   if (process.env.FLUX_WALLPAPER) return process.env.FLUX_WALLPAPER;
   if (process.platform === 'linux') return linuxWallpaper();
   if (!isWin || !process.env.APPDATA) return null;
@@ -649,6 +664,11 @@ function registerIpc() {
     }
     if (patch.theme) nativeTheme.themeSource = patch.theme;
     if ('material' in patch || 'translucent' in patch || 'theme' in patch || 'lite' in patch || 'optFx' in patch) applyMaterial();
+    if ('liveWallpaper' in patch) {
+      applyMaterial();
+      send('app:background', backgroundInfo());
+      sendBounds();
+    }
     return settings;
   });
   ipcMain.on('app:dirty', (_e, count) => {
@@ -1586,15 +1606,16 @@ app.whenReady().then(() => {
       return net.fetch(pathToFileURL(file).toString());
     }
     // Vlastné pozadie (obrázok / video): app://flux/bg/<súbor> – s Range, aby sa video dalo prehrávať dookola.
-    if (pathname.startsWith('/bg/')) {
-      const file = bgFile(decodeURIComponent(pathname.slice('/bg/'.length)));
+    if (pathname.startsWith('/bg/') || pathname.startsWith('/live/')) {
+      // /live/ = súbor z Lively Wallpaper / Wallpaper Engine; povolený je len ten, ktorý je práve nastavený.
+      const file = pathname.startsWith('/live/') ? liveWall()?.file || '' : bgFile(decodeURIComponent(pathname.slice('/bg/'.length)));
       let st;
       try {
         st = fs.statSync(file);
       } catch {
         return new Response('Not found', { status: 404 });
       }
-      const type = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' }[path.extname(file).toLowerCase()] || 'image/jpeg';
+      const type = { '.mkv': 'video/x-matroska', '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' }[path.extname(file).toLowerCase()] || 'image/jpeg';
       const range = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') || '');
       let start = 0;
       let end = st.size - 1;

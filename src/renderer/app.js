@@ -82,6 +82,7 @@ const DEFAULTS = {
   wordWrap: false,
   autosave: true,
   autoReload: false,
+  liveWallpaper: true,
   autoUpdateLangs: true,
   caretStyle: 'line',
   caretBlink: 'smooth',
@@ -449,6 +450,12 @@ let wallpaperUrl = null;
 async function renderBgHistory() {
   const box = $('#bg-hist');
   if (!box) return;
+  const live = await flux.background().catch(() => null);
+  const liveRow = $('[data-key="liveWallpaper"]')?.closest('.s-row')?.querySelector('small');
+  if (liveRow) {
+    liveRow.dataset.base ??= liveRow.textContent;
+    liveRow.textContent = live?.live ? t('Now: {source}', { source: live.title ? `${live.live} – ${live.title}` : live.live }) : liveRow.dataset.base;
+  }
   const list = await flux.backgroundHistory().catch(() => []);
   box.previousElementSibling.hidden = !list.length;
   box.hidden = !list.length;
@@ -487,6 +494,11 @@ async function setupWallpaper() {
       const v = document.createElement('video');
       Object.assign(v, { src: info.url, autoplay: true, muted: true, loop: true, playsInline: true });
       box.append(v);
+    } else if (info.type === 'gif') {
+      const im = document.createElement('img');
+      im.src = info.url;
+      im.alt = '';
+      box.append(im);
     } else if (info.type === 'youtube') {
       const f = document.createElement('iframe');
       const q = `autoplay=1&mute=1&loop=1&playlist=${info.id}&controls=0&disablekb=1&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3`;
@@ -3352,6 +3364,7 @@ function openSettings() {
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
               <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
               <div class="s-row"><span><b>${t('Background')}</b><small>${t('your own picture or video, or a YouTube video, instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${icon('upload', 13)}${t('Image or video…')}</button><button class="s-btn" data-action="bg-yt">${icon('play', 12)}YouTube…</button><button class="s-btn" data-action="bg-reset">${t('Windows wallpaper')}</button></span></div>
+              ${toggle('liveWallpaper', 'Use Lively Wallpaper and Wallpaper Engine', 'when one of them is running and you have no own background, Flux shows the same live wallpaper')}
               <div class="s-row s-bg-hist-row" hidden><span><b>${t('Previous backgrounds')}</b><small>${t('click one to use it again')}</small></span></div>
               <div class="bg-hist" id="bg-hist"></div>
             </div>

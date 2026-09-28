@@ -213,6 +213,13 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 - **Renderer:**
   - `setupWallpaper()` → `setMedia()` puts a `<video>` or a YouTube `<iframe>` into `#wall .wall-media` (`#wall.moving` hides the image layer). The CSP allows `frame-src https://www.youtube-nocookie.com` and `media-src 'self' blob:`.
   - `renderBgHistory()` draws the thumbnails.
+- **Live wallpapers:** `src/main/liveWallpaper.js` → `detect()`.
+  - **When it runs:** only when there is no own background and `liveWallpaper` is not off. The result is cached for 10 s.
+  - **Lively Wallpaper:** it reads `%LOCALAPPDATA%\Lively Wallpaper\WallpaperLayout.json`, or the Store package path, and then each `LivelyInfo.json`.
+  - **Wallpaper Engine:** it reads `steamapps\common\wallpaper_engine\config.json` (Steam path from the registry and `libraryfolders.vdf`), then `project.json` (a video file, or else the `preview`).
+  - **Running check:** only while the program runs, checked with `tasklist`: `lively.exe`, `wallpaper32/64.exe`.
+  - **Serving the file:** videos and GIFs go through `app://flux/live/…`, which serves only the currently detected file. Images go through `wallpaperPath()`.
+  - **Testing off Windows:** set `LOCALAPPDATA` and `FLUX_STEAM_PATH` to fake folders.
 
 ## Smooth scrolling and transitions
 

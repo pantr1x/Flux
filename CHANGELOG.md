@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.29 – 2026-09-29
+
+### Live wallpapers
+- **Lively Wallpaper and Wallpaper Engine:** if one of them is running and you have not set your own background, Flux now shows the same live wallpaper behind its window. It is blurred like the normal wallpaper.
+  - A video wallpaper plays as a video.
+  - For scene and web wallpapers, Flux shows their preview picture, often animated.
+- You can turn it off in **Settings → Appearance → Window → Use Lively Wallpaper and Wallpaper Engine**. That setting also shows which wallpaper Flux found.
+
 ## 1.4.28 – 2026-09-29
 
 ### Colors

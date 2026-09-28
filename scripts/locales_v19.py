@@ -160,3 +160,20 @@ _V19F = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19F.items()})
+
+# 1.4.29 – Lively Wallpaper / Wallpaper Engine.
+_V19G = {
+    'Use Lively Wallpaper and Wallpaper Engine': ('Použiť Lively Wallpaper a Wallpaper Engine', 'Lively Wallpaper und Wallpaper Engine verwenden', 'Usar Lively Wallpaper y Wallpaper Engine', 'Utiliser Lively Wallpaper et Wallpaper Engine', 'Usa Lively Wallpaper e Wallpaper Engine', 'Używaj Lively Wallpaper i Wallpaper Engine', 'Usar Lively Wallpaper e Wallpaper Engine', 'Використовувати Lively Wallpaper і Wallpaper Engine'),
+    'when one of them is running and you have no own background, Flux shows the same live wallpaper': (
+        'keď jeden z nich beží a nemáš vlastné pozadie, Flux ukáže tú istú živú tapetu',
+        'wenn eines davon läuft und du keinen eigenen Hintergrund hast, zeigt Flux dasselbe Live-Hintergrundbild',
+        'cuando uno de ellos está en marcha y no tienes fondo propio, Flux muestra el mismo fondo animado',
+        'quand l’un d’eux tourne et que tu n’as pas de fond personnel, Flux affiche le même fond animé',
+        'quando uno dei due è in esecuzione e non hai uno sfondo tuo, Flux mostra lo stesso sfondo animato',
+        'gdy jeden z nich działa, a nie masz własnego tła, Flux pokazuje tę samą animowaną tapetę',
+        'quando um deles está rodando e você não tem fundo próprio, o Flux mostra o mesmo papel de parede animado',
+        'коли одна з них працює і ти не маєш власного фону, Flux показує ті самі живі шпалери'),
+    'Now: {source}': ('Teraz: {source}', 'Jetzt: {source}', 'Ahora: {source}', 'Maintenant : {source}', 'Ora: {source}', 'Teraz: {source}', 'Agora: {source}', 'Зараз: {source}'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19G.items()})
