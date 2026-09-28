@@ -258,7 +258,10 @@ Settings → General → *Memory & speed*. `lite` (*Save memory*) is the master 
 | `lspIdle` | minutes until Pyright stops without a Python file (0 = never) |
 
 Always on, whatever the settings:
-- **Network service and GPU in the main process:** `enable-features=NetworkServiceInProcess2` and `in-process-gpu`, so Flux runs as 2 processes (main + window) instead of 4. In a measurement, `in-process-gpu` saved ~44 MB. `settings.gpuProcess = true` brings back the separate GPU process.
+- **Network service in the main process:** `enable-features=NetworkServiceInProcess2`, so there is no separate Utility process.
+- **GPU:**
+  - Do **not** use `in-process-gpu`. On Windows it left the window blank in 1.4.35.3, although it worked under xvfb.
+  - If the GPU process dies (`child-process-gone`, `type: 'GPU'`), Flux sets `settings.gpuSafe = true`, and later starts use `--disable-gpu-compositing`.
 - **Idle trimming:** 2 minutes after the window loses focus, the session cache is cleared and `webFrame.clearCache()` runs (`app:trim`).
 - **Pyright** stops after 5 minutes of the window being unfocused.
 - **Project stats:** `projectStats()` in `main.js` scans only the open project (`workspace`). Other projects get the numbers saved at their last visit (`userData/project-stats.json`, `files: null` when never scanned).

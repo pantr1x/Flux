@@ -1663,8 +1663,14 @@ if (settings.lite === undefined) {
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
 // Sieťová služba beží v hlavnom procese namiesto vlastného – o jeden proces (a desiatky MB) menej.
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
-// Aj grafika beží v hlavnom procese – o ďalší proces (a ~40 MB) menej. settings.gpuProcess = true ju vráti do vlastného.
-if (settings.gpuProcess !== true) app.commandLine.appendSwitch('in-process-gpu');
+// Pozor: in-process-gpu (grafika v hlavnom procese) na Windows nechalo okno prázdne (1.4.35.3) – nepoužívať.
+// Poistka: keď grafika alebo okno spadne, ďalší štart je bez GPU kompozície (settings.gpuSafe).
+if (settings.gpuSafe) app.commandLine.appendSwitch('disable-gpu-compositing');
+app.on('child-process-gone', (_e, d) => {
+  if (d.type !== 'GPU' || d.reason === 'clean-exit' || settings.gpuSafe) return;
+  settings.gpuSafe = true;
+  saveSettings();
+});
 // Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
 if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');
