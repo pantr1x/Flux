@@ -7,6 +7,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { app, net } = require('electron');
 const { t } = require('./i18n');
+const { scanFiles } = require('./pluginScan');
 
 const REPO = 'pantr1x/Flux';
 const BRANCHES = ['main', 'claude/optimistic-darwin-5i7m9t'];
@@ -192,7 +193,8 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
     return { ...manifest, readme, iconUrl: manifest.icon ? assetUrl(id, manifest.icon) : '', screenshotUrls: (manifest.screenshots || []).map((s) => assetUrl(id, s)) };
   }
 
-  async function install(id) {
+  // force = používateľ upozornenie videl a aj tak chce plugin nainštalovať.
+  async function install(id, { force = false } = {}) {
     if (!ID.test(id)) throw new Error('Invalid plugin id');
     const manifest = JSON.parse(await fetchText(`${id}/plugin.json`));
     const files = [...new Set([manifest.main || 'plugin.js', ...(manifest.files || [])])];
@@ -200,11 +202,21 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
     const tmp = `${dir}.tmp`;
     await fsp.rm(tmp, { recursive: true, force: true });
     await fsp.mkdir(tmp, { recursive: true });
+    const got = [];
     for (const f of files) {
       if (f.includes('..') || path.isAbsolute(f)) continue;
       const text = await fetchText(`${id}/${f}`);
+      got.push({ path: f, text });
       await fsp.mkdir(path.dirname(path.join(tmp, f)), { recursive: true });
       await fsp.writeFile(path.join(tmp, f), text);
+    }
+    // Pluginy od komunity sa pred inštaláciou skontrolujú (rovnaké pravidlá ako kontrola na GitHube).
+    // Pri podozrivom kóde sa nič nenainštaluje – Flux ukáže upozornenie a spýta sa.
+    const official = id.startsWith('flux.') && manifest.publisher === 'Flux';
+    const findings = official ? [] : scanFiles(got);
+    if (findings.length && !force) {
+      await fsp.rm(tmp, { recursive: true, force: true });
+      return { ...manifest, needsConfirm: true, danger: findings.some((f) => f.level === 'block'), findings: findings.map((f) => ({ ...f, text: t(f.text) })) };
     }
     await fsp.writeFile(path.join(tmp, 'plugin.json'), JSON.stringify(manifest, null, 2));
     await fsp.rm(dir, { recursive: true, force: true });

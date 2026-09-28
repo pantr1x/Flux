@@ -2794,12 +2794,12 @@ function closePalette(picked = false) {
 // nie paleta s vyhľadávaním. Vráti hodnotu tlačidla, alebo null (Esc / klik mimo = rozhodneš sa neskôr).
 // check: { label } pridá zaškrtávacie políčko – výsledok potom príde ako { value, checked }.
 let askClose = null;
-function askDialog({ title, message, detail = '', icon: ic = 'file', buttons, check = null }) {
+function askDialog({ title, message, detail = '', icon: ic = 'file', tone = 'warn', buttons, check = null }) {
   askClose?.(null);
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'ask-back';
-    back.innerHTML = `<div class="ask-card" role="alertdialog" aria-modal="true">
+    back.innerHTML = `<div class="ask-card ask-${tone}" role="alertdialog" aria-modal="true">
       <div class="ask-head"><span class="ask-ic">${icon(ic, 18)}</span><div class="ask-titles"><b></b>${detail ? '<small></small>' : ''}</div></div>
       <p class="ask-msg"></p>
       ${check ? '<label class="ask-check"><input type="checkbox"><span></span></label>' : ''}
@@ -5241,6 +5241,7 @@ async function main() {
   pluginsUI = createPluginsUI({
     host: pluginHost,
     toast,
+    ask: askDialog,
     openProject: (dir) => (closeSettings(), setWorkspace(dir)),
     builtins: [
       {

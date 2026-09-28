@@ -1065,7 +1065,7 @@ function registerIpc() {
   // Pluginy
   ipcMain.handle('plugins:registry', (_e, force) => plugins.registry(!!force));
   ipcMain.handle('plugins:details', (_e, id) => plugins.details(id));
-  ipcMain.handle('plugins:install', (_e, id) => plugins.install(id));
+  ipcMain.handle('plugins:install', (_e, id, force) => plugins.install(id, { force: !!force }));
   ipcMain.handle('plugins:uninstall', (_e, id) => plugins.uninstall(id));
   ipcMain.handle('plugins:enable', (_e, id, on) => plugins.setEnabled(id, on));
   ipcMain.handle('plugins:active', () => plugins.active());

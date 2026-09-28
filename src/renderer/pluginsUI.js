@@ -113,7 +113,7 @@ function openShots(urls, start = 0) {
   show();
 }
 
-export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
+export function createPluginsUI({ host, toast, openProject, ask, builtins = [] }) {
   let list = [];
   let filter = 'all';
   let query = '';
@@ -348,7 +348,30 @@ export function createPluginsUI({ host, toast, openProject, builtins = [] }) {
     if (p) p.busy = true;
     rerender(id);
     try {
-      const m = await flux.pluginInstall(id);
+      let m = await flux.pluginInstall(id);
+      // Kód pluginu sa pred inštaláciou kontroluje (src/main/pluginScan.js) – pri náleze upozornenie.
+      if (m.needsConfirm) {
+        const shown = m.findings.slice(0, 6).map((f) => `•  ${f.text}  (${f.file}${f.line ? `:${f.line}` : ''})`);
+        if (m.findings.length > 6) shown.push(t('…and {n} more', { n: m.findings.length - 6 }));
+        const intro = m.danger ? t('Flux found code in this plugin that could harm your PC or steal your data:') : t('This plugin does things you should know about:');
+        const pick = await ask({
+          icon: 'lock',
+          tone: m.danger ? 'danger' : 'warn',
+          title: m.danger ? t('This plugin may be dangerous') : t('Check this plugin before installing'),
+          detail: `${m.name} · ${m.publisher}`,
+          message: `${intro}\n\n${shown.join('\n')}\n\n${t('Install it only if you trust its author.')}`,
+          buttons: [
+            { label: t('Install anyway'), value: 'install' },
+            { label: t('Cancel'), value: 'cancel', primary: true },
+          ],
+        });
+        if (pick !== 'install') {
+          if (p) p.busy = false;
+          rerender(id);
+          return;
+        }
+        m = await flux.pluginInstall(id, true);
+      }
       await host.refresh(id);
       toast(t('{name} is installed and running.', { name: m.name }), 'ok');
     } catch (err) {

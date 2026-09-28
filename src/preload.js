@@ -63,7 +63,7 @@ contextBridge.exposeInMainWorld('flux', {
   pluginsBuiltin: () => ipcRenderer.invoke('plugins:builtin'),
   pluginRegistry: (force) => ipcRenderer.invoke('plugins:registry', force),
   pluginDetails: (id) => ipcRenderer.invoke('plugins:details', id),
-  pluginInstall: (id) => ipcRenderer.invoke('plugins:install', id),
+  pluginInstall: (id, force) => ipcRenderer.invoke('plugins:install', id, !!force),
   pluginUninstall: (id) => ipcRenderer.invoke('plugins:uninstall', id),
   pluginEnable: (id, on) => ipcRenderer.invoke('plugins:enable', id, on),
   pluginsActive: () => ipcRenderer.invoke('plugins:active'),

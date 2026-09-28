@@ -136,6 +136,8 @@ The same release notes appear in the app (Settings → General → About & updat
 
 See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed in `plugins/index.json`. **Nothing is bundled or turned on by itself**: `BUILTIN_IDS` in `src/main/plugins.js` is empty and `package.json` → `build.files` does not ship `plugins/`. A plugin is downloaded from GitHub (same branches as translations) only when the user presses **Install** in Settings → Plugins. For local testing, `FLUX_PLUGIN_REGISTRY=/path/to/plugins` makes the store read that folder instead of GitHub.
 
+**Install check**: `src/main/pluginScan.js` holds the code rules (eval, `window.flux`, Node/Electron, remote code, obfuscation, network…). `plugins.install()` scans community plugins before installing and returns `needsConfirm` with the findings, `pluginsUI.js` shows an `askDialog` warning (*Cancel* is the default) and installs with `force` only on *Install anyway*. `scripts/plugin-review.mjs` uses the same rules for pull requests.
+
 **Ratings and comments**: 1–5 stars plus text.
 - **Storage.** Each plugin has a GitHub issue in `pantr1x/Flux` (`issue` in `index.json`). A review is a comment on that issue, starting with `<!-- flux-review stars=N -->` and ★★★★☆.
 - **Rules.** One rating per user: the latest counts, and `review()` PATCHes your own comment. A comment without stars is a plain comment.

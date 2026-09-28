@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.24 – 2026-09-29
+
+### Safer plugins
+- **Flux now checks a plugin before it installs it.** If the plugin contains code that could be dangerous, a warning shows what Flux found and where. For example, code that runs hidden text, reaches your files directly, or sends things to the internet.
+  - Press **Cancel**, the highlighted button, to leave it out. **Install anyway** is only for plugins whose author you trust.
+  - Plugins made by the Flux team are not checked.
+- The same rules run on GitHub for every plugin pull request, so a dangerous plugin usually never reaches the store.
+
 ## 1.4.23 – 2026-09-29
 
 ### Light mode

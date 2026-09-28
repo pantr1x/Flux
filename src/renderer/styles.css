@@ -8491,6 +8491,7 @@ body.no-anim .ob-draw {
   text-align: left;
 }
 .ask-msg {
+  white-space: pre-line;
   margin: 0 0 12px;
   font-size: 13px;
   line-height: 1.5;
@@ -8550,4 +8551,8 @@ body.no-anim .ask-card {
 body.theme-light.wallpaper {
   --text-2: #43434e;
   --text-3: #5d5d69;
+}
+.ask-danger .ask-ic {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 14%, transparent);
 }

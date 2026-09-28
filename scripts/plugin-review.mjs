@@ -22,19 +22,8 @@ const MAX_FILE = 300 * 1024;
 const problems = []; // { level: 'block' | 'warn', file, line, text }
 const add = (level, file, text, line = 0) => problems.push({ level, file, line, text });
 
-// Čo plugin nesmie používať (plugin má na všetko API `flux.*`, docs/PLUGINS.md).
-const RULES = [
-  [/\beval\s*\(/, 'block', 'eval() – runs text as code'],
-  [/\bnew\s+Function\s*\(/, 'block', 'new Function() – runs text as code'],
-  [/\bwindow\.flux\b|\bglobalThis\.flux\b/, 'block', 'window.flux – the app bridge (files, programs); plugins must use the `flux` object they get'],
-  [/\brequire\s*\(|\bprocess\.(env|exec|binding)|child_process|ipcRenderer/, 'block', 'Node.js / Electron internals'],
-  [/\bimport\s*\(\s*['"`]?https?:/, 'block', 'loads code from the internet'],
-  [/document\.cookie|localStorage|sessionStorage|indexedDB/, 'warn', 'browser storage – use flux.storage instead'],
-  [/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource/, 'warn', 'network request – must be explained in the README and visible to the user'],
-  [/\batob\s*\(|String\.fromCharCode\s*\(\s*\d+\s*,\s*\d+/, 'warn', 'decoded strings – often used to hide code'],
-  [/\\x[0-9a-f]{2}(\\x[0-9a-f]{2}){7,}/i, 'block', 'long hex-escaped string – looks obfuscated'],
-  [/document\.createElement\s*\(\s*['"`]script/i, 'block', 'injects a <script> tag'],
-];
+// Pravidlá pre kód sú spoločné s Fluxom (upozornenie pred inštaláciou): src/main/pluginScan.js
+const { scanFiles } = createRequire(import.meta.url)('../src/main/pluginScan.js');
 
 // Mimo plugins/ PR od komunity nemá čo meniť.
 for (const f of changed) if (!f.startsWith('plugins/')) add('block', f, 'changes a file outside `plugins/` – plugin pull requests may only add or change plugin folders and `plugins/index.json`');
@@ -60,13 +49,7 @@ for (const f of pluginFiles) {
   }
   const text = readFileSync(p, 'utf8');
   files.push({ path: f, text });
-  if (['.js', '.mjs'].includes(ext)) {
-    text.split('\n').forEach((line, i) => {
-      if (line.length > 800) add('block', f, 'very long line – minified or obfuscated code is not allowed', i + 1);
-      for (const [re, level, why] of RULES) if (re.test(line)) add(level, f, why, i + 1);
-    });
-  }
-  if (ext === '.svg' && /<script|on\w+\s*=|javascript:/i.test(text)) add('block', f, 'SVG with script or event handlers');
+  for (const x of scanFiles([{ path: f, text }])) add(x.level, x.file, x.text, x.line);
 }
 
 // plugin.json ↔ priečinok ↔ index.json
