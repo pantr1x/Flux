@@ -238,7 +238,12 @@ async function githubModelsReview(list) {
   const askAt = async (url, model, chunk, strict) => {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
       body: JSON.stringify({
         model,
         temperature: 0,
@@ -303,6 +308,13 @@ async function githubModelsReview(list) {
     } catch (err) {
       lastErr = err;
     }
+  }
+  // Diagnostika pre správcu: žije vôbec katalóg modelov?
+  try {
+    const cat = await fetch('https://models.github.ai/catalog/models', { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+    console.error(`[catalog] HTTP ${cat.status}: ${(await cat.text()).slice(0, 400)}`);
+  } catch (err) {
+    console.error(`[catalog] ${err.message}`);
   }
   throw lastErr;
 }
