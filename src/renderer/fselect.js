@@ -115,7 +115,7 @@ function enhance(select) {
 }
 
 // ---------- výber farby namiesto systémového okna ----------
-const PRESETS = ['#8b7bff', '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#22c55e', '#84cc16', '#eab308', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#d946ef', '#a855f7', '#e8e8ef', '#26262c'];
+const PRESETS = ['#8b7bff', '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#22c55e', '#84cc16', '#eab308', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#d946ef', '#a855f7', '#ececef', '#1c1b18'];
 const hex2rgb = (h) => {
   const m = /^#?([0-9a-f]{6})$/i.exec(h || '');
   const n = m ? parseInt(m[1], 16) : 0x8b7bff;

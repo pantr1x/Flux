@@ -2,6 +2,13 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.26 – 2026-09-29
+
+### New colors
+- **Dark mode is darker:** almost black, with panels one step lighter, like modern dark apps.
+- **Light mode is a warm off-white** instead of a cold grey-white. This is easier on the eyes.
+- Menus, suggestions, the code map and the sticky headers in the editor use the same new colors.
+
 ## 1.4.25 – 2026-09-29
 
 ### Cleaner look

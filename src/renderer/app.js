@@ -269,7 +269,7 @@ function currentAccent() {
 }
 
 const isDark = () => themeOf(setting('codeTheme')).type === 'dark';
-const monoColor = () => (isDark() ? '#e6e6ea' : '#26262c');
+const monoColor = () => (isDark() ? '#ececef' : '#1c1b18');
 const accentHex = (name) => (name === 'mono' ? monoColor() : ACCENTS[name]);
 
 // Farba textu na farebnom tlačidle: čierna na svetlej farbe, biela na tmavej.
@@ -401,7 +401,7 @@ function applyAppColors() {
   const card = bg('uiCard');
   const alpha = Math.max(0.3, Math.min(1, (Number(setting('cardAlpha')) || 74) / 100));
   set('--card-solid', card);
-  set('--card', card ? rgba(card, alpha) : alpha !== 0.74 ? (isDark() ? `rgba(46, 46, 54, ${alpha})` : `rgba(255, 255, 255, ${alpha})`) : '');
+  set('--card', card ? rgba(card, alpha) : alpha !== 0.74 ? (isDark() ? `rgba(23, 23, 26, ${alpha})` : `rgba(246, 245, 241, ${alpha})`) : '');
   const line = setting('uiLine');
   set('--line-strong', line ? rgba(line, 0.5) : '');
   set('--line', line ? rgba(line, 0.28) : '');
@@ -2132,8 +2132,8 @@ function terminalTheme() {
   const dark = isDark();
   const accent = ACCENTS[currentAccent()];
   return dark
-    ? { background: '#00000000', foreground: '#dcdce6', cursor: accent, cursorAccent: '#2d2d34', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
-    : { background: '#00000000', foreground: '#1d1d24', cursor: accent, cursorAccent: '#f8f8fb', selectionBackground: accent + '44', black: '#1d1d24', brightBlack: '#8e8e9c', red: '#e0364a', green: '#17a86b', yellow: '#b7791f', blue: '#2563eb', magenta: '#7c3aed', cyan: '#0e7490', white: '#5c5c6b' };
+    ? { background: '#00000000', foreground: '#dcdce6', cursor: accent, cursorAccent: '#17171a', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
+    : { background: '#00000000', foreground: '#1d1d24', cursor: accent, cursorAccent: '#f5f4f0', selectionBackground: accent + '44', black: '#1d1d24', brightBlack: '#8e8e9c', red: '#e0364a', green: '#17a86b', yellow: '#b7791f', blue: '#2563eb', magenta: '#7c3aed', cyan: '#0e7490', white: '#5c5c6b' };
 }
 
 function createTerminal() {
