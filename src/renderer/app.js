@@ -83,6 +83,7 @@ const DEFAULTS = {
   autosave: true,
   autoReload: false,
   liveWallpaper: true,
+  adaptColors: true,
   autoUpdateLangs: true,
   caretStyle: 'line',
   caretBlink: 'smooth',
@@ -406,6 +407,57 @@ function applyAppColors() {
   const line = setting('uiLine');
   set('--line-strong', line ? rgba(line, 0.5) : '');
   set('--line', line ? rgba(line, 0.28) : '');
+  // Farby podľa pozadia: jemný nádych farby tapety/videa v paneloch a pri veľmi tmavom pozadí trochu svetlejšie.
+  // Len ak si nenastavil vlastné farby (tie majú vždy prednosť) a pozadie je naozaj vidieť.
+  const tone = setting('adaptColors') !== false && state.material === 'wallpaper' ? bgTone : null;
+  document.body.classList.toggle('adapt', !!tone);
+  if (tone) {
+    const mix = (c, k) => c.map((v, i) => Math.round(v * (1 - k) + [tone.r, tone.g, tone.b][i] * k)).join(', ');
+    const B = dark ? [30, 28, 25] : [231, 229, 223];
+    const C = dark ? [14, 13, 11] : [246, 245, 241];
+    if (!base) set('--base-alpha', `rgba(${mix(B, dark ? 0.16 : 0.12)}, ${dark ? 0.45 : 0.5})`);
+    if (!card) set('--card', `rgba(${mix(C, dark ? 0.07 : 0.05)}, ${alpha !== 0.74 ? alpha : dark ? 0.86 : 0.84})`);
+  }
+  // Veľmi tmavé pozadie v tmavom režime → automaticky trochu svetlejšie (ak si svetlosť nenastavil sám).
+  const manualLift = (Number(setting('darkLift')) || 0) * 0.0038;
+  const autoLift = tone && dark && !manualLift ? Math.max(0, Math.min(1, (0.16 - tone.l) / 0.16)) * 0.04 : 0;
+  document.documentElement.style.setProperty('--dark-lift', String(manualLift || autoLift));
+}
+
+// Priemerná farba a jas pozadia (malá vzorka na canvase) – pre applyAppColors().
+let bgTone = null;
+function sampleTone(source) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 24;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(source, 0, 0, 24, 24);
+    const d = x.getImageData(0, 0, 24, 24).data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      r += d[i];
+      g += d[i + 1];
+      b += d[i + 2];
+    }
+    const n = d.length / 4;
+    r /= n;
+    g /= n;
+    b /= n;
+    const next = { r, g, b, l: (0.299 * r + 0.587 * g + 0.114 * b) / 255 };
+    // Pri videu sa mení len keď je rozdiel viditeľný – nech sa panely neprekresľujú každú chvíľu.
+    if (bgTone && Math.abs(bgTone.r - r) + Math.abs(bgTone.g - g) + Math.abs(bgTone.b - b) < 12) return;
+    bgTone = next;
+    applyAppColors();
+  } catch {} // obrázok z inej domény (napr. YouTube bez CORS) sa prečítať nedá
+}
+function toneFromUrl(url) {
+  if (!url) return;
+  const im = new Image();
+  im.crossOrigin = 'anonymous';
+  im.onload = () => sampleTone(im);
+  im.src = url;
 }
 
 function applyCustomization() {
@@ -434,7 +486,6 @@ function applyCustomization() {
   document.body.classList.toggle('no-fx', !optOn('optFx'));
   document.body.classList.toggle('no-anim', !optOn('optAnim'));
   applyAppColors();
-  root.style.setProperty('--dark-lift', String((Number(setting('darkLift')) || 0) * 0.0038));
   flux.setZoom?.(Number(setting('uiZoom')) / 100);
 }
 
@@ -493,9 +544,13 @@ async function setupWallpaper() {
     if (info.type === 'video') {
       const v = document.createElement('video');
       Object.assign(v, { src: info.url, autoplay: true, muted: true, loop: true, playsInline: true });
+      // farby podľa videa: prvý snímok a potom raz za 4 s
+      v.addEventListener('loadeddata', () => sampleTone(v), { once: true });
+      const iv = setInterval(() => (v.isConnected ? !v.paused && sampleTone(v) : clearInterval(iv)), 4000);
       box.append(v);
     } else if (info.type === 'gif') {
       const im = document.createElement('img');
+      im.onload = () => sampleTone(im);
       im.src = info.url;
       im.alt = '';
       box.append(im);
@@ -503,6 +558,7 @@ async function setupWallpaper() {
       const f = document.createElement('iframe');
       const q = `autoplay=1&mute=1&loop=1&playlist=${info.id}&controls=0&disablekb=1&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3`;
       f.src = `https://www.youtube-nocookie.com/embed/${info.id}?${q}`;
+      toneFromUrl(`https://i.ytimg.com/vi/${info.id}/mqdefault.jpg`);
       f.allow = 'autoplay; encrypted-media';
       f.tabIndex = -1;
       box.append(f);
@@ -529,6 +585,7 @@ async function setupWallpaper() {
     if (url && url !== wallpaperUrl) {
       wallpaperUrl = url;
       img.style.backgroundImage = `url("${url}")`;
+      toneFromUrl(url);
     }
   };
   // Tapeta aj pohyblivé pozadie majú veľkosť celej obrazovky a posúvajú sa opačne ako okno –
@@ -3375,6 +3432,7 @@ function openSettings() {
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
               <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
+              ${toggle('adaptColors', 'Colors follow the background', 'panels get a hint of your wallpaper’s color, and a very dark wallpaper makes them a little lighter – your own app colors always win')}
               <div class="s-row"><span><b>${t('Background')}</b><small>${t('your own picture or video, or a YouTube video, instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${icon('upload', 13)}${t('Image or video…')}</button><button class="s-btn" data-action="bg-yt">${icon('play', 12)}YouTube…</button><button class="s-btn" data-action="bg-reset">${t('Windows wallpaper')}</button></span></div>
               ${toggle('liveWallpaper', 'Use Lively Wallpaper and Wallpaper Engine', 'when one of them is running and you have no own background, Flux shows the same live wallpaper')}
               <div class="s-row s-bg-hist-row" hidden><span><b>${t('Previous backgrounds')}</b><small>${t('click one to use it again')}</small></span></div>

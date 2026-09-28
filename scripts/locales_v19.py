@@ -177,3 +177,19 @@ _V19G = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19G.items()})
+
+# 1.4.31 – farby podľa pozadia.
+_V19H = {
+    'Colors follow the background': ('Farby podľa pozadia', 'Farben passen sich dem Hintergrund an', 'Los colores siguen al fondo', 'Les couleurs suivent le fond', 'I colori seguono lo sfondo', 'Kolory dopasowane do tła', 'As cores seguem o fundo', 'Кольори під фон'),
+    'panels get a hint of your wallpaper’s color, and a very dark wallpaper makes them a little lighter – your own app colors always win': (
+        'panely dostanú nádych farby tvojej tapety a pri veľmi tmavej tapete sú trochu svetlejšie – tvoje vlastné farby majú vždy prednosť',
+        'Bereiche bekommen einen Hauch der Farbe deines Hintergrunds, bei sehr dunklem Hintergrund werden sie etwas heller – deine eigenen Farben haben immer Vorrang',
+        'los paneles toman un toque del color de tu fondo y, con un fondo muy oscuro, se aclaran un poco; tus propios colores siempre tienen prioridad',
+        'les panneaux prennent une touche de la couleur de ton fond et s’éclaircissent un peu avec un fond très sombre – tes propres couleurs gagnent toujours',
+        'i pannelli prendono un tocco del colore dello sfondo e con uno sfondo molto scuro diventano un po’ più chiari – i tuoi colori hanno sempre la precedenza',
+        'panele dostają odcień koloru tapety, a przy bardzo ciemnej tapecie stają się nieco jaśniejsze – twoje własne kolory zawsze wygrywają',
+        'os painéis ganham um toque da cor do seu papel de parede e, com um fundo muito escuro, ficam um pouco mais claros – suas cores próprias sempre têm prioridade',
+        'панелі отримують відтінок кольору шпалер, а при дуже темних шпалерах стають трохи світлішими – твої власні кольори завжди мають перевагу'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19H.items()})

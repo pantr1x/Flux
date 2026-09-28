@@ -2,6 +2,16 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.31 – 2026-09-29
+
+### Colors that follow your background
+- **Flux now takes its colors from your background.** This works for the Windows wallpaper, your own picture or video, YouTube and live wallpapers.
+  - The panels get a light hint of its color, so they fit together.
+  - With a video, the color follows the video as it plays.
+- **A very dark background makes the dark theme a little lighter by itself,** so you can still see where the panels are.
+- This only happens when you have not picked your own app colors or your own *Brightness of dark areas*. Your settings always win.
+- You can turn it off in **Settings → Appearance → Window → Colors follow the background**.
+
 ## 1.4.30 – 2026-09-29
 
 ### Fixes
