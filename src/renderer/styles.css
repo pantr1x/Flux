@@ -8425,3 +8425,9 @@ body.fx-trans .fx-in {
 body.no-anim .ob-draw {
   stroke-dashoffset: 0;
 }
+
+/* Prilepené riadky hore (sticky scroll): stĺpec s číslami mal priehľadné pozadie
+   (editorGutter je priehľadný kvôli tapete) → čísla riadkov pod ním presvitali. */
+.monaco-editor .sticky-widget .sticky-widget-line-numbers {
+  background-color: var(--vscode-editorStickyScroll-background) !important;
+}

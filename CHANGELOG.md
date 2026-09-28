@@ -2,6 +2,19 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.16 – 2026-09-28
+
+### Files changed outside Flux
+- **Flux now asks first** before it shows the new version of a file that changed on disk. You can pick:
+  - **Load the new version**,
+  - **Keep what is in the editor**. Your text then counts as unsaved, and Ctrl+S writes it over the file.
+  - **Always load automatically – don’t ask again**.
+- You can change this later with **Settings → Editor → Reload changed files without asking**.
+
+### Fixes
+- **Sticky headers:** the line numbers of the lines scrolling under the header no longer show through it.
+- **Sticky headers** are now on right after Flux starts. Before, they only turned on after you changed a setting.
+
 ## 1.4.15 – 2026-09-27
 
 ### Files changed outside Flux

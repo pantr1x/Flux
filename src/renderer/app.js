@@ -81,6 +81,7 @@ const DEFAULTS = {
   stickyScroll: true,
   wordWrap: false,
   autosave: true,
+  autoReload: false,
   autoUpdateLangs: true,
   caretStyle: 'line',
   caretBlink: 'smooth',
@@ -525,7 +526,7 @@ function createEditor() {
     scrollBeyondLastLine: false,
     bracketPairColorization: { enabled: true },
     guides: { bracketPairs: 'active', indentation: true },
-    stickyScroll: { enabled: false },
+    stickyScroll: { enabled: setting('stickyScroll') !== false && optOn('optEditorFx'), maxLineCount: 4 },
     glyphMargin: true,
     lineDecorationsWidth: 6,
     lineNumbersMinChars: 3,
@@ -1509,9 +1510,30 @@ async function syncTabs(only) {
       toast(t('“{file}” was reloaded from disk.', { file: name }), 'info', 5000);
       continue;
     }
+    tab.disk = text;
+    if (!setting('autoReload')) {
+      const pick = await confirmPalette(t('“{file}” was changed outside Flux. Show the new version?', { file: name }), [
+        { label: t('Load the new version'), value: 'disk' },
+        { label: t('Keep what is in the editor'), value: 'mine' },
+        { label: t('Always load automatically – don’t ask again'), value: 'always' },
+      ]);
+      if (tab.model.isDisposed()) continue;
+      if (pick !== 'disk' && pick !== 'always') {
+        // Text v editore sa od disku líši → ber ho ako neuložený (Ctrl+S ním prepíše súbor).
+        if (tab.model.getValue() !== text) tab.savedVersion = -1;
+        renderTabs();
+        reportDirty();
+        continue;
+      }
+      if (pick === 'always') {
+        await saveSettings({ autoReload: true });
+        toast(t('Changed files now load automatically. You can turn this off in Settings → Editor.'), 'info', 6000);
+      }
+      if (tab.model.getValue() !== text) replaceTabText(tab, text);
+      continue;
+    }
     const before = tab.model.getValue();
     replaceTabText(tab, text);
-    tab.disk = text;
     toast(t('“{file}” changed on disk – the editor now shows the new version.', { file: name }), 'info', 9000, {
       label: t('Keep my old version'),
       run: () => {
@@ -3098,6 +3120,7 @@ function openSettings() {
               ${toggle('stickyScroll', 'Sticky headers', 'the function or class you are in stays at the top while you scroll')}
               ${toggle('suggestDetails', 'Show docs next to suggestions', 'documentation of the selected function, like in VS Code')}
               ${toggle('autosave', 'Auto save', 'saves the file shortly after you stop typing')}
+              ${toggle('autoReload', 'Reload changed files without asking', 'when another program changes an open file, the editor shows the new version right away')}
             </div>
           </section>
           <section data-pane="running">
