@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('flux', {
   recentFiles: () => ipcRenderer.invoke('file:recent'),
   openRecentFile: (p) => ipcRenderer.invoke('file:open-recent', p),
   forgetRecentFile: (p) => ipcRenderer.invoke('file:forget-recent', p),
+  watchFiles: (files) => ipcRenderer.invoke('fs:watch-files', files),
   startupFiles: () => ipcRenderer.invoke('file:startup'),
   onOpenFiles: (cb) => ipcRenderer.on('open-files', (_e, files) => cb(files)),
   pathForFile: (file) => webUtils.getPathForFile(file),

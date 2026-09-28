@@ -78,7 +78,7 @@ const DEFAULTS = {
   lineHeight: 1.45,
   ligatures: false,
   minimap: true,
-  stickyScroll: true,
+  stickyScroll: false,
   wordWrap: false,
   autosave: true,
   autoReload: false,
@@ -307,7 +307,7 @@ function applyEditorSettings() {
     lineHeight: setting('lineHeight'),
     fontLigatures: setting('ligatures'),
     minimap: { enabled: false },
-    stickyScroll: { enabled: setting('stickyScroll') !== false && optOn('optEditorFx'), maxLineCount: 4 },
+    stickyScroll: { enabled: !!setting('stickyScroll') && optOn('optEditorFx'), maxLineCount: 4 },
     wordWrap: setting('wordWrap') ? 'on' : 'off',
     cursorStyle: setting('caretStyle'),
     cursorBlinking: setting('caretBlink'),
@@ -526,7 +526,7 @@ function createEditor() {
     scrollBeyondLastLine: false,
     bracketPairColorization: { enabled: true },
     guides: { bracketPairs: 'active', indentation: true },
-    stickyScroll: { enabled: setting('stickyScroll') !== false && optOn('optEditorFx'), maxLineCount: 4 },
+    stickyScroll: { enabled: !!setting('stickyScroll') && optOn('optEditorFx'), maxLineCount: 4 },
     glyphMargin: true,
     lineDecorationsWidth: 6,
     lineNumbersMinChars: 3,
@@ -864,7 +864,13 @@ function createTab(path, model, readonly) {
     if (/[\\/]config[\\/]themes[\\/][^\\/]+\.json$/i.test(path)) liveThemeFromText(path, model.getValue());
   });
   state.tabs.push(tab);
+  watchLoose();
   return tab;
+}
+
+// Súbory mimo projektu sleduje hlavný proces zvlášť (zmena → fs:changed → syncOpenTabs).
+function watchLoose() {
+  flux.watchFiles(state.tabs.filter((x) => !x.readonly && !inside(x.path)).map((x) => x.path));
 }
 
 // Prázdny .html súbor dostane sám základnú kostru stránky (ako „!“ + Tab).
@@ -1021,6 +1027,7 @@ async function closeTab(tab, { force = false } = {}) {
   }
   const i = state.tabs.indexOf(tab);
   state.tabs.splice(i, 1);
+  watchLoose();
   clearTimeout(tab.autosaveTimer);
   if (state.active === tab) {
     const next = state.tabs[i] || state.tabs[i - 1];
@@ -5232,11 +5239,8 @@ async function main() {
   setupNav();
   setupLooseFiles();
   flux.onOpenFiles((files) => openStandalone(files));
-  // Súbory mimo projektu nesleduje watcher → skontrolujú sa, keď sa vrátiš do okna.
+  // Pre istotu aj po návrate do okna (sieťové disky a pod. nemusia hlásiť zmeny).
   window.addEventListener('focus', () => state.tabs.length && syncOpenTabs());
-  setInterval(() => {
-    if (document.hasFocus() && state.tabs.some((x) => !inside(x.path))) syncOpenTabs((x) => !inside(x.path));
-  }, 5000);
   flux.startupFiles().then((files) => files.length && setTimeout(() => openStandalone(files), 600));
   flux.onSaveAllAndClose(async () => {
     await saveAll();

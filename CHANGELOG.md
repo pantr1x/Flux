@@ -2,6 +2,12 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.17 – 2026-09-28
+
+### Fixes
+- **Files you open without a project are now watched too.** For example, you replace the file with **Save as** in another program. Flux notices the change within about a second and asks whether to load the new version.
+- **Sticky headers are off by default.** They are the lines that stay at the top of the editor while you scroll. Turn them on in **Settings → Editor → Sticky headers**.
+
 ## 1.4.16 – 2026-09-28
 
 ### Files changed outside Flux

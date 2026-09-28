@@ -418,6 +418,8 @@ function allowFile(p) {
 // Súbory z príkazového riadku („Otvoriť v programe → Flux“, pretiahnutie na ikonu).
 const filesFromArgv = (argv) => argv.slice(1).filter((a) => !a.startsWith('-') && /\.[\w]+$/.test(a) && fs.existsSync(a) && fs.statSync(a).isFile() && path.resolve(a) !== path.resolve(process.argv[1] || ''));
 
+const looseWatch = new Map();
+
 function guard(p) {
   const abs = path.resolve(p);
   if (insideConfig(abs)) return abs;
@@ -774,6 +776,24 @@ function registerIpc() {
     const buf = await fsp.readFile(p);
     if (buf.subarray(0, 8000).includes(0)) throw new Error(t('This is a binary file – the editor cannot show it.'));
     return buf.toString('utf8');
+  });
+  // Otvorené súbory mimo projektu (napr. cez „Otvoriť v programe → Flux“) nesleduje watcher projektu.
+  // fs.watchFile porovnáva stat každú sekundu – zachytí aj „Uložiť ako“ cez starý súbor (premenovanie).
+  ipcMain.handle('fs:watch-files', (_e, files) => {
+    const want = new Set((files || []).map((f) => path.resolve(f)));
+    for (const [f, fn] of looseWatch) {
+      if (want.has(f)) continue;
+      fs.unwatchFile(f, fn);
+      looseWatch.delete(f);
+    }
+    for (const f of want) {
+      if (looseWatch.has(f)) continue;
+      const fn = (cur, prev) => {
+        if (cur.mtimeMs !== prev.mtimeMs || cur.size !== prev.size || cur.ino !== prev.ino) send('fs:changed');
+      };
+      fs.watchFile(f, { interval: 1000 }, fn);
+      looseWatch.set(f, fn);
+    }
   });
   ipcMain.handle('fs:read-any', async (_e, file) => {
     // Na „Prejsť na definíciu“ do knižníc mimo projektu (napr. typeshed od Pyrightu) – iba na čítanie.
