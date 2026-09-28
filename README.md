@@ -97,7 +97,7 @@ Plugins live in [`plugins/`](plugins) and are installed from **Settings → Plug
 
 - **Make one:** press **Create a plugin** in Settings → Plugins, then follow [Making plugins](https://github.com/pantr1x/Flux/wiki/Making-plugins) in the wiki. The full reference is the [plugin guide](docs/PLUGINS.md).
 - **Publish it:** fork this repository, add your plugin folder and open a pull request ([how](https://github.com/pantr1x/Flux/wiki/Publishing-plugins)).
-- **Safety:** every plugin pull request gets an **automatic review**. Fixed rules block dangerous code, and an AI review looks for malware and data theft. It uses Claude or the free GitHub Models. The plugin code is only read during the review, never run. A maintainer gives the final OK.
+- **Safety:** every plugin pull request gets an **automatic review**. Fixed rules block dangerous code, and an AI review looks for malware and data theft. The plugin code is only read during the review, never run. A maintainer gives the final OK.
 
 ## Privacy
 

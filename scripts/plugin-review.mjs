@@ -102,9 +102,8 @@ for (const dir of dirs) {
 }
 
 // ---------- AI kontrola ----------
-// 1) Claude, ak má repozitár tajomstvo ANTHROPIC_API_KEY.
-// 2) Inak GitHub Models – zadarmo cez GITHUB_TOKEN (workflow má `models: read`), žiadny kľúč netreba.
-//    Bezplatná úroveň má limit ~8000 tokenov na požiadavku, preto sa veľké pluginy posielajú po častiach.
+// Claude, ak má repozitár tajomstvo ANTHROPIC_API_KEY. (GitHub Models sme skúšali ako bezplatnú náhradu –
+// v septembri 2026 na každú požiadavku odpovedali len „OK“ bez výsledku, preto tu nie sú.)
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -162,16 +161,7 @@ else if (process.env.ANTHROPIC_API_KEY) {
     aiNote = `Claude review failed (${err.message}).`;
   }
 }
-if (!ai && files.length && process.env.GITHUB_TOKEN) {
-  try {
-    ai = await githubModelsReview(files);
-    aiBy = `GitHub Models (${ai.model})`;
-    aiNote = '';
-  } catch (err) {
-    aiNote = `${aiNote ? `${aiNote} ` : ''}GitHub Models review failed (${err.message}).`;
-  }
-}
-if (!ai && files.length) aiNote = `${aiNote || 'No AI is available.'} A person has to review this plugin.`;
+if (!ai && files.length) aiNote = `${aiNote || 'AI review skipped – the repository has no `ANTHROPIC_API_KEY` secret.'} A person has to review this plugin.`;
 
 async function claudeReview(list) {
   const req = createRequire(join(process.env.SDK_DIR || process.cwd(), 'noop.js'));
@@ -191,132 +181,6 @@ async function claudeReview(list) {
   const text = response.content.find((b) => b.type === 'text')?.text;
   if (!text) throw new Error(`no answer (stop reason: ${response.stop_reason})`);
   return JSON.parse(text);
-}
-
-// Súbory rozdelené do dávok, ktoré sa zmestia do limitu bezplatnej úrovne (~4 znaky = 1 token).
-function batches(list, maxChars = 14000) {
-  const out = [];
-  let cur = [];
-  let size = 0;
-  for (const f of list) {
-    const parts = [];
-    for (let i = 0; i < f.text.length; i += maxChars) parts.push(f.text.slice(i, i + maxChars));
-    parts.forEach((text, i) => {
-      const item = { path: parts.length > 1 ? `${f.path} (part ${i + 1}/${parts.length})` : f.path, text };
-      if (size + text.length > maxChars && cur.length) {
-        out.push(cur);
-        cur = [];
-        size = 0;
-      }
-      cur.push(item);
-      size += text.length;
-    });
-  }
-  if (cur.length) out.push(cur);
-  return out;
-}
-
-async function githubModelsReview(list) {
-  const MODELS = ['openai/gpt-4.1', 'openai/gpt-4.1-mini', 'openai/gpt-4o-mini'];
-  // Dve adresy GitHub Models (nová a staršia z Azure) – ak jedna neodpovie JSONom, skúsi sa druhá.
-  const ENDPOINTS = [
-    ['https://models.github.ai/inference/chat/completions', (m) => m],
-    ['https://models.inference.ai.azure.com/chat/completions', (m) => m.replace(/^openai\//, '')],
-  ];
-  const ask = async (model, chunk, strict) => {
-    let lastErr;
-    for (const [url, name] of ENDPOINTS) {
-      try {
-        return await askAt(url, name(model), chunk, strict);
-      } catch (err) {
-        lastErr = err;
-        if (err.status === 429) throw err; // limit platí pre obe adresy
-      }
-    }
-    throw lastErr;
-  };
-  const askAt = async (url, model, chunk, strict) => {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        max_tokens: 3000,
-        messages: [
-          { role: 'system', content: systemPrompt(false) + (strict ? '' : `\n\nAnswer with JSON only, matching this schema: ${JSON.stringify(SCHEMA)}`) },
-          { role: 'user', content: userPrompt(chunk) },
-        ],
-        ...(strict ? { response_format: { type: 'json_schema', json_schema: { name: 'plugin_review', strict: true, schema: SCHEMA } } } : { response_format: { type: 'json_object' } }),
-      }),
-    });
-    if (!res.ok) {
-      const err = new Error(`${model}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
-      err.status = res.status;
-      throw err;
-    }
-    const raw = await res.text();
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      console.error(`[${url}] HTTP ${res.status}, not JSON: ${raw.slice(0, 300)}`);
-      const err = new Error(`${model}: ${url} answered HTTP ${res.status} without JSON`);
-      err.status = 502;
-      throw err;
-    }
-    const text = data.choices?.[0]?.message?.content || '';
-    try {
-      return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
-    } catch {
-      console.error(`[${model}] not JSON (${strict ? 'json_schema' : 'json_object'}): ${JSON.stringify(data).slice(0, 600)}`);
-      const err = new Error(`${model}: the answer was not JSON`);
-      err.status = 422;
-      throw err;
-    }
-  };
-  const chunks = batches(list);
-  let lastErr;
-  // Model po modeli: pri limite (429) alebo nedostupnom modeli skúsi ďalší.
-  for (const model of MODELS) {
-    try {
-      const results = [];
-      for (const chunk of chunks) {
-        let r;
-        try {
-          r = await ask(model, chunk, true);
-        } catch (err) {
-          if (err.status !== 400 && err.status !== 422) throw err;
-          r = await ask(model, chunk, false); // bez json_schema, len „odpovedz JSONom“
-        }
-        results.push(r);
-      }
-      // Najhorší verdikt zo všetkých dávok vyhráva.
-      const rank = { safe: 0, suspicious: 1, malicious: 2 };
-      const worst = results.reduce((w, r) => ((rank[r.verdict] ?? 1) > (rank[w.verdict] ?? 1) ? r : w), results[0]);
-      return {
-        model,
-        verdict: rank[worst.verdict] === undefined ? 'suspicious' : worst.verdict,
-        summary: results.map((r) => r.summary).filter(Boolean).join(' '),
-        findings: results.flatMap((r) => r.findings || []),
-      };
-    } catch (err) {
-      lastErr = err;
-    }
-  }
-  // Diagnostika pre správcu: žije vôbec katalóg modelov?
-  try {
-    const cat = await fetch('https://models.github.ai/catalog/models', { headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
-    console.error(`[catalog] HTTP ${cat.status}: ${(await cat.text()).slice(0, 400)}`);
-  } catch (err) {
-    console.error(`[catalog] ${err.message}`);
-  }
-  throw lastErr;
 }
 
 // ---------- správa ----------
