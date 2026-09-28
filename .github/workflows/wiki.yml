@@ -20,7 +20,10 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
         run: |
-          git clone "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
+          if ! git clone "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki; then
+            echo "::warning::The wiki does not exist yet. Open the Wiki tab on GitHub, press 'Create the first page' and save it once, then run this workflow again (Actions → Wiki → Run workflow)."
+            exit 0
+          fi
           rsync -a --exclude .git docs/wiki/ wiki/
           cd wiki
           git config user.name "github-actions[bot]"

@@ -238,8 +238,16 @@ async function githubModelsReview(list) {
       err.status = res.status;
       throw err;
     }
-    const text = (await res.json()).choices?.[0]?.message?.content || '';
-    return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    try {
+      return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    } catch {
+      console.error(`[${model}] not JSON (${strict ? 'json_schema' : 'json_object'}): ${JSON.stringify(data).slice(0, 600)}`);
+      const err = new Error(`${model}: the answer was not JSON`);
+      err.status = 422;
+      throw err;
+    }
   };
   const chunks = batches(list);
   let lastErr;
@@ -252,8 +260,8 @@ async function githubModelsReview(list) {
         try {
           r = await ask(model, chunk, true);
         } catch (err) {
-          if (err.status !== 400) throw err;
-          r = await ask(model, chunk, false); // model bez json_schema
+          if (err.status !== 400 && err.status !== 422) throw err;
+          r = await ask(model, chunk, false); // bez json_schema, len „odpovedz JSONom“
         }
         results.push(r);
       }
