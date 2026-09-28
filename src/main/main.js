@@ -56,11 +56,8 @@ const bgDir = () => path.join(app.getPath('userData'), 'backgrounds');
 const bgFile = (name) => path.join(bgDir(), path.basename(String(name)));
 const bgKey = (b) => (b.type === 'youtube' ? `yt:${b.id}` : `f:${b.file}`);
 // Lively Wallpaper / Wallpaper Engine – len keď nemáš vlastné pozadie a je to zapnuté (liveWallpaper).
-// S Acrylic od Windows (auto na Windows 11) živú tapetu vidno cez okno samu – netreba ju hľadať ani kresliť.
-const drawsWall = () => {
-  const m = settings.material || 'auto';
-  return m === 'wallpaper' || (m === 'auto' && !mica);
-};
+// Živú tapetu treba hľadať len keď ju Flux kreslí sám (Acrylic/Mica od Windows ju ukážu samy).
+const drawsWall = () => ['auto', 'wallpaper'].includes(settings.material || 'auto');
 const liveWall = () => (!settings.bg && settings.liveWallpaper !== false && drawsWall() ? liveWallpaper.detect() : null);
 const movingBackground = () => {
   if (settings.bg) return (settings.bg.type === 'video' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) || (settings.bg.type === 'youtube' && !!settings.bg.id);
@@ -151,12 +148,12 @@ function wallpaperPath() {
 // Pamäť a rýchlosť (Nastavenia → Všeobecné → Advanced): kým časť nezmeníš, riadi sa „Save memory“ (lite).
 const optOn = (key) => settings[key] ?? !settings.lite;
 
-// „auto“ (predvolené): Windows 11 → Acrylic od Windows (ukazuje, čo je naozaj za oknom, aj živú tapetu,
-// Flux nič nekreslí); s vlastným pozadím alebo bez Acrylic → Flux nakreslí tapetu sám.
+// „auto“ (predvolené) = tapetu kreslí Flux: vidno len plochu (aj Lively cez malú upečenú kópiu), nie iné okná.
+// Acrylic od Windows by ukazoval aj okná za Fluxom.
 function materialMode() {
   let m = settings.material || 'auto';
   if (settings.translucent === false || !optOn('optFx')) m = 'none';
-  if (m === 'auto') m = settings.bg || !mica ? 'wallpaper' : 'acrylic';
+  if (m === 'auto') m = 'wallpaper';
   if (m === 'wallpaper' && !wallpaperPath() && !movingBackground()) m = mica ? 'acrylic' : 'none';
   if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
   return m;
@@ -1666,6 +1663,8 @@ if (settings.lite === undefined) {
 app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
 // Sieťová služba beží v hlavnom procese namiesto vlastného – o jeden proces (a desiatky MB) menej.
 app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
+// Aj grafika beží v hlavnom procese – o ďalší proces (a ~40 MB) menej. settings.gpuProcess = true ju vráti do vlastného.
+if (settings.gpuProcess !== true) app.commandLine.appendSwitch('in-process-gpu');
 // Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
 if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');

@@ -104,7 +104,7 @@ const DEFAULTS = {
   letterSpacing: 0,
   bracketColors: true,
   cornerRadius: 14,
-  wallBlur: 40,
+  wallBlur: 0, // ostrá tapeta (0 = bez rozmazania)
   wallOpacity: 55,
   darkLift: 0,
   density: 'comfortable',
@@ -472,6 +472,7 @@ function applyCustomization() {
   if (uiFont) root.style.setProperty('--ui-font', `'${uiFont.replace(/'/g, '')}', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif`);
   else root.style.removeProperty('--ui-font');
   root.style.setProperty('--wall-blur', `${Number(setting('wallBlur'))}px`);
+  placeWall?.();
   root.style.setProperty('--wall-opacity', String(Number(setting('wallOpacity')) / 100));
   document.body.classList.toggle('density-compact', setting('density') === 'compact');
   // Rozloženie: menu a hľadanie hore, kde je panel s terminálom a bočný panel.
@@ -497,6 +498,7 @@ async function saveSettings(patch) {
 // ---------- tapeta za oknom ----------
 // Rozmazaná tapeta Windows nakreslená priamo vo Fluxe, posúva sa spolu s oknom.
 let wallpaperUrl = null;
+let placeWall = null; // prepočíta veľkosť vrstiev tapety (ostrá = plné rozlíšenie)
 // Nastavenia → Vzhľad → Okno: predošlé pozadia ako náhľady (obrázok, prvý snímok videa, obrázok z YouTube).
 async function renderBgHistory() {
   const box = $('#bg-hist');
@@ -545,7 +547,15 @@ async function setupWallpaper() {
     if (!key) return;
     const box = document.createElement('div');
     box.className = 'wall-media';
-    if (info.type === 'video') {
+    if (info.type === 'video' && sharpWall()) {
+      // Ostrá tapeta: video priamo v plnom rozlíšení (dekóduje grafická karta) – plátno ani pečenie netreba.
+      const v = document.createElement('video');
+      Object.assign(v, { src: info.url, autoplay: true, muted: true, loop: true, playsInline: true });
+      v.className = 'wall-direct';
+      v.addEventListener('loadeddata', () => (sampleTone(v), syncVideo()), { once: true });
+      const iv = setInterval(() => (v.isConnected ? !v.paused && sampleTone(v) : clearInterval(iv)), 4000);
+      box.append(v);
+    } else if (info.type === 'video') {
       // Video sa neukazuje priamo: snímky sa kreslia do malého plátna (1/8 obrazovky) najviac 15× za sekundu.
       // Rozmazaná vrstva sa tak prekresľuje menej často a je malá – video samo ostane skryté (1×1 px).
       const v = document.createElement('video');
@@ -766,11 +776,14 @@ async function setupWallpaper() {
   let bounds = null;
   // Šetrenie pamäte a výkonu: pozadie je aj tak rozmazané, preto sa kreslí v 1/4 veľkosti a zväčší sa
   // (textúra na grafickej karte je 16× menšia, rozmazanie lacnejšie; YouTube si vyberie nižšiu kvalitu).
-  const S = 4;
+  // Rozmazaná tapeta sa kreslí v 1/4 veľkosti, ostrá v plnej (inak by bola kockatá).
+  const sharpWall = () => Number(setting('wallBlur')) < 4;
+  const scaleOf = () => (sharpWall() ? 1 : 4);
   // plátno videa: 1/8 obrazovky (živé aj upečené – rovnaký rozmer a orez)
   const wallSize = () => ({ W: Math.max(64, Math.round((bounds?.dw || innerWidth) / 8)), H: Math.max(36, Math.round((bounds?.dh || innerHeight) / 8)) });
   const place = (el) => {
     if (!el || !bounds) return;
+    const S = scaleOf();
     const w = Math.ceil(bounds.dw / S);
     const h = Math.ceil(bounds.dh / S);
     el.style.width = `${w}px`;
@@ -778,6 +791,10 @@ async function setupWallpaper() {
     el.style.transform = `translate(${-bounds.x}px, ${-bounds.y}px) scale(${S})`;
     el.style.setProperty('--wall-w', `${w}px`);
     el.style.setProperty('--wall-h', `${h}px`);
+  };
+  placeWall = () => {
+    place(img);
+    for (const el of layer.querySelectorAll('.wall-media')) place(el);
   };
   flux.onBounds((b) => {
     bounds = b;
@@ -1094,14 +1111,22 @@ function slideIndicator(box, active, key) {
 }
 
 // ---------- plynulé posúvanie so zotrvačnosťou („klzne ako na ľade“) ----------
-// Plynulé posúvanie editora: koliesko posúva cieľ a editor sa k nemu plynule dobehne (ako web) –
-// rýchlosť sa tak pri ďalšom zúbku neskokovo nemení a pohyb nie je sekaný.
+// Plynulé posúvanie editora: koliesko posúva cieľ a editor k nemu ide ako kriticky tlmená pružina –
+// rýchlosť sa mení plynulo (aj pri ďalšom zúbku bez skoku), takže pohyb nie je sekaný ani „pílovitý“.
+// springStep je presné riešenie pre krok dt (ms), stabilné aj pri pomalších snímkach.
+function springStep(pos, vel, target, dt, w = 0.016) {
+  const e = pos - target;
+  const k = Math.exp(-w * dt);
+  const tmp = (vel + w * e) * dt;
+  return [target + (e + tmp) * k, (vel - w * tmp) * k];
+}
 let scrollAnimating = false;
 function inertiaScroll() {
   const node = $('#editor');
   let goal = 0; // cieľ bez zaokrúhlenia (touchpad posúva po pár px)
   let target = 0;
   let pos = 0;
+  let vel = 0; // px/ms
   let frame = 0;
   let last = 0;
   const stickyOn = () => {
@@ -1110,18 +1135,21 @@ function inertiaScroll() {
   };
   const stop = () => {
     frame = 0;
+    vel = 0;
     scrollAnimating = false;
   };
-  const step = () => {
-    const now = performance.now();
+  // čas snímky z requestAnimationFrame (zarovnaný s obnovovaním obrazovky) – rovnomerné kroky
+  const step = (now) => {
     // čas snímky môže byť starší ako posledné koliesko – nikdy záporný krok
     const dt = Math.min(50, Math.max(0, now - last));
-    last = now;
+    last = Math.max(last, now);
     // niekto iný posunul editor (posuvník, klávesnica, skok na riadok) – nechať ho tak
     if (Math.abs(editor.getScrollTop() - Math.round(pos)) > 2) return stop();
-    pos += (target - pos) * (1 - Math.exp(-dt / 90));
-    if (Math.abs(target - pos) < 0.5) pos = target;
+    [pos, vel] = springStep(pos, vel, target, dt);
+    if (Math.abs(target - pos) < 0.5 && Math.abs(vel) < 0.02) pos = target;
     editor.setScrollTop(pos);
+    // vykresliť hneď v tejto snímke – inak Monaco niekedy kreslí až o snímku neskôr a posun trhá
+    editor.render();
     if (pos === target) return stop();
     frame = requestAnimationFrame(step);
   };
@@ -1140,7 +1168,10 @@ function inertiaScroll() {
         goal = pos;
       }
       // zmena smeru zastaví pohyb hneď
-      if (frame && Math.sign(dy) !== Math.sign(target - pos)) goal = pos;
+      if (frame && Math.sign(dy) !== Math.sign(target - pos)) {
+        goal = pos;
+        vel = 0;
+      }
       goal = Math.max(0, Math.min(max, goal + dy));
       // s prilepenými riadkami hore dobehne na celý riadok – netreba ho potom dorovnávať
       const top0 = editor.getTopForLineNumber(1); // riadky začínajú s malým odsadením
@@ -3541,8 +3572,7 @@ function openSettings() {
   const toggle = (key, label, hint = '') =>
     `<label class="s-row"><span><b>${t(label)}</b>${hint ? `<small>${t(hint)}</small>` : ''}</span><input type="checkbox" class="switch" data-key="${key}"${setting(key) ? ' checked' : ''}></label>`;
   const materials = [
-    state.mica && ['auto', t('Automatic (recommended)')],
-    state.hasWallpaper && ['wallpaper', state.mica ? t('Wallpaper drawn by Flux') : t('Wallpaper (recommended)')],
+    state.hasWallpaper && ['wallpaper', t('Wallpaper (recommended)')],
     state.mica && ['acrylic', 'Acrylic (Windows)'],
     state.mica && ['mica', 'Mica (Windows)'],
     ['none', t('Off')],
@@ -3634,7 +3664,7 @@ function openSettings() {
             </div>
             <h3>${t('Window')}</h3>
             <div class="s-group">
-              ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${state.mica ? t('Automatic uses Windows Acrylic: you see what is really behind the window (also a live wallpaper), and it stays see-through when you click another app. With your own background, Flux draws it.') : t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, setting('material') || (state.mica ? 'auto' : state.material))).join('')}</select></label>` : ''}
+              ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
               ${toggle('inertia', 'Smooth scrolling with inertia', 'the editor, settings, lists and panels keep gliding a bit after you stop the wheel')}
               ${toggle('transitions', 'Transition animations', 'a soft fade when you switch files, settings pages and screens')}
               ${toggle('menuBar', 'Menu bar', 'File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo')}

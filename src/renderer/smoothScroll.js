@@ -1,6 +1,14 @@
 // Plynulé posúvanie so zotrvačnosťou pre celú aplikáciu (nastavenia, zoznamy, bočný panel, AI…).
 // Editor má vlastné (inertiaScroll v app.js) – obe sa riadia tým istým nastavením.
-// Koliesko posunie cieľ, obsah k nemu plynule dobehne.
+// Koliesko posunie cieľ, obsah k nemu ide ako tlmená pružina (springStep) – rýchlosť bez skokov.
+// rovnaká pružina ako v editore (app.js by bol kruhový import)
+function springStep(pos, vel, target, dt, w = 0.016) {
+  const e = pos - target;
+  const k = Math.exp(-w * dt);
+  const tmp = (vel + w * e) * dt;
+  return [target + (e + tmp) * k, (vel - w * tmp) * k];
+}
+
 const SKIP = '.monaco-editor, .xterm, iframe, select, input[type="range"], .no-smooth';
 
 export function setupSmoothScroll(isOn) {
@@ -18,20 +26,20 @@ export function setupSmoothScroll(isOn) {
     return null;
   }
 
-  // Koliesko posúva cieľ, obsah sa k nemu plynule dobehne (1 - e^(-dt/90)) – bez skokov v rýchlosti.
-  function step(el) {
+  function step(el, now) {
     const m = moving.get(el);
     if (!m) return;
-    const now = performance.now();
+    // čas z requestAnimationFrame (zarovnaný s obrazovkou); nikdy záporný krok
     const dt = Math.min(50, Math.max(0, now - m.last));
-    m.last = now;
+    m.last = Math.max(m.last, now);
     // niekto posunul inak (posuvník, klávesnica) – nechať ho tak
     if (Math.abs(el.scrollTop - Math.round(m.pos)) > 2) return moving.delete(el);
-    m.pos += (m.target - m.pos) * (1 - Math.exp(-dt / 90));
-    if (Math.abs(m.target - m.pos) < 0.5) m.pos = m.target;
+    [m.pos, m.vel] = springStep(m.pos, m.vel, m.target, dt);
+    m.pos = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, m.pos));
+    if (Math.abs(m.target - m.pos) < 0.5 && Math.abs(m.vel) < 0.02) m.pos = m.target;
     el.scrollTop = m.pos;
     if (m.pos === m.target) return moving.delete(el);
-    m.frame = requestAnimationFrame(() => step(el));
+    m.frame = requestAnimationFrame((t) => step(el, t));
   }
 
   addEventListener(
@@ -46,12 +54,15 @@ export function setupSmoothScroll(isOn) {
       const max = el.scrollHeight - el.clientHeight;
       let m = moving.get(el);
       if (!m) {
-        m = { target: el.scrollTop, pos: el.scrollTop, frame: 0, last: performance.now() };
+        m = { target: el.scrollTop, pos: el.scrollTop, vel: 0, frame: 0, last: performance.now() };
         moving.set(el, m);
-        m.frame = requestAnimationFrame(() => step(el));
+        m.frame = requestAnimationFrame((t) => step(el, t));
       }
       // zmena smeru zastaví pohyb hneď
-      if (Math.sign(dy) !== Math.sign(m.target - m.pos)) m.target = m.pos;
+      if (Math.sign(dy) !== Math.sign(m.target - m.pos)) {
+        m.target = m.pos;
+        m.vel = 0;
+      }
       m.target = Math.max(0, Math.min(max, m.target + dy));
     },
     { passive: false },
