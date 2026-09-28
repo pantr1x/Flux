@@ -2,6 +2,20 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.27 – 2026-09-29
+
+### Backgrounds: videos, YouTube and history
+- **Video backgrounds:** in **Settings → Appearance → Window → Background**, press **Image or video…**. You can now also pick a video (MP4, WebM, MOV). It plays muted and blurred behind Flux, like the wallpaper.
+- **YouTube backgrounds:** press **YouTube…** and paste a link. The video plays muted in the background.
+- **Previous backgrounds:** every background you used is kept, up to 12. They show as small pictures under the buttons.
+  - Click one to use it again.
+  - The **×** removes it from the list.
+- **Windows wallpaper** goes back to your desktop picture. Your own backgrounds stay in the list.
+- A video in the background pauses while Flux is minimized.
+
+### Colors
+- **Dark mode:** the area around the editor is a bit lighter again (dark grey), and the editor and panels are almost black.
+
 ## 1.4.26 – 2026-09-29
 
 ### New colors

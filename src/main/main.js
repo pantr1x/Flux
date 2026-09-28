@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, net, nativeTheme, screen, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, net, nativeTheme, screen, nativeImage, session } = require('electron');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
@@ -28,7 +28,7 @@ const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 
 // Vlastný protokol app:// – editor a jeho web workery sa načítajú spoľahlivejšie než cez file://.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
 
 // ---------- nastavenia ----------
@@ -46,12 +46,67 @@ function saveSettings() {
   } catch {}
 }
 
+// ---------- vlastné pozadie (obrázok, video, YouTube) + história ----------
+// Súbory sú v userData/backgrounds, v nastaveniach je len ich meno: settings.bg = { type, file | id, name }.
+// settings.bgHistory = posledné pozadia (najnovšie prvé), aby sa dalo vrátiť k predošlému.
+const BG_MAX = 12;
+const bgDir = () => path.join(app.getPath('userData'), 'backgrounds');
+const bgFile = (name) => path.join(bgDir(), path.basename(String(name)));
+const bgKey = (b) => (b.type === 'youtube' ? `yt:${b.id}` : `f:${b.file}`);
+const movingBackground = () => (settings.bg?.type === 'video' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) || (settings.bg?.type === 'youtube' && !!settings.bg.id);
+
+// Staršie verzie mali jeden súbor userData/background.<ext> v settings.bgImage.
+function migrateBackground() {
+  if (!settings.bgImage || settings.bg) return;
+  try {
+    if (fs.existsSync(settings.bgImage)) {
+      fs.mkdirSync(bgDir(), { recursive: true });
+      const name = `${Date.now()}-background${path.extname(settings.bgImage)}`;
+      fs.renameSync(settings.bgImage, bgFile(name));
+      settings.bg = { type: 'image', file: name, name: t('Background image') };
+      settings.bgHistory = [settings.bg];
+    }
+  } catch {}
+  delete settings.bgImage;
+  saveSettings();
+}
+
+function useBackground(bg) {
+  settings.bg = bg;
+  const hist = (settings.bgHistory || []).filter((b) => bgKey(b) !== bgKey(bg));
+  hist.unshift({ ...bg, at: Date.now() });
+  for (const old of hist.splice(BG_MAX)) if (old.file) fsp.rm(bgFile(old.file), { force: true }).catch(() => {});
+  settings.bgHistory = hist;
+  settings.material = 'wallpaper';
+  settings.translucent = true;
+  saveSettings();
+  applyMaterial();
+  send('app:background', backgroundInfo());
+  sendBounds();
+}
+
+function backgroundInfo() {
+  const bg = settings.bg;
+  if (!bg) return null;
+  if (bg.type === 'youtube') return { type: 'youtube', id: bg.id };
+  if (bg.file && fs.existsSync(bgFile(bg.file))) return { type: bg.type, url: `app://flux/bg/${encodeURIComponent(bg.file)}` };
+  return null;
+}
+
+// YouTube odkaz → id videa (youtu.be/ID, watch?v=ID, shorts/ID, embed/ID alebo samotné id).
+function youtubeId(text) {
+  const s = String(text || '').trim();
+  if (/^[\w-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
 // ---------- priesvitnosť ----------
 // „wallpaper“: Flux si sám nakreslí rozmazanú tapetu – vyzerá priesvitne aj keď okno nie je aktívne
 // (Acrylic/Mica od Windows vtedy okno vždy zosivia).
 function wallpaperPath() {
   // Vlastný obrázok pozadia (Nastavenia → Personalize) má prednosť.
-  if (settings.bgImage && fs.existsSync(settings.bgImage)) return settings.bgImage;
+  if (settings.bg?.type === 'image' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) return bgFile(settings.bg.file);
   if (process.env.FLUX_WALLPAPER) return process.env.FLUX_WALLPAPER;
   if (process.platform === 'linux') return linuxWallpaper();
   if (!isWin || !process.env.APPDATA) return null;
@@ -65,7 +120,7 @@ const optOn = (key) => settings[key] ?? !settings.lite;
 function materialMode() {
   let m = settings.material || 'wallpaper';
   if (settings.translucent === false || !optOn('optFx')) m = 'none';
-  if (m === 'wallpaper' && !wallpaperPath()) m = mica ? 'acrylic' : 'none';
+  if (m === 'wallpaper' && !wallpaperPath() && !movingBackground()) m = mica ? 'acrylic' : 'none';
   if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
   return m;
 }
@@ -75,7 +130,7 @@ function applyMaterial() {
   const m = materialMode();
   const dark = settings.theme !== 'light';
   if (mica) win.setBackgroundMaterial(m === 'acrylic' || m === 'mica' ? m : 'none');
-  win.setBackgroundColor(m === 'acrylic' || m === 'mica' ? '#00000000' : dark ? '#0e0e10' : '#e7e5df');
+  win.setBackgroundColor(m === 'acrylic' || m === 'mica' ? '#00000000' : dark ? '#1b1b1f' : '#e7e5df');
   send('app:material', m);
 }
 
@@ -311,7 +366,7 @@ function createWindow() {
     minHeight: 480,
     show: false,
     title: 'Flux',
-    backgroundColor: ['acrylic', 'mica'].includes(materialMode()) ? '#00000000' : dark ? '#0e0e10' : '#e7e5df',
+    backgroundColor: ['acrylic', 'mica'].includes(materialMode()) ? '#00000000' : dark ? '#1b1b1f' : '#e7e5df',
     // Windows 11: vlastná horná lišta s natívnymi tlačidlami a efekt Mica (priesvitné pozadie).
     titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
     titleBarOverlay: isWin ? { color: '#00000000', symbolColor: dark ? '#e8e8ef' : '#1d1d24', height: 44 } : false,
@@ -1122,15 +1177,53 @@ function registerIpc() {
     if (win && Math.abs(win.webContents.getZoomFactor() - z) > 0.001) win.webContents.setZoomFactor(z);
   });
   ipcMain.handle('app:choose-background', async () => {
-    const r = await dialog.showOpenDialog(win, { title: t('Background image'), properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }] });
+    const r = await dialog.showOpenDialog(win, {
+      title: t('Background image or video'),
+      properties: ['openFile'],
+      filters: [
+        { name: t('Images and videos'), extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'mp4', 'webm', 'mov', 'm4v'] },
+        { name: t('Images'), extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'] },
+        { name: t('Videos'), extensions: ['mp4', 'webm', 'mov', 'm4v'] },
+      ],
+    });
     if (r.canceled || !r.filePaths[0]) return false;
-    const dest = path.join(app.getPath('userData'), `background${path.extname(r.filePaths[0]).toLowerCase()}`);
-    await fsp.copyFile(r.filePaths[0], dest);
-    settings.bgImage = dest;
-    settings.material = 'wallpaper';
-    settings.translucent = true;
+    const src = r.filePaths[0];
+    const ext = path.extname(src).toLowerCase();
+    const video = ['.mp4', '.webm', '.mov', '.m4v'].includes(ext);
+    const { size } = await fsp.stat(src);
+    if (size > 400 * 1024 * 1024) throw new Error(t('The file is too large (over 400 MB).'));
+    await fsp.mkdir(bgDir(), { recursive: true });
+    const name = `${Date.now()}-${path.basename(src, ext).replace(/[^\w.-]+/g, '_').slice(0, 40)}${ext}`;
+    await fsp.copyFile(src, bgFile(name));
+    useBackground({ type: video ? 'video' : 'image', file: name, name: path.basename(src) });
+    return true;
+  });
+  ipcMain.handle('app:background-youtube', async (_e, link) => {
+    const id = youtubeId(link);
+    if (!id) throw new Error(t('This is not a YouTube link.'));
+    useBackground({ type: 'youtube', id, name: `YouTube · ${id}` });
+    return true;
+  });
+  ipcMain.handle('app:background', () => backgroundInfo());
+  ipcMain.handle('app:background-history', () =>
+    (settings.bgHistory || [])
+      .filter((b) => b.type === 'youtube' || (b.file && fs.existsSync(bgFile(b.file))))
+      .map((b) => ({ ...b, key: bgKey(b), url: b.file ? `app://flux/bg/${encodeURIComponent(b.file)}` : '', current: !!settings.bg && bgKey(b) === bgKey(settings.bg) })),
+  );
+  ipcMain.handle('app:background-use', (_e, key) => {
+    const b = (settings.bgHistory || []).find((x) => bgKey(x) === key);
+    if (!b) return false;
+    const { at, ...bg } = b;
+    useBackground(bg);
+    return true;
+  });
+  ipcMain.handle('app:background-forget', (_e, key) => {
+    const b = (settings.bgHistory || []).find((x) => bgKey(x) === key);
+    if (!b) return false;
+    settings.bgHistory = settings.bgHistory.filter((x) => x !== b);
+    const current = settings.bg && bgKey(settings.bg) === key;
+    if (b.file && !current) fsp.rm(bgFile(b.file), { force: true }).catch(() => {});
     saveSettings();
-    applyMaterial();
     return true;
   });
   // Vlastný kurzor myši: obrázok sa zmenší na max. 64 px a uloží ako data URL do nastavení.
@@ -1152,10 +1245,14 @@ function registerIpc() {
     if (Math.max(width, height) > 64) img = img.resize(width >= height ? { width: 64 } : { height: 64 });
     return { url: img.toDataURL(), ...img.getSize() };
   });
+  // Späť na tapetu Windows – vlastné pozadie ostáva v histórii.
   ipcMain.handle('app:reset-background', () => {
     delete settings.bgImage;
+    delete settings.bg;
     saveSettings();
     applyMaterial();
+    send('app:background', null);
+    sendBounds();
     return true;
   });
   // Vlastný príkaz zo skratky – beží vo výstupe ako program.
@@ -1471,6 +1568,13 @@ app.on('second-instance', (_e, argv, cwd) => {
 app.whenReady().then(() => {
   loadSettings();
   i18n.setLanguage(settings.language || 'en');
+  migrateBackground();
+  // YouTube prehrávač v pozadí (vložené video) vyžaduje Referer – app:// ho neposiela a video by
+  // skončilo chybou „Video player configuration error“. Pošle sa adresa webu Fluxu.
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] }, (details, cb) => {
+    details.requestHeaders.Referer = 'https://pantr1x.github.io/';
+    cb({ requestHeaders: details.requestHeaders });
+  });
   nativeTheme.themeSource = settings.theme === 'light' ? 'light' : 'dark';
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url);
@@ -1480,6 +1584,29 @@ app.whenReady().then(() => {
       const file = path.normalize(path.join(base, decodeURIComponent(pathname.slice('/plugins/'.length))));
       if (!file.startsWith(base + path.sep)) return new Response('Forbidden', { status: 403 });
       return net.fetch(pathToFileURL(file).toString());
+    }
+    // Vlastné pozadie (obrázok / video): app://flux/bg/<súbor> – s Range, aby sa video dalo prehrávať dookola.
+    if (pathname.startsWith('/bg/')) {
+      const file = bgFile(decodeURIComponent(pathname.slice('/bg/'.length)));
+      let st;
+      try {
+        st = fs.statSync(file);
+      } catch {
+        return new Response('Not found', { status: 404 });
+      }
+      const type = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp' }[path.extname(file).toLowerCase()] || 'image/jpeg';
+      const range = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') || '');
+      let start = 0;
+      let end = st.size - 1;
+      if (range) {
+        if (range[1]) start = Number(range[1]);
+        if (range[2]) end = Math.min(end, Number(range[2]));
+        else if (!range[1]) start = Math.max(0, st.size - Number(range[2]));
+      }
+      const body = require('node:stream').Readable.toWeb(fs.createReadStream(file, { start, end }));
+      const headers = { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Accept-Ranges': 'bytes' };
+      if (range) headers['Content-Range'] = `bytes ${start}-${end}/${st.size}`;
+      return new Response(body, { status: range ? 206 : 200, headers });
     }
     // Pluginy pribalené vo Fluxe: app://flux/builtin/<id>/<súbor>
     if (pathname.startsWith('/builtin/')) {

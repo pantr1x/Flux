@@ -141,3 +141,22 @@ _V19E = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19E.items()})
+
+# 1.4.27 – pozadie z videa / YouTube, história pozadí.
+_V19F = {
+    'Background image or video': ('Obrázok alebo video na pozadie', 'Hintergrundbild oder -video', 'Imagen o vídeo de fondo', 'Image ou vidéo de fond', 'Immagine o video di sfondo', 'Obraz lub wideo w tle', 'Imagem ou vídeo de fundo', 'Зображення або відео для фону'),
+    'Image or video…': ('Obrázok alebo video…', 'Bild oder Video…', 'Imagen o vídeo…', 'Image ou vidéo…', 'Immagine o video…', 'Obraz lub wideo…', 'Imagem ou vídeo…', 'Зображення або відео…'),
+    'Images and videos': ('Obrázky a videá', 'Bilder und Videos', 'Imágenes y vídeos', 'Images et vidéos', 'Immagini e video', 'Obrazy i wideo', 'Imagens e vídeos', 'Зображення та відео'),
+    'Paste a YouTube link, e.g. https://youtu.be/…': ('Vlož odkaz na YouTube, napr. https://youtu.be/…', 'Füge einen YouTube-Link ein, z. B. https://youtu.be/…', 'Pega un enlace de YouTube, p. ej. https://youtu.be/…', 'Colle un lien YouTube, par ex. https://youtu.be/…', 'Incolla un link di YouTube, ad es. https://youtu.be/…', 'Wklej link do YouTube, np. https://youtu.be/…', 'Cole um link do YouTube, ex. https://youtu.be/…', 'Встав посилання на YouTube, напр. https://youtu.be/…'),
+    'Previous backgrounds': ('Predošlé pozadia', 'Frühere Hintergründe', 'Fondos anteriores', 'Fonds précédents', 'Sfondi precedenti', 'Poprzednie tła', 'Fundos anteriores', 'Попередні фони'),
+    'The file is too large (over 400 MB).': ('Súbor je príliš veľký (viac ako 400 MB).', 'Die Datei ist zu groß (über 400 MB).', 'El archivo es demasiado grande (más de 400 MB).', 'Le fichier est trop volumineux (plus de 400 Mo).', 'Il file è troppo grande (oltre 400 MB).', 'Plik jest za duży (ponad 400 MB).', 'O arquivo é grande demais (mais de 400 MB).', 'Файл завеликий (понад 400 МБ).'),
+    'The video plays muted in the background, blurred like the wallpaper.': ('Video hrá na pozadí bez zvuku, rozmazané ako tapeta.', 'Das Video läuft stumm im Hintergrund, unscharf wie das Hintergrundbild.', 'El vídeo se reproduce sin sonido en el fondo, desenfocado como el fondo de pantalla.', 'La vidéo tourne sans son en arrière-plan, floutée comme le fond d’écran.', 'Il video scorre senza audio sullo sfondo, sfocato come lo sfondo.', 'Wideo odtwarza się bez dźwięku w tle, rozmyte jak tapeta.', 'O vídeo toca sem som no fundo, desfocado como o papel de parede.', 'Відео грає без звуку на фоні, розмите як шпалери.'),
+    'This is not a YouTube link.': ('Toto nie je odkaz na YouTube.', 'Das ist kein YouTube-Link.', 'Esto no es un enlace de YouTube.', 'Ce n’est pas un lien YouTube.', 'Questo non è un link di YouTube.', 'To nie jest link do YouTube.', 'Isto não é um link do YouTube.', 'Це не посилання на YouTube.'),
+    'Videos': ('Videá', 'Videos', 'Vídeos', 'Vidéos', 'Video', 'Wideo', 'Vídeos', 'Відео'),
+    'Windows wallpaper': ('Tapeta Windows', 'Windows-Hintergrund', 'Fondo de Windows', 'Fond d’écran Windows', 'Sfondo di Windows', 'Tapeta Windows', 'Papel de parede do Windows', 'Шпалери Windows'),
+    'click one to use it again': ('kliknutím ho znova použiješ', 'klicke auf einen, um ihn wieder zu nutzen', 'haz clic en uno para usarlo de nuevo', 'clique sur un fond pour le réutiliser', 'fai clic su uno per usarlo di nuovo', 'kliknij, aby użyć ponownie', 'clique em um para usar de novo', 'натисни, щоб використати знову'),
+    'your own picture or video, or a YouTube video, instead of the Windows wallpaper': ('vlastný obrázok, video alebo video z YouTube namiesto tapety Windows', 'eigenes Bild, Video oder YouTube-Video statt des Windows-Hintergrunds', 'tu imagen, vídeo o un vídeo de YouTube en lugar del fondo de Windows', 'ta propre image, vidéo ou une vidéo YouTube au lieu du fond Windows', 'la tua immagine, un video o un video di YouTube al posto dello sfondo di Windows', 'własny obraz, wideo lub film z YouTube zamiast tapety Windows', 'sua imagem, vídeo ou um vídeo do YouTube em vez do papel de parede do Windows', 'власне зображення, відео або відео з YouTube замість шпалер Windows'),
+    'Remove from the list': ('Odstrániť zo zoznamu', 'Aus der Liste entfernen', 'Quitar de la lista', 'Retirer de la liste', 'Rimuovi dall’elenco', 'Usuń z listy', 'Remover da lista', 'Прибрати зі списку'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19F.items()})

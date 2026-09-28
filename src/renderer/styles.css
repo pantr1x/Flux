@@ -17,21 +17,21 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Tmavá téma: takmer čierna (moderné tmavé aplikácie), karty o stupeň svetlejšie. Na Windows 11 cez ňu presvitá Acrylic. */
+/* Tmavá téma: tmavosivé okolie, samotný editor a karty takmer čierne (ako moderné editory). Na Windows 11 cez ňu presvitá Acrylic. */
 body.theme-dark {
-  --base: #0e0e10;
-  --base-alpha: rgba(14, 14, 16, 0.45);
-  --card: rgba(23, 23, 26, 0.82);
-  --card-solid: #17171a;
+  --base: #1b1b1f;
+  --base-alpha: rgba(27, 27, 31, 0.45);
+  --card: rgba(13, 13, 15, 0.86);
+  --card-solid: #131316;
   --card-2: rgba(255, 255, 255, 0.04);
-  --line: rgba(255, 255, 255, 0.065);
-  --line-strong: rgba(255, 255, 255, 0.11);
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.115);
   --text: #ececef;
   --text-2: #a1a1aa;
-  --text-3: #7d7d87;
+  --text-3: #7f7f89;
   --hover: rgba(255, 255, 255, 0.06);
   --active: rgba(255, 255, 255, 0.1);
-  --shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
   --ok: #3ecf8e;
   --err: #ff6b7a;
   --warn: #f5b94a;
@@ -85,7 +85,7 @@ body.no-mica {
 }
 
 body.theme-dark.no-mica {
-  --card: #18181b;
+  --card: #0e0e10;
 }
 
 body.theme-light.no-mica {
@@ -7385,8 +7385,8 @@ body.no-fx {
   --shadow: 0 0 0 1px var(--line-strong);
 }
 body.no-fx.theme-dark {
-  --card: #17171a;
-  --base-alpha: #0e0e10;
+  --card: #0e0e10;
+  --base-alpha: #1b1b1f;
 }
 body.no-fx.theme-light {
   --card: #f5f4f0;
@@ -8595,4 +8595,102 @@ body.accent-mono .hm-tip {
 body.accent-mono .hm-tip-ic {
   background: var(--hover);
   color: var(--text-2);
+}
+
+/* Pohyblivé pozadie (video / YouTube) cez celé okno – rovnaké rozmazanie a sila ako tapeta. */
+#wall.moving .wall-img {
+  display: none;
+}
+.wall-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  filter: blur(var(--wall-blur, 40px)) saturate(1.35);
+  opacity: var(--wall-opacity, 0.55);
+}
+.wall-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* YouTube má pevný pomer 16:9 – iframe sa zväčší tak, aby pokryl celé okno (ako object-fit: cover). */
+.wall-media iframe {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100vw, 177.78vh);
+  height: max(100vh, 56.25vw);
+  transform: translate(-50%, -50%) scale(1.15);
+  border: 0;
+}
+body.theme-light .wall-media {
+  opacity: calc(var(--wall-opacity, 0.55) * 0.75);
+}
+
+/* Predošlé pozadia */
+.bg-hist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  padding: 4px 14px 14px;
+}
+.bg-item {
+  position: relative;
+}
+.bg-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card-2);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.bg-thumb img,
+.bg-thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.bg-thumb:hover {
+  filter: brightness(1.08);
+}
+.bg-item.current .bg-thumb {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.bg-kind {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+}
+.bg-x {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.bg-item:hover .bg-x {
+  opacity: 1;
 }

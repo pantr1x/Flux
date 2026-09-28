@@ -200,6 +200,20 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
 
 **Full installer** – `updater.js` → `install()`: re-checks for a newer version (max 4 s), writes the TEMP marker `flux-relaunch-after-update`, emits `status: 'installing'` and calls `quitAndInstall(false, true)` – the installer runs **visibly**, but on updates (`${isUpdated}`) `build/installer.nsh` skips the welcome page (`skipPageIfUpdated`), the install-mode page (`customInstallMode` keeps the previous per-user / per-machine mode), the folder page (electron-builder) and the finish page (`FluxFinishPre`), so only the progress bar shows – and `customPageAfterChangeDir` → `FluxInstShow` turns that page into a small **“Updating Flux”** window (caption and header text, Back/Next/Cancel and *Show details* hidden, window cut below the progress bar); `customInstall` then starts Flux because of the marker. The installer UI always comes from the **new** version, so installer changes show up on the very next update. Closing Flux normally with a downloaded update still installs silently (`autoInstallOnAppQuit`). The *Windows build* workflow tests exactly this flow (install, then `--updated --force-run`) and fails if the installer waits for a click or Flux does not reopen – **keep it green before releasing installer changes**. It also takes a screenshot every second during the update and force-pushes them (plus `windows.txt`, the visible window titles) to the **`ci-screens`** branch – `git fetch origin ci-screens && git show origin/ci-screens:update-020.png > x.png` to look at them. In the app, `updatesUI.startInstall()` shows the in-app progress overlay; settings show `.up-bar` and the status bar `#st-update` (Updating N % / Restart to update) while a version downloads.
 
+## Backgrounds
+
+- **Own background:** Settings → Appearance → Window → *Background*.
+  - **Files:** `settings.bg = { type: 'image' | 'video' | 'youtube', file | id, name }`. Files are copied to `userData/backgrounds` and served as `app://flux/bg/<file>`. The protocol answers Range requests, so videos can loop and seek.
+  - **History:** `settings.bgHistory` keeps the last 12 backgrounds. A file is deleted when it drops out of the list.
+  - **Migration:** the old `settings.bgImage` is moved into this format at start (`migrateBackground()`).
+- **Main process** (`main.js`):
+  - `backgroundInfo()`, `useBackground()` and the `app:background*` IPC handlers.
+  - A video or YouTube background counts as a wallpaper for `materialMode()` (`movingBackground()`).
+  - YouTube embeds need a `Referer`: `onBeforeSendHeaders` sets the website address for `youtube-nocookie.com`.
+- **Renderer:**
+  - `setupWallpaper()` → `setMedia()` puts a `<video>` or a YouTube `<iframe>` into `#wall .wall-media` (`#wall.moving` hides the image layer). The CSP allows `frame-src https://www.youtube-nocookie.com` and `media-src 'self' blob:`.
+  - `renderBgHistory()` draws the thumbnails.
+
 ## Smooth scrolling and transitions
 
 - `inertia` (*Smooth scrolling with inertia*, Appearance → Window) controls both the editor (`inertiaScroll()` in `app.js`, a capture wheel listener on `#editor`) and every other scrollable element (`src/renderer/smoothScroll.js` – a global wheel listener that moves the nearest scrollable parent with velocity + friction). Elements that must keep native scrolling: add class `no-smooth` (Monaco, xterm, iframes, selects and range inputs are skipped already).

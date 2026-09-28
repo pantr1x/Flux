@@ -401,7 +401,7 @@ function applyAppColors() {
   const card = bg('uiCard');
   const alpha = Math.max(0.3, Math.min(1, (Number(setting('cardAlpha')) || 74) / 100));
   set('--card-solid', card);
-  set('--card', card ? rgba(card, alpha) : alpha !== 0.74 ? (isDark() ? `rgba(23, 23, 26, ${alpha})` : `rgba(246, 245, 241, ${alpha})`) : '');
+  set('--card', card ? rgba(card, alpha) : alpha !== 0.74 ? (isDark() ? `rgba(13, 13, 15, ${alpha})` : `rgba(246, 245, 241, ${alpha})`) : '');
   const line = setting('uiLine');
   set('--line-strong', line ? rgba(line, 0.5) : '');
   set('--line', line ? rgba(line, 0.28) : '');
@@ -445,14 +445,73 @@ async function saveSettings(patch) {
 // ---------- tapeta za oknom ----------
 // Rozmazaná tapeta Windows nakreslená priamo vo Fluxe, posúva sa spolu s oknom.
 let wallpaperUrl = null;
+// Nastavenia → Vzhľad → Okno: predošlé pozadia ako náhľady (obrázok, prvý snímok videa, obrázok z YouTube).
+async function renderBgHistory() {
+  const box = $('#bg-hist');
+  if (!box) return;
+  const list = await flux.backgroundHistory().catch(() => []);
+  box.previousElementSibling.hidden = !list.length;
+  box.hidden = !list.length;
+  box.innerHTML = list
+    .map((b) => {
+      const thumb =
+        b.type === 'youtube'
+          ? `<img src="https://i.ytimg.com/vi/${escapeAttr(b.id)}/mqdefault.jpg" alt="" loading="lazy">`
+          : b.type === 'video'
+            ? `<video src="${escapeAttr(b.url)}#t=0.5" muted preload="metadata"></video>`
+            : `<img src="${escapeAttr(b.url)}" alt="" loading="lazy">`;
+      const badge = b.type === 'image' ? '' : `<span class="bg-kind">${b.type === 'youtube' ? 'YouTube' : icon('play', 10)}</span>`;
+      return `<div class="bg-item${b.current ? ' current' : ''}" title="${escapeAttr(b.name || '')}"><button class="bg-thumb" data-bg-use="${escapeAttr(b.key)}">${thumb}${badge}</button><button class="bg-x" data-bg-forget="${escapeAttr(b.key)}" title="${t('Remove from the list')}">${icon('x', 11)}</button></div>`;
+    })
+    .join('');
+}
+
 async function setupWallpaper() {
   const layer = document.createElement('div');
   layer.id = 'wall';
   layer.innerHTML = '<div class="wall-img"></div>';
   document.body.prepend(layer);
   const img = layer.firstChild;
+  // Pohyblivé pozadie (vlastné video alebo YouTube) – vrstva cez celé okno namiesto tapety.
+  let mediaKey = '';
+  const setMedia = (info) => {
+    const key = info && info.type !== 'image' && state.material === 'wallpaper' ? `${info.type}:${info.url || info.id}` : '';
+    if (key === mediaKey) return;
+    mediaKey = key;
+    layer.querySelector('.wall-media')?.remove();
+    layer.classList.toggle('moving', !!key);
+    if (!key) return;
+    const box = document.createElement('div');
+    box.className = 'wall-media';
+    if (info.type === 'video') {
+      const v = document.createElement('video');
+      Object.assign(v, { src: info.url, autoplay: true, muted: true, loop: true, playsInline: true });
+      box.append(v);
+    } else if (info.type === 'youtube') {
+      const f = document.createElement('iframe');
+      const q = `autoplay=1&mute=1&loop=1&playlist=${info.id}&controls=0&disablekb=1&modestbranding=1&playsinline=1&rel=0&iv_load_policy=3`;
+      f.src = `https://www.youtube-nocookie.com/embed/${info.id}?${q}`;
+      f.allow = 'autoplay; encrypted-media';
+      f.tabIndex = -1;
+      box.append(f);
+    }
+    layer.append(box);
+  };
+  // Minimalizované okno: video netreba prehrávať.
+  document.addEventListener('visibilitychange', () => {
+    const v = layer.querySelector('.wall-media video');
+    if (v) document.hidden ? v.pause() : v.play().catch(() => {});
+  });
+  flux.onBackground((info) => {
+    wallpaperUrl = null;
+    setMedia(info);
+    load();
+  });
   const load = async () => {
-    if (state.material !== 'wallpaper') return;
+    if (state.material !== 'wallpaper') return setMedia(null);
+    const info = await flux.background();
+    setMedia(info);
+    if (info && info.type !== 'image') return;
     const url = await flux.wallpaper();
     if (url && url !== wallpaperUrl) {
       wallpaperUrl = url;
@@ -470,6 +529,7 @@ async function setupWallpaper() {
     if (m !== 'wallpaper') {
       img.style.backgroundImage = 'none';
       wallpaperUrl = null;
+      setMedia(null);
     }
     applyTheme();
     load();
@@ -2132,7 +2192,7 @@ function terminalTheme() {
   const dark = isDark();
   const accent = ACCENTS[currentAccent()];
   return dark
-    ? { background: '#00000000', foreground: '#dcdce6', cursor: accent, cursorAccent: '#17171a', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
+    ? { background: '#00000000', foreground: '#dcdce6', cursor: accent, cursorAccent: '#0e0e10', selectionBackground: accent + '55', black: '#2a2a35', brightBlack: '#6f6f86', red: '#ff6b7a', green: '#3ecf8e', yellow: '#f5b94a', blue: '#6ea8ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#dcdce6' }
     : { background: '#00000000', foreground: '#1d1d24', cursor: accent, cursorAccent: '#f5f4f0', selectionBackground: accent + '44', black: '#1d1d24', brightBlack: '#8e8e9c', red: '#e0364a', green: '#17a86b', yellow: '#b7791f', blue: '#2563eb', magenta: '#7c3aed', cyan: '#0e7490', white: '#5c5c6b' };
 }
 
@@ -3291,7 +3351,9 @@ function openSettings() {
               <label class="s-row"><span><b>${t('Background blur')}</b></span><input type="range" min="0" max="100" data-key="wallBlur" value="${setting('wallBlur')}"></label>
               <label class="s-row"><span><b>${t('Background strength')}</b></span><input type="range" min="10" max="100" data-key="wallOpacity" value="${setting('wallOpacity')}"></label>
               <label class="s-row"><span><b>${t('Brightness of dark areas')}</b><small>${t('Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.')}</small></span><input type="range" min="0" max="100" data-key="darkLift" value="${setting('darkLift')}"></label>
-              <div class="s-row"><span><b>${t('Background image')}</b><small>${t('your own picture instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${t('Choose…')}</button><button class="s-btn" data-action="bg-reset">${t('Reset')}</button></span></div>
+              <div class="s-row"><span><b>${t('Background')}</b><small>${t('your own picture or video, or a YouTube video, instead of the Windows wallpaper')}</small></span><span class="s-inline"><button class="s-btn" data-action="bg-pick">${icon('upload', 13)}${t('Image or video…')}</button><button class="s-btn" data-action="bg-yt">${icon('play', 12)}YouTube…</button><button class="s-btn" data-action="bg-reset">${t('Windows wallpaper')}</button></span></div>
+              <div class="s-row s-bg-hist-row" hidden><span><b>${t('Previous backgrounds')}</b><small>${t('click one to use it again')}</small></span></div>
+              <div class="bg-hist" id="bg-hist"></div>
             </div>
             <div class="s-group s-reset-all"><div class="s-row"><span><b>${t('Reset the look')}</b><small>${t('cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay')}</small></span><button class="s-btn" data-action="look-reset">${icon('refresh', 13)}${t('Reset all')}</button></div></div>
           </section>
@@ -3558,6 +3620,7 @@ function openSettings() {
     requestAnimationFrame(spy);
   }
   showTab(tab);
+  renderBgHistory();
   if (jumpTo) requestAnimationFrame(() => $(`#${jumpTo}`)?.scrollIntoView({ block: 'start' }));
   // Hľadanie naprieč všetkými záložkami – podľa názvu, popisu, časti, záložky aj príbuzných slov,
   // znesie drobný preklep. Pod poľom ukazuje návrhy (šípky + Enter skočí na nastavenie).
@@ -3878,19 +3941,45 @@ function openSettings() {
       return rerenderSettings();
     }
     if (e.target.closest('[data-action="bg-pick"]')) {
-      const ok = await flux.chooseBackground();
+      let ok = false;
+      try {
+        ok = await flux.chooseBackground();
+      } catch (err) {
+        return toast(errorText(err), 'error');
+      }
       if (ok) {
         wallpaperUrl = null;
-        window.dispatchEvent(new Event('focus'));
         toast(t('Background changed.'), 'ok');
+        renderBgHistory();
       }
       return;
+    }
+    if (e.target.closest('[data-action="bg-yt"]')) {
+      const link = await promptPalette({ placeholder: t('Paste a YouTube link, e.g. https://youtu.be/…'), note: t('The video plays muted in the background, blurred like the wallpaper.') });
+      if (!link) return;
+      try {
+        await flux.backgroundYoutube(link);
+      } catch (err) {
+        return toast(errorText(err), 'error');
+      }
+      toast(t('Background changed.'), 'ok');
+      return renderBgHistory();
     }
     if (e.target.closest('[data-action="bg-reset"]')) {
       await flux.resetBackground();
       wallpaperUrl = null;
-      window.dispatchEvent(new Event('focus'));
-      return;
+      return renderBgHistory();
+    }
+    const forget = e.target.closest('[data-bg-forget]');
+    if (forget) {
+      await flux.forgetBackground(forget.dataset.bgForget);
+      return renderBgHistory();
+    }
+    const useBg = e.target.closest('[data-bg-use]');
+    if (useBg) {
+      await flux.useBackground(useBg.dataset.bgUse);
+      wallpaperUrl = null;
+      return renderBgHistory();
     }
     if (e.target.closest('[data-action="edit-keys"]')) {
       closeSettings();
