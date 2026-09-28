@@ -681,7 +681,7 @@ async function setupWallpaper() {
       ctx.filter = `blur(${blur}px) saturate(1.35)`;
       ctx.drawImage(v, sx, sy, sw, sh, 0, 0, W, H);
     };
-    const rec = new MediaRecorder(cv.captureStream(15), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 350000 });
+    const rec = new MediaRecorder(cv.captureStream(15), { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 1500000 }); // vyššia kvalita – inak kódovač robí štvorčeky, ktoré sa 8× zväčšia
     const chunks = [];
     const ac = new AbortController();
     let timer = 0;
@@ -3518,7 +3518,8 @@ function openSettings() {
   const toggle = (key, label, hint = '') =>
     `<label class="s-row"><span><b>${t(label)}</b>${hint ? `<small>${t(hint)}</small>` : ''}</span><input type="checkbox" class="switch" data-key="${key}"${setting(key) ? ' checked' : ''}></label>`;
   const materials = [
-    state.hasWallpaper && ['wallpaper', t('Wallpaper (recommended)')],
+    state.mica && ['auto', t('Automatic (recommended)')],
+    state.hasWallpaper && ['wallpaper', state.mica ? t('Wallpaper drawn by Flux') : t('Wallpaper (recommended)')],
     state.mica && ['acrylic', 'Acrylic (Windows)'],
     state.mica && ['mica', 'Mica (Windows)'],
     ['none', t('Off')],
@@ -3610,7 +3611,7 @@ function openSettings() {
             </div>
             <h3>${t('Window')}</h3>
             <div class="s-group">
-              ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, state.material)).join('')}</select></label>` : ''}
+              ${state.platform === 'win32' ? `<label class="s-row"><span><b>${t('Window translucency')}</b><small>${state.mica ? t('Automatic uses Windows Acrylic: you see what is really behind the window (also a live wallpaper), and it stays see-through when you click another app. With your own background, Flux draws it.') : t('“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.')}</small></span><select data-key="material">${materials.map(([v, l]) => opt(v, l, setting('material') || (state.mica ? 'auto' : state.material))).join('')}</select></label>` : ''}
               ${toggle('inertia', 'Smooth scrolling with inertia', 'the editor, settings, lists and panels keep gliding a bit after you stop the wheel')}
               ${toggle('transitions', 'Transition animations', 'a soft fade when you switch files, settings pages and screens')}
               ${toggle('menuBar', 'Menu bar', 'File, Edit, View, Run and Help as a row at the top – otherwise they open from the flux logo')}

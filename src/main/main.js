@@ -14,6 +14,7 @@ const { createGitHub } = require('./github');
 const { createPlugins, pluginsDir } = require('./plugins');
 const { createUpdater } = require('./updater');
 const liveWallpaper = require('./liveWallpaper');
+const keepActive = require('./keepActive');
 const { createMcpServer } = require('./mcpServer');
 const { LiveServer } = require('./liveServer');
 const { LanguageServer } = require('./lsp');
@@ -23,7 +24,7 @@ const { t } = i18n;
 
 const isWin = process.platform === 'win32';
 // Priesvitné pozadie (Acrylic – rozmazaná tapeta ako v Zen Browseri) je len vo Windows 11 22H2+.
-const mica = isWin && Number(os.release().split('.')[2]) >= 22621;
+const mica = (isWin && Number(os.release().split('.')[2]) >= 22621) || process.env.FLUX_FAKE_MICA === '1'; // FLUX_FAKE_MICA len na testy
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'dist', 'renderer');
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 
@@ -55,7 +56,12 @@ const bgDir = () => path.join(app.getPath('userData'), 'backgrounds');
 const bgFile = (name) => path.join(bgDir(), path.basename(String(name)));
 const bgKey = (b) => (b.type === 'youtube' ? `yt:${b.id}` : `f:${b.file}`);
 // Lively Wallpaper / Wallpaper Engine – len keď nemáš vlastné pozadie a je to zapnuté (liveWallpaper).
-const liveWall = () => (!settings.bg && settings.liveWallpaper !== false ? liveWallpaper.detect() : null);
+// S Acrylic od Windows (auto na Windows 11) živú tapetu vidno cez okno samu – netreba ju hľadať ani kresliť.
+const drawsWall = () => {
+  const m = settings.material || 'auto';
+  return m === 'wallpaper' || (m === 'auto' && !mica);
+};
+const liveWall = () => (!settings.bg && settings.liveWallpaper !== false && drawsWall() ? liveWallpaper.detect() : null);
 const movingBackground = () => {
   if (settings.bg) return (settings.bg.type === 'video' && settings.bg.file && fs.existsSync(bgFile(settings.bg.file))) || (settings.bg.type === 'youtube' && !!settings.bg.id);
   const live = liveWall();
@@ -63,6 +69,14 @@ const movingBackground = () => {
 };
 
 // Staršie verzie mali jeden súbor userData/background.<ext> v settings.bgImage.
+// 1.4.36: predvolené je „auto“ (Acrylic od Windows). Staré predvolené „wallpaper“ sa prepne raz.
+function migrateMaterial() {
+  if (settings.materialAuto) return;
+  if (!settings.material || settings.material === 'wallpaper') delete settings.material;
+  settings.materialAuto = true;
+  saveSettings();
+}
+
 function migrateBackground() {
   if (!settings.bgImage || settings.bg) return;
   try {
@@ -84,7 +98,7 @@ function useBackground(bg) {
   hist.unshift({ ...bg, at: Date.now() });
   for (const old of hist.splice(BG_MAX)) if (old.file) fsp.rm(bgFile(old.file), { force: true }).catch(() => {});
   settings.bgHistory = hist;
-  settings.material = 'wallpaper';
+  if (settings.material && settings.material !== 'auto') settings.material = 'wallpaper';
   settings.translucent = true;
   saveSettings();
   applyMaterial();
@@ -137,9 +151,12 @@ function wallpaperPath() {
 // Pamäť a rýchlosť (Nastavenia → Všeobecné → Advanced): kým časť nezmeníš, riadi sa „Save memory“ (lite).
 const optOn = (key) => settings[key] ?? !settings.lite;
 
+// „auto“ (predvolené): Windows 11 → Acrylic od Windows (ukazuje, čo je naozaj za oknom, aj živú tapetu,
+// Flux nič nekreslí); s vlastným pozadím alebo bez Acrylic → Flux nakreslí tapetu sám.
 function materialMode() {
-  let m = settings.material || 'wallpaper';
+  let m = settings.material || 'auto';
   if (settings.translucent === false || !optOn('optFx')) m = 'none';
+  if (m === 'auto') m = settings.bg || !mica ? 'wallpaper' : 'acrylic';
   if (m === 'wallpaper' && !wallpaperPath() && !movingBackground()) m = mica ? 'acrylic' : 'none';
   if ((m === 'acrylic' || m === 'mica') && !mica) m = 'none';
   return m;
@@ -148,6 +165,7 @@ function materialMode() {
 function applyMaterial() {
   if (!win) return;
   const m = materialMode();
+  if ((m === 'acrylic' || m === 'mica') && settings.keepAcrylic !== false) keepActive.ensure(app.getPath('userData')).catch(() => {});
   const dark = settings.theme !== 'light';
   if (mica) win.setBackgroundMaterial(m === 'acrylic' || m === 'mica' ? m : 'none');
   win.setBackgroundColor(m === 'acrylic' || m === 'mica' ? '#00000000' : dark ? '#1e1c19' : '#e7e5df');
@@ -448,6 +466,11 @@ function createWindow() {
     }, 120e3);
   });
   win.on('focus', () => clearTimeout(trimTimer));
+  // Acrylic/Mica ostane priesvitné aj keď klikneš do iného programu (keepActive.js).
+  const keep = () => ['acrylic', 'mica'].includes(materialMode()) && settings.keepAcrylic !== false && setTimeout(() => keepActive.poke(win), 50);
+  win.on('blur', keep);
+  win.on('restore', keep);
+  win.on('show', () => !win.isFocused() && keep());
   for (const ev of ['move', 'resize', 'maximize', 'unmaximize', 'restore']) win.on(ev, sendBounds);
   win.webContents.on('did-finish-load', sendBounds);
 }
@@ -1644,6 +1667,7 @@ app.whenReady().then(() => {
   loadSettings();
   i18n.setLanguage(settings.language || 'en');
   migrateBackground();
+  migrateMaterial();
   // YouTube prehrávač v pozadí (vložené video) vyžaduje Referer – app:// ho neposiela a video by
   // skončilo chybou „Video player configuration error“. Pošle sa adresa webu Fluxu.
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] }, (details, cb) => {

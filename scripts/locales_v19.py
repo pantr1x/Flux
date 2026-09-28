@@ -203,3 +203,20 @@ _V19I = {
 }
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19I.items()})
+
+# 1.4.36 – Acrylic od Windows ako predvolené.
+_V19J = {
+    'Automatic (recommended)': ('Automaticky (odporúčané)', 'Automatisch (empfohlen)', 'Automático (recomendado)', 'Automatique (recommandé)', 'Automatico (consigliato)', 'Automatycznie (zalecane)', 'Automático (recomendado)', 'Автоматично (рекомендовано)'),
+    'Wallpaper drawn by Flux': ('Tapeta kreslená Fluxom', 'Von Flux gezeichnetes Hintergrundbild', 'Fondo dibujado por Flux', 'Fond d’écran dessiné par Flux', 'Sfondo disegnato da Flux', 'Tapeta rysowana przez Flux', 'Papel de parede desenhado pelo Flux', 'Шпалери, намальовані Flux'),
+    'Automatic uses Windows Acrylic: you see what is really behind the window (also a live wallpaper), and it stays see-through when you click another app. With your own background, Flux draws it.': (
+        'Automaticky používa Acrylic od Windows: vidíš, čo je naozaj za oknom (aj živú tapetu), a ostane priesvitné, aj keď klikneš do iného programu. Vlastné pozadie kreslí Flux.',
+        'Automatisch nutzt Windows Acrylic: Du siehst, was wirklich hinter dem Fenster ist (auch ein Live-Hintergrund), und es bleibt durchscheinend, wenn du in eine andere App klickst. Einen eigenen Hintergrund zeichnet Flux.',
+        'Automático usa Acrylic de Windows: ves lo que hay realmente detrás de la ventana (también un fondo animado), y sigue translúcida cuando haces clic en otra app. Un fondo propio lo dibuja Flux.',
+        'Automatique utilise Acrylic de Windows : tu vois ce qui est vraiment derrière la fenêtre (même un fond animé), et elle reste translucide quand tu cliques dans une autre app. Un fond personnalisé est dessiné par Flux.',
+        'Automatico usa Acrylic di Windows: vedi ciò che c’è davvero dietro la finestra (anche uno sfondo animato), e resta traslucida quando clicchi in un’altra app. Uno sfondo personale lo disegna Flux.',
+        'Automatycznie używa Acrylic z Windows: widzisz, co naprawdę jest za oknem (także animowaną tapetę), a okno zostaje przezroczyste, gdy klikniesz inną aplikację. Własne tło rysuje Flux.',
+        'Automático usa o Acrylic do Windows: você vê o que está realmente atrás da janela (até um papel de parede animado), e ela continua translúcida quando você clica em outro app. Um fundo próprio é desenhado pelo Flux.',
+        'Автоматично використовує Acrylic від Windows: ти бачиш, що насправді за вікном (навіть живі шпалери), і воно лишається прозорим, коли клацаєш в іншу програму. Власне тло малює Flux.'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19J.items()})

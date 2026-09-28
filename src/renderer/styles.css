@@ -8722,9 +8722,9 @@ body.moving-bg *::after {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Upečené pozadie je už rozmazané – netreba filter, len sa roztiahne. */
+/* Upečené pozadie je už rozmazané – len jemné dorozmazanie v malej vrstve, aby zväčšené video nebolo kockaté. */
 .wall-media.baked {
-  filter: none;
+  filter: blur(calc(var(--wall-blur, 40px) / 12));
 }
 .wall-media.baked video {
   width: 100%;

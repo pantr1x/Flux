@@ -221,6 +221,12 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
       - The key is a hash of the video URL, `wallBlur` and the display size.
     - The *Windows wallpaper* button (`app:reset-background`) also sets `liveWallpaper: false`.
   - **Performance:** both wall layers (`.wall-img`, `.wall-media`) are laid out at 1/4 of the display size and scaled up 4× (`place()` in `setupWallpaper()`), with the blur divided by 4 in CSS. A background video plays only while the window is visible and focused (`syncVideo()`). Without `optAnim` it shows a still frame, and YouTube shows its thumbnail.
+- **Default material `auto`** (`materialMode()` in `main.js`): on Windows 11 22H2+ it is Windows **Acrylic**, so Flux draws nothing, and the real desktop, including a live wallpaper, shows through. With an own background (`settings.bg`), or without Acrylic, it falls back to `wallpaper` (drawn by Flux). `migrateMaterial()` switches the old default `wallpaper` to `auto` once (`materialAuto`). Live wallpaper detection runs only when Flux draws the wall (`drawsWall()`).
+- **Acrylic stays on when inactive:** `src/main/keepActive.js`.
+  - Windows greys Acrylic/Mica when the window loses focus. On `blur`, `restore` and `show`, `poke()` sends the window `WM_NCACTIVATE(TRUE)`, so DWM keeps the active backdrop. The focus does not change.
+  - The message is sent by a tiny C# helper, `userData/bin/flux-keepactive.exe`. `ensure()` compiles it once with the `csc.exe` of .NET Framework 4 in `%WINDIR%`, so there is no native module, and it changes nothing in the quick-update `base`.
+  - Without `csc`, Acrylic simply greys as before. The `keepAcrylic: false` setting turns it off.
+  - `FLUX_FAKE_MICA=1` makes Linux tests resolve `auto` to `acrylic`.
 - **Live wallpapers:** `src/main/liveWallpaper.js` → `detect()`.
   - **When it runs:** only when there is no own background and `liveWallpaper` is not off. The result is cached for 10 s.
   - **Lively Wallpaper:** it reads `%LOCALAPPDATA%\Lively Wallpaper\WallpaperLayout.json`, or the Store package path, and then each `LivelyInfo.json`.
