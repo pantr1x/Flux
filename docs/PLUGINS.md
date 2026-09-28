@@ -46,7 +46,7 @@ my-plugin/
 | `version` | Raise it on every change – users get an **Update** button. |
 | `main` | The JavaScript file to load (an ES module). |
 | `files` | Every file Flux downloads on install (text files: js, css, json, svg, md). Screenshots are only shown, not downloaded. |
-| `issue` | Number of the GitHub issue used for ratings (👍 / 👎). The Flux team fills it in when your plugin is accepted. |
+| `issue` | Number of the GitHub issue that stores the ratings. The Flux team fills it in when your plugin is accepted. |
 
 ## plugin.js
 
@@ -90,21 +90,35 @@ Look at the plugins in [`plugins/`](../plugins) for complete examples – they a
 
 ## Publish your plugin
 
-1. **Fork** [pantr1x/Flux](https://github.com/pantr1x/Flux) on GitHub.
-2. Copy your folder to `plugins/<your id>/` (the folder name must be the same as `id`).
-3. Add a screenshot – it is what people look at first.
-4. Add an entry to `plugins/index.json` (the same fields as your `plugin.json`, without `main`, `files` and `readme`, and with `"verified": false`).
-5. Open a **pull request**. After a quick review for safety it is merged and shows up in **Settings → Plugins → Community** for everyone.
+Plugins are published with a **fork** and a **pull request**. You never need write access to Flux.
 
-To publish a new version, raise `version` in both files and open another pull request.
+1. **Fork** [pantr1x/Flux](https://github.com/pantr1x/Flux) on GitHub (button *Fork* in the top right).
+2. In your fork, add your folder as `plugins/<your id>/`. The folder name must be the same as `id`, for example `plugins/anna.todo-highlight/`.
+3. Add a screenshot. It is what people look at first.
+4. Add an entry to `plugins/index.json`. Use the same fields as your `plugin.json`, but leave out `main`, `files` and `readme`, and add `"verified": false`.
+5. Open a **pull request** from your fork to `pantr1x/Flux`.
+
+### What happens after you open the pull request
+
+- **Automatic review.** The *Plugin review* check runs within a minute or two and writes its result as a comment in the pull request.
+  - **Rules.** It checks the files against the rules below: forbidden APIs, obfuscated code, files outside `plugins/`, and `plugin.json` against `index.json`.
+  - **AI review.** Claude reads the whole plugin and looks for malware: stealing code, files or tokens, hidden network requests, remote code, keyloggers, and plugins that do something different than they say.
+  - **Only read, never run.** Your code is never run and never installed during the review.
+- **Fixing problems.** If something is wrong, the check is red and the comment says what to fix. Push a fix to the same branch and the review runs again.
+- **Final OK.** When the check is green, a maintainer looks at it once more and merges it. From then on it shows up in **Settings → Plugins → Community** for everyone.
+
+To publish a new version, raise `version` in both files and open another pull request. It is reviewed the same way.
 
 ### Rules
 
-- No hidden network requests, no reading files outside the open project, no obfuscated code.
-- Keep it small and readable – reviewers must be able to understand it.
-- Plugins made by the Flux team have a ✓ next to the publisher name.
+- **Use only the `flux` object your plugin gets.** Never use `window.flux`, Node.js (`require`, `process`) or Electron.
+- **No `eval`, `new Function`, and no code loaded from the internet.**
+- **No hidden network requests.** If your plugin needs the internet, say so in the README and show it to the user.
+- **No obfuscated or minified code.** Keep it small and readable, so reviewers can understand it. Files over 300 KB and very long lines are rejected.
+- **Only these files:** code, JSON, Markdown, CSS, SVG and images.
+- **Reserved names:** the `flux.` prefix, the publisher name *Flux* and `"verified": true` are for plugins made by the Flux team. These have a ✓ next to the publisher name.
 
 ## Ratings
 
-Each plugin has a GitHub issue. 👍 and 👎 reactions on it are the rating shown as stars in the store,
-and comments are the reviews. Users can rate from the plugin page in Flux once they connect GitHub in **Settings → GitHub**.
+People rate a plugin with **1 to 5 stars** and can write a comment. Open the plugin in **Settings → Plugins** and press **Rate**.
+Reading ratings works for everyone. To write one, you sign in with GitHub. Each plugin has its own GitHub issue in `pantr1x/Flux` where the ratings are stored.

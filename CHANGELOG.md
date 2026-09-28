@@ -2,6 +2,19 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.23 – 2026-09-29
+
+### Light mode
+- **Text is readable again in light mode.** Your own app colors, for example white text for dark mode, are now used only in the mode they fit. Before, they were also used in light mode, and the text almost disappeared.
+- Secondary text, like project details and file paths, is a bit darker in light mode. It is darker still on a see-through wallpaper background.
+- In light mode, the highlight of the word under the cursor is softer.
+
+### Plugins
+- **Publishing a plugin** now works with a fork and a pull request, and every pull request gets an **automatic safety review**.
+  - Fixed rules block dangerous code.
+  - An AI review looks for malware and data theft.
+  - A how-to is in the [wiki](https://github.com/pantr1x/Flux/wiki/Making-plugins).
+
 ## 1.4.22 – 2026-09-28
 
 ### Fixes

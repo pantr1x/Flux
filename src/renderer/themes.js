@@ -167,6 +167,8 @@ export function defineMonacoTheme(monaco, id, accent) {
           'editor.selectionBackground': `#${a}38`,
           'editor.inactiveSelectionBackground': `#${a}1c`,
           'editorIndentGuide.background1': '#0000000e',
+          'editor.wordHighlightBackground': '#0000000d',
+          'editor.wordHighlightStrongBackground': '#00000014',
           'editorWidget.background': '#ffffff',
           'editorSuggestWidget.background': '#ffffff',
           'editorSuggestWidget.selectedBackground': `#${a}2a`,

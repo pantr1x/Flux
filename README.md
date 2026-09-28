@@ -13,12 +13,28 @@
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">What's new</a>
   &nbsp;·&nbsp;
-  <a href="docs/PLUGINS.md">Make a plugin</a>
+  <a href="https://github.com/pantr1x/Flux/wiki">Wiki</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/pantr1x/Flux/wiki/Making-plugins">Make a plugin</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/pantr1x/Flux/releases/latest"><img alt="Latest version" src="https://img.shields.io/github/v/release/pantr1x/Flux?label=version&color=8b7bff"></a>
+  <a href="https://github.com/pantr1x/Flux/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/pantr1x/Flux/total?color=3ecf8e"></a>
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4">
+  <a href="https://github.com/pantr1x/Flux/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/pantr1x/Flux?style=flat&color=f5b94a"></a>
 </p>
 
 <p align="center">
   <img src="docs/images/home.png" width="860" alt="Flux home screen">
 </p>
+
+## Why Flux
+
+- **Made for learning and small projects.** Open Flux, press **F5**, and your code runs. You do not have to set anything up first.
+- **Light.** The installer is small, languages are downloaded only when you need them, and a *Save memory* mode helps on older PCs.
+- **Everything in one window.** Code, program output, a terminal, a live website preview, Git and AI help.
+- **Yours to change.** Themes, fonts, colors and shortcuts, plus plugins that anyone can write in a few lines of JavaScript.
 
 ## Install
 
@@ -77,7 +93,22 @@ All of them can be changed in Settings → General → Shortcuts.
   <img src="docs/images/plugins.png" width="700" alt="Plugin store">
 </p>
 
-Plugins live in [`plugins/`](plugins) and are installed from **Settings → Plugins**. To make your own, press **Create a plugin** there, or read the [plugin guide](docs/PLUGINS.md). Publishing is a pull request that adds your plugin folder.
+Plugins live in [`plugins/`](plugins) and are installed from **Settings → Plugins**.
+
+- **Make one:** press **Create a plugin** in Settings → Plugins, then follow [Making plugins](https://github.com/pantr1x/Flux/wiki/Making-plugins) in the wiki. The full reference is the [plugin guide](docs/PLUGINS.md).
+- **Publish it:** fork this repository, add your plugin folder and open a pull request ([how](https://github.com/pantr1x/Flux/wiki/Publishing-plugins)).
+- **Safety:** every plugin pull request gets an **automatic review**. Fixed rules block dangerous code, and an AI review by Claude looks for malware and data theft. The plugin code is only read during the review, never run. A maintainer gives the final OK.
+
+## Privacy
+
+Flux has no accounts, ads or tracking.
+
+- **Internet:** it only goes online to check for updates, to show the plugin store, to download the languages and plugins you choose, and for the features you turn on: GitHub, and Claude AI with your own API key.
+- **Settings and projects** stay on your PC.
+
+## Contributing
+
+Bug reports and ideas are welcome in [Issues](https://github.com/pantr1x/Flux/issues). Plugins are the easiest way to add a feature, see [Plugins](#plugins).
 
 ## Build it yourself
 

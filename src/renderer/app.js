@@ -293,6 +293,7 @@ function applyTheme() {
   if (term) term.options.theme = terminalTheme();
   if (shTerm) shTerm.options.theme = terminalTheme();
   codemap?.refresh();
+  applyAppColors(); // vlastné farby platia len pre režim, ku ktorému sa hodia
 }
 
 // Nastavenia editora a terminálu (písmo, veľkosť, minimapa…).
@@ -378,15 +379,25 @@ function applyAppColors() {
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
   };
   const set = (name, v) => (v ? b.setProperty(name, v) : b.removeProperty(name));
-  const text = setting('uiText');
-  const text2 = setting('uiText2');
+  // Vlastné farby sa vyberajú pre jeden režim – biely text z tmavého režimu by vo svetlom
+  // nebolo vidieť (a naopak). Farba, ktorá sa k režimu nehodí, sa preto vynechá.
+  const dark = isDark();
+  const lum = (hex) => {
+    const n = parseInt(String(hex).slice(1), 16);
+    return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  };
+  const fits = (hex, bright) => !!hex && /^#[0-9a-f]{6}$/i.test(hex) && (bright ? lum(hex) > 0.5 : lum(hex) <= 0.5);
+  const fg = (key) => (fits(setting(key), dark) ? setting(key) : '');
+  const bg = (key) => (fits(setting(key), !dark) ? setting(key) : '');
+  const text = fg('uiText');
+  const text2 = fg('uiText2');
   set('--text', text);
   set('--text-2', text2);
   set('--text-3', text2 ? rgba(text2, 0.78) : '');
-  const base = setting('uiBase');
+  const base = bg('uiBase');
   set('--base', base);
   set('--base-alpha', base ? rgba(base, 0.45) : '');
-  const card = setting('uiCard');
+  const card = bg('uiCard');
   const alpha = Math.max(0.3, Math.min(1, (Number(setting('cardAlpha')) || 74) / 100));
   set('--card-solid', card);
   set('--card', card ? rgba(card, alpha) : alpha !== 0.74 ? (isDark() ? `rgba(46, 46, 54, ${alpha})` : `rgba(255, 255, 255, ${alpha})`) : '');

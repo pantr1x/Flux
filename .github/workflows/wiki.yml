@@ -1,0 +1,31 @@
+# Wiki na GitHube (github.com/pantr1x/Flux/wiki) sa robí z docs/wiki/*.md – upravuj tie súbory, nie wiki priamo.
+# Wiki musí mať aspoň jednu stránku vytvorenú ručne (inak jej git repozitár neexistuje).
+name: Wiki
+
+on:
+  push:
+    paths:
+      - 'docs/wiki/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Push docs/wiki to the wiki
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          git clone "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
+          rsync -a --exclude .git docs/wiki/ wiki/
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Wiki is up to date."; exit 0; fi
+          git commit -m "Update wiki from docs/wiki (${GITHUB_SHA::7})"
+          git push

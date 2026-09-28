@@ -1,0 +1,86 @@
+# Kontrola pluginov od komunity (pull request z forku, ktorý mení plugins/**).
+# pull_request_target: beží s kódom a tajomstvami tohto repozitára, NIE z forku – kód z PR sa len číta
+# (scripts/plugin-review.mjs), nikdy sa nespúšťa ani neinštaluje. Výsledok príde ako komentár v PR
+# a kontrola „Plugin review“ je červená, kým sú v plugine problémy.
+name: Plugin review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'plugins/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: plugin-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Flux (trusted scripts)
+        uses: actions/checkout@v4
+        with:
+          path: base
+          persist-credentials: false
+
+      - name: Checkout the pull request (read only)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the Claude SDK (outside both checkouts)
+        run: npm install --no-save --no-package-lock --prefix "$RUNNER_TEMP/sdk" @anthropic-ai/sdk@^0.128.0
+
+      - name: List changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename' > "$RUNNER_TEMP/changed.txt"
+
+      - name: Review
+        id: review
+        working-directory: base
+        env:
+          PR_DIR: ${{ github.workspace }}/pr
+          CHANGED: ${{ runner.temp }}/changed.txt
+          OUT: ${{ runner.temp }}/review.md
+          SDK_DIR: ${{ runner.temp }}/sdk
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set +e
+          node scripts/plugin-review.mjs
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          [ -f "$RUNNER_TEMP/review.md" ] || exit 0
+          # Jeden komentár, ktorý sa pri ďalšom pushi prepíše.
+          id=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- flux-plugin-review -->")) | .id' | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@"$RUNNER_TEMP/review.md" > /dev/null
+          else
+            gh api "repos/${{ github.repository }}/issues/$PR/comments" -F body=@"$RUNNER_TEMP/review.md" > /dev/null
+          fi
+
+      - name: Result
+        run: |
+          if [ "${{ steps.review.outputs.code }}" != "0" ]; then
+            echo "::error::The plugin needs changes or a manual review – see the comment on the pull request."
+            exit 1
+          fi
