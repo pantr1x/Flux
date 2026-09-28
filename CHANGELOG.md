@@ -2,6 +2,18 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.18 – 2026-09-28
+
+### Sticky headers are back, without the glitches
+- The lines at the top of the editor show **which function you are in** while you scroll. They are on again by default. Turn them off in **Settings → Editor → Sticky headers**.
+- The line under them is **no longer cut in half**. When you stop scrolling, the editor lines up to a whole line.
+- The line with your **text cursor never hides under them**. The editor moves so you always see where you type.
+
+### Updates
+- **Flux opens again after an update** even if you took a while to answer the *Unsaved changes* question. Before, it sometimes stayed closed.
+- With **Auto save** on, restarting for an update saves your files without asking.
+- When you choose **Keep what is in the editor** after a file changed outside Flux, auto save now saves your version too.
+
 ## 1.4.17 – 2026-09-28
 
 ### Fixes

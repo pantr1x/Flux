@@ -339,6 +339,13 @@ function createWindow() {
   win.on('close', (e) => {
     if (allowClose || dirtyCount === 0) return;
     e.preventDefault();
+    // Reštart kvôli aktualizácii so zapnutým automatickým ukladaním: uložiť bez pýtania.
+    if (updater.updating() && settings.autosave !== false) {
+      allowClose = true;
+      send('app:save-all-and-close');
+      return;
+    }
+    updater.pauseCancelWatch();
     const choice = dialog.showMessageBoxSync(win, {
       type: 'warning',
       buttons: [t('Save all'), t("Don't save"), t('Cancel')],
@@ -348,7 +355,7 @@ function createWindow() {
       message: dirtyCount === 1 ? t('You have 1 unsaved file.') : t('You have {n} unsaved files.', { n: dirtyCount }),
       detail: t('Do you want to save before closing?'),
     });
-    if (choice === 2) return;
+    if (choice === 2) return updater.closeCanceled();
     allowClose = true;
     if (choice === 0) send('app:save-all-and-close');
     else win.close();

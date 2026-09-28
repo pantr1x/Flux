@@ -78,7 +78,7 @@ const DEFAULTS = {
   lineHeight: 1.45,
   ligatures: false,
   minimap: true,
-  stickyScroll: false,
+  stickyScroll: true,
   wordWrap: false,
   autosave: true,
   autoReload: false,
@@ -547,6 +547,7 @@ function createEditor() {
   codemap.setVisible(setting('minimap'));
 
   inertiaScroll();
+  stickyFix();
   setupSmoothScroll(() => !!setting('inertia'));
   monaco.editor.onDidChangeMarkers((uris) => {
     const m = editor.getModel();
@@ -793,6 +794,71 @@ function inertiaScroll() {
     },
     { capture: true, passive: false },
   );
+}
+
+// Prilepené riadky hore (sticky scroll – v ktorej funkcii si) prekrývajú začiatok editora:
+// 1) riadok s kurzorom sa pod nimi nesmie schovať – editor sa posunie, aby bol vidieť,
+// 2) po dobehnutí posúvania sa editor zarovná na celý riadok, nech pod nimi nie je riadok zrezaný napoly.
+function stickyFix() {
+  const node = $('#editor');
+  const stickyH = () => {
+    const w = node.querySelector('.sticky-widget');
+    return w && w.style.display !== 'none' ? w.offsetHeight : 0;
+  };
+  // Riadok, ktorý je (aspoň čiastočne) úplne hore.
+  const lineAtTop = (top) => {
+    let l = editor.getVisibleRanges()[0]?.startLineNumber || 1;
+    while (l > 1 && editor.getTopForLineNumber(l) > top) l--;
+    return l;
+  };
+  let timer = 0;
+  let anim = 0;
+  let pressed = false;
+  const scrollTo = (target) => {
+    const from = editor.getScrollTop();
+    const start = performance.now();
+    cancelAnimationFrame(anim);
+    const step = (t) => {
+      const k = Math.min(1, Math.max(0, t - start) / 110);
+      editor.setScrollTop(from + (target - from) * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) anim = requestAnimationFrame(step);
+    };
+    anim = requestAnimationFrame(step);
+  };
+  const snap = () => {
+    if (pressed || !editor.getModel() || !stickyH()) return;
+    const top = editor.getScrollTop();
+    const l = lineAtTop(top);
+    const a = editor.getTopForLineNumber(l);
+    const b = editor.getTopForLineNumber(l + 1);
+    if (top <= a || top >= b) return;
+    scrollTo(top - a < (b - a) / 2 ? a : b);
+  };
+  node.addEventListener('pointerdown', () => (pressed = true), true);
+  node.addEventListener('wheel', () => cancelAnimationFrame(anim), { capture: true, passive: true });
+  window.addEventListener('pointerup', () => {
+    if (!pressed) return;
+    pressed = false;
+    clearTimeout(timer);
+    timer = setTimeout(snap, 160);
+  });
+  editor.onDidScrollChange((e) => {
+    if (!e.scrollTopChanged) return;
+    clearTimeout(timer);
+    timer = setTimeout(snap, 160);
+  });
+  // Kurzor pod prilepenými riadkami → posunúť ho von (až po prekreslení, keď je výška známa).
+  editor.onDidChangeCursorPosition((e) => {
+    if (pressed || e.source === 'mouse') return;
+    requestAnimationFrame(() => {
+      const h = stickyH();
+      if (!h || !editor.getModel()) return;
+      const line = editor.getPosition().lineNumber;
+      const y = editor.getTopForLineNumber(line) - editor.getScrollTop();
+      const lh = editor.getOption(monaco.editor.EditorOption.lineHeight);
+      if (y > -lh && y < h) editor.setScrollTop(editor.getTopForLineNumber(line) - h);
+    });
+  });
 }
 
 // Popis vybraného návrhu vedľa zoznamu (ako vo VS Code). Monaco si to pamätá vo svojom úložisku.
@@ -1527,7 +1593,10 @@ async function syncTabs(only) {
       if (tab.model.isDisposed()) continue;
       if (pick !== 'disk' && pick !== 'always') {
         // Text v editore sa od disku líši → ber ho ako neuložený (Ctrl+S ním prepíše súbor).
-        if (tab.model.getValue() !== text) tab.savedVersion = -1;
+        if (tab.model.getValue() !== text) {
+          tab.savedVersion = -1;
+          scheduleAutosave(tab);
+        }
         renderTabs();
         reportDirty();
         continue;

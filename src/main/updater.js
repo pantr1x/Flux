@@ -154,12 +154,23 @@ function createUpdater({ getSettings, send }) {
   let quitRelaunch = false;
   // Zatvorenie sa dá zrušiť (neuložené súbory → Zrušiť): ak Flux o chvíľu stále beží, vrátiť stav späť,
   // nech sa okno s priebehom zavrie a aktualizácia sa dá spustiť znova.
+  // Pozor: okno „Neuložené zmeny“ je synchrónne a zastaví aj tento časovač – keby si tam
+  // premýšľal dlhšie ako 10 s, spustil by sa hneď po odpovedi a Flux by sa po aktualizácii
+  // neotvoril. Preto ho main.js pri tom okne vypne (pauseCancelWatch) a zrušenie hlási sám.
+  let cancelTimer = 0;
   function watchCancel() {
-    setTimeout(() => {
-      installing = false;
-      quitRelaunch = false;
-      emit({ status: 'ready', progress: 100, canceled: Date.now() });
-    }, 10000);
+    clearTimeout(cancelTimer);
+    cancelTimer = setTimeout(closeCanceled, 10000);
+  }
+  function pauseCancelWatch() {
+    clearTimeout(cancelTimer);
+  }
+  function closeCanceled() {
+    clearTimeout(cancelTimer);
+    if (!installing) return;
+    installing = false;
+    quitRelaunch = false;
+    emit({ status: 'ready', progress: 100, canceled: Date.now() });
   }
   async function install() {
     if (!(useUpdater() && state.status === 'ready') || installing) return;
@@ -206,7 +217,7 @@ function createUpdater({ getSettings, send }) {
     return check();
   }
 
-  return { state: snap, check, download, install, notes, start, setDev };
+  return { state: snap, check, download, install, notes, start, setDev, updating: () => installing, pauseCancelWatch, closeCanceled };
 }
 
 // a > b podľa semver: 1.5.0 > 1.5.0-beta.2 > 1.5.0-beta.1 > 1.4.9
