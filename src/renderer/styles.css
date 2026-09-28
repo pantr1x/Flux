@@ -17,21 +17,21 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Tmavá téma: tmavosivé okolie, samotný editor a karty takmer čierne (ako moderné editory). Na Windows 11 cez ňu presvitá Acrylic. */
+/* Tmavá téma: presný opak svetlej – rovnaký teplý odtieň, okolie tmavé, editor a karty takmer čierne. Na Windows 11 cez ňu presvitá Acrylic. */
 body.theme-dark {
-  --base: #1b1b1f;
-  --base-alpha: rgba(27, 27, 31, 0.45);
-  --card: rgba(13, 13, 15, 0.86);
-  --card-solid: #131316;
-  --card-2: rgba(255, 255, 255, 0.04);
-  --line: rgba(255, 255, 255, 0.07);
-  --line-strong: rgba(255, 255, 255, 0.115);
-  --text: #ececef;
-  --text-2: #a1a1aa;
-  --text-3: #7f7f89;
-  --hover: rgba(255, 255, 255, 0.06);
-  --active: rgba(255, 255, 255, 0.1);
-  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --base: #1e1c19;
+  --base-alpha: rgba(30, 28, 25, 0.45);
+  --card: rgba(14, 13, 11, 0.86);
+  --card-solid: #13120f;
+  --card-2: rgba(255, 245, 225, 0.04);
+  --line: rgba(255, 245, 225, 0.075);
+  --line-strong: rgba(255, 245, 225, 0.12);
+  --text: #ecebe6;
+  --text-2: #a7a39a;
+  --text-3: #827e75;
+  --hover: rgba(255, 245, 225, 0.06);
+  --active: rgba(255, 245, 225, 0.1);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 245, 225, 0.06);
   --ok: #3ecf8e;
   --err: #ff6b7a;
   --warn: #f5b94a;
@@ -85,7 +85,7 @@ body.no-mica {
 }
 
 body.theme-dark.no-mica {
-  --card: #0e0e10;
+  --card: #0e0d0b;
 }
 
 body.theme-light.no-mica {
@@ -7385,8 +7385,8 @@ body.no-fx {
   --shadow: 0 0 0 1px var(--line-strong);
 }
 body.no-fx.theme-dark {
-  --card: #0e0e10;
-  --base-alpha: #1b1b1f;
+  --card: #0e0d0b;
+  --base-alpha: #1e1c19;
 }
 body.no-fx.theme-light {
   --card: #f5f4f0;

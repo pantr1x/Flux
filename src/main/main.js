@@ -130,7 +130,7 @@ function applyMaterial() {
   const m = materialMode();
   const dark = settings.theme !== 'light';
   if (mica) win.setBackgroundMaterial(m === 'acrylic' || m === 'mica' ? m : 'none');
-  win.setBackgroundColor(m === 'acrylic' || m === 'mica' ? '#00000000' : dark ? '#1b1b1f' : '#e7e5df');
+  win.setBackgroundColor(m === 'acrylic' || m === 'mica' ? '#00000000' : dark ? '#1e1c19' : '#e7e5df');
   send('app:material', m);
 }
 
@@ -366,7 +366,7 @@ function createWindow() {
     minHeight: 480,
     show: false,
     title: 'Flux',
-    backgroundColor: ['acrylic', 'mica'].includes(materialMode()) ? '#00000000' : dark ? '#1b1b1f' : '#e7e5df',
+    backgroundColor: ['acrylic', 'mica'].includes(materialMode()) ? '#00000000' : dark ? '#1e1c19' : '#e7e5df',
     // Windows 11: vlastná horná lišta s natívnymi tlačidlami a efekt Mica (priesvitné pozadie).
     titleBarStyle: process.platform === 'linux' ? 'default' : 'hidden',
     titleBarOverlay: isWin ? { color: '#00000000', symbolColor: dark ? '#e8e8ef' : '#1d1d24', height: 44 } : false,

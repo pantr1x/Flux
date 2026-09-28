@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.28 – 2026-09-29
+
+### Colors
+- **Dark mode is now the exact opposite of light mode, in the same warm tone.**
+  - The area around the files is a warm dark grey.
+  - The editor and panels are an almost black version of the light mode's off-white.
+  - Text and lines have the same slightly warm tint.
+
 ## 1.4.27 – 2026-09-29
 
 ### Backgrounds: videos, YouTube and history
