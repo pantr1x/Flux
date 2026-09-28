@@ -12,7 +12,7 @@ Flux is a small code editor for Windows 10/11, built with Electron and Monaco. I
 | `locales/` | Translations downloaded by the app at runtime (see *Translations*). |
 | `plugins/` | Built-in and community plugins + `index.json`. Guide: `docs/PLUGINS.md`. |
 | `site/` | The website (a single `index.html`, no build step). |
-| `build/` | Installer assets; `release-notes.md` is generated during a release. |
+| `build/` | Installer assets; `release-notes.md` is generated during a release. `file-icons/*.ico` are the File Explorer icons per extension (made by `scripts/file-icons.mjs`, registered as `Flux.<ext>` in `installer.nsh`). |
 | `scripts/` | `build.mjs` (esbuild → `dist/renderer`), `release-notes.mjs`, `extract-strings.mjs`, `build-locales.py` + `locales_*.py`. |
 | `.github/workflows/` | `release.yml`, `pages.yml`, `windows-build.yml`. |
 

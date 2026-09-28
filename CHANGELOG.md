@@ -2,6 +2,14 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.21 – 2026-09-28
+
+### Opening files from File Explorer
+- **Double-clicking a file while Flux is open now brings Flux to the front and shows the file.** Before, the window sometimes stayed behind, and the settings could cover the file.
+- **Files that open with Flux have their own icons** in File Explorer. Each one looks like a page with its type on it, for example PY, JS or C++, instead of the Flux app icon.
+  - Files with other extensions get a plain page with the Flux mark.
+  - The new icons appear after this update. If a file still shows the old icon, choose **Open with → Flux** again once.
+
 ## 1.4.20 – 2026-09-28
 
 ### Clearer question when a file changed outside Flux

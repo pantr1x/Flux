@@ -4204,6 +4204,9 @@ const START_CHOICES = [
 // ---------- samostatné súbory (aj bez projektu) ----------
 async function openStandalone(files) {
   if (!files?.length) return;
+  // Súbor otvorený zvonku (dvojklik v Prieskumníkovi) má byť hneď vidieť – nič ho nesmie prekrývať.
+  if (!$('#settings').hidden) closeSettings();
+  closePalette();
   closeStart();
   for (const f of files) await openFile(f);
   refreshLooseFiles();

@@ -1448,7 +1448,13 @@ app.on('second-instance', (_e, argv) => {
   const files = filesFromArgv(argv).map(allowFile).filter(Boolean);
   if (files.length) send('open-files', files);
   if (win.isMinimized()) win.restore();
+  // Windows nedovolí oknu len tak „ukradnúť“ popredie (iba zabliká v paneli úloh) –
+  // na chvíľu „vždy navrchu“ ho spoľahlivo vytiahne dopredu.
+  win.show();
+  win.setAlwaysOnTop(true);
+  win.moveTop();
   win.focus();
+  setTimeout(() => win && !win.isDestroyed() && win.setAlwaysOnTop(false), 150);
 });
 
 app.whenReady().then(() => {
