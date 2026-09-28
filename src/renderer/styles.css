@@ -1361,6 +1361,17 @@ button.status-item:hover {
 ::-webkit-scrollbar-thumb {
   background: var(--hover);
   border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Bočný panel: posuvníky sa ukážu, až keď je nad zoznamom myš – dva stále pruhy vedľa seba rušili. */
+#sidebar ::-webkit-scrollbar-thumb {
+  background: transparent;
+  background-clip: padding-box;
+}
+#sidebar :hover::-webkit-scrollbar-thumb {
+  background-color: var(--hover);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -2969,7 +2980,7 @@ body:not(.no-mica):not(.wallpaper) #onboard {
   position: absolute;
   inset: -20%;
   pointer-events: none;
-  opacity: 0.9;
+  opacity: 0.6;
   contain: strict;
 }
 
@@ -3005,13 +3016,17 @@ body.idle .ob-aurora i {
 .ob-aurora i:nth-child(3) {
   left: 30%;
   bottom: 4%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 20%, rgba(120, 120, 140, 0.22)), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%);
   animation-duration: 26s;
   animation-delay: -12s;
 }
 
 body.theme-light .ob-aurora i:nth-child(2) {
-  background: radial-gradient(circle, rgba(0, 0, 0, 0.08), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.7), transparent 65%);
+}
+/* Čiernobiely akcent: sivé škvrny vyzerali ako šmuhy – nech je pozadie len jemne svetlejšie. */
+body.accent-mono .ob-aurora {
+  opacity: 0.3;
 }
 
 @keyframes drift {
@@ -3034,7 +3049,7 @@ body.theme-light .ob-aurora i:nth-child(2) {
   background-image: radial-gradient(color-mix(in srgb, var(--text) 16%, transparent) 1px, transparent 1.2px);
   background-size: 22px 22px;
   mask-image: radial-gradient(ellipse 60% 55% at 50% 50%, #000 20%, transparent 75%);
-  opacity: 0.5;
+  opacity: 0.3;
 }
 
 .ob-stage {
@@ -7572,6 +7587,9 @@ body.no-fx .wall-img {
   border: 0;
   background: none;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 5px 10px;
   border-radius: 7px;
   color: var(--text-3);
@@ -8555,4 +8573,25 @@ body.theme-light.wallpaper {
 .ask-danger .ask-ic {
   color: var(--err);
   background: color-mix(in srgb, var(--err) 14%, transparent);
+}
+
+/* Domovská obrazovka: posledné súbory pod projektmi (ľavý stĺpec už nie je poloprázdny). */
+.hm-h-files {
+  margin-top: 18px;
+}
+.hm .hm-files .hm-line {
+  padding: 6px 10px;
+}
+.hm .hm-files .hm-ic.sm {
+  width: 28px;
+  height: 28px;
+}
+/* Čiernobiely akcent: tip bez sivého bloku, len jemný podklad. */
+body.accent-mono .hm-tip {
+  background: var(--card-2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+body.accent-mono .hm-tip-ic {
+  background: var(--hover);
+  color: var(--text-2);
 }

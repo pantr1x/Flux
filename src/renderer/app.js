@@ -285,6 +285,7 @@ function applyTheme() {
   document.body.classList.toggle('theme-dark', dark);
   document.body.classList.toggle('theme-light', !dark);
   document.body.classList.toggle('no-mica', state.material === 'none');
+  document.body.classList.toggle('accent-mono', accent === monoColor());
   document.body.classList.toggle('wallpaper', state.material === 'wallpaper');
   document.documentElement.style.setProperty('--accent', accent);
   document.documentElement.style.setProperty('--accent-fg', readableOn(accent));
@@ -4369,13 +4370,13 @@ async function openStart() {
                  ${recent.length ? `<div class="hm-sub">${t('Recent')}</div><div class="hm-lines">${recent.map(line).join('')}</div>` : ''}
                  <div class="hm-none" hidden>${t('Nothing found')}</div>`
           }
+          ${recentFiles.length ? `<h3 class="hm-h hm-h-files">${t('Recent files')}</h3><div class="hm-lines hm-files">${recentFiles.map(fileLine).join('')}</div>` : ''}
         </section>
         <aside class="hm-side">
           <h3 class="hm-h">${t('Start something new')}<small>${state.workspace ? t('new file in {dir}', { dir: escapeHtml(basename(state.workspace)) }) : t('creates a new project')}</small></h3>
           <div class="hm-quick">${choices
             .map((c) => `<button class="hm-q" data-tpl="${c.id}"><span class="hm-ic sm">${fileIcon(c.icon).replace(/width="16" height="16"/, 'width="18" height="18"')}</span><span class="hm-text"><b>${t(c.title)}</b><small>${t(c.sub)}</small></span></button>`)
             .join('')}</div>
-          ${recentFiles.length ? `<h3 class="hm-h">${t('Recent files')}</h3><div class="hm-lines">${recentFiles.map(fileLine).join('')}</div>` : ''}
           <div class="hm-tip"><span class="hm-tip-ic">${icon('sparkle', 14)}</span><span><b>${t('Tip')}</b><small>${escapeHtml(tip)}</small></span></div>
         </aside>
       </div>

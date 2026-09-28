@@ -2,6 +2,16 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.25 – 2026-09-29
+
+### Cleaner look
+- **Home screen:**
+  - **Recent files** moved under your projects, so both columns are balanced and there is no big empty space.
+  - The moving background is softer, with no grey smudges when the accent color is black or white.
+  - The tip box is calmer.
+- **Sidebar:** the two scrollbars (files and project) only show while the mouse is over the list.
+- **Settings:** long section names in the menu stay on one line.
+
 ## 1.4.24 – 2026-09-29
 
 ### Safer plugins
