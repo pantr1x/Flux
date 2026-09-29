@@ -142,7 +142,12 @@ fn has_visible_window(pid: u32) -> bool {
         let q = unsafe { &mut *(l as *mut Q) };
         let mut p = 0u32;
         unsafe { GetWindowThreadProcessId(h, &mut p) };
-        if p == q.pid && unsafe { IsWindowVisible(h) } != 0 {
+        // skutočné okno: viditeľné a aspoň 300×200 (nie pomocné 16×16 okná)
+        let mut r = windows_sys::Win32::Foundation::RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        let big = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(h, &mut r) } != 0 && r.right - r.left >= 300 && r.bottom - r.top >= 200;
+        // zbalené okno (na paneli úloh) je v poriadku
+        let big = big || unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsIconic(h) } != 0;
+        if p == q.pid && big && unsafe { IsWindowVisible(h) } != 0 {
             q.found = true;
             return 0;
         }

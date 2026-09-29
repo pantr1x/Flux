@@ -64,9 +64,22 @@ jobs:
           if ($p.HasExited) { $problems += "Flux Native exited (code $($p.ExitCode))" }
           elseif ($p.MainWindowHandle -eq 0) { $problems += "Flux Native runs but has no window" }
           else {
-            # okno musí byť naozaj viditeľné (priehľadné okno vo verziách 0.7–0.8.3 bolo neviditeľné)
-            Add-Type -Name W -Namespace U -MemberDefinition '[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);'
-            if (-not [U.W]::IsWindowVisible($p.MainWindowHandle)) { $problems += "Flux Native window is not visible" }
+            # musí mať skutočné viditeľné okno aspoň 300×200 (MainWindowHandle býva aj pomocné 16×16 okno)
+            Add-Type -Name W -Namespace U -MemberDefinition @'
+          public delegate bool EnumProc(IntPtr h, IntPtr l);
+          [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+          [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+          [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+          [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+          public struct RECT { public int L, T, R, B; }
+          public static bool HasBigWindow(uint pid) {
+            bool found = false;
+            EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); RECT r;
+              if (p == pid && IsWindowVisible(h) && GetWindowRect(h, out r) && r.R - r.L >= 300 && r.B - r.T >= 200) { found = true; return false; } return true; }, IntPtr.Zero);
+            return found;
+          }
+          '@
+            if (-not [U.W]::HasBigWindow([uint32]$p.Id)) { $problems += "Flux Native has no visible window" }
           }
           if (Test-Path $crash) { $problems += "crash log: $(Get-Content $crash -Raw)" }
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
