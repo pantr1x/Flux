@@ -23,6 +23,55 @@ jobs:
           workspaces: '. -> target'
       - name: Build Flux Native
         run: cargo build -p flux-native --release
+      - name: Smoke test (must start with real-world settings)
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory out -Force | Out-Null
+          # nastavenia ako u skutočného používateľa: domovská obrazovka, viac projektov s ikonami a úlohami,
+          # GitHub účet vývojára, AI s kľúčmi z Electron Fluxu, priehľadné okno (liveCache), diakritika
+          $root = "$env:RUNNER_TEMP\smoke-projects"
+          $dirs = @('python-hra', 'moja-stránka', 'api-tools') | ForEach-Object { $d = "$root\$_"; New-Item -ItemType Directory $d -Force | Out-Null; $d }
+          Set-Content "$($dirs[0])\main.py" "print('ahoj')"
+          Set-Content "$($dirs[1])\index.html" "<h1>Ahoj</h1>"
+          Set-Content "$($dirs[2])\main.rs" "fn main() {}"
+          $img = "$env:RUNNER_TEMP\smoke-wall.png"
+          $bmp = New-Object System.Drawing.Bitmap 64, 64; $bmp.Save($img, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+          $meta = @{}
+          $meta[$dirs[0]] = @{ description = 'Hra s hadom'; kind = 'python'; icon = 'emoji:🎮'; todos = @(@{ id = 1; text = 'Skóre'; done = $false }) }
+          $meta[$dirs[1]] = @{ description = 'Web'; kind = 'web'; icon = 'line:robot'; todos = @() }
+          $ud = "$env:RUNNER_TEMP\ud-smoke"; New-Item -ItemType Directory $ud -Force | Out-Null
+          @{
+            onboarded = $true; lastFolder = $dirs[0]; userName = 'Šimon'; autoUpdate = $false; lastSeenVersion = 'x'
+            projects = @($dirs | ForEach-Object { @{ dir = $_; pinned = ($_ -eq $dirs[0]) } }); recent = $dirs
+            projectMeta = $meta
+            github = @{ token = 'enc:djEwAAAAAAAAAAAAAAAAAAAA'; user = @{ login = 'pantr1x'; name = 'Šimon'; id = 1; avatar = $null } }
+            ai = @{ key = 'enc:djEwBBBB'; model = 'claude-opus-5'; mcp = @(@{ name = 'github'; url = 'https://example.com/mcp'; enabled = $true; token = 'enc:x' }) }
+            liveCache = @{ file = $img; video = $false; preview = $img; source = 'lively' }
+            codeLangs = @('python', 'web')
+          } | ConvertTo-Json -Depth 8 | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
+          $env:FLUX_USER_DATA = $ud
+          $env:FLUX_TEST = "2:start;4:settings=general;5:settings=ai;6:settings=github;7:settings=developer;8:settings=plugins;9:newproj;11:ai;13:back;14:fwd"
+          $p = Start-Process (Get-ChildItem target\release\flux-native.exe).FullName -PassThru
+          Start-Sleep 25
+          $p.Refresh()
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $shot = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($shot); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $shot.Save("out\smoke.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $shot.Dispose()
+          $crash = "$ud\flux-native-crash.log"
+          $problems = @()
+          if ($p.HasExited) { $problems += "Flux Native exited (code $($p.ExitCode))" }
+          elseif ($p.MainWindowHandle -eq 0) { $problems += "Flux Native runs but has no window" }
+          if (Test-Path $crash) { $problems += "crash log: $(Get-Content $crash -Raw)" }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          Remove-Item Env:FLUX_TEST, Env:FLUX_USER_DATA
+          if ($problems) {
+            $problems | ForEach-Object { Write-Host "::error::$_" }
+            "## Smoke test FAILED`n$($problems -join "`n")" | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          "## Smoke test passed" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Measure memory (Flux Native)
         shell: pwsh
         run: |
@@ -105,8 +154,9 @@ jobs:
           @{ version = $ver; sha = $env:GITHUB_SHA; sha256 = $hash; size = (Get-Item out\Flux-Native.exe).Length } | ConvertTo-Json | Set-Content out\native.json -Encoding utf8NoBOM
           $report | ForEach-Object { Write-Host $_ }
           "## Memory`n``````n$($report -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
+      # native.json v ci-native = kanál aktualizácií: len zostava, ktorá prešla smoke testom
       - name: Publish screenshots (branch ci-native)
-        if: always()
+        if: success()
         continue-on-error: true
         shell: bash
         run: |

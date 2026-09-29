@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.8.3 – 2026-09-29
+
+### Flux Native starts again
+- **Safe mode.** If Flux did not start properly last time, it now tells you and starts without the see-through window and wallpaper (after two failed starts also with simpler graphics). An invisible Flux that got stuck is closed first. Once a start works, the next one is normal again.
+- More room for Flux's main thread on Windows, and crashes outside Flux's own code are written to `flux-native-crash.log` too.
+- Your GitHub token and API keys are now kept in the **Windows Credential Manager**. Please sign in to GitHub and paste your API key again once.
+- New builds are tested with real-world settings before they are offered as an update.
+
 ## 0.8.2 – 2026-09-29
 
 ### Safer updates

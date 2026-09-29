@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod boot;
 mod code;
 mod gen;
 mod i18n;
@@ -31,6 +32,7 @@ pub fn want_transparent() -> bool {
         && s["liveWallMode"].as_str().unwrap_or("see") == "see"
         && !s["bg"]["type"].is_string()
         && s["liveCache"]["file"].is_string()
+        && !boot::safe()
 }
 
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
@@ -53,7 +55,19 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
 }
 
 // chyba pri štarte: záznam do userData/flux-native-crash.log a okno s hlásením (bez konzoly by inak nebolo nič vidieť)
-fn report(msg: &str) {
+// informačné okno (núdzový režim); mimo Windows len na stderr
+pub fn notice(msg: &str) {
+    eprintln!("[flux] {msg}");
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+        let w = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let (text, title) = (w(msg), w("Flux"));
+        unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_OK | MB_ICONINFORMATION) };
+    }
+}
+
+pub fn report(msg: &str) {
     let log = flux_core::settings::user_data().join("flux-native-crash.log");
     let line = format!("[{}] Flux Native {} ({}): {msg}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), env!("CARGO_PKG_VERSION"), update::SHA);
     let _ = std::fs::create_dir_all(log.parent().unwrap_or(std::path::Path::new(".")));
@@ -72,6 +86,8 @@ fn report(msg: &str) {
 fn main() -> eframe::Result {
     // po aktualizácii: .new preč, .old zatiaľ ostane (návrat, ak by nová verzia hneď spadla)
     update::cleanup(true);
+    boot::catch_hard_crashes();
+    boot::begin();
     let started = std::time::Instant::now();
     std::panic::set_hook(Box::new(move |info| {
         let at = info.location().map(|l| format!(" at {}:{}", l.file(), l.line())).unwrap_or_default();
@@ -95,7 +111,8 @@ fn main() -> eframe::Result {
 fn run() -> eframe::Result {
     // OpenGL (glow) je najúspornejšie; bez ovládača OpenGL (virtuálny stroj, server) záloha cez wgpu (DirectX/Vulkan).
     // FLUX_RENDERER=wgpu vynúti zálohu.
-    let forced = std::env::var("FLUX_RENDERER").ok();
+    // núdzový režim po dvoch neúspešných štartoch: rovno wgpu
+    let forced = std::env::var("FLUX_RENDERER").ok().or_else(|| (boot::FAILS.load(std::sync::atomic::Ordering::Relaxed) >= 2).then(|| "wgpu".to_string()));
     if forced.as_deref() != Some("wgpu") {
         match eframe::run_native("Flux", options(eframe::Renderer::Glow), Box::new(|cc| Ok(Box::new(app::App::new(cc))))) {
             Ok(()) => return Ok(()),

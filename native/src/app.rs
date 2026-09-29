@@ -112,6 +112,7 @@ pub struct App {
     live_at: f64,
     tex_info: String, // vývojár: počet a veľkosť textúr (raz za sekundu)
     start_trimmed: bool,
+    boot_ok: bool,                                 // záznam štartu „ok“ zapísaný
     live_done: Arc<std::sync::atomic::AtomicBool>, // prvé zisťovanie živej tapety skončilo
     live_saved: Option<crate::live::Found>,        // čo je uložené v settings.liveCache
     wall_at: f64,                                  // kedy sa naposledy zisťoval zdroj tapety
@@ -209,6 +210,7 @@ impl App {
             live_done: Default::default(),
             tex_info: String::new(),
             start_trimmed: false,
+            boot_ok: false,
             live_saved: live_cache,
             live_at: -100.0,
             wall_at: -100.0,
@@ -226,6 +228,7 @@ impl App {
             tour_rects: HashMap::new(),
             frames: Default::default(),
         };
+        crate::boot::window();
         crate::i18n::set_language(app.core.setting("language").as_str().unwrap_or("en"));
         if app.core.setting("onboarded").as_bool() != Some(true) || std::env::var("FLUX_INTRO").is_ok() {
             app.intro = Some(intro::Intro::new(app.core.setting("userName").as_str().unwrap_or("")));
@@ -299,7 +302,7 @@ impl App {
 
     // tapeta za oknom: materiál nie je „none“ a efekty sú zapnuté (optFx)
     fn wall_on(&self) -> bool {
-        self.get("material").as_str() != Some("none") && self.core.setting("optFx").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true))
+        !crate::boot::safe() && self.get("material").as_str() != Some("none") && self.core.setting("optFx").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true))
     }
 
     fn wall_source(&self) -> Option<crate::wall::Src> {
@@ -2399,6 +2402,10 @@ fn ago(ms: u64) -> String {
 }
 
 impl eframe::App for App {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        crate::boot::closed();
+    }
+
     // priehľadné okno: kde Flux nič nenakreslí, presvitá plocha (živá tapeta)
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
         if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
@@ -2473,6 +2480,13 @@ impl eframe::App for App {
         }
         self.tour_rects.clear();
         // po štarte (načítanie písma, tapety, zvýraznenia) raz uvoľniť nepotrebnú pamäť
+        // Flux beží a kreslí → ďalší štart normálny (boot.rs)
+        if !self.boot_ok && self.started.elapsed() > Duration::from_secs(3) {
+            self.boot_ok = true;
+            crate::boot::ok();
+        } else if !self.boot_ok {
+            ctx.request_repaint_after(Duration::from_millis(500));
+        }
         if !self.start_trimmed && self.started.elapsed() > Duration::from_secs(10) {
             self.start_trimmed = true;
             // nová verzia beží → predošlá (.old) už netreba
