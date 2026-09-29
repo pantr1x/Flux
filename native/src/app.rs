@@ -1,6 +1,7 @@
 // Flux Native – okno v rovnakom rozložení ako Electron Flux: bočný panel (logo, projekty, voľné súbory, strom, Nastavenia),
 // horná lišta (späť/dopredu, karty súborov, hľadanie, AI, ▶ Run), zaoblená karta s editorom + minimapou,
 // Výstupom/Terminálom a stavovým riadkom; bez otvoreného súboru stránka projektu. Logika je v flux-core.
+mod editing;
 mod intro;
 mod menus;
 mod prefs;
@@ -85,6 +86,8 @@ pub struct App {
     cursor: (usize, usize),
     scroll_to: Option<f32>,
     intro: Option<intro::Intro>,
+    find: Option<editing::Find>,
+    find_goto: bool,
     palette: Option<menus::Palette>,
     ask: Option<menus::Ask>,
     renaming: Option<(String, String)>,
@@ -149,6 +152,8 @@ impl App {
             cursor: (1, 1),
             scroll_to: None,
             intro: None,
+            find: None,
+            find_goto: false,
             palette: None,
             ask: None,
             renaming: None,
@@ -485,6 +490,10 @@ impl App {
                 }
                 "shell" => self.sh.pty.write(&arg.replace("\\r", "\r")),
                 "home" => self.home = true,
+                "find" => {
+                    self.find = Some(editing::Find { q: arg.to_string(), repl: String::new(), replace: true, idx: 0, focus: false });
+                    self.find_goto = true;
+                }
                 "palette" => self.open_palette(
                     match arg {
                         "all" => menus::PaletteMode::Everything,
@@ -983,6 +992,61 @@ impl App {
         let font = theme::mono(fsz);
         let ed_rect = Rect::from_min_max(rect.min, pos2(rect.right() - mini_w, rect.bottom()));
         let mini = Rect::from_min_max(pos2(rect.right() - mini_w, rect.top()), rect.max);
+        // ---- klávesy editora pred TextEdit: Tab/Shift+Tab, Ctrl+/, Ctrl+F/H, písané zátvorky ----
+        let ed_id = egui::Id::new(("editor", self.tabs[self.active].path.clone()));
+        let ctx = ui.ctx().clone();
+        let focused = ctx.memory(|m| m.has_focus(ed_id));
+        let (find_k, repl_k) = ctx.input_mut(|i| (i.consume_key(egui::Modifiers::COMMAND, egui::Key::F), i.consume_key(egui::Modifiers::COMMAND, egui::Key::H)));
+        if find_k || repl_k {
+            let sel_text = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).map(|r| {
+                let (a, b) = (usize::from(r.primary.index).min(usize::from(r.secondary.index)), usize::from(r.primary.index).max(usize::from(r.secondary.index)));
+                self.tabs[self.active].text.chars().skip(a).take(b - a).collect::<String>()
+            });
+            let prev = self.find.take();
+            let q = sel_text.filter(|s| !s.is_empty() && !s.contains('\n')).or(prev.as_ref().map(|f| f.q.clone())).unwrap_or_default();
+            self.find = Some(editing::Find { q, repl: prev.map(|f| f.repl).unwrap_or_default(), replace: repl_k, idx: 0, focus: true });
+        }
+        let mut typed: Option<char> = None;
+        let mut new_sel: Option<(usize, usize)> = None;
+        if focused {
+            let (tab_k, back_k, comment_k) = ctx.input_mut(|i| {
+                (i.consume_key(egui::Modifiers::NONE, egui::Key::Tab), i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab), i.consume_key(egui::Modifiers::COMMAND, egui::Key::Slash))
+            });
+            typed = ctx.input(|i| {
+                i.events.iter().find_map(|e| {
+                    if let egui::Event::Text(t) = e {
+                        let mut c = t.chars();
+                        match (c.next(), c.next()) {
+                            (Some(ch), None) if "([{\"'".contains(ch) => Some(ch),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                })
+            });
+            if tab_k || back_k || comment_k {
+                let (a, b) = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).map(|r| (usize::from(r.secondary.index), usize::from(r.primary.index))).unwrap_or((0, 0));
+                let ext = self.tabs[self.active].ext();
+                let text = &mut self.tabs[self.active].text;
+                new_sel = Some(if comment_k { editing::toggle_comment(text, a, b, &ext) } else { editing::indent(text, a, b, back_k) });
+                self.last_edit = Some(Instant::now());
+            }
+        }
+        // nálezy hľadania
+        let found = self.find.as_ref().map(|f| editing::matches(&self.tabs[self.active].text, &f.q)).unwrap_or_default();
+        let cur_found = self.find.as_ref().map(|f| if found.is_empty() { 0 } else { f.idx % found.len() }).unwrap_or(0);
+        if self.find_goto {
+            if let Some(&(a, b)) = found.get(cur_found) {
+                new_sel = Some((a, b));
+            }
+        }
+        if let Some((a, b)) = new_sel {
+            let mut st = egui::TextEdit::load_state(&ctx, ed_id).unwrap_or_default();
+            st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(a), egui::text::CCursor::new(b))));
+            st.store(&ctx, ed_id);
+        }
+        let find_goto = std::mem::take(&mut self.find_goto);
         let code = &self.code;
         let tab = &mut self.tabs[self.active];
         let ext = tab.ext();
@@ -1001,6 +1065,7 @@ impl App {
             ui.horizontal_top(|ui| {
                 ui.add_space(gutter);
                 let hl = ui.painter().add(egui::Shape::Noop);
+                let found_shapes = ui.painter().add(egui::Shape::Noop);
                 let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_w: f32| {
                     let mut job = code.highlight(ui.ctx(), ui.style(), buf.as_str(), &lang);
                     job.wrap.max_width = if wrap { wrap_w } else { f32::INFINITY };
@@ -1013,6 +1078,7 @@ impl App {
                 };
                 let lines = tab.text.lines().count().max(1) + usize::from(tab.text.ends_with('\n'));
                 let te = egui::TextEdit::multiline(&mut tab.text)
+                    .id(ed_id)
                     .code_editor()
                     .font(font.clone())
                     .frame(Frame::NONE)
@@ -1022,7 +1088,39 @@ impl App {
                     .lock_focus(true)
                     .layouter(&mut layouter)
                     .show(ui);
-                edited = te.response.changed();
+                edited = te.response.changed() || new_sel.is_some();
+                // automatické zatváranie zátvoriek a úvodzoviek
+                if te.response.changed() {
+                    if let (Some(ch), Some(r)) = (typed, te.cursor_range) {
+                        let c = usize::from(r.primary.index);
+                        if editing::auto_close(&mut tab.text, c, ch) {
+                            let mut st = egui::TextEdit::load_state(ui.ctx(), ed_id).unwrap_or_default();
+                            st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(c))));
+                            st.store(ui.ctx(), ed_id);
+                        }
+                    }
+                }
+                // zvýraznenie nálezov (za textom) a posun na aktuálny
+                if !found.is_empty() {
+                    let mut shapes = vec![];
+                    let clip = ui.clip_rect();
+                    for (i, &(a, b)) in found.iter().enumerate() {
+                        let ra = te.galley.pos_from_cursor(egui::text::CCursor::new(a)).translate(te.galley_pos.to_vec2());
+                        if ra.bottom() < clip.top() - 200.0 || ra.top() > clip.bottom() + 200.0 {
+                            if !(find_goto && i == cur_found) {
+                                continue;
+                            }
+                        }
+                        let rb = te.galley.pos_from_cursor(egui::text::CCursor::new(b)).translate(te.galley_pos.to_vec2());
+                        let r = Rect::from_min_max(pos2(ra.left(), ra.top() + 1.0), pos2(rb.right().max(ra.left() + 2.0), ra.bottom() - 1.0));
+                        let on = i == cur_found;
+                        shapes.push(egui::Shape::rect_filled(r, 3.0, if on { Color32::from_rgba_unmultiplied(245, 185, 74, 110) } else { Color32::from_rgba_unmultiplied(245, 185, 74, 45) }));
+                        if on && find_goto {
+                            ui.scroll_to_rect(r.expand(60.0), None);
+                        }
+                    }
+                    ui.painter().set(found_shapes, egui::Shape::Vec(shapes));
+                }
                 if let Some(r) = te.cursor_range {
                     let idx = r.primary.index;
                     let before: String = tab.text.chars().take(idx.into()).collect();
@@ -1084,6 +1182,49 @@ impl App {
         }
         if let Some(c) = cursor {
             self.cursor = c;
+        }
+        // ---- lišta hľadania ----
+        if self.find.is_some() {
+            match self.find_bar(ui, ed_rect, found.len()) {
+                Some("close") => self.find = None,
+                Some("next") => {
+                    if let Some(f) = self.find.as_mut() {
+                        f.idx = (cur_found + 1) % found.len().max(1);
+                    }
+                    self.find_goto = true;
+                }
+                Some("prev") => {
+                    if let Some(f) = self.find.as_mut() {
+                        f.idx = (cur_found + found.len().max(1) - 1) % found.len().max(1);
+                    }
+                    self.find_goto = true;
+                }
+                Some("goto") => self.find_goto = true,
+                Some("replace") => {
+                    if let (Some(&(a, b)), Some(f)) = (found.get(cur_found), self.find.as_ref()) {
+                        let repl = f.repl.clone();
+                        let text = &mut self.tabs[self.active].text;
+                        let (ab, bb) = (text.char_indices().nth(a).map(|x| x.0).unwrap_or(text.len()), text.char_indices().nth(b).map(|x| x.0).unwrap_or(text.len()));
+                        text.replace_range(ab..bb, &repl);
+                        self.last_edit = Some(Instant::now());
+                        self.find_goto = true;
+                    }
+                }
+                Some("replace-all") => {
+                    if let Some(f) = self.find.as_ref() {
+                        let (q, repl) = (f.q.clone(), f.repl.clone());
+                        let text = &mut self.tabs[self.active].text;
+                        for &(a, b) in found.iter().rev() {
+                            let (ab, bb) = (text.char_indices().nth(a).map(|x| x.0).unwrap_or(text.len()), text.char_indices().nth(b).map(|x| x.0).unwrap_or(text.len()));
+                            text.replace_range(ab..bb, &repl);
+                        }
+                        let _ = q;
+                        self.last_edit = Some(Instant::now());
+                    }
+                }
+                _ => {}
+            }
+            ctx.request_repaint();
         }
         // ---- minimapa (ako v Monacu: znak = 1 px, riadok = 2 px) ----
         if mini_w <= 0.0 {

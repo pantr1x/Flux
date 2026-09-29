@@ -30,5 +30,7 @@ _V20 = {
     'Delete “{name}”? It goes to the Recycle Bin, so you can still restore it.': ('Zmazať „{name}“? Pôjde do Koša, takže ho ešte môžeš obnoviť.', '„{name}“ löschen? Es kommt in den Papierkorb, du kannst es also wiederherstellen.', '¿Eliminar «{name}»? Irá a la Papelera, así que aún podrás restaurarlo.', 'Supprimer « {name} » ? Il ira dans la Corbeille, vous pourrez donc le restaurer.', 'Eliminare «{name}»? Finirà nel Cestino, quindi potrai ancora ripristinarlo.', 'Usunąć „{name}”? Trafi do Kosza, więc nadal możesz go przywrócić.', 'Excluir “{name}”? Vai para a Lixeira, então você ainda pode restaurar.', 'Видалити «{name}»? Він потрапить до Кошика, тож його ще можна відновити.'),
     'Project name': ('Názov projektu', 'Projektname', 'Nombre del proyecto', 'Nom du projet', 'Nome del progetto', 'Nazwa projektu', 'Nome do projeto', 'Назва проєкту'),
     'Show in folder': ('Zobraziť v priečinku', 'Im Ordner anzeigen', 'Mostrar en la carpeta', 'Afficher dans le dossier', 'Mostra nella cartella', 'Pokaż w folderze', 'Mostrar na pasta', 'Показати в папці'),
+    '{i} of {n}': ('{i} z {n}', '{i} von {n}', '{i} de {n}', '{i} sur {n}', '{i} di {n}', '{i} z {n}', '{i} de {n}', '{i} з {n}'),
+    'Replace all': ('Nahradiť všetko', 'Alle ersetzen', 'Reemplazar todo', 'Tout remplacer', 'Sostituisci tutto', 'Zamień wszystko', 'Substituir tudo', 'Замінити все'),
 }
 V20 = {code: {k: v[i] for k, v in _V20.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}
