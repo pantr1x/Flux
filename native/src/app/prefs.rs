@@ -89,6 +89,8 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Custom("memory"),
                     Row::Toggle("lite", "Save memory", "Uses less memory and turns off effects – good for slower PCs. You can change each part under Advanced."),
                     Row::Toggle("trimMemory", "Free memory when Flux is in the background", "Windows moves unused memory out of RAM while you work in another app. Switching back can take a moment."),
+                    Row::Toggle("optFx", "Transparency and blur", "see-through panels and your blurred wallpaper"),
+                    Row::Toggle("optAnim", "Animations", "windows, menus and cards glide in and out"),
                 ],
             ),
             ("Language", vec![Row::Custom("language")]),
@@ -119,6 +121,12 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             (
                 "Window",
                 vec![
+                    Row::Select(
+                        "material",
+                        "Window translucency",
+                        "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.",
+                        o(&[("wallpaper", "Wallpaper (recommended)"), ("none", "Off")]),
+                    ),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
                     Row::Toggle("showSearch", "Search button", "a magnifier at the top that finds files, commands and settings"),
@@ -179,6 +187,14 @@ impl App {
     // hodnota nastavenia s predvolenou hodnotou z DEFAULTS
     pub(super) fn get(&self, key: &str) -> Value {
         let v = self.core.setting(key);
+        // optX sa bez vlastnej hodnoty riadi „Šetriť pamäť“ (optOn v app.js)
+        if v.is_null() && key.starts_with("opt") {
+            return json!(self.core.setting("lite").as_bool() != Some(true));
+        }
+        // „auto“ = tapeta (materialMode v main.js)
+        if key == "material" && (v.is_null() || v.as_str() == Some("auto") || v.as_str() == Some("acrylic") || v.as_str() == Some("mica")) {
+            return json!("wallpaper");
+        }
         if v.is_null() {
             default_of(key)
         } else {
@@ -221,7 +237,7 @@ impl App {
         }
         let alpha = k;
         ui.painter().add(egui::Shadow { offset: [0, 18], blur: 50, spread: 0, color: Color32::from_black_alpha((120.0 * alpha) as u8) }.as_shape(card, CornerRadius::same(16)));
-        ui.painter().rect_filled(card, CornerRadius::same(16), p.card.gamma_multiply(alpha).to_opaque().lerp_to_gamma(p.card, alpha));
+        ui.painter().rect_filled(card, CornerRadius::same(16), p.solid.gamma_multiply(0.3 + 0.7 * alpha));
         ui.painter().rect_stroke(card, CornerRadius::same(16), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
         // ---- ľavá ponuka ----
         let nav = Rect::from_min_size(card.min, vec2(210.0, card.height()));
@@ -303,7 +319,13 @@ impl App {
         let tabs: Vec<&str> = if finding.is_empty() { vec![TABS.iter().find(|x| x.0 == st.tab).map(|x| x.0).unwrap_or("general")] } else { TABS.iter().map(|x| x.0).collect() };
         let jump = self.settings.as_mut().unwrap().jump.take();
         let slide = (1.0 - k) * 14.0;
-        egui::ScrollArea::vertical().id_salt(("s-body", tabs.join(","))).auto_shrink(false).show(&mut bui, |ui| {
+        let sk = egui::Id::new(("sa-settings", tabs.join(",")));
+        let off = self.smooth.begin(&ctx, sk, bui.layer_id(), None);
+        let mut sa = egui::ScrollArea::vertical().id_salt(("s-body", tabs.join(","))).auto_shrink(false);
+        if let Some(o) = off {
+            sa = sa.vertical_scroll_offset(o);
+        }
+        let sout = sa.show(&mut bui, |ui| {
             ui.add_space(8.0 + slide);
             let inner = ui.available_width() - 56.0;
             for tab in tabs {
@@ -341,6 +363,7 @@ impl App {
             }
             ui.add_space(30.0);
         });
+        self.smooth.end(sk, &sout);
     }
 
     fn group(&mut self, ui: &mut egui::Ui, rows: Vec<Row>, w: f32, ctx: &egui::Context) {
@@ -357,10 +380,14 @@ impl App {
         let n = rows.len();
         for (i, row) in rows.into_iter().enumerate() {
             let top = ui.cursor().top();
+            // riadok s odsadením 16 px zľava aj sprava (ovládacie prvky nevyčnievajú z rámika)
             ui.horizontal(|ui| {
                 ui.set_min_height(54.0);
                 ui.add_space(16.0);
-                self.row(ui, row, w - 32.0, ctx);
+                ui.allocate_ui_with_layout(vec2(w - 32.0, 54.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_max_width(w - 32.0);
+                    self.row(ui, row, w - 32.0, ctx);
+                });
             });
             let bottom = ui.cursor().top();
             if i + 1 < n {
@@ -404,16 +431,9 @@ impl App {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let cur = self.get(key);
                     let cur_label = opts.iter().find(|o| o.0 == cur || o.0.as_f64().is_some() && o.0.as_f64() == cur.as_f64()).map(|o| o.1.clone()).unwrap_or_else(|| cur.to_string());
-                    let mut pick = None;
-                    egui::ComboBox::from_id_salt(("sel", key)).selected_text(cur_label).width(190.0).show_ui(ui, |ui| {
-                        for (v, l) in &opts {
-                            if ui.selectable_label(*v == cur, l).clicked() {
-                                pick = Some(v.clone());
-                            }
-                        }
-                    });
-                    if let Some(v) = pick {
-                        self.set(key, v, ctx);
+                    let labels: Vec<String> = opts.iter().map(|o| o.1.clone()).collect();
+                    if let Some(i) = widgets::select(ui, egui::Id::new(("sel", key)), &cur_label, &labels, 200.0, &self.pal) {
+                        self.set(key, opts[i].0.clone(), ctx);
                     }
                 });
             }
@@ -421,19 +441,37 @@ impl App {
                 self.label(ui, title, hint, lw);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let mut v = self.get(key).as_f64().unwrap_or(min);
-                    ui.spacing_mut().slider_width = 180.0;
-                    let r = ui.add(egui::Slider::new(&mut v, min..=max).step_by(step).show_value(key == "uiZoom" || key == "cornerRadius"));
-                    if r.drag_stopped() || (r.changed() && !r.dragged()) || (r.changed() && key == "darkLift") {
+                    // hodnota vedľa posuvníka (ako #s-zoom-v v Electron Fluxe)
+                    let val = if key == "uiZoom" { format!("{v:.0} %") } else { format!("{v:.0}") };
+                    let (changed, released) = widgets::slider(ui, egui::Id::new(("rng", key)), &mut v, min, max, step, 180.0, &p);
+                    ui.label(egui::RichText::new(val).font(theme::ui(12.0)).color(p.text3));
+                    // náhľad počas ťahania; uiZoom až po pustení (inak by sa okno menilo pod myšou)
+                    if (changed && key != "uiZoom") || (released && key == "uiZoom") {
                         self.set(key, json!(v), ctx);
+                    } else if changed {
+                        self.update_settings(|o| {
+                            o.insert(key.into(), json!(v));
+                        });
                     }
                 });
             }
             Row::Number(key, title, min, max) => {
                 self.label(ui, title, "", lw);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let mut v = self.get(key).as_f64().unwrap_or(min);
-                    if ui.add(egui::DragValue::new(&mut v).range(min..=max).speed(0.2)).changed() {
-                        self.set(key, json!(v.round()), ctx);
+                    // − hodnota + (ako input[type=number])
+                    let v = self.get(key).as_f64().unwrap_or(min);
+                    let mut nv = v;
+                    if widgets::button(ui, None, "+", p.card2, p.text, 30.0, &p).clicked() {
+                        nv = (v + 1.0).min(max);
+                    }
+                    let (r, _) = ui.allocate_exact_size(vec2(44.0, 30.0), Sense::hover());
+                    ui.painter().rect_stroke(r, CornerRadius::same(8), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                    ui.painter().text(r.center(), Align2::CENTER_CENTER, format!("{v:.0}"), theme::bold(13.0), p.text);
+                    if widgets::button(ui, None, "−", p.card2, p.text, 30.0, &p).clicked() {
+                        nv = (v - 1.0).max(min);
+                    }
+                    if nv != v {
+                        self.set(key, json!(nv), ctx);
                     }
                 });
             }
@@ -565,6 +603,49 @@ impl App {
                 if widgets::button(&mut b, Some("globe"), &t("All versions"), p.card2, p.text, 30.0, &p).clicked() {
                     flux_core::settings::open_external("https://pantr1x.github.io/Flux/#releases");
                 }
+                // poznámky k vydaniam (native/CHANGELOG.md)
+                ui.add_space(14.0);
+                let (hr, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
+                let mut job = egui::text::LayoutJob::default();
+                job.append(&t("Release notes").to_uppercase(), 0.0, egui::TextFormat { font_id: theme::bold(11.0), color: p.text3, extra_letter_spacing: 1.0, ..Default::default() });
+                let g = ui.fonts_mut(|f| f.layout_job(job));
+                ui.painter().galley(pos2(hr.left(), hr.center().y - g.size().y / 2.0), g, p.text3);
+                ui.add_space(6.0);
+                let start = ui.cursor().top();
+                let bg = ui.painter().add(egui::Shape::Noop);
+                ui.add_space(12.0);
+                for line in include_str!("../../CHANGELOG.md").lines().skip_while(|l| !l.starts_with("## ")) {
+                    let (font, color, indent, text) = if let Some(h) = line.strip_prefix("## ") {
+                        ui.add_space(8.0);
+                        (theme::bold(15.0), p.text, 16.0, h.to_string())
+                    } else if let Some(h) = line.strip_prefix("### ") {
+                        ui.add_space(4.0);
+                        (theme::bold(13.0), p.text2, 16.0, h.to_string())
+                    } else if let Some(b) = line.strip_prefix("- ") {
+                        (theme::ui(12.5), p.text2, 32.0, b.to_string())
+                    } else if line.trim().is_empty() {
+                        continue;
+                    } else {
+                        (theme::ui(12.5), p.text2, 16.0, line.to_string())
+                    };
+                    // **tučné** časti
+                    let mut job = egui::text::LayoutJob::default();
+                    job.wrap.max_width = w - indent - 16.0;
+                    for (i, part) in text.split("**").enumerate() {
+                        let f = if i % 2 == 1 { theme::bold(font.size) } else { font.clone() };
+                        job.append(part, 0.0, egui::TextFormat { font_id: f, color: if i % 2 == 1 { p.text } else { color }, ..Default::default() });
+                    }
+                    let g = ui.fonts_mut(|f| f.layout_job(job));
+                    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
+                    if indent > 20.0 {
+                        ui.painter().circle_filled(pos2(r.left() + 22.0, r.top() + 9.0), 2.0, p.text3);
+                    }
+                    ui.painter().galley(pos2(r.left() + indent, r.top() + 2.0), g, color);
+                }
+                ui.add_space(12.0);
+                let rr = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
+                ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(12), p.card2));
+                ui.painter().rect_stroke(rr, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
             }
             "memory" => {
                 let mb = crate::mem::used_mb();
@@ -586,7 +667,7 @@ impl App {
                     let code = l["code"].as_str().unwrap_or("en");
                     let r = Rect::from_min_size(area.min + vec2((i % 3) as f32 * (cw + 8.0), (i / 3) as f32 * (ch + 8.0)), vec2(cw, ch));
                     let resp = ui.interact(r, ui.id().with(("slang", code)), Sense::click());
-                    ui.painter().rect_filled(r, CornerRadius::same(10), if resp.hovered() { p.hover } else { p.card2 });
+                    ui.painter().rect_filled(r, CornerRadius::same(10), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
                     ui.painter().rect_stroke(r, CornerRadius::same(10), if code == cur { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
                     if let Some(svg) = crate::gen::flag(code) {
                         egui::Image::from_bytes(format!("bytes://flag/{code}.svg"), svg.as_bytes()).paint_at(ui, Rect::from_min_size(pos2(r.left() + 10.0, r.center().y - 7.0), vec2(21.0, 14.0)));
@@ -641,7 +722,7 @@ impl App {
                     let r = Rect::from_min_size(area.min + vec2((i % 3) as f32 * (cw + 8.0), (i / 3) as f32 * 59.0), vec2(cw, 52.0));
                     let resp = ui.interact(r, ui.id().with(("sth", *id)), Sense::click());
                     let on = *id == cur;
-                    ui.painter().rect_filled(r, CornerRadius::same(12), if resp.hovered() { p.hover } else { p.card2 });
+                    ui.painter().rect_filled(r, CornerRadius::same(12), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
                     ui.painter().rect_stroke(r, CornerRadius::same(12), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line_strong) }, StrokeKind::Inside);
                     let (dark, c, _) = crate::code::theme_of(id);
                     for (k, idx) in [2usize, 7, 4, 5, 6].iter().enumerate() {

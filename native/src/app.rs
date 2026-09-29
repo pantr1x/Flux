@@ -97,6 +97,8 @@ pub struct App {
     shown: String,
     panel_w: f32,
     trim: crate::mem::Trim,
+    smooth: crate::smooth::Smooth,
+    wall: crate::wall::Wall,
 }
 
 impl App {
@@ -163,6 +165,8 @@ impl App {
             shown: String::new(),
             panel_w: 420.0,
             trim: Default::default(),
+            smooth: Default::default(),
+            wall: Default::default(),
         };
         crate::i18n::set_language(app.core.setting("language").as_str().unwrap_or("en"));
         if app.core.setting("onboarded").as_bool() != Some(true) || std::env::var("FLUX_INTRO").is_ok() {
@@ -212,16 +216,55 @@ impl App {
             p.line = x.gamma_multiply(0.6);
             p.line_strong = x;
         }
+        p.solid = p.solid.lerp_to_gamma(p.card, 0.5);
+        // tapeta za oknom: pozadie a karta sú priesvitné (--base-alpha, --card v Electron Fluxe)
+        if self.wall_on() {
+            let alpha = (self.get("cardAlpha").as_f64().unwrap_or(74.0) / 100.0).clamp(0.3, 1.0) as f32;
+            let base_a = if p.dark { 0.45 } else { 0.5 };
+            let card_a = if (alpha - 0.74).abs() > 0.001 {
+                alpha
+            } else if p.dark {
+                0.86
+            } else {
+                0.84
+            };
+            p.base = p.base.gamma_multiply(base_a);
+            p.card = p.card.gamma_multiply(card_a);
+        }
         p
+    }
+
+    // tapeta za oknom: materiál nie je „none“ a efekty sú zapnuté (optFx)
+    fn wall_on(&self) -> bool {
+        self.get("material").as_str() != Some("none") && self.core.setting("optFx").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true))
+    }
+
+    fn wall_source(&self) -> Option<std::path::PathBuf> {
+        if !self.wall_on() {
+            return None;
+        }
+        let bg = self.core.setting("bg");
+        if bg["type"].as_str() == Some("image") {
+            if let Some(f) = bg["file"].as_str() {
+                let p = settings::user_data().join("backgrounds").join(f);
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+        crate::wall::desktop_wallpaper()
     }
 
     // znova načíta vzhľad z nastavení (farby, veľkosť, hustota, plynulé posúvanie, písmo výstupu)
     fn apply_look(&mut self, ctx: &egui::Context) {
+        let src = self.wall_source();
+        self.wall.want(ctx, src);
         self.pal = self.palette();
         theme::apply(ctx, &self.pal);
         ctx.set_zoom_factor((self.get("uiZoom").as_f64().unwrap_or(100.0) / 100.0).clamp(0.8, 1.4) as f32);
         widgets::set_dense(self.get("density").as_str() == Some("compact"));
         let inertia = self.get("inertia").as_bool() != Some(false) && self.anim_on();
+        self.smooth.on = inertia;
         ctx.all_styles_mut(|s| {
             s.scroll_animation = if inertia { egui::style::ScrollAnimation::new(1600.0, egui::Rangef::new(0.12, 0.3)) } else { egui::style::ScrollAnimation::none() };
             s.animation_time = if self.anim_on() { 0.12 } else { 0.0 };
@@ -613,7 +656,13 @@ impl App {
                 let mut rename: Option<(String, String)> = None;
                 let hidden = self.projects.iter().filter(|pr| pr["hidden"].as_bool() == Some(true)).count();
                 let projects = self.projects.clone();
-                egui::ScrollArea::vertical().id_salt("projects").max_height(200.0).auto_shrink([false, true]).show(ui, |ui| {
+                let sk = egui::Id::new("sa-projects");
+                let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
+                let mut sa = egui::ScrollArea::vertical().id_salt("projects").max_height(200.0).auto_shrink([false, true]);
+                if let Some(o) = off {
+                    sa = sa.vertical_scroll_offset(o);
+                }
+                let sout = sa.show(ui, |ui| {
                     for pr in &projects {
                         if pr["hidden"].as_bool() == Some(true) && !self.show_hidden {
                             continue;
@@ -649,6 +698,7 @@ impl App {
                         }
                     }
                 });
+                self.smooth.end(sk, &sout);
                 if let Some((r, d, pinned, hid)) = menu_for {
                     self.project_menu(&r, &d, pinned, hid);
                 }
@@ -698,7 +748,13 @@ impl App {
                         }
                     }
                     let mut open_f = None;
-                    egui::ScrollArea::vertical().id_salt("loose").max_height(170.0).auto_shrink([false, true]).show(ui, |ui| {
+                    let sk = egui::Id::new("sa-loose");
+                    let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
+                    let mut sa = egui::ScrollArea::vertical().id_salt("loose").max_height(170.0).auto_shrink([false, true]);
+                    if let Some(o) = off {
+                        sa = sa.vertical_scroll_offset(o);
+                    }
+                    let sout = sa.show(ui, |ui| {
                         for f in &self.recent_files {
                             let sel = !self.home && self.tabs.get(self.active).map(|t| &t.path == f).unwrap_or(false);
                             if widgets::row(ui, sel, 10.0, Lead::File(&widgets::file_name(f)), &widgets::file_name(f), Some(&short_dir(f)), false, &p).on_hover_text(f).clicked() {
@@ -706,6 +762,7 @@ impl App {
                             }
                         }
                     });
+                    self.smooth.end(sk, &sout);
                     if let Some(f) = open_f {
                         self.open_file(&f);
                     }
@@ -732,9 +789,16 @@ impl App {
                     });
                     ui.add_space(4.0);
                     let h = (ui.available_height() - footer_h).max(40.0);
-                    egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]).show(ui, |ui| {
+                    let sk = egui::Id::new("sa-tree");
+                    let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
+                    let mut sa = egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]);
+                    if let Some(o) = off {
+                        sa = sa.vertical_scroll_offset(o);
+                    }
+                    let sout = sa.show(ui, |ui| {
                         self.tree_ui(ui, &w, 0);
                     });
+                    self.smooth.end(sk, &sout);
                 } else {
                     // bez priečinka: „No folder is open.“ + Open folder
                     widgets::separator(ui, &p);
@@ -932,6 +996,23 @@ impl App {
         let mut act = None;
         let tabs_clip = Rect::from_x_y_ranges(x..=rx, r.y_range());
         let painter = ui.painter().with_clip_rect(tabs_clip);
+        // zvýraznenie aktívnej karty sa presúva plynulo (slideIndicator v Electron Fluxe)
+        {
+            let mut xx = x;
+            for (i, t) in self.tabs.iter().enumerate() {
+                let w = (widgets::text_w(ui, &t.name(), theme::ui(13.0)) + 16.0 + 7.0 + 20.0 + 16.0).min(220.0);
+                if i == self.active && !self.home {
+                    let t_anim = if self.anim_on() { 0.18 } else { 0.0 };
+                    let ax = ui.ctx().animate_value_with_time(egui::Id::new("tab-ind-x"), xx, t_anim);
+                    let aw = ui.ctx().animate_value_with_time(egui::Id::new("tab-ind-w"), w, t_anim);
+                    let tr = Rect::from_min_size(pos2(ax, cy - 15.0), vec2(aw, 30.0));
+                    painter.add(egui::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(if p.dark { 70 } else { 18 }) }.as_shape(tr, CornerRadius::same(9)));
+                    painter.rect_filled(tr, CornerRadius::same(9), p.card);
+                    painter.rect_stroke(tr, CornerRadius::same(9), Stroke::new(1.0, p.line), StrokeKind::Inside);
+                }
+                xx += w + 4.0;
+            }
+        }
         for (i, t) in self.tabs.iter().enumerate() {
             let sel = i == self.active && !self.home;
             let name = t.name();
@@ -941,12 +1022,9 @@ impl App {
                 break;
             }
             let resp = ui.interact(tr.intersect(tabs_clip), ui.id().with(("tab", i)), Sense::click());
-            if sel {
-                painter.add(egui::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(if p.dark { 70 } else { 18 }) }.as_shape(tr, CornerRadius::same(9)));
-                painter.rect_filled(tr, CornerRadius::same(9), p.card);
-                painter.rect_stroke(tr, CornerRadius::same(9), Stroke::new(1.0, p.line), StrokeKind::Inside);
-            } else if resp.hovered() {
-                painter.rect_filled(tr, CornerRadius::same(9), p.hover);
+            let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered() && !sel, 0.12);
+            if hk > 0.0 {
+                painter.rect_filled(tr, CornerRadius::same(9), p.hover.gamma_multiply(hk));
             }
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tabs_clip));
             child.set_clip_rect(tabs_clip);
@@ -1057,7 +1135,9 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(ed_rect));
         child.set_clip_rect(ed_rect);
         let mut sa = if wrap { egui::ScrollArea::vertical() } else { egui::ScrollArea::both() }.auto_shrink(false).id_salt(&tab.path);
-        if let Some(y) = self.scroll_to.take() {
+        // plynulé posúvanie (koliesko aj skoky z minimapy)
+        let sk = egui::Id::new(("sa-ed", tab.path.clone()));
+        if let Some(y) = self.smooth.begin(&child.ctx().clone(), sk, child.layer_id(), self.scroll_to.take()) {
             sa = sa.vertical_scroll_offset(y.max(0.0));
         }
         let out = sa.show(&mut child, |ui| {
@@ -1177,6 +1257,7 @@ impl App {
             });
             ui.add_space(PAD);
         });
+        self.smooth.end(sk, &out);
         if edited {
             self.last_edit = Some(Instant::now());
         }
@@ -1234,16 +1315,36 @@ impl App {
         let tab = &self.tabs[self.active];
         let job = self.code.highlight(ui.ctx(), ui.style(), &tab.text, &lang);
         let painter = ui.painter().with_clip_rect(mini);
+        // minimapa ako v Monacu: riadok = 2 px, znak = 1 px; pri dlhom súbore sa posúva spolu s editorom
+        let ppp = ui.ctx().pixels_per_point();
+        let snap = |v: f32| (v * ppp).round() / ppp;
+        let total = tab.text.lines().count().max(1);
+        let pitch = 2.0f32;
+        let view_h = out.inner_rect.height();
+        let content_h = (out.content_size.y - view_h).max(1.0);
+        let frac = (out.state.offset.y / content_h).clamp(0.0, 1.0);
+        let mm_h = mini.height() - 8.0;
+        let mm_off = ((total as f32 * pitch - mm_h).max(0.0) * frac).round();
+        let first = (mm_off / pitch) as usize;
+        let max_lines = first + (mm_h / pitch) as usize + 1;
+        let (x0, y0) = (mini.left() + 10.0, mini.top() + 4.0 - mm_off);
+        let max_cols = ((mini_w - 18.0).max(10.0)) as usize;
         let (mut line, mut col) = (0usize, 0usize);
-        let (x0, y0) = (mini.left() + 8.0, mini.top() + 4.0);
-        let max_lines = ((mini.height() - 8.0) / 2.0) as usize;
+        let draw = |line: usize, st: usize, end: usize, color: Color32| {
+            if line < first || st >= max_cols {
+                return;
+            }
+            let end = end.min(max_cols);
+            let y = snap(y0 + line as f32 * pitch);
+            painter.rect_filled(Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((end - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))), 0.0, color);
+        };
         'outer: for s in &job.sections {
-            let color = s.format.color.gamma_multiply(0.75);
+            let color = s.format.color.gamma_multiply(0.7);
             let mut run: Option<usize> = None;
             for ch in job.text[s.byte_range.start.0..s.byte_range.end.0].chars() {
                 if ch == '\n' || ch == ' ' || ch == '\t' {
                     if let Some(st) = run.take() {
-                        painter.rect_filled(Rect::from_min_size(pos2(x0 + st as f32, y0 + line as f32 * 2.0), vec2((col - st) as f32, 1.6)), 0.0, color);
+                        draw(line, st, col, color);
                     }
                     if ch == '\n' {
                         line += 1;
@@ -1262,20 +1363,20 @@ impl App {
                 col += 1;
             }
             if let Some(st) = run {
-                painter.rect_filled(Rect::from_min_size(pos2(x0 + st as f32, y0 + line as f32 * 2.0), vec2((col - st) as f32, 1.6)), 0.0, color);
+                draw(line, st, col, color);
             }
         }
         // posuvník minimapy: viditeľná časť; klik/ťahanie posúva editor
         let mr = ui.interact(mini, ui.id().with("minimap"), Sense::click_and_drag());
-        let view_h = out.inner_rect.height();
         let top_line = ((out.state.offset.y - PAD).max(0.0)) / lh;
-        let slider = Rect::from_min_size(pos2(mini.left() + 1.0, y0 + top_line * 2.0), vec2(mini_w - 1.0, view_h / lh * 2.0));
-        if mr.hovered() || mr.dragged() {
-            painter.rect_filled(slider, 0.0, p.hover);
+        let slider = Rect::from_min_size(pos2(mini.left() + 1.0, y0 + top_line * pitch), vec2(mini_w - 1.0, view_h / lh * pitch));
+        let hk = ui.ctx().animate_bool_with_time(ui.id().with("mm-h"), mr.hovered() || mr.dragged(), 0.15);
+        if hk > 0.0 {
+            painter.rect_filled(slider, 0.0, p.hover.gamma_multiply(hk));
         }
         if let Some(pos) = mr.interact_pointer_pos() {
             if mr.clicked() || mr.dragged() {
-                let target_line = (pos.y - y0) / 2.0;
+                let target_line = (pos.y - y0) / pitch;
                 self.scroll_to = Some(target_line * lh + PAD - view_h / 2.0);
                 ui.ctx().request_repaint();
             }
@@ -1323,7 +1424,13 @@ impl App {
         let summary = self.summaries.get(&ws).cloned().unwrap_or(Value::Null);
         let langs: Vec<String> = summary["langs"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
         let items = self.list(&ws);
-        egui::ScrollArea::vertical().id_salt("project-page").auto_shrink(false).show(&mut child, |ui| {
+        let sk = egui::Id::new("sa-project-page");
+        let off = self.smooth.begin(&child.ctx().clone(), sk, child.layer_id(), None);
+        let mut sa = egui::ScrollArea::vertical().id_salt("project-page").auto_shrink(false);
+        if let Some(o) = off {
+            sa = sa.vertical_scroll_offset(o);
+        }
+        let sout = sa.show(&mut child, |ui| {
             let full = ui.available_width();
             let inner_w = (full - 60.0).min(960.0);
             let left = rect.left() + (full - inner_w) / 2.0;
@@ -1390,6 +1497,13 @@ impl App {
             let tw = (inner_w - 4.0 * 11.0) / 5.0;
             for (i, (ic, val, label)) in tiles.iter().enumerate() {
                 let t = Rect::from_min_size(pos2(left + i as f32 * (tw + 11.0), row.top()), vec2(tw, 83.0));
+                // dlaždica sa pri prejdení myšou jemne nadvihne
+                let tresp = ui.interact(t, ui.id().with(("tile", i)), Sense::hover());
+                let hk = ui.ctx().animate_bool_with_time(tresp.id, tresp.hovered(), 0.15);
+                let t = t.translate(vec2(0.0, -2.0 * hk));
+                if hk > 0.0 {
+                    ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha((60.0 * hk) as u8) }.as_shape(t, CornerRadius::same(12)));
+                }
                 card(ui, t, 12, &p);
                 let ib = Rect::from_min_size(pos2(t.right() - 40.0, t.top() + 12.0), vec2(28.0, 28.0));
                 ui.painter().rect_filled(ib, CornerRadius::same(8), p.active);
@@ -1415,8 +1529,9 @@ impl App {
                 for (name, path) in files {
                     let r = Rect::from_min_size(pos2(fc.left() + 16.0, y), vec2(lw - 32.0, 32.0));
                     let resp = ui.interact(r, ui.id().with(("pf", path)), Sense::click());
-                    if resp.hovered() {
-                        ui.painter().rect_filled(r, CornerRadius::same(8), p.hover);
+                    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+                    if hk > 0.0 {
+                        ui.painter().rect_filled(r, CornerRadius::same(8), p.hover.gamma_multiply(hk));
                     }
                     widgets::file_icon(ui, Rect::from_min_size(pos2(r.left() + 10.0, r.center().y - 8.0), vec2(16.0, 16.0)), name);
                     ui.painter().text(pos2(r.left() + 36.0, r.center().y), Align2::LEFT_CENTER, name, theme::bold(13.0), p.text);
@@ -1504,6 +1619,7 @@ impl App {
             }
             ui.add_space(40.0);
         });
+        self.smooth.end(sk, &sout);
     }
 
     // ---------- karta: Výstup / Terminál ----------
@@ -1515,12 +1631,13 @@ impl App {
             _ => ui.painter().hline(rect.x_range(), rect.top(), Stroke::new(1.0, p.line)),
         };
         // pilulky Output | Terminal
-        let group = Rect::from_min_size(pos2(rect.left() + 15.0, rect.top() + 7.0), vec2(150.0, 24.0));
+        let gw = 4.0 + [t("Output"), t("Terminal")].iter().map(|l| widgets::text_w(ui, l, theme::bold(12.5)) + 22.0).sum::<f32>();
+        let group = Rect::from_min_size(pos2(rect.left() + 15.0, rect.top() + 7.0), vec2(gw, 26.0));
         ui.painter().rect_filled(group, CornerRadius::same(8), p.card2);
         let mut x = group.left() + 2.0;
         for (b, label) in [(Bottom::Output, "Output"), (Bottom::Terminal, "Terminal")] {
-            let w = widgets::text_w(ui, &t(label), theme::bold(12.5)) + 20.0;
-            let r = Rect::from_min_size(pos2(x, group.top() + 2.0), vec2(w, 20.0));
+            let w = widgets::text_w(ui, &t(label), theme::bold(12.5)) + 22.0;
+            let r = Rect::from_min_size(pos2(x, group.top() + 2.0), vec2(w, 22.0));
             let resp = ui.interact(r, ui.id().with(label), Sense::click());
             let sel = self.bottom == b;
             if sel {
@@ -1833,6 +1950,8 @@ impl eframe::App for App {
         let ctx = &ctx;
         self.events();
         self.run_tests(ctx);
+        // tapeta pod všetkým (panely sú nad ňou priesvitné)
+        self.wall.paint(ctx);
         // pamäť na pozadí (trimMemory, predvolene zapnuté)
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
         if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {
@@ -1937,7 +2056,7 @@ impl eframe::App for App {
                 self.project_page(&mut card_ui, main);
             }
             if self.anim_on() {
-                let k = ((now - self.switched) / 0.16).clamp(0.0, 1.0) as f32;
+                let k = ((now - self.switched) / 0.24).clamp(0.0, 1.0) as f32;
                 if k < 1.0 {
                     card_ui.painter().rect_filled(main.shrink(1.0), 0.0, p.card.gamma_multiply(1.0 - k * k));
                     ctx.request_repaint();

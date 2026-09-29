@@ -108,16 +108,12 @@ pub fn section(ui: &mut egui::Ui, title: &str, action: Option<&str>, p: &Pal) ->
 
 pub fn icon_button_at(ui: &mut egui::Ui, r: Rect, name: &str, size: f32, p: &Pal, enabled: bool) -> Response {
     let resp = ui.interact(r, ui.id().with(("ib", name, r.min.x as i32, r.min.y as i32)), if enabled { Sense::click() } else { Sense::hover() });
-    if enabled && resp.hovered() {
-        ui.painter().rect_filled(r, CornerRadius::same(8), p.hover);
+    // plynulé zvýraznenie pri prejdení myšou
+    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), enabled && resp.hovered(), ui.style().animation_time);
+    if hk > 0.0 {
+        ui.painter().rect_filled(r, CornerRadius::same(8), p.hover.gamma_multiply(hk));
     }
-    let c = if !enabled {
-        p.text3.gamma_multiply(0.55)
-    } else if resp.hovered() {
-        p.text
-    } else {
-        p.text2
-    };
+    let c = if !enabled { p.text3.gamma_multiply(0.55) } else { p.text2.lerp_to_gamma(p.text, hk) };
     icon_at(ui, r.center(), size, name, c);
     if enabled {
         resp.on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -217,16 +213,9 @@ pub fn button(ui: &mut egui::Ui, lead: Option<&str>, label: &str, fill: Color32,
     let tw = text_w(ui, label, font.clone());
     let w = tw + if lead.is_some() { 46.0 } else { 26.0 };
     let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
-    let hovered = resp.hovered();
-    let bg = if hovered {
-        if fill == Color32::TRANSPARENT {
-            p.hover
-        } else {
-            fill.gamma_multiply(1.12)
-        }
-    } else {
-        fill
-    };
+    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), ui.style().animation_time);
+    let hover_fill = if fill == Color32::TRANSPARENT || fill == p.card2 { p.active } else { fill.lerp_to_gamma(Color32::WHITE, 0.1) };
+    let bg = fill.lerp_to_gamma(hover_fill, hk);
     ui.painter().rect_filled(r, CornerRadius::same(10), bg);
     if fill == Color32::TRANSPARENT || fill == p.hover || fill == p.card2 {
         ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
@@ -242,4 +231,63 @@ pub fn button(ui: &mut egui::Ui, lead: Option<&str>, label: &str, fill: Color32,
 
 pub fn file_name(path: &str) -> String {
     Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string())
+}
+
+// Rozbaľovací zoznam ako .s-row select (rámik, šípka dole, zoznam pod ním). Vráti vybraný index.
+pub fn select(ui: &mut egui::Ui, id: egui::Id, current: &str, options: &[String], width: f32, p: &Pal) -> Option<usize> {
+    let (r, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
+    let hk = ui.ctx().animate_bool_with_time(id.with("h"), resp.hovered(), ui.style().animation_time);
+    ui.painter().rect_filled(r, CornerRadius::same(9), p.card2.lerp_to_gamma(p.hover, hk));
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&resp));
+    ui.painter().rect_stroke(r, CornerRadius::same(9), Stroke::new(if open { 2.0 } else { 1.0 }, if open { p.accent } else { p.line_strong }), StrokeKind::Inside);
+    text(ui, pos2(r.left() + 12.0, r.center().y), Align2::LEFT_CENTER, current, theme::ui(13.0), p.text, width - 40.0);
+    let c = pos2(r.right() - 16.0, r.center().y);
+    let pts = vec![pos2(c.x - 4.0, c.y - 2.0), pos2(c.x, c.y + 2.0), pos2(c.x + 4.0, c.y - 2.0)];
+    ui.painter().line(pts, Stroke::new(1.6, p.text2));
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let mut pick = None;
+    egui::Popup::menu(&resp).width(width).show(|ui| {
+        ui.set_min_width(width - 12.0);
+        for (i, o) in options.iter().enumerate() {
+            let (rr, rs) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
+            let on = o == current;
+            if rs.hovered() || on {
+                ui.painter().rect_filled(rr, CornerRadius::same(6), if on { p.active } else { p.hover });
+            }
+            if on {
+                icon_at(ui, pos2(rr.right() - 14.0, rr.center().y), 12.0, "check", p.text);
+            }
+            text(ui, pos2(rr.left() + 10.0, rr.center().y), Align2::LEFT_CENTER, o, theme::ui(13.0), p.text, rr.width() - 34.0);
+            if rs.clicked() {
+                pick = Some(i);
+            }
+        }
+    });
+    pick
+}
+
+// Posuvník ako input[type=range] vo Fluxe: tenká dráha, vyplnená časť vo farbe zvýraznenia, koliesko.
+// Vráti (zmenené počas ťahania, pustené).
+pub fn slider(ui: &mut egui::Ui, id: egui::Id, v: &mut f64, min: f64, max: f64, step: f64, width: f32, p: &Pal) -> (bool, bool) {
+    let (r, resp) = ui.allocate_exact_size(vec2(width, 24.0), Sense::click_and_drag());
+    let track = Rect::from_min_max(pos2(r.left() + 8.0, r.center().y - 2.0), pos2(r.right() - 8.0, r.center().y + 2.0));
+    let mut changed = false;
+    if let Some(pos) = resp.interact_pointer_pos() {
+        if resp.dragged() || resp.clicked() || resp.drag_started() {
+            let k = ((pos.x - track.left()) / track.width()).clamp(0.0, 1.0) as f64;
+            let nv = ((min + k * (max - min)) / step).round() * step;
+            if (nv - *v).abs() > f64::EPSILON {
+                *v = nv.clamp(min, max);
+                changed = true;
+            }
+        }
+    }
+    let k = ((*v - min) / (max - min)).clamp(0.0, 1.0) as f32;
+    let x = egui::lerp(track.left()..=track.right(), k);
+    ui.painter().rect_filled(track, CornerRadius::same(2), p.active);
+    ui.painter().rect_filled(Rect::from_min_max(track.min, pos2(x, track.bottom())), CornerRadius::same(2), p.accent);
+    let hk = ui.ctx().animate_bool_with_time(id.with("h"), resp.hovered() || resp.dragged(), ui.style().animation_time);
+    ui.painter().circle_filled(pos2(x, r.center().y), 7.0 + hk * 1.5, p.accent);
+    ui.painter().circle_stroke(pos2(x, r.center().y), 7.0 + hk * 1.5, Stroke::new(2.0, p.card));
+    (changed, resp.drag_stopped() || resp.clicked())
 }

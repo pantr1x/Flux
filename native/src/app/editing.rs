@@ -196,7 +196,7 @@ impl App {
         let h = if f.replace { 70.0 } else { 38.0 };
         let r = Rect::from_min_size(pos2(ed.right() - w - 18.0, ed.top() + 6.0), vec2(w, h));
         ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: egui::Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
-        ui.painter().rect_filled(r, CornerRadius::same(10), p.card);
+        ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
         ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
         let _ = ui.interact(r, ui.id().with("find-bg"), Sense::click());
         let mut act = None;

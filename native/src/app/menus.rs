@@ -85,10 +85,12 @@ fn fuzzy(hay: &str, q: &str) -> Option<i32> {
 
 // položka ponuky: ikona, text, skratka vpravo, fajka
 pub fn item(ui: &mut egui::Ui, icon: Option<&str>, label: &str, key: &str, checked: bool, enabled: bool, p: &crate::theme::Pal) -> Response {
-    let w = ui.available_width().max(240.0);
+    // šírka podľa ponuky (nie celého okna)
+    let w = ui.min_rect().width().max(ui.spacing().menu_width.min(260.0)).max(230.0);
     let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), if enabled { Sense::click() } else { Sense::hover() });
-    if enabled && resp.hovered() {
-        ui.painter().rect_filled(r, CornerRadius::same(6), p.hover);
+    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), enabled && resp.hovered(), 0.1);
+    if hk > 0.0 {
+        ui.painter().rect_filled(r, CornerRadius::same(6), p.hover.gamma_multiply(hk));
     }
     let c = if enabled { p.text } else { p.text3.gamma_multiply(0.6) };
     if checked {
@@ -552,7 +554,7 @@ impl App {
         let h = 52.0 + rows as f32 * 40.0 + 10.0;
         let card = Rect::from_min_size(pos2(full.center().x - w / 2.0, full.top() + 56.0 - (1.0 - k) * 10.0), vec2(w, h));
         ui.painter().add(egui::Shadow { offset: [0, 14], blur: 40, spread: 0, color: Color32::from_black_alpha((110.0 * k) as u8) }.as_shape(card, CornerRadius::same(14)));
-        ui.painter().rect_filled(card, CornerRadius::same(14), p.card);
+        ui.painter().rect_filled(card, CornerRadius::same(14), p.solid);
         ui.painter().rect_stroke(card, CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
         widgets::icon_at(ui, pos2(card.left() + 22.0, card.top() + 26.0), 16.0, "search", p.text3);
         let hint = match pal.mode {
@@ -572,15 +574,24 @@ impl App {
         let mut lc = ui.new_child(egui::UiBuilder::new().max_rect(list));
         lc.set_clip_rect(list);
         let sel = pal.sel;
-        egui::ScrollArea::vertical().id_salt("pal-list").auto_shrink(false).show(&mut lc, |ui| {
+        let sk = egui::Id::new("sa-palette");
+        let off = self.smooth.begin(&ctx, sk, lc.layer_id(), None);
+        let mut sa = egui::ScrollArea::vertical().id_salt("pal-list").auto_shrink(false);
+        if let Some(o) = off {
+            sa = sa.vertical_scroll_offset(o);
+        }
+        let sout = sa.show(&mut lc, |ui| {
             if res.is_empty() {
                 ui.add_space(10.0);
                 ui.label(egui::RichText::new(t("No results")).color(p.text3));
             }
             for (i, (_, icon, label, detail, action)) in res.iter().enumerate() {
                 let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
-                if i == sel || resp.hovered() {
-                    ui.painter().rect_filled(r, CornerRadius::same(9), if i == sel { p.active } else { p.hover });
+                let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.1);
+                if i == sel {
+                    ui.painter().rect_filled(r, CornerRadius::same(9), p.active);
+                } else if hk > 0.0 {
+                    ui.painter().rect_filled(r, CornerRadius::same(9), p.hover.gamma_multiply(hk));
                 }
                 if i == sel && (up || down) {
                     ui.scroll_to_rect(r, None);
@@ -598,6 +609,7 @@ impl App {
                 }
             }
         });
+        self.smooth.end(sk, &sout);
         let card_clicked_outside = bg.clicked() && !card.contains(bg.interact_pointer_pos().unwrap_or_default());
         if esc || card_clicked_outside {
             self.palette = None;
@@ -629,7 +641,7 @@ impl App {
         let h = g.size().y + 100.0;
         let card = Rect::from_center_size(full.center(), vec2(w, h));
         ui.painter().add(egui::Shadow { offset: [0, 14], blur: 40, spread: 0, color: Color32::from_black_alpha(110) }.as_shape(card, CornerRadius::same(14)));
-        ui.painter().rect_filled(card, CornerRadius::same(14), p.card);
+        ui.painter().rect_filled(card, CornerRadius::same(14), p.solid);
         ui.painter().rect_stroke(card, CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
         ui.painter().galley(card.min + vec2(24.0, 24.0), g, p.text);
         let mut b = ui.new_child(

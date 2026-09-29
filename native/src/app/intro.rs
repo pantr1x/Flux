@@ -49,11 +49,14 @@ pub struct Intro {
     pub step: usize,
     name: String,
     more: bool,
+    shown: usize, // krok, ktorý je práve na obrazovke (na animáciu prechodu)
+    changed: f64, // kedy sa krok zmenil
+    dir: f32,     // smer prechodu: 1 dopredu, -1 späť
 }
 
 impl Intro {
     pub fn new(name: &str) -> Self {
-        Intro { step: 0, name: name.to_string(), more: false }
+        Intro { step: 0, name: name.to_string(), more: false, shown: 0, changed: -1.0, dir: 1.0 }
     }
 }
 
@@ -68,10 +71,43 @@ impl App {
         let p = self.pal;
         let ctx = ui.ctx().clone();
         ui.painter().rect_filled(rect, 0.0, p.base);
-        // jemná žiara v pozadí (ako radial-gradient v .ob)
-        glow(ui, rect.left_top() + vec2(rect.width() * 0.2, rect.height() * 0.25), rect.width() * 0.45, Color32::from_white_alpha(if p.dark { 9 } else { 40 }));
-        glow(ui, rect.left_top() + vec2(rect.width() * 0.62, rect.height() * 0.95), rect.width() * 0.35, Color32::from_white_alpha(if p.dark { 5 } else { 25 }));
+        let anim = self.anim_on();
+        let now = ctx.input(|i| i.time);
+        // pohyblivé pozadie: mäkké žiary vo farbe zvýraznenia pomaly krúžia (ako živé .ob pozadie)
+        let tt = if anim { now as f32 } else { 0.0 };
+        let tint = |a: u8| if p.accent == p.text || p.accent.r() == p.accent.g() { Color32::from_white_alpha(a) } else { Color32::from_rgba_unmultiplied(p.accent.r(), p.accent.g(), p.accent.b(), a) };
+        let (w, h) = (rect.width(), rect.height());
+        glow(ui, rect.left_top() + vec2(w * (0.22 + 0.06 * (tt * 0.13).sin()), h * (0.28 + 0.07 * (tt * 0.11).cos())), w * 0.46, tint(if p.dark { 16 } else { 50 }));
+        glow(ui, rect.left_top() + vec2(w * (0.74 + 0.05 * (tt * 0.09).cos()), h * (0.78 + 0.06 * (tt * 0.12).sin())), w * 0.4, tint(if p.dark { 11 } else { 38 }));
+        glow(ui, rect.left_top() + vec2(w * (0.55 + 0.08 * (tt * 0.07).sin()), h * (0.12 + 0.05 * (tt * 0.1).sin())), w * 0.28, Color32::from_white_alpha(if p.dark { 7 } else { 30 }));
+        // jemná bodková mriežka
+        let gap = 28.0;
+        let mut y = rect.top() + (tt * 3.0) % gap;
+        while y < rect.bottom() {
+            let mut x = rect.left() + 10.0;
+            while x < rect.right() {
+                ui.painter().circle_filled(pos2(x, y), 0.9, if p.dark { Color32::from_white_alpha(10) } else { Color32::from_black_alpha(14) });
+                x += gap;
+            }
+            y += gap;
+        }
+        if anim {
+            ctx.request_repaint_after(std::time::Duration::from_millis(33));
+        }
         let Some(intro) = self.intro.as_mut() else { return };
+        // prechod medzi krokmi: nový krok sa vysunie zboku a zosilnie
+        if intro.shown != intro.step || intro.changed < 0.0 {
+            intro.dir = if intro.step >= intro.shown { 1.0 } else { -1.0 };
+            intro.shown = intro.step;
+            intro.changed = now;
+        }
+        let k = if anim { ((now - intro.changed) / 0.35).clamp(0.0, 1.0) as f32 } else { 1.0 };
+        let ease = 1.0 - (1.0 - k).powi(3);
+        if k < 1.0 {
+            ctx.request_repaint();
+        }
+        ui.set_opacity(ease);
+        let rect = rect.translate(vec2((1.0 - ease) * 36.0 * intro.dir, 0.0));
         let step = STEPS[intro.step];
         let cx = rect.center().x;
         let mut next = false;
@@ -80,7 +116,7 @@ impl App {
         match step {
             "splash" | "done" => {
                 let top = rect.center().y - 140.0;
-                logo(ui, Rect::from_center_size(pos2(cx, top + 40.0), vec2(82.0, 82.0)));
+                logo(ui, Rect::from_center_size(pos2(cx, top + 40.0), vec2(82.0, 82.0)), ease);
                 if step == "splash" {
                     ui.painter().text(pos2(cx, top + 122.0), Align2::CENTER_CENTER, "flux", theme::bold(34.0), p.text);
                     ui.painter().text(pos2(cx, top + 159.0), Align2::CENTER_CENTER, t("Code. Run. Create."), theme::ui(14.5), p.text2);
@@ -204,7 +240,7 @@ impl App {
             let r = Rect::from_min_size(body.min + vec2((i % 3) as f32 * (cw + 8.0), (i / 3) as f32 * (ch + gap)), vec2(cw, ch));
             let resp = ui.interact(r, ui.id().with(("lang", code)), Sense::click());
             let on = code == cur;
-            ui.painter().rect_filled(r, CornerRadius::same(10), if resp.hovered() { p.hover } else { p.card2 });
+            ui.painter().rect_filled(r, CornerRadius::same(10), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
             ui.painter().rect_stroke(r, CornerRadius::same(10), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
             if let Some(svg) = crate::gen::flag(code) {
                 egui::Image::from_bytes(format!("bytes://flag/{code}.svg"), svg.as_bytes()).paint_at(ui, Rect::from_min_size(pos2(r.left() + 10.0, r.center().y - 7.0), vec2(21.0, 14.0)));
@@ -237,7 +273,7 @@ impl App {
             let r = Rect::from_min_size(body.min + vec2((i % cols) as f32 * (cw + 9.0), (i / cols) as f32 * (ch + 9.0)), vec2(cw, ch));
             let resp = ui.interact(r, ui.id().with(("code", *id)), Sense::click());
             let on = chosen.iter().any(|x| x == id);
-            ui.painter().rect_filled(r, CornerRadius::same(12), if resp.hovered() { p.hover } else { p.card2 });
+            ui.painter().rect_filled(r, CornerRadius::same(12), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
             ui.painter().rect_stroke(r, CornerRadius::same(12), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
             let ic = Rect::from_center_size(pos2(r.center().x, r.top() + if more { 28.0 } else { 38.0 }), vec2(44.0, 44.0));
             ui.painter().rect_filled(ic, CornerRadius::same(10), p.hover);
@@ -314,7 +350,7 @@ impl App {
             let r = Rect::from_min_size(pos2(up.left() + 12.0 + i as f32 * (ow + 10.0), up.top() + 60.0), vec2(ow, 44.0));
             let resp = ui.interact(r, ui.id().with(("upd", i)), Sense::click());
             let on = auto == *val;
-            ui.painter().rect_filled(r, CornerRadius::same(8), if resp.hovered() { p.hover } else { p.card2 });
+            ui.painter().rect_filled(r, CornerRadius::same(8), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
             ui.painter().rect_stroke(r, CornerRadius::same(8), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
             let c = pos2(r.left() + 16.0, r.top() + 15.0);
             ui.painter().circle_stroke(c, 5.5, Stroke::new(1.2, if on { p.text } else { p.text3 }));
@@ -339,7 +375,7 @@ impl App {
             let r = Rect::from_min_size(body.min + vec2((i % 2) as f32 * (tw + 8.0), (i / 2) as f32 * (th + 8.0)), vec2(tw, th));
             let resp = ui.interact(r, ui.id().with(("look", *id)), Sense::click());
             let on = *id == cur;
-            ui.painter().rect_filled(r, CornerRadius::same(10), if resp.hovered() { p.hover } else { p.card2 });
+            ui.painter().rect_filled(r, CornerRadius::same(10), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
             ui.painter().rect_stroke(r, CornerRadius::same(10), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
             let (_, c, _) = crate::code::theme_of(id);
             for (k, idx) in [2usize, 7, 4, 5, 6].iter().enumerate() {
@@ -421,11 +457,25 @@ impl App {
 }
 
 // veľké logo (LOGO z onboarding.js)
-fn logo(ui: &egui::Ui, r: Rect) {
+// veľké logo: pri objavení „vyskočí“ a znak </> sa nakreslí zľava doprava (.ob-draw)
+fn logo(ui: &egui::Ui, r: Rect, k: f32) {
+    let s = 0.86 + 0.14 * k;
+    let r = Rect::from_center_size(r.center(), r.size() * s);
     ui.painter().add(egui::Shadow { offset: [0, 10], blur: 30, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(22)));
     ui.painter().rect_filled(r, CornerRadius::same(22), Color32::from_rgb(0x11, 0x11, 0x14));
     ui.painter().rect_stroke(r, CornerRadius::same(22), Stroke::new(1.0, Color32::from_white_alpha(36)), StrokeKind::Inside);
-    widgets::icon_at(ui, r.center(), r.width() * 0.62, "code", Color32::WHITE);
+    let ir = Rect::from_center_size(r.center(), egui::Vec2::splat(r.width() * 0.62));
+    let reveal = Rect::from_min_max(ir.min, pos2(egui::lerp(ir.left()..=ir.right(), k), ir.bottom()));
+    // odhalenie cez orezanie maliara
+    let painter = ui.painter().with_clip_rect(reveal.expand(1.0));
+    if let Some(svg) = crate::gen::line("code") {
+        let img = egui::Image::from_bytes("bytes://li/code.svg", svg.as_bytes()).tint(Color32::WHITE);
+        if let Some(tex) = img.load_for_size(ui.ctx(), ir.size()).ok().and_then(|p| p.texture_id()) {
+            painter.image(tex, ir, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        } else {
+            ui.ctx().request_repaint();
+        }
+    }
 }
 
 fn primary(ui: &mut egui::Ui, r: Rect, label: &str, p: &crate::theme::Pal) -> bool {

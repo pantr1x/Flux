@@ -6,8 +6,10 @@ mod code;
 mod gen;
 mod i18n;
 mod mem;
+mod smooth;
 mod term;
 mod theme;
+mod wall;
 mod widgets;
 
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {

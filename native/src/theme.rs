@@ -12,6 +12,7 @@ pub struct Pal {
     pub dark: bool,
     pub base: Color32,        // --base: okolie karty
     pub card: Color32,        // --card: editor a karta
+    pub solid: Color32,       // --card-solid: okná nad všetkým (nastavenia, hľadanie)
     pub card2: Color32,       // --card-2: jemne odlíšené plochy na karte
     pub line: Color32,        // --line
     pub line_strong: Color32, // --line-strong
@@ -77,6 +78,7 @@ fn base_palette(dark: bool) -> Pal {
             dark,
             base: Color32::from_rgb(0x1e, 0x1c, 0x19),
             card: Color32::from_rgb(0x0e, 0x0d, 0x0b),
+            solid: Color32::from_rgb(0x13, 0x12, 0x0f),
             card2: rgba(255, 245, 225, 0.04),
             line: rgba(255, 245, 225, 0.075),
             line_strong: rgba(255, 245, 225, 0.12),
@@ -95,6 +97,7 @@ fn base_palette(dark: bool) -> Pal {
             dark,
             base: Color32::from_rgb(0xe7, 0xe5, 0xdf),
             card: Color32::from_rgb(0xf7, 0xf6, 0xf2),
+            solid: Color32::from_rgb(0xf5, 0xf4, 0xf0),
             card2: rgba(40, 30, 10, 0.035),
             line: rgba(40, 30, 10, 0.08),
             line_strong: rgba(40, 30, 10, 0.13),
@@ -114,7 +117,7 @@ fn base_palette(dark: bool) -> Pal {
 pub fn apply(ctx: &egui::Context, p: &Pal) {
     let mut v = if p.dark { Visuals::dark() } else { Visuals::light() };
     v.panel_fill = p.base;
-    v.window_fill = p.card;
+    v.window_fill = p.solid;
     v.extreme_bg_color = p.card;
     v.faint_bg_color = p.card2;
     v.override_text_color = Some(p.text);
