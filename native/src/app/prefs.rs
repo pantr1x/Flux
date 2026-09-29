@@ -710,6 +710,18 @@ impl App {
         }
     }
 
+    pub(super) fn settings_jump(&mut self, section: &str) {
+        if let Some(st) = self.settings.as_mut() {
+            st.jump = Some(section.to_string());
+        }
+    }
+
+    pub(super) fn settings_find(&mut self, q: &str) {
+        if let Some(st) = self.settings.as_mut() {
+            st.find = q.to_string();
+        }
+    }
+
     pub(super) fn anim_on(&self) -> bool {
         self.get("transitions").as_bool() != Some(false) && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true))
     }

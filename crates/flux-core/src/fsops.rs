@@ -371,6 +371,11 @@ pub async fn trash(target: &str) -> Result<Value, String> {
     Ok(json!(true))
 }
 
+// Do Koša bez otázky (otázku ukáže okno aplikácie).
+pub fn move_to_trash(target: &str) -> Result<(), String> {
+    trash::delete(target).map_err(|e| e.to_string())
+}
+
 pub fn reveal(target: &str) {
     #[cfg(windows)]
     let _ = std::process::Command::new("explorer").arg(format!("/select,{target}")).spawn();

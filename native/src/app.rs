@@ -2,6 +2,7 @@
 // horná lišta (späť/dopredu, karty súborov, hľadanie, AI, ▶ Run), zaoblená karta s editorom + minimapou,
 // Výstupom/Terminálom a stavovým riadkom; bez otvoreného súboru stránka projektu. Logika je v flux-core.
 mod intro;
+mod menus;
 mod prefs;
 
 use crate::code::Code;
@@ -84,6 +85,10 @@ pub struct App {
     cursor: (usize, usize),
     scroll_to: Option<f32>,
     intro: Option<intro::Intro>,
+    palette: Option<menus::Palette>,
+    ask: Option<menus::Ask>,
+    renaming: Option<(String, String)>,
+    new_in: Option<String>,
     settings: Option<prefs::SettingsUi>,
     switched: f64, // čas poslednej zmeny obsahu karty (animácia prechodu)
     shown: String,
@@ -144,6 +149,10 @@ impl App {
             cursor: (1, 1),
             scroll_to: None,
             intro: None,
+            palette: None,
+            ask: None,
+            renaming: None,
+            new_in: None,
             settings: None,
             switched: 0.0,
             shown: String::new(),
@@ -476,6 +485,19 @@ impl App {
                 }
                 "shell" => self.sh.pty.write(&arg.replace("\\r", "\r")),
                 "home" => self.home = true,
+                "palette" => self.open_palette(
+                    match arg {
+                        "all" => menus::PaletteMode::Everything,
+                        "commands" => menus::PaletteMode::Commands,
+                        _ => menus::PaletteMode::Files,
+                    },
+                    ctx,
+                ),
+                "pq" => {
+                    if let Some(pl) = self.palette.as_mut() {
+                        pl.set_query(arg);
+                    }
+                }
                 "settings" => self.open_settings(if arg.is_empty() { "general" } else { arg }, ctx),
                 "set" => {
                     // set=kľúč:hodnota (JSON), napr. set=panelPos:"right"
@@ -530,7 +552,8 @@ impl App {
         }
         widgets::brand_mark(ui, Rect::from_min_size(pos2(brand.left() + 4.0, r.center().y - 10.0), vec2(20.0, 20.0)), &p);
         ui.painter().text(pos2(brand.left() + 32.0, r.center().y), Align2::LEFT_CENTER, "flux", theme::bold(15.0), p.text);
-        widgets::icon_button_at(ui, Rect::from_center_size(pos2(brand.right() + 17.0, r.center().y), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
+        let menu = widgets::icon_button_at(ui, Rect::from_center_size(pos2(brand.right() + 17.0, r.center().y), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
+        self.app_menu(&menu);
         if with_toggle {
             let t = Rect::from_center_size(pos2(r.right() - 14.0, r.center().y), vec2(28.0, 28.0));
             if widgets::icon_button_at(ui, t, "sidebar", 16.0, &p, true).on_hover_text(crate::i18n::t("Hide sidebar")).clicked() {
@@ -577,9 +600,12 @@ impl App {
                     }
                 }
                 let mut open = None;
+                let mut menu_for: Option<(egui::Response, String, bool, bool)> = None;
+                let mut rename: Option<(String, String)> = None;
                 let hidden = self.projects.iter().filter(|pr| pr["hidden"].as_bool() == Some(true)).count();
+                let projects = self.projects.clone();
                 egui::ScrollArea::vertical().id_salt("projects").max_height(200.0).auto_shrink([false, true]).show(ui, |ui| {
-                    for pr in &self.projects {
+                    for pr in &projects {
                         if pr["hidden"].as_bool() == Some(true) && !self.show_hidden {
                             continue;
                         }
@@ -590,7 +616,22 @@ impl App {
                         let kind = self.main_kind(&dir);
                         let icon_name = kind.as_deref().map(kind_file).unwrap_or("");
                         let lead = if icon_name.is_empty() { Lead::Line("folder") } else { Lead::File(icon_name) };
+                        if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == dir) {
+                            let te = ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 8)));
+                            te.request_focus();
+                            if te.lost_focus() {
+                                let (f, n) = (from.clone(), new.clone());
+                                self.renaming = None;
+                                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                    rename = Some((f, n));
+                                }
+                            }
+                            continue;
+                        }
                         let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
+                        if r.secondary_clicked() || r.context_menu_opened() {
+                            menu_for = Some((r.clone(), dir.clone(), pr["pinned"].as_bool() == Some(true), pr["hidden"].as_bool() == Some(true)));
+                        }
                         if pr["pinned"].as_bool() == Some(true) {
                             widgets::icon_at(ui, pos2(r.rect.right() - 16.0, r.rect.center().y), 12.0, "pin", p.text3);
                         }
@@ -599,6 +640,12 @@ impl App {
                         }
                     }
                 });
+                if let Some((r, d, pinned, hid)) = menu_for {
+                    self.project_menu(&r, &d, pinned, hid);
+                }
+                if let Some((f, n)) = rename {
+                    self.finish_rename(&f, &n);
+                }
                 if let Some(d) = open {
                     if ws.as_deref() == Some(d.as_str()) {
                         self.home = true;
@@ -607,7 +654,7 @@ impl App {
                     }
                 }
                 if let Some(name) = &mut self.new_project {
-                    let r = ui.add(egui::TextEdit::singleline(name).hint_text("Project name").desired_width(f32::INFINITY).margin(Margin::symmetric(10, 6)));
+                    let r = ui.add(egui::TextEdit::singleline(name).hint_text(t("Project name")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 6)));
                     r.request_focus();
                     if r.lost_focus() {
                         let n = name.trim().to_string();
@@ -677,27 +724,6 @@ impl App {
                     ui.add_space(4.0);
                     let h = (ui.available_height() - footer_h).max(40.0);
                     egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]).show(ui, |ui| {
-                        if let Some((is_dir, name)) = &mut self.new_item {
-                            let r = ui
-                                .add(egui::TextEdit::singleline(name).hint_text(if *is_dir { t("Folder name") } else { t("File name") }).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5)));
-                            r.request_focus();
-                            if r.lost_focus() {
-                                let (d, n) = (*is_dir, name.trim().to_string());
-                                self.new_item = None;
-                                if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !n.is_empty() {
-                                    let target = Path::new(&w).join(&n).to_string_lossy().to_string();
-                                    match fsops::create(&target, d) {
-                                        Ok(_) => {
-                                            self.tree.clear();
-                                            if !d {
-                                                self.open_file(&target);
-                                            }
-                                        }
-                                        Err(e) => self.status = e,
-                                    }
-                                }
-                            }
-                        }
                         self.tree_ui(ui, &w, 0);
                     });
                 } else {
@@ -737,17 +763,69 @@ impl App {
             });
     }
 
+    // pole na názov nového súboru/priečinka priamo v strome (v cieľovom priečinku)
+    fn new_item_ui(&mut self, ui: &mut egui::Ui, dir: &str, indent: f32) {
+        let target = self.new_in.clone().or_else(|| self.workspace()).unwrap_or_default();
+        let Some((is_dir, name)) = &mut self.new_item else { return };
+        if target != dir {
+            return;
+        }
+        let mut r = None;
+        ui.horizontal(|ui| {
+            ui.add_space(indent);
+            r = Some(ui.add(egui::TextEdit::singleline(name).hint_text(if *is_dir { t("Folder name") } else { t("File name") }).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5))));
+        });
+        let r = r.unwrap();
+        r.request_focus();
+        if r.lost_focus() {
+            let (d, n) = (*is_dir, name.trim().to_string());
+            self.new_item = None;
+            self.new_in = None;
+            if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !n.is_empty() {
+                let target = Path::new(dir).join(&n).to_string_lossy().to_string();
+                match fsops::create(&target, d) {
+                    Ok(_) => {
+                        self.tree.clear();
+                        if !d {
+                            self.open_file(&target);
+                        }
+                    }
+                    Err(e) => self.status = e,
+                }
+            }
+        }
+    }
+
     fn tree_ui(&mut self, ui: &mut egui::Ui, dir: &str, depth: usize) {
         let p = self.pal;
+        self.new_item_ui(ui, dir, depth as f32 * 14.0);
         let items = self.list(dir);
         for (name, path, is_dir) in items {
             let indent = 6.0 + depth as f32 * 14.0;
+            if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == path) {
+                let mut te = None;
+                ui.horizontal(|ui| {
+                    ui.add_space(indent);
+                    te = Some(ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5))));
+                });
+                let te = te.unwrap();
+                te.request_focus();
+                if te.lost_focus() {
+                    let (f, n) = (from.clone(), new.clone());
+                    self.renaming = None;
+                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        self.finish_rename(&f, &n);
+                    }
+                }
+                continue;
+            }
             let open = self.open_dirs.contains(&path);
             let active = !self.home && self.tabs.get(self.active).map(|t| t.path == path).unwrap_or(false);
             let dirty = self.tabs.iter().any(|t| t.path == path && t.dirty());
             let lead = if is_dir { Lead::Folder { open } } else { Lead::File(&name) };
             let ind = if is_dir { indent } else { indent + 20.0 };
             let r = widgets::row(ui, active, ind, lead, &name, None, false, &p);
+            self.tree_menu(&r, &path, is_dir);
             if dirty {
                 ui.painter().circle_filled(pos2(r.rect.right() - 12.0, r.rect.center().y), 3.0, p.accent);
             }
@@ -832,7 +910,12 @@ impl App {
         ar.on_hover_text(t("Claude AI is coming to Flux Native soon"));
         rx -= 63.0;
         if self.get("showSearch").as_bool() != Some(false) {
-            widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(30.0, 30.0)), "search", 16.0, &p, true).on_hover_text(t("Search (coming soon)"));
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(30.0, 30.0)), "search", 16.0, &p, true)
+                .on_hover_text(format!("{} (Ctrl+Shift+A)", t("Search files, commands, settings and projects")))
+                .clicked()
+            {
+                self.act("search", ui.ctx());
+            }
             rx -= 36.0;
         }
         // karty súborov
@@ -1403,6 +1486,26 @@ impl App {
                 i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::L),
             )
         });
+        // ďalšie skratky z Electron Fluxu
+        let more = ctx.input_mut(|i| {
+            let c = egui::Modifiers::COMMAND;
+            let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+            [
+                (i.consume_key(c, egui::Key::P), "quick-open"),
+                (i.consume_key(cs, egui::Key::A), "search"),
+                (i.consume_key(cs, egui::Key::P), "commands"),
+                (i.consume_key(cs, egui::Key::N), "new-project"),
+                (i.consume_key(c, egui::Key::N), "new-file"),
+                (i.consume_key(cs, egui::Key::S), "save-all"),
+                (i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5), "stop"),
+                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::O), "open-file"),
+            ]
+        });
+        for (hit, id) in more {
+            if hit {
+                self.act(id, ctx);
+            }
+        }
         if sets {
             if self.settings.is_some() {
                 self.settings = None;
@@ -1700,6 +1803,21 @@ impl eframe::App for App {
                 }
             }
         });
+        // paleta a potvrdenie nad všetkým
+        if self.palette.is_some() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("palette-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.palette_ui(ui, full);
+            });
+        }
+        if self.ask.is_some() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("ask-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.ask_ui(ui, full);
+            });
+        }
         // Nastavenia nad všetkým (vlastná vrstva)
         if self.settings.is_some() {
             let full = ctx.content_rect();
