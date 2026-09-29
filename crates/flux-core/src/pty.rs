@@ -5,7 +5,7 @@ use serde_json::json;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tauri::{AppHandle, Emitter};
+use crate::Emit;
 
 struct Live {
     child: Box<dyn Child + Send + Sync>,
@@ -27,7 +27,7 @@ impl Pty {
     }
 
     // Spustí program; vráti pid alebo chybu.
-    pub fn spawn(&self, app: &AppHandle, cmd: &str, args: &[String], cwd: &str, env: &[(&str, &str)], data_ev: &'static str, exit_ev: &'static str) -> Result<u32, String> {
+    pub fn spawn(&self, emit: &Emit, cmd: &str, args: &[String], cwd: &str, env: &[(&str, &str)], data_ev: &'static str, exit_ev: &'static str) -> Result<u32, String> {
         self.kill();
         let (cols, rows) = {
             let s = *self.size.lock().unwrap();
@@ -56,7 +56,7 @@ impl Pty {
         };
         *self.live.lock().unwrap() = Some(Live { child, master: pair.master, writer, id });
         let started = Instant::now();
-        let app = app.clone();
+        let emit = emit.clone();
         let live = self.live.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 16384];
@@ -74,7 +74,7 @@ impl Pty {
                         };
                         let text = String::from_utf8_lossy(&pending[..cut]).to_string();
                         pending.drain(..cut);
-                        let _ = app.emit(data_ev, text);
+                        emit(data_ev, serde_json::Value::String(text));
                     }
                 }
             }
@@ -90,7 +90,7 @@ impl Pty {
                     _ => -1,
                 }
             };
-            let _ = app.emit(exit_ev, json!({ "code": code, "ms": started.elapsed().as_millis() as u64 }));
+            emit(exit_ev, json!({ "code": code, "ms": started.elapsed().as_millis() as u64 }));
         });
         Ok(pid)
     }

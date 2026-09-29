@@ -1,0 +1,19 @@
+[package]
+name = "flux-native"
+version = "0.1.0"
+edition = "2021"
+description = "Flux – natívna verzia v Ruste (egui), bez Chromia"
+
+[[bin]]
+name = "flux-native"
+path = "src/main.rs"
+
+[dependencies]
+flux-core = { path = "../crates/flux-core" }
+serde_json = "1"
+dirs = "6"
+eframe = { version = "0.36", default-features = false, features = ["glow", "wgpu", "default_fonts", "x11", "wayland"] }
+egui_extras = { version = "0.36", features = ["syntect"] }
+alacritty_terminal = "0.26"
+rfd = "0.15"
+notify = "8"

@@ -2,7 +2,7 @@
 use crate::pty::Pty;
 use serde_json::{json, Value};
 use std::path::Path;
-use tauri::{AppHandle, Emitter};
+use crate::Emit;
 
 pub struct Cmd {
     pub cmd: String,
@@ -67,25 +67,25 @@ pub fn command_for(file: &str, python: &str, lang: &str) -> Option<Cmd> {
 }
 
 // Spustí príkaz a pošle run:start (rozhranie potom čaká na run:data / run:exit).
-pub fn start(pty: &Pty, app: &AppHandle, cmd: &Cmd, cwd: &str, label: &str) -> Value {
-    match pty.spawn(app, &cmd.cmd, &cmd.args, cwd, &[("PYTHONIOENCODING", "utf-8"), ("PYTHONUTF8", "1")], "run:data", "run:exit") {
+pub fn start(pty: &Pty, emit: &Emit, cmd: &Cmd, cwd: &str, label: &str) -> Value {
+    match pty.spawn(emit, &cmd.cmd, &cmd.args, cwd, &[("PYTHONIOENCODING", "utf-8"), ("PYTHONUTF8", "1")], "run:data", "run:exit") {
         Ok(pid) => {
-            let _ = app.emit("run:start", json!({ "label": label, "cwd": cwd, "pid": pid, "pty": true }));
+            emit("run:start", json!({ "label": label, "cwd": cwd, "pid": pid, "pty": true }));
             json!({ "ok": true })
         }
         Err(e) => {
-            let _ = app.emit("run:start", json!({ "label": label, "cwd": cwd, "pid": 0 }));
-            let _ = app.emit("run:exit", json!({ "code": -1, "error": e, "ms": 0 }));
+            emit("run:start", json!({ "label": label, "cwd": cwd, "pid": 0 }));
+            emit("run:exit", json!({ "code": -1, "error": e, "ms": 0 }));
             json!({ "ok": true })
         }
     }
 }
 
-pub fn run_file(pty: &Pty, app: &AppHandle, file: &str, python: &str, lang: &str) -> Value {
+pub fn run_file(pty: &Pty, emit: &Emit, file: &str, python: &str, lang: &str) -> Value {
     let cwd = Path::new(file).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
     let label = Path::new(file).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     match command_for(file, python, lang) {
-        Some(cmd) => start(pty, app, &cmd, &cwd, &label),
+        Some(cmd) => start(pty, emit, &cmd, &cwd, &label),
         None => json!({ "ok": false, "error": "Can't run this type of file yet." }),
     }
 }

@@ -1,12 +1,11 @@
-# Flux v Ruste (Tauri, priečinok desktop/): zostaví ho na Windows a zmeria pamäť oproti Electron verzii.
-# Obe verzie sa spustia s rovnakým projektom a nastaveniami; výsledok je v súhrne behu (Summary)
-# a v artefakte Flux-Tauri (program, inštalátor, screenshoty, memory.txt).
-name: Tauri build
+# Flux Native (native/, čistý Rust + egui): zostaví ho na Windows a zmeria pamäť (ako Správca úloh).
+# Výsledok: súhrn behu, vetva ci-native (native.png, memory.txt), artefakt Flux-Native.
+name: Native build
 
 on:
   push:
     branches: [main, 'claude/**']
-    paths: ['desktop/**', 'crates/**', 'Cargo.toml', 'scripts/tauri-bridge.mjs', 'src/**', '.github/workflows/tauri.yml']
+    paths: ['native/**', 'crates/**', 'Cargo.toml', '.github/workflows/native.yml']
   workflow_dispatch:
 
 permissions:
@@ -17,27 +16,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Build the UI and the bridge
-        run: |
-          node scripts/build.mjs
-          node scripts/tauri-bridge.mjs
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: '. -> target'
-      - name: Build Flux (Tauri)
-        working-directory: desktop
-        run: npx --yes @tauri-apps/cli@2 build
-      - name: Build Flux (Electron, unpacked) for comparison
-        run: npx electron-builder --dir --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-      - name: Measure memory (Tauri vs Electron)
+      - name: Build Flux Native
+        run: cargo build -p flux-native --release
+      - name: Measure memory (Flux Native)
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -89,36 +74,32 @@ jobs:
             $bmp.Save("out\$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
           }
           $report = @()
-          $td = "$env:RUNNER_TEMP\ud-tauri"; Settings $td
-          $env:FLUX_USER_DATA = $td
-          try { $report += Start-FluxRun 'tauri' (Get-ChildItem target\release\flux.exe).FullName $null } catch { $report += "tauri: measurement failed: $_" }
-          Remove-Item Env:FLUX_USER_DATA
-          $ed = "$env:RUNNER_TEMP\ud-electron"; Settings $ed
-          try { $report += Start-FluxRun 'electron' (Get-ChildItem release\win-unpacked\Flux.exe).FullName "--user-data-dir=$ed" } catch { $report += "electron: measurement failed: $_" }
-          $report += "Installer sizes:"
-          Get-ChildItem target\release\bundle\nsis\*.exe | ForEach-Object { $report += "  Tauri: $([math]::Round($_.Length / 1MB, 1)) MB" }
+          $nd = "$env:RUNNER_TEMP\ud-native"; Settings $nd
+          $env:FLUX_USER_DATA = $nd
+          $env:FLUX_TEST = "2:open=main.py"
+          try { $report += Start-FluxRun 'native' (Get-ChildItem target\release\flux-native.exe).FullName $null } catch { $report += "native: measurement failed: $_" }
+          $report += "Program size: $([math]::Round((Get-Item target\release\flux-native.exe).Length / 1MB, 1)) MB"
           $report | Set-Content out\memory.txt
           $report | ForEach-Object { Write-Host $_ }
           "## Memory`n``````n$($report -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
-      # screenshoty a čísla na vetvu ci-tauri: git show origin/ci-tauri:tauri.png > x.png
-      - name: Publish screenshots (branch ci-tauri)
+      - name: Publish screenshots (branch ci-native)
         if: always()
         continue-on-error: true
         shell: bash
         run: |
           [ -d out ] || exit 0
           cd out
-          git init -q -b ci-tauri
+          git init -q -b ci-native
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Tauri measurement from ${GITHUB_SHA::7}"
-          for i in 1 2 3 4; do git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-tauri && exit 0; sleep $((i * 5)); done
+          git commit -q -m "Native measurement from ${GITHUB_SHA::7}"
+          for i in 1 2 3 4; do git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-native && exit 0; sleep $((i * 5)); done
           exit 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Flux-Tauri
+          name: Flux-Native
           path: |
             out/*
-            target/release/bundle/nsis/*.exe
+            target/release/flux-native.exe

@@ -1,5 +1,5 @@
 // Súbory a projekty – rovnaké odpovede ako Electron verzia (src/main/main.js), aby rozhranie fungovalo bez zmien.
-use crate::{settings, Flux};
+use crate::{settings, Core as Flux};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 

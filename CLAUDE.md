@@ -16,7 +16,24 @@ Flux is a small code editor for Windows 10/11, built with Electron and Monaco. I
 | `scripts/` | `build.mjs` (esbuild → `dist/renderer`), `release-notes.mjs`, `extract-strings.mjs`, `build-locales.py` + `locales_*.py`. |
 | `.github/workflows/` | `release.yml`, `pages.yml`, `windows-build.yml`, `plugin-review.yml` (safety review of plugin pull requests: `scripts/plugin-review.mjs`, rules + Claude with the `ANTHROPIC_API_KEY` secret (without it the check asks for a manual review; GitHub Models only answered `OK` in 2026-09, so there is no free fallback); manual run for one plugin via *Run workflow*; PR code is only read, never run), `wiki.yml` (publishes `docs/wiki/*.md` to the GitHub wiki – edit those files, not the wiki). |
 
-## Flux in Rust (Tauri, `desktop/`) – in progress
+## Flux Native (`native/`, pure Rust + egui) – in progress, the chosen direction
+
+- **Why:** in a measurement on Windows CI, Electron Flux took ~120 MB and the Tauri/WebView2 build ~109 MB, because the Chromium UI engine is almost all of it. So the user chose a **native** app with a different look, and Flux Native is the way forward. Electron Flux keeps shipping until Flux Native covers the important features.
+- **Layout:** Cargo workspace at the repo root (`Cargo.toml`) with these members:
+  - `crates/flux-core`: shared logic, used by both Rust builds, with the modules `settings` (same `settings.json` as Electron), `fsops`, `python`, `runner` (`command_for`) and `pty`. Events go through an `Emit` callback (`Arc<dyn Fn(&str, Value)>`).
+  - `desktop` (Tauri),
+  - `native`.
+- **`native/src/`:**
+  - `app.rs`: the window. It has a top bar with tabs and ▶ Run, a sidebar with projects and a file tree, and one rounded card holding the editor plus Output/Terminal, followed by a status bar. Editing uses `egui::TextEdit` with syntect colors (`egui_extras::syntax_highlighting`) and a line number gutter. It also covers autosave after 1 s, F5, Ctrl+S/O/W and reloading on outside changes via `notify`.
+  - `term.rs`: Alacritty's VT emulator (`alacritty_terminal`) fed by `flux_core::pty`, drawn as a colored grid, with keys → bytes.
+  - `theme.rs`: Flux colors, plus Segoe UI and Cascadia Mono from `%WINDIR%\Fonts`.
+  - `widgets.rs`: painted rows, language badges and the logo, because the fonts have no icon glyphs.
+- **Renderer:** OpenGL (`glow`) first. If that fails, for example in a VM or on CI, it retries with `wgpu`. `FLUX_RENDERER=wgpu` forces `wgpu`.
+- **Test on Linux:** needs `libxkbcommon-dev libxkbcommon-x11-0 libgl1-mesa-dev libgl1-mesa-dri` and Rust ≥ 1.95. Run `cargo build -p flux-native`, then `FLUX_USER_DATA=<dir> FLUX_TEST='2:open=main.py;4:run;6:type=Rust\r' LIBGL_ALWAYS_SOFTWARE=1 xvfb-run ./target/debug/flux-native` and take a screenshot with `import -window root x.png`. `FLUX_TEST` steps are `<seconds>:<action>`, where the action is `open=<file in project>`, `run`, `type=<text for the program>`, `terminal` or `shell=<text>`.
+- **Windows:** `.github/workflows/native.yml` builds a release and measures the Task Manager memory. The result goes to the job summary and to the branch `ci-native` (`native.png`, `memory.txt`).
+- **Next phases:** settings UI, search + Ctrl+P, Python autocomplete (an LSP client talking to Pyright), Live Server, Git/GitHub, AI, plugins, themes, updates, installer.
+
+## Flux in Rust (Tauri, `desktop/`) – paused (WebView2 saved only ~10 % RAM)
 
 - **Goal:** Flux with the same UI and much less memory. The window is the system WebView (WebView2 on Windows) showing the unchanged `dist/renderer`, and everything the Electron main process does moves to Rust.
 - **Bridge:** `desktop/src/bridge.js` is **generated** from `src/preload.js` by `node scripts/tauri-bridge.mjs`, so both builds share one `window.flux` API. Every call is the Rust command `ipc(ch, args)` with the same channel names as in Electron (`desktop/src/main.rs`). Events use `app.emit(channel, payload)`. After adding an IPC call, regenerate the bridge and add the channel to `main.rs`. Channels that are not ported yet return safe defaults (`null` / `[]`).

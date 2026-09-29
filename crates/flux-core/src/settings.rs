@@ -2,7 +2,6 @@
 // prechod medzi verziami nič nestratí.
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
 
 pub fn user_data() -> PathBuf {
     if let Ok(d) = std::env::var("FLUX_USER_DATA") {
@@ -41,16 +40,16 @@ pub fn platform() -> &'static str {
 }
 
 // Preklady: pribalené locales/<jazyk>.json (vo vývoji priamo z repozitára).
-pub fn locale(app: &AppHandle, lang: &str) -> Value {
+pub fn locale(res: Option<PathBuf>, lang: &str) -> Value {
     if lang == "en" {
         return json!({});
     }
     let name = format!("{}.json", lang.replace(['/', '\\', '.'], ""));
     let mut dirs = vec![];
-    if let Ok(r) = app.path().resource_dir() {
+    if let Some(r) = res.clone() {
         dirs.push(r.join("locales"));
     }
-    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales"));
+    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../locales"));
     for d in dirs {
         if let Some(v) = std::fs::read_to_string(d.join(&name)).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
             return v.get("strings").cloned().unwrap_or(v);
@@ -60,12 +59,12 @@ pub fn locale(app: &AppHandle, lang: &str) -> Value {
 }
 
 // Zoznam jazykov rozhrania (pribalený locales/index.json).
-pub fn languages(app: &AppHandle) -> Value {
+pub fn languages(res: Option<PathBuf>) -> Value {
     let mut dirs = vec![];
-    if let Ok(r) = app.path().resource_dir() {
+    if let Some(r) = res.clone() {
         dirs.push(r.join("locales"));
     }
-    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales"));
+    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../locales"));
     for d in dirs {
         if let Some(v) = std::fs::read_to_string(d.join("index.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
             return v;

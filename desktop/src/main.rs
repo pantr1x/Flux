@@ -3,11 +3,7 @@
 // → jeden príkaz „ipc“ s názvom kanála ako v Electrone, takže rozhranie netreba meniť.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod fsops;
-mod pty;
-mod python;
-mod runner;
-mod settings;
+use flux_core::{fsops, pty, python, runner, settings, Core, Emit};
 
 use notify::{RecursiveMode, Watcher};
 use serde_json::{json, Value};
@@ -16,11 +12,26 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct Flux {
-    pub settings: Mutex<Value>,
-    pub workspace: Mutex<Option<String>>,
+    pub core: Core,
     pub run: pty::Pty,
     pub shell: pty::Pty,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
+}
+
+// nastavenia a projekt sú v spoločnom jadre (flux-core)
+impl std::ops::Deref for Flux {
+    type Target = Core;
+    fn deref(&self) -> &Core {
+        &self.core
+    }
+}
+
+// udalosti z jadra → okno
+fn emitter(app: &AppHandle) -> Emit {
+    let app = app.clone();
+    std::sync::Arc::new(move |ch: &str, v: Value| {
+        let _ = app.emit(ch, v);
+    })
 }
 
 fn arg(args: &[Value], i: usize) -> Value {
@@ -104,12 +115,12 @@ async fn ipc(app: AppHandle, state: State<'_, Flux>, ch: String, args: Vec<Value
         }
         "i18n:current" => {
             let lang = setting("language").as_str().unwrap_or("en").to_string();
-            Ok(settings::locale(&app, &lang))
+            Ok(settings::locale(app.path().resource_dir().ok(), &lang))
         }
-        "i18n:list" => Ok(settings::languages(&app)),
+        "i18n:list" => Ok(settings::languages(app.path().resource_dir().ok())),
         "i18n:use" => {
             let code = arg_str(&args, 0);
-            let data = settings::locale(&app, &code);
+            let data = settings::locale(app.path().resource_dir().ok(), &code);
             let mut set = s.settings.lock().unwrap();
             set["language"] = json!(code);
             settings::save(&set);
@@ -255,19 +266,19 @@ async fn ipc(app: AppHandle, state: State<'_, Flux>, ch: String, args: Vec<Value
             }
             Ok(json!(true))
         }
-        "run:file" => Ok(runner::run_file(&s.run, &app, &arg_str(&args, 0), &arg_str(&args, 1), &arg_str(&args, 2))),
+        "run:file" => Ok(runner::run_file(&s.run, &emitter(&app), &arg_str(&args, 0), &arg_str(&args, 1), &arg_str(&args, 2))),
         "run:pip" => {
             let pkg = arg_str(&args, 1);
             if pkg.is_empty() || !pkg.chars().all(|c| c.is_alphanumeric() || "._-[]".contains(c)) {
                 return Ok(json!({ "ok": false, "error": "Invalid package name." }));
             }
             let cmd = runner::Cmd { cmd: arg_str(&args, 0), args: vec!["-m".into(), "pip".into(), "install".into(), pkg.clone()] };
-            Ok(runner::start(&s.run, &app, &cmd, &ws().unwrap_or_default(), &format!("pip install {pkg}")))
+            Ok(runner::start(&s.run, &emitter(&app), &cmd, &ws().unwrap_or_default(), &format!("pip install {pkg}")))
         }
         "run:create-venv" => {
             let Some(w) = ws() else { return Ok(json!({ "ok": false })) };
             let cmd = runner::Cmd { cmd: arg_str(&args, 0), args: vec!["-m".into(), "venv".into(), ".venv".into()] };
-            Ok(runner::start(&s.run, &app, &cmd, &w, "python -m venv .venv"))
+            Ok(runner::start(&s.run, &emitter(&app), &cmd, &w, "python -m venv .venv"))
         }
         "run:input" => {
             s.run.write(&arg_str(&args, 0));
@@ -290,7 +301,7 @@ async fn ipc(app: AppHandle, state: State<'_, Flux>, ch: String, args: Vec<Value
             }
             let cmd = runner::shell_command();
             let cwd = ws().filter(|d| std::path::Path::new(d).is_dir()).or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string())).unwrap_or_default();
-            match s.shell.spawn(&app, &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit") {
+            match s.shell.spawn(&emitter(&app), &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit") {
                 Ok(_) => Ok(json!(true)),
                 Err(e) => {
                     let _ = app.emit("shell:data", format!("\r\n{e}\r\n"));
@@ -323,7 +334,7 @@ async fn ipc(app: AppHandle, state: State<'_, Flux>, ch: String, args: Vec<Value
 
 fn main() {
     tauri::Builder::default()
-        .manage(Flux { settings: Mutex::new(settings::load()), workspace: Mutex::new(None), run: pty::Pty::default(), shell: pty::Pty::default(), watcher: Mutex::new(None) })
+        .manage(Flux { core: Core::load(), run: pty::Pty::default(), shell: pty::Pty::default(), watcher: Mutex::new(None) })
         .invoke_handler(tauri::generate_handler![ipc])
         .setup(|app| {
             // okno s mostom window.flux (bridge.js beží pred app.js)
