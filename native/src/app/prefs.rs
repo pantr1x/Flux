@@ -130,6 +130,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
                     Row::Toggle("showSearch", "Search button", "a magnifier at the top that finds files, commands and settings"),
+                    Row::Toggle("searchWide", "Wide search field", "a search box at the top instead of just the magnifier"),
                     Row::Select("panelPos", "Panel position", "where output and the terminal are", o(&[("bottom", "Bottom"), ("right", "Right"), ("left", "Left")])),
                     Row::Select("sidePos", "Sidebar position", "projects and files", o(&[("left", "Left"), ("right", "Right")])),
                     Row::Range("uiZoom", "Size of everything", "", 80.0, 140.0, 5.0),
@@ -498,17 +499,18 @@ impl App {
                     if widgets::button(ui, None, &t("Reset"), p.card2, p.text, 30.0, &p).clicked() {
                         self.set(key, json!(""), ctx);
                     }
-                    let cur = match key {
-                        "uiText" => p.text,
-                        "uiText2" => p.text2,
-                        "uiBase" => p.base,
-                        "uiCard" => p.card,
-                        _ => p.line_strong.to_opaque(),
-                    };
-                    let mut c = cur;
-                    let hex = format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b());
-                    ui.label(egui::RichText::new(hex).font(theme::mono(11.5)).color(p.text));
-                    if egui::color_picker::color_edit_button_srgba(ui, &mut c, egui::color_picker::Alpha::Opaque).changed() {
+                    // zobrazená farba = vlastná, inak nepriehľadná farba témy (nie priesvitná nad tapetou)
+                    let th = theme::palette_for(p.dark, "mono", 0.0);
+                    let cur = custom.as_deref().and_then(|h| u32::from_str_radix(h.trim_start_matches('#'), 16).ok()).map(theme::hex).unwrap_or(match key {
+                        "uiText" => th.text,
+                        "uiText2" => th.text2,
+                        "uiBase" => th.base,
+                        "uiCard" => th.card,
+                        _ => th.card.lerp_to_gamma(th.text, 0.12),
+                    });
+                    ui.add_space(6.0);
+                    let (r, _) = ui.allocate_exact_size(vec2(112.0, 32.0), Sense::hover());
+                    if let Some(c) = widgets::color_field(ui, r, key, cur, false, &p) {
                         self.set(key, json!(format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b())), ctx);
                     }
                 });
@@ -767,10 +769,12 @@ impl App {
                 }
                 // vlastná farba
                 let cc = pos2(r.left() + 28.0 + ACCENTS.len() as f32 * 34.0, r.center().y);
-                let mut col = if cur.starts_with('#') { p.accent } else { Color32::from_rgb(0x8b, 0x7b, 0xff) };
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_center_size(cc, vec2(28.0, 22.0))));
-                if egui::color_picker::color_edit_button_srgba(&mut child, &mut col, egui::color_picker::Alpha::Opaque).on_hover_text(t("Custom color")).changed() {
-                    pick = Some(format!("#{:02x}{:02x}{:02x}", col.r(), col.g(), col.b()));
+                let col = if cur.starts_with('#') { p.accent } else { Color32::from_rgb(0x8b, 0x7b, 0xff) };
+                if cur.starts_with('#') {
+                    ui.painter().circle_stroke(cc, 14.0, Stroke::new(2.0, col));
+                }
+                if let Some(c) = widgets::color_field(ui, Rect::from_center_size(cc, vec2(28.0, 28.0)), "accent", col, true, &p) {
+                    pick = Some(format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
                 }
                 if let Some(a) = pick {
                     self.set("accent", json!(a), ctx);

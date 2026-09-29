@@ -291,3 +291,50 @@ pub fn slider(ui: &mut egui::Ui, id: egui::Id, v: &mut f64, min: f64, max: f64, 
     ui.painter().circle_stroke(pos2(x, r.center().y), 7.0 + hk * 1.5, Stroke::new(2.0, p.card));
     (changed, resp.drag_stopped() || resp.clicked())
 }
+
+// farebné pole ako v Electron Fluxe (.color-field): zaoblený box s okrúhlou nepriehľadnou vzorkou
+// a hex kódom; klik otvorí výber farby s hex políčkom. `dot` = len okrúhla vzorka (vlastný accent).
+pub fn color_field(ui: &mut egui::Ui, r: Rect, id: &str, cur: Color32, dot: bool, p: &Pal) -> Option<Color32> {
+    let cur = cur.to_opaque();
+    let resp = ui.interact(r, ui.id().with(("cf", id)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+    let hex = format!("#{:02X}{:02X}{:02X}", cur.r(), cur.g(), cur.b());
+    if dot {
+        ui.painter().circle_filled(r.center(), 11.0 + hk * 1.5, cur);
+        ui.painter().circle_stroke(r.center(), 11.0 + hk * 1.5, Stroke::new(1.0, p.line_strong));
+        icon_at(ui, r.center(), 11.0, "plus", if cur.intensity() > 0.6 { Color32::from_rgb(0x16, 0x16, 0x1a) } else { Color32::WHITE });
+    } else {
+        ui.painter().rect_filled(r, CornerRadius::same(9), p.card2.lerp_to_gamma(p.hover, hk));
+        ui.painter().rect_stroke(r, CornerRadius::same(9), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        let c = pos2(r.left() + 16.0, r.center().y);
+        ui.painter().circle_filled(c, 8.0, cur);
+        ui.painter().circle_stroke(c, 8.0, Stroke::new(1.0, p.line_strong));
+        ui.painter().text(pos2(r.left() + 31.0, r.center().y), Align2::LEFT_CENTER, &hex, crate::theme::mono(12.0), p.text);
+    }
+    let mut out = None;
+    let hid = resp.id.with("hex");
+    egui::Popup::from_toggle_button_response(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        ui.spacing_mut().slider_width = 200.0;
+        let mut c = cur;
+        if egui::color_picker::color_picker_color32(ui, &mut c, egui::color_picker::Alpha::Opaque) && c != cur {
+            out = Some(c);
+        }
+        ui.add_space(4.0);
+        let mut text = ui.data(|d| d.get_temp::<String>(hid)).unwrap_or_else(|| hex.clone());
+        let te = ui.add(egui::TextEdit::singleline(&mut text).font(crate::theme::mono(12.5)).desired_width(200.0).margin(egui::Margin::symmetric(8, 5)));
+        if te.changed() {
+            let h = text.trim().trim_start_matches('#');
+            if h.len() == 6 {
+                if let Ok(v) = u32::from_str_radix(h, 16) {
+                    out = Some(crate::theme::hex(v));
+                }
+            }
+        }
+        if te.has_focus() {
+            ui.data_mut(|d| d.insert_temp(hid, text));
+        } else {
+            ui.data_mut(|d| d.remove::<String>(hid));
+        }
+    });
+    out
+}

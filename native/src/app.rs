@@ -1,6 +1,7 @@
 // Flux Native – okno v rovnakom rozložení ako Electron Flux: bočný panel (logo, projekty, voľné súbory, strom, Nastavenia),
 // horná lišta (späť/dopredu, karty súborov, hľadanie, AI, ▶ Run), zaoblená karta s editorom + minimapou,
 // Výstupom/Terminálom a stavovým riadkom; bez otvoreného súboru stránka projektu. Logika je v flux-core.
+mod chrome;
 mod editing;
 mod intro;
 mod menus;
@@ -597,6 +598,9 @@ impl App {
     fn side_top(&mut self, ui: &mut egui::Ui, with_toggle: bool) {
         let p = self.pal;
         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), TOP_H), Sense::hover());
+        chrome::drag_area(ui, r, "side");
+        // bočný panel vpravo: vpravo hore sú − □ ×, prepínač panela je v hornej lište
+        let with_toggle = with_toggle && self.get("sidePos").as_str() != Some("right");
         let brand = Rect::from_min_size(pos2(r.left() + 2.0, r.center().y - 14.0), vec2(70.0, 28.0));
         let resp = ui.interact(brand, ui.id().with("brand"), Sense::click());
         if resp.hovered() {
@@ -639,6 +643,76 @@ impl App {
         self.summaries.get(dir).and_then(|s| s["langs"][0].as_str().map(String::from))
     }
 
+    // riadok projektu (.pr-row): ikona jazyka, meno, štatistiky; pri prejdení myšou skryť a pripnúť
+    fn project_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        pr: &Value,
+        ws: Option<&str>,
+        open: &mut Option<String>,
+        menu_for: &mut Option<(egui::Response, String, bool, bool)>,
+        rename: &mut Option<(String, String)>,
+    ) {
+        let p = self.pal;
+        let dir = pr["dir"].as_str().unwrap_or("").to_string();
+        let name = pr["name"].as_str().unwrap_or("").to_string();
+        let pinned = pr["pinned"].as_bool() == Some(true);
+        let hidden = pr["hidden"].as_bool() == Some(true);
+        let sel = ws == Some(dir.as_str());
+        let sub = self.project_sub(&dir);
+        let kind = self.main_kind(&dir);
+        let icon_name = kind.as_deref().map(kind_file).unwrap_or("");
+        let lead = if icon_name.is_empty() { Lead::Line("folder") } else { Lead::File(icon_name) };
+        if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == dir) {
+            let te = ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 8)));
+            te.request_focus();
+            if te.lost_focus() {
+                let (f, n) = (from.clone(), new.clone());
+                self.renaming = None;
+                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    *rename = Some((f, n));
+                }
+            }
+            return;
+        }
+        let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
+        if r.secondary_clicked() || r.context_menu_opened() {
+            *menu_for = Some((r.clone(), dir.clone(), pinned, hidden));
+        }
+        let over = ui.rect_contains_pointer(r.rect);
+        let k = ui.ctx().animate_bool_with_time(r.id.with("acts"), over, 0.15);
+        let cy = r.rect.center().y;
+        if k > 0.0 || pinned {
+            // špendlík (pripnutý = vždy viditeľný a vyplnený accentom), vedľa neho skryť
+            let pin_r = Rect::from_center_size(pos2(r.rect.right() - 16.0, cy), vec2(24.0, 24.0));
+            let pr_ = ui.interact(pin_r, ui.id().with(("pin", &dir)), Sense::click()).on_hover_text(t(if pinned { "Unpin" } else { "Pin to top" }));
+            if pr_.hovered() {
+                ui.painter().rect_filled(pin_r, CornerRadius::same(7), p.active);
+            }
+            let pc = if pinned { p.accent } else { p.text3.lerp_to_gamma(p.text, if pr_.hovered() { 1.0 } else { 0.0 }) };
+            widgets::icon_at(ui, pin_r.center(), 13.0 * (0.8 + 0.2 * if pinned { 1.0 } else { k }), "pin", pc.gamma_multiply(if pinned { 1.0 } else { k }));
+            if pr_.clicked() {
+                fsops::pin(&self.core, &dir, !pinned);
+                self.reload_projects();
+            }
+            if k > 0.0 {
+                let hide_r = Rect::from_center_size(pos2(r.rect.right() - 40.0, cy), vec2(24.0, 24.0));
+                let hr = ui.interact(hide_r, ui.id().with(("hide", &dir)), Sense::click()).on_hover_text(t(if hidden { "Show in the sidebar" } else { "Hide from the sidebar" }));
+                if hr.hovered() {
+                    ui.painter().rect_filled(hide_r, CornerRadius::same(7), p.active);
+                }
+                widgets::icon_at(ui, hide_r.center(), 13.0 * (0.8 + 0.2 * k), if hidden { "eye" } else { "eyeOff" }, (if hr.hovered() { p.text } else { p.text3 }).gamma_multiply(k));
+                if hr.clicked() {
+                    fsops::hide(&self.core, &dir, !hidden);
+                    self.reload_projects();
+                }
+            }
+        }
+        if r.clicked() {
+            *open = Some(dir);
+        }
+    }
+
     fn sidebar(&mut self, root: &mut egui::Ui) {
         let p = self.pal;
         (if self.get("sidePos").as_str() == Some("right") { egui::Panel::right("side") } else { egui::Panel::left("side") })
@@ -648,17 +722,41 @@ impl App {
             .show(root, |ui| {
                 self.side_top(ui, true);
                 let ws = self.workspace();
+                let mut open = None;
+                let mut menu_for: Option<(egui::Response, String, bool, bool)> = None;
+                let mut rename: Option<(String, String)> = None;
+                let hidden = self.projects.iter().filter(|pr| pr["hidden"].as_bool() == Some(true)).count();
+                let projects = self.projects.clone();
+                // ---- PINNED (pripnuté projekty v jemnom rámčeku, .pr-pinned) ----
+                let pinned: Vec<Value> = projects.iter().filter(|pr| pr["pinned"].as_bool() == Some(true) && pr["hidden"].as_bool() != Some(true)).cloned().collect();
+                if !pinned.is_empty() {
+                    let (cap, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
+                    widgets::icon_at(ui, pos2(cap.left() + 13.0, cap.center().y), 11.0, "pin", p.text3);
+                    let mut job = egui::text::LayoutJob::default();
+                    job.append(&t("Pinned").to_uppercase(), 0.0, egui::TextFormat { font_id: theme::bold(11.0), color: p.text3, extra_letter_spacing: 1.0, ..Default::default() });
+                    let g = ui.fonts_mut(|f| f.layout_job(job));
+                    ui.painter().galley(pos2(cap.left() + 22.0, cap.center().y - g.size().y / 2.0), g, p.text3);
+                    let box_top = ui.cursor().top();
+                    let where_ = ui.painter().add(egui::Shape::Noop);
+                    ui.add_space(3.0);
+                    let mut inner = ui
+                        .new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(ui.max_rect().left() + 3.0, ui.cursor().top()), pos2(ui.max_rect().right() - 3.0, ui.max_rect().bottom()))));
+                    for pr in &pinned {
+                        self.project_row(&mut inner, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
+                    }
+                    let used = inner.min_rect().height();
+                    ui.add_space(used + 3.0);
+                    let br = Rect::from_min_max(pos2(ui.max_rect().left(), box_top), pos2(ui.max_rect().right(), ui.cursor().top()));
+                    let tint = p.hover.lerp_to_gamma(p.accent.gamma_multiply(0.35), 0.2);
+                    ui.painter().set(where_, egui::epaint::RectShape::new(br, CornerRadius::same(12), tint, Stroke::new(1.0, p.line.lerp_to_gamma(p.accent, 0.22)), StrokeKind::Inside));
+                    ui.add_space(10.0);
+                }
                 // ---- PROJECTS ----
                 if widgets::section(ui, &t("Projects").to_uppercase(), Some("folderOpen"), &p).map(|r| r.on_hover_text(t("Open folder")).clicked()) == Some(true) {
                     if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
                         self.open_folder(&d.to_string_lossy());
                     }
                 }
-                let mut open = None;
-                let mut menu_for: Option<(egui::Response, String, bool, bool)> = None;
-                let mut rename: Option<(String, String)> = None;
-                let hidden = self.projects.iter().filter(|pr| pr["hidden"].as_bool() == Some(true)).count();
-                let projects = self.projects.clone();
                 let sk = egui::Id::new("sa-projects");
                 let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
                 let mut sa = egui::ScrollArea::vertical().id_salt("projects").max_height(200.0).auto_shrink([false, true]);
@@ -666,39 +764,11 @@ impl App {
                     sa = sa.vertical_scroll_offset(o);
                 }
                 let sout = sa.show(ui, |ui| {
-                    for pr in &projects {
+                    for pr in projects.iter().filter(|pr| pr["pinned"].as_bool() != Some(true)) {
                         if pr["hidden"].as_bool() == Some(true) && !self.show_hidden {
                             continue;
                         }
-                        let dir = pr["dir"].as_str().unwrap_or("").to_string();
-                        let name = pr["name"].as_str().unwrap_or("").to_string();
-                        let sel = ws.as_deref() == Some(dir.as_str());
-                        let sub = self.project_sub(&dir);
-                        let kind = self.main_kind(&dir);
-                        let icon_name = kind.as_deref().map(kind_file).unwrap_or("");
-                        let lead = if icon_name.is_empty() { Lead::Line("folder") } else { Lead::File(icon_name) };
-                        if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == dir) {
-                            let te = ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 8)));
-                            te.request_focus();
-                            if te.lost_focus() {
-                                let (f, n) = (from.clone(), new.clone());
-                                self.renaming = None;
-                                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                                    rename = Some((f, n));
-                                }
-                            }
-                            continue;
-                        }
-                        let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
-                        if r.secondary_clicked() || r.context_menu_opened() {
-                            menu_for = Some((r.clone(), dir.clone(), pr["pinned"].as_bool() == Some(true), pr["hidden"].as_bool() == Some(true)));
-                        }
-                        if pr["pinned"].as_bool() == Some(true) {
-                            widgets::icon_at(ui, pos2(r.rect.right() - 16.0, r.rect.center().y), 12.0, "pin", p.text3);
-                        }
-                        if r.clicked() {
-                            open = Some(dir);
-                        }
+                        self.project_row(ui, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
                     }
                 });
                 self.smooth.end(sk, &sout);
@@ -927,6 +997,8 @@ impl App {
         let p = self.pal;
         let mut x = r.left();
         let cy = r.center().y;
+        // prázdna lišta presúva okno (ako -webkit-app-region: drag); tlačidlá nad ňou majú prednosť
+        chrome::drag_area(ui, r, "top");
         if !self.side_open {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(x + 8.0, r.top()), vec2(140.0, TOP_H))));
             self.side_top(&mut child, false);
@@ -945,8 +1017,16 @@ impl App {
             self.go(false);
         }
         x += 70.0;
-        // vpravo: Stop, ▶ Run, AI, hľadanie
-        let mut rx = r.right();
+        // vpravo: − □ × okna, Stop, ▶ Run, AI, hľadanie
+        let full_r = ui.ctx().content_rect().right();
+        let side_right = self.side_open && self.get("sidePos").as_str() == Some("right");
+        let mut rx = if side_right { r.right() } else { r.right().min(full_r - chrome::CONTROLS_W - 6.0) };
+        if side_right {
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(28.0, 28.0)), "sidebar", 16.0, &p, true).on_hover_text(t("Hide sidebar")).clicked() {
+                self.side_open = false;
+            }
+            rx -= 36.0;
+        }
         let can_run = !self.tabs.is_empty() && !self.home;
         // na stránke projektu ▶ Run nie je (ako v Electron Fluxe)
         if can_run || self.running {
@@ -985,7 +1065,26 @@ impl App {
         ui.painter().text(pos2(ai.left() + 29.0, cy), Align2::LEFT_CENTER, "AI", theme::bold(13.0), p.text2);
         ar.on_hover_text(t("Claude AI is coming to Flux Native soon"));
         rx -= 63.0;
-        if self.get("showSearch").as_bool() != Some(false) {
+        if self.get("showSearch").as_bool() != Some(false) && self.get("searchWide").as_bool() == Some(true) {
+            // široké pole hľadania (body.search-wide #topsearch): 🔍 Search … Ctrl+Shift+A
+            let w = (rx - x - 160.0).clamp(120.0, 280.0);
+            let sr = Rect::from_min_size(pos2(rx - w - 6.0, cy - 15.0), vec2(w, 30.0));
+            let resp = ui.interact(sr, ui.id().with("topsearch"), Sense::click()).on_hover_cursor(egui::CursorIcon::Text);
+            let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+            ui.painter().rect_filled(sr, CornerRadius::same(9), p.card2);
+            ui.painter().rect_stroke(sr, CornerRadius::same(9), Stroke::new(1.0, p.line.lerp_to_gamma(p.line_strong, hk)), StrokeKind::Inside);
+            let col = p.text3.lerp_to_gamma(p.text2, hk);
+            widgets::icon_at(ui, pos2(sr.left() + 18.0, cy), 14.0, "search", col);
+            let key_w = if w > 200.0 { widgets::text_w(ui, "Ctrl+Shift+A", theme::ui(10.5)) + 10.0 } else { 0.0 };
+            widgets::text(ui, pos2(sr.left() + 32.0, cy), Align2::LEFT_CENTER, &t("Search"), theme::ui(13.0), col, w - 40.0 - key_w);
+            if key_w > 0.0 {
+                ui.painter().text(pos2(sr.right() - 8.0, cy), Align2::RIGHT_CENTER, "Ctrl+Shift+A", theme::ui(10.5), p.text3);
+            }
+            if resp.on_hover_text(t("Search files, commands, settings and projects")).clicked() {
+                self.act("search", ui.ctx());
+            }
+            rx -= w + 12.0;
+        } else if self.get("showSearch").as_bool() != Some(false) {
             if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(30.0, 30.0)), "search", 16.0, &p, true)
                 .on_hover_text(format!("{} (Ctrl+Shift+A)", t("Search files, commands, settings and projects")))
                 .clicked()
@@ -1466,22 +1565,33 @@ impl App {
             let main_file = main_file(&items);
             let mut acts = ui.new_child(
                 egui::UiBuilder::new()
-                    .max_rect(Rect::from_min_max(pos2(left + inner_w - 420.0, head.top() + 6.0), pos2(left + inner_w, head.top() + 40.0)))
+                    .max_rect(Rect::from_min_max(pos2(left + inner_w - 520.0, head.top() + 6.0), pos2(left + inner_w, head.top() + 40.0)))
                     .layout(egui::Layout::right_to_left(egui::Align::Center)),
             );
             acts.spacing_mut().item_spacing.x = 6.0;
-            if widgets::button(&mut acts, Some("filePlus"), &t("New file"), p.card2, p.text, 32.0, &p).clicked() {
+            // ako acts v app.js: web → Open page · Live preview, ostatné → Open main file · Run it; potom New file a 🔍
+            if widgets::icon_button(&mut acts, "search", &p, true).on_hover_text(format!("{} (Ctrl+P)", t("Find file"))).clicked() {
+                self.act("quick-open", ui.ctx());
+            }
+            let has_main = main_file.is_some();
+            let (nf_bg, nf_fg) = if has_main { (p.card2, p.text) } else { (p.accent, p.accent_fg) };
+            if widgets::button(&mut acts, Some("filePlus"), &t("New file"), nf_bg, nf_fg, 32.0, &p).clicked() {
                 self.new_item = Some((false, String::new()));
             }
             if let Some((name, path)) = &main_file {
                 let web = name.ends_with(".html");
-                if widgets::button(&mut acts, Some(if web { "globe" } else { "play" }), &if web { t("Open page") } else { t("Run it") }, p.accent, p.accent_fg, 32.0, &p).on_hover_text(name).clicked()
-                {
-                    if web {
+                if web {
+                    widgets::button(&mut acts, Some("monitor"), &t("Live preview"), p.card2, p.text3, 32.0, &p).on_hover_text(t("Live Server is coming to Flux Native soon"));
+                    if widgets::button(&mut acts, Some("globe"), &t("Open page"), p.accent, p.accent_fg, 32.0, &p).on_hover_text(name).clicked() {
                         settings::open_external(path);
-                    } else {
+                    }
+                } else {
+                    if widgets::button(&mut acts, Some("play"), &t("Run it"), p.card2, p.text, 32.0, &p).on_hover_text(name).clicked() {
                         self.open_file(path);
                         self.run();
+                    }
+                    if widgets::button(&mut acts, Some("code"), &t("Open main file"), p.accent, p.accent_fg, 32.0, &p).on_hover_text(name).clicked() {
+                        self.open_file(path);
                     }
                 }
             }
@@ -1964,7 +2074,11 @@ impl eframe::App for App {
         }
         if self.intro.is_some() {
             let r = root.max_rect();
-            egui::CentralPanel::default().frame(Frame::new().fill(self.pal.base)).show(root, |ui| self.intro_ui(ui, r));
+            egui::CentralPanel::default().frame(Frame::new().fill(self.pal.base)).show(root, |ui| {
+                chrome::drag_area(ui, Rect::from_min_size(r.min, vec2(r.width(), TOP_H)), "intro");
+                self.intro_ui(ui, r)
+            });
+            self.window_chrome(ctx);
             return;
         }
         self.shortcuts(ctx);
@@ -2091,5 +2205,6 @@ impl eframe::App for App {
                 self.settings_ui(ui, full);
             });
         }
+        self.window_chrome(ctx);
     }
 }

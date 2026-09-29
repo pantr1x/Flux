@@ -18,6 +18,8 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
     eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Flux")
+            // vlastná titulná lišta ako v Electron Fluxe (− □ × kreslí app/chrome.rs)
+            .with_decorations(false)
             .with_inner_size(size)
             .with_min_inner_size([760.0, 480.0])
             .with_icon(std::sync::Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon64.png")).unwrap_or_default())),
