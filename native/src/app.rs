@@ -808,6 +808,7 @@ impl App {
                 "settings" => self.open_settings(if arg.is_empty() { "general" } else { arg }, ctx),
                 "ai" => self.toggle_ai(),
                 "newproj" => self.open_new_project(),
+                "panic" => panic!("test crash"),
                 "gh-signin" => self.gh_sign_in(ctx),
                 "gh-pick" => self.gh_pick(ctx),
                 "ask" => self.ai_ask(arg, ctx),
@@ -2474,6 +2475,8 @@ impl eframe::App for App {
         // po štarte (načítanie písma, tapety, zvýraznenia) raz uvoľniť nepotrebnú pamäť
         if !self.start_trimmed && self.started.elapsed() > Duration::from_secs(10) {
             self.start_trimmed = true;
+            // nová verzia beží → predošlá (.old) už netreba
+            crate::update::cleanup(false);
             if self.core.setting("trimMemory").as_bool() != Some(false) {
                 crate::mem::trim_now();
             }

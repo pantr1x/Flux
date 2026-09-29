@@ -56,12 +56,34 @@ fn exe() -> Option<PathBuf> {
     std::env::current_exe().ok()
 }
 
-// po aktualizácii: zmaže starý program (.old), ktorý ešte bežal pri výmene
-pub fn cleanup() {
+// po aktualizácii: starý program (.old) ostane, kým nová verzia nebeží aspoň 20 s (keep_old = true pri štarte);
+// ak nová verzia hneď spadne, rollback() vráti starú
+pub fn cleanup(keep_old: bool) {
     if let Some(e) = exe() {
-        let _ = std::fs::remove_file(e.with_extension("old"));
+        if !keep_old {
+            let _ = std::fs::remove_file(e.with_extension("old"));
+        }
         let _ = std::fs::remove_file(e.with_extension("new"));
     }
+}
+
+// nová verzia spadla hneď po štarte a vedľa je predošlá (.old): vymeniť späť a spustiť ju
+pub fn rollback() -> bool {
+    let Some(e) = exe() else { return false };
+    let old = e.with_extension("old");
+    if !old.exists() {
+        return false;
+    }
+    let bad = e.with_extension("bad");
+    let _ = std::fs::remove_file(&bad);
+    if std::fs::rename(&e, &bad).is_err() {
+        return false;
+    }
+    if std::fs::rename(&old, &e).is_err() {
+        let _ = std::fs::rename(&bad, &e);
+        return false;
+    }
+    std::process::Command::new(&e).spawn().is_ok()
 }
 
 // vlastná zostava bez adresy na testy sa neaktualizuje (prepísala by sa verziou z CI)

@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.8.2 – 2026-09-29
+
+### Safer updates
+- If a new version of Flux Native does not start, it **goes back to the previous version by itself** and tells you what happened.
+- When Flux cannot start, you now see a message instead of nothing. The details are saved in `flux-native-crash.log` in the settings folder.
+
 ## 0.8.1 – 2026-09-29
 
 ### New project window
