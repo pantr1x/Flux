@@ -16,6 +16,21 @@ Flux is a small code editor for Windows 10/11, built with Electron and Monaco. I
 | `scripts/` | `build.mjs` (esbuild → `dist/renderer`), `release-notes.mjs`, `extract-strings.mjs`, `build-locales.py` + `locales_*.py`. |
 | `.github/workflows/` | `release.yml`, `pages.yml`, `windows-build.yml`, `plugin-review.yml` (safety review of plugin pull requests: `scripts/plugin-review.mjs`, rules + Claude with the `ANTHROPIC_API_KEY` secret (without it the check asks for a manual review; GitHub Models only answered `OK` in 2026-09, so there is no free fallback); manual run for one plugin via *Run workflow*; PR code is only read, never run), `wiki.yml` (publishes `docs/wiki/*.md` to the GitHub wiki – edit those files, not the wiki). |
 
+## Flux in Rust (Tauri, `desktop/`) – in progress
+
+- **Goal:** Flux with the same UI and much less memory. The window is the system WebView (WebView2 on Windows) showing the unchanged `dist/renderer`, and everything the Electron main process does moves to Rust.
+- **Bridge:** `desktop/src/bridge.js` is **generated** from `src/preload.js` by `node scripts/tauri-bridge.mjs`, so both builds share one `window.flux` API. Every call is the Rust command `ipc(ch, args)` with the same channel names as in Electron (`desktop/src/main.rs`). Events use `app.emit(channel, payload)`. After adding an IPC call, regenerate the bridge and add the channel to `main.rs`. Channels that are not ported yet return safe defaults (`null` / `[]`).
+- **Ported:**
+  - settings: the same `settings.json` as Electron (`FLUX_USER_DATA` overrides the folder),
+  - translations,
+  - projects, file tree and file operations (dialogs via `rfd`, Recycle Bin via `trash`, a watcher via `notify` → `fs:changed`),
+  - finding Python,
+  - ▶ Run for all languages (`runner.rs` = `commandFor`), in a PTY (`pty.rs`, `portable-pty`),
+  - Terminal.
+- **Not yet:** Pyright/LSP (needs a Node runtime), updates, GitHub, plugins, AI, MCP, Live Server, backgrounds/wallpaper, toolchains, Flux Together, memory stats.
+- **Test on Linux:** `cargo build` in `desktop/` (needs `libwebkit2gtk-4.1-dev`), then `FLUX_USER_DATA=<dir> FLUX_TEST_JS="<js>" xvfb-run ./target/debug/flux`. `FLUX_TEST_JS` runs in the window 8 s after start (debug builds only). Log with `window.__TAURI__.core.invoke('ipc', { ch: 'log', args: [msg] })`, which prints `[okno] …` to stderr.
+- **Windows:** `.github/workflows/tauri.yml` builds it and measures its Task Manager memory next to the Electron build (job summary + artifact `Flux-Tauri`).
+
 ## Build and check
 
 ```bash

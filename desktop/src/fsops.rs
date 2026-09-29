@@ -152,3 +152,183 @@ pub fn stats(dir: &str) -> Value {
     walk(Path::new(dir), 0, &mut files);
     json!({ "files": files.len(), "lines": 0, "chars": 0, "lastModified": 0, "kinds": {}, "time": 0 })
 }
+
+// ---------- ďalšie operácie so súbormi a projektmi ----------
+fn update_projects(s: &Flux, f: impl FnOnce(&mut serde_json::Map<String, Value>)) {
+    let mut set = s.settings.lock().unwrap();
+    if let Some(o) = set.as_object_mut() {
+        f(o);
+    }
+    settings::save(&set);
+}
+
+fn with_project(s: &Flux, dir: &str, f: impl FnOnce(&mut serde_json::Map<String, Value>)) {
+    update_projects(s, |o| {
+        if let Some(list) = o.get_mut("projects").and_then(|v| v.as_array_mut()) {
+            if let Some(p) = list.iter_mut().find(|p| p.get("dir").and_then(|d| d.as_str()) == Some(dir)) {
+                if let Some(po) = p.as_object_mut() {
+                    f(po);
+                }
+            }
+        }
+    });
+}
+
+pub fn pin(s: &Flux, dir: &str, on: bool) -> Value {
+    with_project(s, dir, |p| {
+        p.insert("pinned".into(), json!(on));
+    });
+    json!(true)
+}
+
+pub fn hide(s: &Flux, dir: &str, on: bool) -> Value {
+    with_project(s, dir, |p| {
+        p.insert("hidden".into(), json!(on));
+    });
+    json!(true)
+}
+
+pub fn forget(s: &Flux, dir: &str) -> Value {
+    update_projects(s, |o| {
+        for key in ["recent", "projects"] {
+            if let Some(list) = o.get_mut(key).and_then(|v| v.as_array_mut()) {
+                list.retain(|x| x.as_str() != Some(dir) && x.get("dir").and_then(|d| d.as_str()) != Some(dir));
+            }
+        }
+    });
+    json!(true)
+}
+
+fn valid_name(n: &str) -> bool {
+    !n.is_empty() && n.trim() == n && !n.chars().any(|c| "\\/:*?\"<>|".contains(c))
+}
+
+pub fn rename_project(s: &Flux, dir: &str, name: &str) -> Result<Value, String> {
+    if !valid_name(name) {
+        return Err("Invalid folder name.".into());
+    }
+    let target = Path::new(dir).parent().unwrap_or(Path::new("")).join(name);
+    if target.exists() {
+        return Err("A folder with this name already exists.".into());
+    }
+    std::fs::rename(dir, &target).map_err(|e| e.to_string())?;
+    let t = target.to_string_lossy().to_string();
+    update_projects(s, |o| {
+        let swap = |v: &mut Value| {
+            if v.as_str() == Some(dir) {
+                *v = json!(t);
+            }
+        };
+        if let Some(list) = o.get_mut("recent").and_then(|v| v.as_array_mut()) {
+            list.iter_mut().for_each(swap);
+        }
+        if let Some(list) = o.get_mut("projects").and_then(|v| v.as_array_mut()) {
+            for p in list.iter_mut() {
+                if let Some(d) = p.get_mut("dir") {
+                    swap(d);
+                }
+            }
+        }
+        if o.get("lastFolder").and_then(|v| v.as_str()) == Some(dir) {
+            o.insert("lastFolder".into(), json!(t));
+        }
+    });
+    let mut ws = s.workspace.lock().unwrap();
+    if ws.as_deref() == Some(dir) {
+        *ws = Some(t.clone());
+    }
+    Ok(json!(t))
+}
+
+pub fn default_root() -> PathBuf {
+    dirs::document_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default()).join("Flux Projects")
+}
+
+pub fn create_project(name: &str, root: &str) -> Result<Value, String> {
+    if !valid_name(name) {
+        return Err("Invalid project name.".into());
+    }
+    let base = if root.is_empty() { default_root() } else { PathBuf::from(root) };
+    let dir = base.join(name);
+    if dir.exists() {
+        return Err("This project already exists.".into());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(json!(dir.to_string_lossy()))
+}
+
+// Súbor otvorený mimo projektu – pridá sa do nedávnych súborov.
+pub fn allow_file(s: &Flux, p: &str) -> Value {
+    let abs = std::fs::canonicalize(p).map(|x| x.to_string_lossy().trim_start_matches(r"\\?\").to_string()).unwrap_or_else(|_| p.to_string());
+    let path = Path::new(&abs);
+    if path.is_dir() {
+        return json!({ "dir": abs });
+    }
+    if !path.is_file() {
+        return Value::Null;
+    }
+    update_projects(s, |o| {
+        let mut list: Vec<Value> = o.get("recentFiles").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+        list.retain(|x| x.as_str().map(|v| v.to_lowercase()) != Some(abs.to_lowercase()));
+        list.insert(0, json!(abs));
+        list.truncate(12);
+        o.insert("recentFiles".into(), Value::Array(list));
+    });
+    json!(abs)
+}
+
+pub fn recent_files(s: &Flux) -> Value {
+    let set = s.settings.lock().unwrap();
+    let list: Vec<Value> = set.get("recentFiles").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    Value::Array(list.into_iter().filter(|f| f.as_str().map(|p| Path::new(p).is_file()).unwrap_or(false)).collect())
+}
+
+pub fn forget_recent(s: &Flux, p: &str) -> Value {
+    update_projects(s, |o| {
+        if let Some(list) = o.get_mut("recentFiles").and_then(|v| v.as_array_mut()) {
+            list.retain(|x| x.as_str().map(|v| v.to_lowercase()) != Some(p.to_lowercase()));
+        }
+    });
+    json!(true)
+}
+
+pub fn read_image(file: &str) -> Result<Value, String> {
+    use base64::Engine;
+    let meta = std::fs::metadata(file).map_err(|e| e.to_string())?;
+    if meta.len() > 25 * 1024 * 1024 {
+        return Err("The image is too large.".into());
+    }
+    let ext = Path::new(file).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let mime = match ext.as_str() {
+        "svg" => "image/svg+xml".to_string(),
+        "jpg" | "jpeg" => "image/jpeg".to_string(),
+        "ico" => "image/x-icon".to_string(),
+        e => format!("image/{e}"),
+    };
+    let bytes = std::fs::read(file).map_err(|e| e.to_string())?;
+    Ok(json!({ "url": format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)), "size": meta.len() }))
+}
+
+pub async fn trash(target: &str) -> Result<Value, String> {
+    let name = Path::new(target).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let ok = rfd::AsyncMessageDialog::new()
+        .set_title("Flux")
+        .set_description(format!("Delete “{name}”?\n\nIt will be moved to the Recycle Bin, where you can restore it."))
+        .set_buttons(rfd::MessageButtons::OkCancelCustom("Move to Recycle Bin".into(), "Cancel".into()))
+        .show()
+        .await;
+    if !matches!(ok, rfd::MessageDialogResult::Custom(ref b) if b == "Move to Recycle Bin") && ok != rfd::MessageDialogResult::Ok {
+        return Ok(json!(false));
+    }
+    trash::delete(target).map_err(|e| e.to_string())?;
+    Ok(json!(true))
+}
+
+pub fn reveal(target: &str) {
+    #[cfg(windows)]
+    let _ = std::process::Command::new("explorer").arg(format!("/select,{target}")).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").args(["-R", target]).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = std::process::Command::new("xdg-open").arg(Path::new(target).parent().unwrap_or(Path::new("/"))).spawn();
+}

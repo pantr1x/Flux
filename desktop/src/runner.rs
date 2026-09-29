@@ -1,107 +1,100 @@
-// Spúšťanie súboru (▶ Run): výstup ide do okna ako udalosti run:start / run:data / run:exit,
-// rovnako ako v Electron verzii (src/main/runner.js). Zatiaľ bez pseudoterminálu – vstup sa posiela po riadkoch.
+// ▶ Run: ktorý program spustí súbor (ako src/main/runner.js → commandFor) a spustenie v pseudoterminále.
+use crate::pty::Pty;
 use serde_json::{json, Value};
-use std::io::{Read, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::path::Path;
 use tauri::{AppHandle, Emitter};
 
-#[derive(Default)]
-pub struct Runner {
-    child: Arc<Mutex<Option<Child>>>,
-    stdin: Arc<Mutex<Option<ChildStdin>>>,
+pub struct Cmd {
+    pub cmd: String,
+    pub args: Vec<String>,
 }
 
-fn command_for(file: &str, python: &str, lang: &str) -> Option<(String, Vec<String>)> {
-    let ext = std::path::Path::new(file).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-    let py = if python.is_empty() { if cfg!(windows) { "python".to_string() } else { "python3".to_string() } } else { python.to_string() };
-    match (lang, ext.as_str()) {
-        (_, "py" | "pyw") | ("python", _) => Some((py, vec!["-u".into(), file.into()])),
-        (_, "js" | "mjs" | "cjs") => Some(("node".into(), vec![file.into()])),
+fn c(cmd: &str, args: &[&str]) -> Option<Cmd> {
+    Some(Cmd { cmd: cmd.into(), args: args.iter().map(|s| s.to_string()).collect() })
+}
+
+fn git_bash() -> Option<String> {
+    ["ProgramFiles", "ProgramFiles(x86)"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .chain(std::env::var("LOCALAPPDATA").ok().map(|l| format!("{l}\\Programs")))
+        .map(|r| format!("{r}\\Git\\bin\\bash.exe"))
+        .find(|p| Path::new(p).exists())
+}
+
+// C/C++/Rust: najprv preložiť, potom spustiť (ako Code Runner vo VS Code).
+fn compile_and_run(src: &str, compiler: &str) -> Option<Cmd> {
+    let stem = Path::new(src).file_stem()?.to_string_lossy().to_string();
+    if cfg!(windows) {
+        let out = format!("{stem}.exe");
+        let q = |s: &str| format!("'{}'", s.replace('\'', "''"));
+        c("powershell.exe", &["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &format!("& {compiler} {} -o {}; if ($?) {{ & {} }}", q(src), q(&out), q(&format!(".\\{out}")))])
+    } else {
+        c("bash", &["-c", &format!("{compiler} \"$1\" -o \"$2\" && \"./$2\""), "flux", src, &stem])
+    }
+}
+
+pub fn command_for(file: &str, python: &str, lang: &str) -> Option<Cmd> {
+    let p = Path::new(file);
+    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let base = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    if ext.is_empty() && lang == "python" {
+        return (!python.is_empty()).then(|| Cmd { cmd: python.into(), args: vec!["-u".into(), file.into()] });
+    }
+    match ext.as_str() {
+        "py" | "pyw" => (!python.is_empty()).then(|| Cmd { cmd: python.into(), args: vec!["-u".into(), file.into()] }),
+        "js" | "mjs" | "cjs" => c("node", &[file]),
+        "ts" | "mts" | "cts" => c("node", &["--experimental-strip-types", "--no-warnings", file]),
+        "pl" => c("perl", &[file]),
+        "java" => c("java", &[&base]),
+        "go" => c("go", &["run", &base]),
+        "cs" => c("dotnet", &["run", &base]),
+        "rs" => compile_and_run(&base, "rustc"),
+        "rb" => c("ruby", &[&base]),
+        "php" => c("php", &[&base]),
+        "lua" => c("lua", &[&base]),
+        "zig" => c("zig", &["run", &base]),
+        "r" => c("Rscript", &[&base]),
+        "jl" => c("julia", &[&base]),
+        "c" => compile_and_run(&base, "gcc"),
+        "cpp" | "cc" | "cxx" => compile_and_run(&base, "g++"),
+        "bat" | "cmd" if cfg!(windows) => c("cmd.exe", &["/d", "/c", file]),
+        "ps1" => c(if cfg!(windows) { "powershell.exe" } else { "pwsh" }, &["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file]),
+        "sh" if !cfg!(windows) => c("bash", &[file]),
+        "sh" => git_bash().and_then(|b| c(&b, &[file])),
         _ => None,
     }
 }
 
-impl Runner {
-    pub fn run(&self, app: &AppHandle, file: &str, python: &str, lang: &str) -> Result<Value, String> {
-        self.stop();
-        let cwd = std::path::Path::new(file).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
-        let label = std::path::Path::new(file).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        let Some((cmd, args)) = command_for(file, python, lang) else {
+// Spustí príkaz a pošle run:start (rozhranie potom čaká na run:data / run:exit).
+pub fn start(pty: &Pty, app: &AppHandle, cmd: &Cmd, cwd: &str, label: &str) -> Value {
+    match pty.spawn(app, &cmd.cmd, &cmd.args, cwd, &[("PYTHONIOENCODING", "utf-8"), ("PYTHONUTF8", "1")], "run:data", "run:exit") {
+        Ok(pid) => {
+            let _ = app.emit("run:start", json!({ "label": label, "cwd": cwd, "pid": pid, "pty": true }));
+            json!({ "ok": true })
+        }
+        Err(e) => {
             let _ = app.emit("run:start", json!({ "label": label, "cwd": cwd, "pid": 0 }));
-            let _ = app.emit("run:exit", json!({ "code": -1, "error": "This file type cannot be run yet in this build.", "ms": 0 }));
-            return Ok(json!(false));
-        };
-        let mut c = Command::new(&cmd);
-        c.args(&args).current_dir(&cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).env("PYTHONIOENCODING", "utf-8");
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+            let _ = app.emit("run:exit", json!({ "code": -1, "error": e, "ms": 0 }));
+            json!({ "ok": true })
         }
-        let started = Instant::now();
-        let mut child = match c.spawn() {
-            Ok(ch) => ch,
-            Err(e) => {
-                let _ = app.emit("run:start", json!({ "label": label, "cwd": cwd, "pid": 0 }));
-                let _ = app.emit("run:exit", json!({ "code": -1, "error": format!("{cmd}: {e}"), "ms": 0 }));
-                return Ok(json!(false));
-            }
-        };
-        let _ = app.emit("run:start", json!({ "label": label, "cwd": cwd, "pid": child.id(), "pty": false }));
-        let mut readers = vec![];
-        for stream in [child.stdout.take().map(|s| Box::new(s) as Box<dyn Read + Send>), child.stderr.take().map(|s| Box::new(s) as Box<dyn Read + Send>)].into_iter().flatten() {
-            let app = app.clone();
-            readers.push(std::thread::spawn(move || {
-                let mut stream = stream;
-                let mut buf = [0u8; 8192];
-                while let Ok(n) = stream.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    let _ = app.emit("run:data", String::from_utf8_lossy(&buf[..n]).to_string());
-                }
-            }));
-        }
-        *self.stdin.lock().unwrap() = child.stdin.take();
-        *self.child.lock().unwrap() = Some(child);
-        // čakanie na koniec programu vo vlastnom vlákne
-        let slot = self.child.clone();
-        let app = app.clone();
-        std::thread::spawn(move || {
-            for r in readers {
-                let _ = r.join();
-            }
-            let code = loop {
-                let mut g = slot.lock().unwrap();
-                match g.as_mut().map(|c| c.try_wait()) {
-                    Some(Ok(Some(st))) => {
-                        *g = None;
-                        break st.code().unwrap_or(-1);
-                    }
-                    Some(Ok(None)) => {}
-                    _ => break -1, // zastavené cez stop()
-                }
-                drop(g);
-                std::thread::sleep(std::time::Duration::from_millis(20));
-            };
-            let _ = app.emit("run:exit", json!({ "code": code, "ms": started.elapsed().as_millis() as u64 }));
-        });
-        Ok(json!(true))
     }
+}
 
-    pub fn input(&self, text: &str) {
-        if let Some(s) = self.stdin.lock().unwrap().as_mut() {
-            let _ = s.write_all(text.as_bytes());
-            let _ = s.flush();
-        }
+pub fn run_file(pty: &Pty, app: &AppHandle, file: &str, python: &str, lang: &str) -> Value {
+    let cwd = Path::new(file).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    let label = Path::new(file).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    match command_for(file, python, lang) {
+        Some(cmd) => start(pty, app, &cmd, &cwd, &label),
+        None => json!({ "ok": false, "error": "Can't run this type of file yet." }),
     }
+}
 
-    pub fn stop(&self) {
-        if let Some(mut c) = self.child.lock().unwrap().take() {
-            let _ = c.kill();
-        }
-        *self.stdin.lock().unwrap() = None;
+// Terminál: PowerShell na Windows, inak shell používateľa.
+pub fn shell_command() -> Cmd {
+    if cfg!(windows) {
+        return Cmd { cmd: "powershell.exe".into(), args: vec!["-NoLogo".into()] };
     }
+    let sh = std::env::var("SHELL").ok().filter(|s| Path::new(s).exists()).unwrap_or_else(|| "/bin/bash".into());
+    Cmd { cmd: sh, args: vec!["-i".into()] }
 }

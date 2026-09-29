@@ -59,6 +59,21 @@ pub fn locale(app: &AppHandle, lang: &str) -> Value {
     json!({})
 }
 
+// Zoznam jazykov rozhrania (pribalený locales/index.json).
+pub fn languages(app: &AppHandle) -> Value {
+    let mut dirs = vec![];
+    if let Ok(r) = app.path().resource_dir() {
+        dirs.push(r.join("locales"));
+    }
+    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../locales"));
+    for d in dirs {
+        if let Some(v) = std::fs::read_to_string(d.join("index.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
+            return v;
+        }
+    }
+    json!([{ "code": "en", "name": "English", "native": "English" }])
+}
+
 pub fn open_external(url: &str) {
     #[cfg(target_os = "windows")]
     let _ = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn();
