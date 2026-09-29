@@ -204,3 +204,22 @@ _V19I = {
 for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
     V19[code].update({k: v[i] for k, v in _V19I.items()})
 
+# 1.4.35.6 – uvoľnenie pamäte na pozadí.
+_V19J = {
+    'Free memory when Flux is in the background': (
+        'Uvoľniť pamäť, keď je Flux na pozadí', 'Speicher freigeben, wenn Flux im Hintergrund ist', 'Liberar memoria cuando Flux está en segundo plano',
+        'Libérer la mémoire quand Flux est en arrière-plan', 'Libera memoria quando Flux è in background', 'Zwalniaj pamięć, gdy Flux działa w tle',
+        'Liberar memória quando o Flux está em segundo plano', 'Звільняти пам’ять, коли Flux у фоні'),
+    'Windows moves unused memory out of RAM while you work in another app. Switching back can take a moment.': (
+        'Windows presunie nepoužívanú pamäť z RAM, kým pracuješ v inom programe. Návrat môže chvíľu trvať.',
+        'Windows lagert ungenutzten Speicher aus dem RAM aus, während du in einer anderen App arbeitest. Das Zurückwechseln kann einen Moment dauern.',
+        'Windows saca de la RAM la memoria sin usar mientras trabajas en otra app. Volver puede tardar un momento.',
+        'Windows retire de la RAM la mémoire inutilisée pendant que tu travailles dans une autre app. Le retour peut prendre un instant.',
+        'Windows sposta fuori dalla RAM la memoria inutilizzata mentre lavori in un’altra app. Il ritorno può richiedere un attimo.',
+        'Windows przenosi nieużywaną pamięć poza RAM, gdy pracujesz w innej aplikacji. Powrót może chwilę potrwać.',
+        'O Windows tira da RAM a memória não usada enquanto você trabalha em outro app. Voltar pode levar um momento.',
+        'Windows вивантажує невикористану пам’ять із RAM, поки ти працюєш в іншій програмі. Повернення може зайняти мить.'),
+}
+for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk']):
+    V19[code].update({k: v[i] for k, v in _V19J.items()})
+

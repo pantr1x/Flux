@@ -265,6 +265,11 @@ Always on, whatever the settings:
   - If the GPU process dies (`child-process-gone`, `type: 'GPU'`), Flux sets `settings.gpuSafe = true`, and later starts use `--disable-gpu-compositing`.
 - **Code splitting:** `scripts/build.mjs` builds the renderer with esbuild `splitting: true` (`dist/renderer/chunks/`). Every `import()` becomes its own file, loaded only when needed, e.g. Monaco language tokenizers and modes. Emmet (`emmet-monaco-es`) is imported at the first HTML/CSS model (`needEmmet`). Measured: start 1.9 s → 1.6 s, window process −11 MB.
 - **V8:** `js-flags=--optimize-for-size` (plus `--max-old-space-size=512` with `optJsLimit`). One `js-flags` switch only, because a second `appendSwitch` would replace the first.
+- **Working-set trim (Windows, `trimMemory`, default on):**
+  - When the window has been unfocused for 20 s, or minimized for 1 s, and then every 2 min, `keepActive.trim()` runs the helper as `flux-keepactive.exe trim <pids>`. The pids are all of `getAppMetrics()` plus Pyright.
+  - The helper calls `K32EmptyWorkingSet` (VERSION 2), and Windows moves unused pages out of RAM, as Chromium does on minimize. The Task Manager number drops well below 100 MB in the background.
+  - An active Electron window cannot get near 100 MB: main, GPU and window each have a Chromium baseline, and Flux's own JS is only ~30 MB of it.
+  - The helper is compiled ~10 s after start on Windows, whatever the material.
 - **Idle trimming:** 2 minutes after the window loses focus, the session cache is cleared and `webFrame.clearCache()` runs (`app:trim`).
 - **Pyright** stops after 5 minutes of the window being unfocused.
 - **Project stats:** `projectStats()` in `main.js` scans only the open project (`workspace`). Other projects get the numbers saved at their last visit (`userData/project-stats.json`, `files: null` when never scanned).

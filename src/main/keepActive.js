@@ -7,14 +7,30 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 
-const VERSION = '1';
+// Druhý režim „trim <pid>…“: Windows presunie nepoužívanú pamäť procesov Fluxu z RAM (EmptyWorkingSet) –
+// to isté robí Chromium pri minimalizovaní. Stránky sa vrátia samy, keď ich Flux znova potrebuje.
+const VERSION = '2';
 const SOURCE = `using System;
 using System.Runtime.InteropServices;
 static class FluxKeepActive {
   [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+  [DllImport("kernel32.dll")] static extern bool K32EmptyWorkingSet(IntPtr h);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
   static void Main(string[] args) {
     if (args.Length < 1) return;
+    if (args[0] == "trim") {
+      for (int i = 1; i < args.Length; i++) {
+        try {
+          IntPtr p = OpenProcess(0x1000 | 0x0200, false, int.Parse(args[i])); // QUERY_LIMITED_INFORMATION | SET_QUOTA
+          if (p == IntPtr.Zero) continue;
+          K32EmptyWorkingSet(p);
+          CloseHandle(p);
+        } catch {}
+      }
+      return;
+    }
     IntPtr h = new IntPtr(long.Parse(args[0]));
     if (IsWindow(h)) SendMessage(h, 0x0086, new IntPtr(1), IntPtr.Zero); // WM_NCACTIVATE, TRUE
   }
@@ -75,4 +91,13 @@ function poke(win) {
   } catch {}
 }
 
-module.exports = { ensure, poke };
+// Uvoľní pamäť daných procesov z RAM (len Windows, keď je pomocník pripravený).
+function trim(pids) {
+  const list = (pids || []).filter((p) => Number.isInteger(p) && p > 0);
+  if (!exe || !list.length) return;
+  try {
+    execFile(exe, ['trim', ...list.map(String)], { windowsHide: true, timeout: 5000 }, () => {});
+  } catch {}
+}
+
+module.exports = { ensure, poke, trim };

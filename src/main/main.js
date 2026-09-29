@@ -464,6 +464,24 @@ function createWindow() {
     }, 120e3);
   });
   win.on('focus', () => clearTimeout(trimTimer));
+  // Na pozadí (iný program 20 s, minimalizované 1 s) Windows presunie nepoužívanú pamäť Fluxu z RAM
+  // a potom znova každé 2 minúty – v Správcovi úloh klesne číslo, pri návrate sa pamäť vráti sama.
+  let wsTimer = null;
+  const trimAll = () => {
+    if (settings.trimMemory === false || !win || win.isDestroyed() || win.isFocused()) return;
+    const pids = app.getAppMetrics().map((p) => p.pid);
+    if (lsp.proc?.pid) pids.push(lsp.proc.pid);
+    keepActive.trim(pids);
+    wsTimer = setTimeout(trimAll, 120e3);
+  };
+  const trimLater = (ms) => {
+    clearTimeout(wsTimer);
+    if (isWin && settings.trimMemory !== false) wsTimer = setTimeout(trimAll, ms);
+  };
+  win.on('blur', () => trimLater(20e3));
+  win.on('minimize', () => trimLater(1000));
+  win.on('focus', () => clearTimeout(wsTimer));
+  if (isWin) setTimeout(() => keepActive.ensure(app.getPath('userData')).catch(() => {}), 10e3);
   // Acrylic/Mica ostane priesvitné aj keď klikneš do iného programu (keepActive.js).
   const keep = () => ['acrylic', 'mica'].includes(materialMode()) && settings.keepAcrylic !== false && setTimeout(() => keepActive.poke(win), 50);
   win.on('blur', keep);
