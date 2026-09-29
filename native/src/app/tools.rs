@@ -79,6 +79,11 @@ pub fn refresh(tools: &Shared, ctx: &egui::Context, force: bool) {
     });
 }
 
+// inštalácia z iných miest (okno Nový projekt)
+pub fn install(tools: &Shared, ctx: &egui::Context, id: &'static str) {
+    enqueue(tools, ctx, id, false);
+}
+
 // pridá jazyk do frontu; inštalujú sa jeden po druhom
 fn enqueue(tools: &Shared, ctx: &egui::Context, id: &'static str, upgrade: bool) {
     let start = {

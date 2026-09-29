@@ -1,7 +1,7 @@
 // Domov Fluxu (klik na logo) – to isté ako openStart() v app.js: pozdrav s dátumom, súčty za všetky
 // projekty, Nový projekt / Otvoriť priečinok / Otvoriť súbor, pripnuté a nedávne projekty s hľadaním,
 // nedávne súbory, „Začni niečo nové“ zo šablón (templates.js) a tip dňa.
-use super::{format_time, kind_file, App};
+use super::{format_time, App};
 use crate::i18n::{t, tf};
 use crate::theme;
 use crate::widgets;
@@ -39,7 +39,7 @@ const PY_TK: &str = "import tkinter as tk\n\n\ndef on_click():\n    label.config
 const PY_GAME: &str = "import pygame\n\npygame.init()\nscreen = pygame.display.set_mode((640, 480))\npygame.display.set_caption(\"My game\")\nclock = pygame.time.Clock()\n\nx, y = 300, 220\nrunning = True\nwhile running:\n    for event in pygame.event.get():\n        if event.type == pygame.QUIT:\n            running = False\n\n    keys = pygame.key.get_pressed()\n    if keys[pygame.K_LEFT]:\n        x -= 5\n    if keys[pygame.K_RIGHT]:\n        x += 5\n    if keys[pygame.K_UP]:\n        y -= 5\n    if keys[pygame.K_DOWN]:\n        y += 5\n\n    screen.fill((30, 30, 40))\n    pygame.draw.rect(screen, (139, 123, 255), (x, y, 40, 40))\n\n    pygame.display.flip()\n    clock.tick(60)\n\npygame.quit()\n";
 
 // súbory šablóny: (meno, obsah); prvý sa otvorí
-fn template_files(id: &str) -> Vec<(&'static str, &'static str)> {
+pub(super) fn template_files(id: &str) -> Vec<(&'static str, &'static str)> {
     match id {
         "py" => vec![("main.py", "\n")],
         "py-tkinter" => vec![("window.py", PY_TK)],
@@ -349,17 +349,13 @@ impl App {
                     } else if hk > 0.0 || cur {
                         ui.painter().rect_filled(r, CornerRadius::same(10), if cur { p.active } else { p.hover.gamma_multiply(hk) });
                     }
-                    let kind = app.main_kind(&dir);
                     let isz = if card { 24.0 } else { 18.0 };
                     let ic = if card {
                         Rect::from_min_size(pos2(r.left() + 16.0, r.top() + 16.0), vec2(isz, isz))
                     } else {
                         Rect::from_min_size(pos2(r.left() + 12.0, r.center().y - isz / 2.0), vec2(isz, isz))
                     };
-                    match kind.as_deref().map(kind_file) {
-                        Some(f) if !f.is_empty() => widgets::file_icon(ui, ic, f),
-                        _ => widgets::icon_at(ui, ic.center(), isz * 0.8, "folder", p.text2),
-                    }
+                    super::newproj::paint_icon(ui, ic, &app.project_icon(&dir), &p);
                     let name = pr["name"].as_str().unwrap_or("");
                     let d = desc(app, &dir);
                     let sub = if d.is_empty() { short_path(&dir) } else { d };
@@ -533,7 +529,7 @@ impl App {
             Some("newproject") => {
                 self.close_start();
                 self.side_open = true;
-                self.new_project = Some(String::new());
+                self.open_new_project();
             }
             Some("open") => {
                 if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {

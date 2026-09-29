@@ -107,7 +107,11 @@ pub fn section(ui: &mut egui::Ui, title: &str, action: Option<&str>, p: &Pal) ->
 }
 
 pub fn icon_button_at(ui: &mut egui::Ui, r: Rect, name: &str, size: f32, p: &Pal, enabled: bool) -> Response {
-    let resp = ui.interact(r, ui.id().with(("ib", name, r.min.x as i32, r.min.y as i32)), if enabled { Sense::click() } else { Sense::hover() });
+    // aj vypnuté tlačidlo zachytí klik – inak by prepadol do lišty okna (dvojklik = maximalizovať)
+    let mut resp = ui.interact(r, ui.id().with(("ib", name, r.min.x as i32, r.min.y as i32)), Sense::click());
+    if !enabled {
+        resp.flags.remove(egui::response::Flags::CLICKED);
+    }
     // plynulé zvýraznenie pri prejdení myšou
     let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), enabled && resp.hovered(), ui.style().animation_time);
     if hk > 0.0 {
@@ -139,6 +143,7 @@ pub enum Lead<'a> {
     File(&'a str),         // meno súboru → farebná ikona
     Folder { open: bool }, // šípka + priečinok
     Line(&'a str),         // čiarová ikona
+    Project(&'a str),      // ikona projektu: „file:a.py“, „line:rocket“, „emoji:🤖“
 }
 
 // Riadok v bočnom paneli: .row (28 px) alebo dvojriadkový s podnadpisom (projekty, voľné súbory).
@@ -179,6 +184,19 @@ pub fn row(ui: &mut egui::Ui, selected: bool, indent: f32, lead: Lead, name: &st
         }
         Lead::Line(n) => {
             icon(ui, Rect::from_min_size(pos2(x, cy - 8.0), vec2(16.0, 16.0)), n, p.text3);
+            x += 23.0;
+        }
+        Lead::Project(spec) => {
+            let r = Rect::from_min_size(pos2(x, cy - 8.0), vec2(16.0, 16.0));
+            if let Some(n) = spec.strip_prefix("line:") {
+                icon(ui, r, n, p.text2);
+            } else if let Some(e) = spec.strip_prefix("emoji:") {
+                ui.painter().text(r.center(), Align2::CENTER_CENTER, e, egui::FontId::proportional(14.0), p.text);
+            } else if let Some(f) = spec.strip_prefix("file:") {
+                file_icon(ui, r, f);
+            } else {
+                icon(ui, r, "folder", p.text3);
+            }
             x += 23.0;
         }
     }

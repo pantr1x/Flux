@@ -133,7 +133,7 @@ impl App {
                 self.side_open = true;
             }
             "new-project" => {
-                self.new_project = Some(String::new());
+                self.open_new_project();
                 self.side_open = true;
             }
             "open-folder" => {

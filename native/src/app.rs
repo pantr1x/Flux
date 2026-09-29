@@ -8,6 +8,7 @@ mod github;
 mod home;
 mod intro;
 mod menus;
+mod newproj;
 mod prefs;
 mod preview;
 mod tools;
@@ -67,13 +68,14 @@ pub struct App {
     home: bool, // stránka projektu namiesto editora
     hist: Vec<String>,
     hist_i: usize,
+    last_go: Option<Instant>,                           // posledný krok späť/dopredu (tlačidlá myši niekedy pošlú dva)
     tree: HashMap<String, Vec<(String, String, bool)>>, // priečinok → (meno, cesta, je priečinok)
     open_dirs: HashSet<String>,
     projects: Vec<Value>,
     summaries: HashMap<String, Value>,
     recent_files: Vec<String>,
     show_hidden: bool,
-    new_project: Option<String>,
+    new_project: Option<newproj::NewProj>,
     new_item: Option<(bool, String)>, // (priečinok?, meno) pre nový súbor/priečinok v strome
     new_todo: String,
     side_open: bool,
@@ -163,6 +165,7 @@ impl App {
             home: true,
             hist: vec![],
             hist_i: 0,
+            last_go: None,
             tree: HashMap::new(),
             open_dirs: HashSet::new(),
             projects: vec![],
@@ -543,10 +546,24 @@ impl App {
     }
 
     fn go(&mut self, back: bool) {
-        let i = if back { self.hist_i.checked_sub(1) } else { Some(self.hist_i + 1).filter(|i| *i < self.hist.len()) };
-        if let Some(i) = i {
-            self.hist_i = i;
+        // najviac jeden krok za 150 ms (dvojitá udalosť tlačidla myši, druhý prechod egui)
+        if self.last_go.is_some_and(|t| t.elapsed() < Duration::from_millis(150)) {
+            return;
+        }
+        self.last_go = Some(Instant::now());
+        let mut i = self.hist_i;
+        loop {
+            i = match if back { i.checked_sub(1) } else { Some(i + 1).filter(|i| *i < self.hist.len()) } {
+                Some(i) => i,
+                None => return,
+            };
+            // preskočiť miesta, ktoré už neexistujú (zmazaný súbor alebo projekt)
             let p = self.hist[i].clone();
+            let gone = p.strip_prefix("file:").or(p.strip_prefix("proj:")).is_some_and(|x| !Path::new(x).exists());
+            if gone || p == self.place() {
+                continue;
+            }
+            self.hist_i = i;
             if p == "home" {
                 let now = self.switched.max(0.0);
                 self.open_start(now);
@@ -558,6 +575,14 @@ impl App {
                 self.home = true;
             } else if let Some(f) = p.strip_prefix("file:") {
                 self.start = false;
+                // súbor z iného projektu: najprv prepnúť projekt, aby sedel bočný panel
+                let ws = self.workspace().unwrap_or_default();
+                if ws.is_empty() || !f.starts_with(&ws) {
+                    let owner = self.projects.iter().filter_map(|p| p["dir"].as_str()).filter(|d| f.starts_with(d)).max_by_key(|d| d.len()).map(String::from);
+                    if let Some(d) = owner {
+                        self.open_folder(&d);
+                    }
+                }
                 if let Some(t) = self.tabs.iter().position(|t| t.path == f) {
                     self.active = t;
                     self.home = false;
@@ -565,6 +590,7 @@ impl App {
                     self.open_file(f);
                 }
             }
+            return;
         }
     }
 
@@ -781,6 +807,7 @@ impl App {
                 }
                 "settings" => self.open_settings(if arg.is_empty() { "general" } else { arg }, ctx),
                 "ai" => self.toggle_ai(),
+                "newproj" => self.open_new_project(),
                 "gh-signin" => self.gh_sign_in(ctx),
                 "gh-pick" => self.gh_pick(ctx),
                 "ask" => self.ai_ask(arg, ctx),
@@ -793,6 +820,7 @@ impl App {
                 }
                 "tour" => self.tour = Some(arg.parse().unwrap_or(0)),
                 "start" => self.open_start(ctx.input(|i| i.time)),
+                "hist" => eprintln!("[hist] {} {:?}", self.hist_i, self.hist),
                 "back" => self.go(true),
                 "fwd" => self.go(false),
                 "preview" => self.open_preview(),
@@ -900,9 +928,8 @@ impl App {
         let hidden = pr["hidden"].as_bool() == Some(true);
         let sel = ws == Some(dir.as_str());
         let sub = self.project_sub(&dir);
-        let kind = self.main_kind(&dir);
-        let icon_name = kind.as_deref().map(kind_file).unwrap_or("");
-        let lead = if icon_name.is_empty() { Lead::Line("folder") } else { Lead::File(icon_name) };
+        let spec = self.project_icon(&dir);
+        let lead = Lead::Project(&spec);
         if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == dir) {
             let te = ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 8)));
             te.request_focus();
@@ -1028,21 +1055,8 @@ impl App {
                         self.open_folder(&d);
                     }
                 }
-                if let Some(name) = &mut self.new_project {
-                    let r = ui.add(egui::TextEdit::singleline(name).hint_text(t("Project name")).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 6)));
-                    r.request_focus();
-                    if r.lost_focus() {
-                        let n = name.trim().to_string();
-                        self.new_project = None;
-                        if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !n.is_empty() {
-                            match fsops::create_project(&n, "") {
-                                Ok(d) => self.open_folder(d.as_str().unwrap_or("")),
-                                Err(e) => self.status = e,
-                            }
-                        }
-                    }
-                } else if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New project"), None, false, &p).clicked() {
-                    self.new_project = Some(String::new());
+                if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New project"), None, false, &p).clicked() {
+                    self.open_new_project();
                 }
                 if hidden > 0
                     && widgets::row(ui, false, 10.0, Lead::Line(if self.show_hidden { "eyeOff" } else { "eye" }), &crate::i18n::tf("{n} hidden", &[("n", &hidden.to_string())]), None, false, &p)
@@ -1783,7 +1797,7 @@ impl App {
             let mut acts = child.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(x0, cy + 14.0), vec2(tw + 60.0, 32.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
             acts.spacing_mut().item_spacing.x = 6.0;
             if widgets::button(&mut acts, Some("plus"), &t("New project"), p.accent, p.accent_fg, 30.0, &p).clicked() {
-                self.new_project = Some(String::new());
+                self.open_new_project();
             }
             if widgets::button(&mut acts, Some("folderOpen"), &t("Open folder"), p.card2, p.text, 30.0, &p).clicked() {
                 if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
@@ -1820,10 +1834,21 @@ impl App {
             let icon_box = Rect::from_min_size(pos2(left, head.top()), vec2(64.0, 64.0));
             ui.painter().rect_filled(icon_box, CornerRadius::same(14), p.card2);
             ui.painter().rect_stroke(icon_box, CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-            match langs.first() {
-                Some(k) => widgets::file_icon(ui, Rect::from_center_size(icon_box.center(), vec2(36.0, 36.0)), kind_file(k)),
-                None => widgets::icon_at(ui, icon_box.center(), 30.0, "folder", p.text2),
+            // klik na ikonu = zmeniť ikonu projektu
+            let ir = ui.interact(icon_box, ui.id().with("proj-icon"), Sense::click()).on_hover_text(t("Change icon")).on_hover_cursor(egui::CursorIcon::PointingHand);
+            if ir.hovered() {
+                ui.painter().rect_stroke(icon_box, CornerRadius::same(14), Stroke::new(1.5, p.text3), StrokeKind::Inside);
             }
+            let spec = self.project_icon(&ws);
+            newproj::paint_icon(ui, Rect::from_center_size(icon_box.center(), vec2(36.0, 36.0)), &spec, &p);
+            egui::Popup::from_toggle_button_response(&ir).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                ui.set_width(300.0);
+                let lang = langs.first().map(|k| kind_file(k)).unwrap_or("");
+                let cur = self.core.setting("projectMeta")[&ws]["icon"].as_str().unwrap_or("").to_string();
+                if let Some(ic) = newproj::icon_picker(ui, &cur, lang, 300.0, &p) {
+                    self.set_project_meta(&ws, json!({ "icon": if ic.is_empty() { Value::Null } else { json!(ic) } }));
+                }
+            });
             let tx = icon_box.right() + 19.0;
             ui.painter().text(pos2(tx, head.top() + 20.0), Align2::LEFT_CENTER, widgets::file_name(&ws), theme::bold(30.0), p.text);
             let desc = meta["description"].as_str().filter(|d| !d.is_empty()).map(String::from).unwrap_or_else(|| ws.clone());
@@ -2637,6 +2662,14 @@ impl eframe::App for App {
                 self.ask_ui(ui, full);
             });
         }
+        // okno Nový projekt
+        if self.new_project.is_some() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("newproj-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.new_project_ui(ui, full);
+            });
+        }
         // Nastavenia nad všetkým (vlastná vrstva)
         if self.settings.is_some() {
             let full = ctx.content_rect();
@@ -2658,8 +2691,9 @@ impl eframe::App for App {
         if self.intro.is_none() {
             let (b, f) = ctx.input_mut(|i| {
                 (
-                    i.pointer.button_pressed(egui::PointerButton::Extra1) || i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowLeft),
-                    i.pointer.button_pressed(egui::PointerButton::Extra2) || i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowRight),
+                    // ako prehliadač: až pri pustení tlačidla myši
+                    i.pointer.button_released(egui::PointerButton::Extra1) || i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowLeft),
+                    i.pointer.button_released(egui::PointerButton::Extra2) || i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowRight),
                 )
             });
             if b {

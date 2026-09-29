@@ -2,6 +2,18 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.8.1 – 2026-09-29
+
+### New project window
+- **New project** opens a proper window, like in Flux: pick Python, Website, JavaScript, Empty or one of 14 more languages, then choose an **icon**: the language icon, a line icon (robot, rocket, globe, star…) or an emoji (🎮 🚀 🎨 🔥…). Add a name, a short description and where to save it.
+- If the language is not on your computer yet, the window offers **Install** right there.
+- **Change the icon later**: click the big icon on the project page.
+
+### Fixes
+- **Back and forward** with the mouse buttons now go exactly one step and switch to the right project. The ← → buttons at the top no longer maximize the window when you click them while they are grey.
+- The intro shows **Installed** on languages that are already on your computer.
+- The memory number ("Flux uses … MB right now") now matches Task Manager. It used to count memory the graphics driver only reserves, so it showed about 400 MB.
+
 ## 0.8.0 – 2026-09-29
 
 ### Settings like in Flux

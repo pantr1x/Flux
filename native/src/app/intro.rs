@@ -281,6 +281,12 @@ impl App {
             theme::ui(11.0),
             p.text3,
         );
+        // čo už je na počítači (Nastavenia → Jazyky) – odznak „Installed“ hore na karte
+        super::tools::refresh(&self.tools, ui.ctx(), false);
+        let installed: Vec<&str> = {
+            let s = self.tools.lock().unwrap();
+            s.status.as_ref().map(|(l, _)| flux_core::toolchains::TOOLCHAINS.iter().zip(l.iter()).filter(|(_, st)| st.installed).map(|(tc, _)| tc.id).collect()).unwrap_or_default()
+        };
         let mut toggle = None;
         for (i, (id, label, file, _)) in list.iter().enumerate() {
             let r = Rect::from_min_size(body.min + vec2((i % cols) as f32 * (cw + 9.0), (i / cols) as f32 * (ch + 9.0)), vec2(cw, ch));
@@ -299,7 +305,26 @@ impl App {
             }
             ui.painter().text(pos2(r.center().x, ic.bottom() + 16.0), Align2::CENTER_CENTER, t(label), theme::bold(12.0), p.text);
             if *id == "+more" {
-                ui.painter().text(pos2(r.center().x, ic.bottom() + 33.0), Align2::CENTER_CENTER, "Rust, TypeScript, PHP, Lua\u{2026}", theme::ui(10.5), p.text3);
+                widgets::text(ui, pos2(r.center().x, ic.bottom() + 33.0), Align2::CENTER_CENTER, "Rust, TypeScript, PHP, Lua\u{2026}", theme::ui(10.5), p.text3, cw - 16.0);
+            }
+            let tool = match *id {
+                "js" | "ts" => "node",
+                "web" | "explore" | "+more" => "",
+                x => x,
+            };
+            if !tool.is_empty() && installed.contains(&tool) {
+                if more {
+                    // málo miesta: len zelená fajka v rohu
+                    let c = pos2(r.left() + 15.0, r.top() + 15.0);
+                    ui.painter().circle_filled(c, 8.0, p.green.gamma_multiply(0.22));
+                    widgets::icon_at(ui, c, 10.0, "check", p.green);
+                } else {
+                    let txt = t("Installed");
+                    let tw = widgets::text_w(ui, &txt, theme::bold(10.5)) + 14.0;
+                    let y = ic.bottom() + 34.0;
+                    widgets::icon_at(ui, pos2(r.center().x - tw / 2.0 + 5.0, y), 10.0, "check", p.green);
+                    ui.painter().text(pos2(r.center().x - tw / 2.0 + 14.0, y), Align2::LEFT_CENTER, txt, theme::bold(10.5), p.green);
+                }
             }
             if on {
                 let cb = Rect::from_min_size(pos2(r.right() - 24.0, r.top() + 8.0), vec2(16.0, 16.0));

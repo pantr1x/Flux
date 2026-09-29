@@ -110,5 +110,9 @@ _V20 = {
     'Test the connection': ('Otestovať spojenie', 'Verbindung testen', 'Probar la conexión', 'Tester la connexion', 'Prova la connessione', 'Sprawdź połączenie', 'Testar a conexão', 'Перевірити з’єднання'),
     'Works – {model} answered.': ('Funguje – {model} odpovedal.', 'Funktioniert – {model} hat geantwortet.', 'Funciona: {model} respondió.', 'Ça marche – {model} a répondu.', 'Funziona: {model} ha risposto.', 'Działa – {model} odpowiedział.', 'Funciona – {model} respondeu.', 'Працює – {model} відповів.'),
     'Your web page next to the code, reloaded every time you save.': ('Tvoja webstránka vedľa kódu, obnovená pri každom uložení.', 'Deine Webseite neben dem Code, bei jedem Speichern neu geladen.', 'Tu página web junto al código, recargada cada vez que guardas.', 'Votre page web à côté du code, rechargée à chaque enregistrement.', 'La tua pagina web accanto al codice, ricaricata a ogni salvataggio.', 'Twoja strona obok kodu, odświeżana przy każdym zapisie.', 'Sua página web ao lado do código, recarregada a cada salvamento.', 'Ваша вебсторінка поруч із кодом, оновлюється після кожного збереження.'),
+    'Change icon': ('Zmeniť ikonu', 'Symbol ändern', 'Cambiar icono', 'Changer l’icône', 'Cambia icona', 'Zmień ikonę', 'Alterar ícone', 'Змінити значок'),
+    'Icon': ('Ikona', 'Symbol', 'Icono', 'Icône', 'Icona', 'Ikona', 'Ícone', 'Значок'),
+    'Language icon': ('Ikona jazyka', 'Symbol der Sprache', 'Icono del lenguaje', 'Icône du langage', 'Icona del linguaggio', 'Ikona języka', 'Ícone da linguagem', 'Значок мови'),
+    'Project {name} is ready.': ('Projekt {name} je pripravený.', 'Projekt {name} ist bereit.', 'El proyecto {name} está listo.', 'Le projet {name} est prêt.', 'Il progetto {name} è pronto.', 'Projekt {name} jest gotowy.', 'O projeto {name} está pronto.', 'Проєкт {name} готовий.'),
 }
 V20 = {code: {k: v[i] for k, v in _V20.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

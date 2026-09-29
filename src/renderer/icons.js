@@ -54,6 +54,7 @@ const paths = {
   file: '<path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4"/>',
   todo: '<path d="m4 7 2 2 3-3M4 16l2 2 3-3M12 8h8M12 17h8"/>',
   python: '<path d="M12 3c-4 0-4 1.8-4 3v2h4.2v1H6c-2 0-3 1.4-3 4s1 4 3 4h1.8v-2.5c0-1.6 1.3-2.9 3-2.9h4.3c1.3 0 2.4-1.1 2.4-2.4V6c0-1.6-1.8-3-5.5-3Z"/><path d="M12 21c4 0 4-1.8 4-3v-2h-4.2v-1H18c2 0 3-1.4 3-4s-1-4-3-4h-1.8"/><circle cx="10" cy="5.8" r=".6" fill="currentColor"/><circle cx="14" cy="18.2" r=".6" fill="currentColor"/>',
+  robot: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 12.5v1M14.5 12.5v1M9.5 16h5M3 12.5v2.5M21 12.5v2.5"/><circle cx="12" cy="4" r="1"/>',
   sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7Z"/>',
   save: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"/><path d="M8 3v5h7M8 21v-7h8v7"/>',
 };

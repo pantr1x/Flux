@@ -45,15 +45,17 @@ pub fn trim_now() {
     trim();
 }
 
-// pamäť programu ako v Správcovi úloh (Windows: súkromná pamäť; Linux: RSS)
+// pamäť programu ako v Správcovi úloh: súkromná pracovná množina (Windows 10 1809+), nie celý „commit“ –
+// do toho by sa rátala aj pamäť, ktorú si ovládač grafiky len rezervuje (preto intro ukazovalo ~400 MB)
 #[cfg(windows)]
 pub fn used_mb() -> Option<f64> {
-    use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
+    use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX2};
     unsafe {
-        let mut c: PROCESS_MEMORY_COUNTERS_EX = std::mem::zeroed();
-        c.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+        let mut c: PROCESS_MEMORY_COUNTERS_EX2 = std::mem::zeroed();
+        c.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32;
         if K32GetProcessMemoryInfo(windows_sys::Win32::System::Threading::GetCurrentProcess(), &mut c as *mut _ as *mut _, c.cb) != 0 {
-            return Some(c.PrivateUsage as f64 / 1048576.0);
+            let v = if c.PrivateWorkingSetSize > 0 { c.PrivateWorkingSetSize } else { c.WorkingSetSize };
+            return Some(v as f64 / 1048576.0);
         }
     }
     None
