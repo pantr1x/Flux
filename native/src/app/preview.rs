@@ -150,6 +150,11 @@ impl App {
         {
             let zoom = ctx.zoom_factor();
             let Some(pv) = self.preview.as_mut() else { return };
+            // zbalené okno: WebView2 zavrieť (jeho procesy berú desiatky MB), po obnovení sa vytvorí znova
+            if ctx.input(|i| i.viewport().minimized.unwrap_or(false)) {
+                pv.view = None;
+                return;
+            }
             let Some(b) = pv.body else { return };
             let bounds = wry::Rect {
                 position: wry::dpi::LogicalPosition::new((b.left() * zoom) as f64, (b.top() * zoom) as f64).into(),

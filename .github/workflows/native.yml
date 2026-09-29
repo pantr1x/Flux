@@ -79,6 +79,22 @@ jobs:
           $env:FLUX_USER_DATA = $nd
           $env:FLUX_TEST = "2:open=main.py"
           try { $report += Start-FluxRun 'native' (Get-ChildItem target\release\flux-native.exe).FullName $null } catch { $report += "native: measurement failed: $_" }
+          # živá tapeta (falošný Lively s ukážkovým videom): koľko stojí jedna snímka a prehrávanie vo Fluxe
+          try {
+            $lv = "$env:RUNNER_TEMP\fake-local"; $wp = "$lv\wp1"
+            New-Item -ItemType Directory "$lv\Lively Wallpaper", $wp -Force | Out-Null
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 60 "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4" -OutFile "$wp\video.mp4"
+            '{"FileName":"video.mp4","Title":"test"}' | Set-Content "$wp\LivelyInfo.json"
+            ('[{"LivelyInfoPath":"' + ($wp -replace '\\','\\') + '"}]') | Set-Content "$lv\Lively Wallpaper\WallpaperLayout.json"
+            $realLocal = $env:LOCALAPPDATA; $env:LOCALAPPDATA = $lv; $env:FLUX_LIVE_TEST = "1"
+            foreach ($mode in @('still', 'play')) {
+              $d = "$env:RUNNER_TEMP\ud-live-$mode"; Settings $d
+              $j = Get-Content "$d\settings.json" | ConvertFrom-Json; $j | Add-Member liveWallMode $mode -Force; $j | ConvertTo-Json -Depth 5 | Set-Content "$d\settings.json"
+              $env:FLUX_USER_DATA = $d
+              $report += Start-FluxRun "native-live-$mode" (Get-ChildItem target\release\flux-native.exe).FullName $null
+            }
+            $env:LOCALAPPDATA = $realLocal; Remove-Item Env:FLUX_LIVE_TEST
+          } catch { $report += "live wallpaper measurement skipped: $_" }
           $report += "Program size: $([math]::Round((Get-Item target\release\flux-native.exe).Length / 1MB, 1)) MB"
           $report | Set-Content out\memory.txt
           # program na stiahnutie a vyskúšanie (bez inštalátora, rovnaké nastavenia ako Electron Flux)

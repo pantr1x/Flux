@@ -2,6 +2,19 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.7.0 – 2026-09-29
+
+### Much less memory with Lively Wallpaper and Wallpaper Engine
+- **See-through window.** Flux no longer plays its own copy of your video wallpaper. The window is see-through, so your live wallpaper shows behind the panels as it is, moving, and Flux does not use extra memory for it. The first time, Flux offers **Restart Flux** in Settings → Appearance to turn this on.
+- Settings → Appearance → Window → **Live wallpaper**: *See-through* (lightest, windows behind Flux show too), *Still image* or *Play inside Flux* (uses more memory).
+- **No more flash at start.** Flux remembers your live wallpaper, so the Windows wallpaper no longer shows for a moment first.
+
+### Back and forward
+- **← →** in the top bar, the back/forward buttons on your mouse and **Alt+← / Alt+→** now go back and forth between files, project pages and the home screen.
+
+### For the developer
+- Settings → Developer → Memory shows what uses memory: textures, wallpaper, preview and the program.
+
 ## 0.6.0 – 2026-09-29
 
 - **Intro**:

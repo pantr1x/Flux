@@ -18,6 +18,7 @@ pub fn default_of(key: &str) -> Value {
         "lineHeight" => json!(1.45),
         "minimap" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
+        "liveWallMode" => json!("see"),
         "uiZoom" => json!(100),
         "lineNumbers" => json!("on"),
         "cornerRadius" => json!(14),
@@ -151,6 +152,21 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     "Memory",
                     vec![
                         Row::Info("Memory", format!("{} MB", crate::mem::used_mb().map(|m| format!("{m:.0}")).unwrap_or("–".into()))),
+                        // rozpis: textúry egui (písmo, tapeta, ikony) a čo ešte beží
+                        Row::Info("Textures", app.tex_info.clone()),
+                        Row::Info(
+                            "Running",
+                            [
+                                app.wall.describe(),
+                                if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) { "see-through window".into() } else { String::new() },
+                                if app.preview.is_some() { "Live Server preview".into() } else { String::new() },
+                                if app.running { "program".into() } else { String::new() },
+                            ]
+                            .into_iter()
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" · "),
+                        ),
                         Row::Button("dev-trim", "Free memory now", "Move unused memory out of RAM, like when Flux is in the background.", "Trim"),
                         Row::Toggle("devFps", "Show frames per second", "in the status bar – when nothing moves it should drop to 0"),
                     ],
@@ -194,10 +210,12 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                         "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.",
                         o(&[("wallpaper", "Wallpaper (recommended)"), ("none", "Off")]),
                     ),
-                    Row::Toggle(
-                        "liveWallpaper",
-                        "Use Lively Wallpaper and Wallpaper Engine",
-                        "when one of them is running, Flux shows the same wallpaper behind its panels – videos play only while Flux is in front",
+                    Row::Toggle("liveWallpaper", "Use Lively Wallpaper and Wallpaper Engine", "when one of them is running, Flux shows the same wallpaper behind its panels"),
+                    Row::Select(
+                        "liveWallMode",
+                        "Live wallpaper",
+                        "See-through is the lightest: your live wallpaper shows through Flux as it is (windows behind Flux show too). Changes apply after a restart.",
+                        o(&[("see", "See-through (lightest)"), ("still", "Still image"), ("play", "Play inside Flux (more memory)")]),
                     ),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
@@ -211,7 +229,18 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Range("darkLift", "Brightness of dark areas", "Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.", 0.0, 100.0, 1.0),
                 ],
             ),
-            ("", vec![Row::Button("look-reset", "Reset the look", "cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay", "Reset all")]),
+            (
+                "",
+                // priehľadnosť okna sa dá zmeniť len novým štartom – ponúknuť ho, keď sa líši od želania
+                if crate::want_transparent() != crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+                    vec![
+                        Row::Button("restart", "Restart Flux", "to switch the live wallpaper mode", "Restart"),
+                        Row::Button("look-reset", "Reset the look", "cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay", "Reset all"),
+                    ]
+                } else {
+                    vec![Row::Button("look-reset", "Reset the look", "cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay", "Reset all")]
+                },
+            ),
         ],
         "editor" => vec![
             (
@@ -660,6 +689,19 @@ impl App {
             "tour" => {
                 self.settings = None;
                 self.tour = Some(0);
+            }
+            // nový štart (uloží súbory) – napr. pre priehľadné okno živej tapety
+            "restart" => {
+                for i in 0..self.tabs.len() {
+                    if self.tabs[i].dirty() {
+                        self.save(i);
+                    }
+                }
+                if let Ok(e) = std::env::current_exe() {
+                    if std::process::Command::new(e).args(std::env::args_os().skip(1)).spawn().is_ok() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                }
             }
             "dev-data" => flux_core::settings::open_external(&flux_core::settings::user_data().to_string_lossy()),
             "dev-exe" => {

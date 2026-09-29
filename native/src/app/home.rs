@@ -185,6 +185,14 @@ impl App {
         ui.painter().text(pos2(full.left() + 44.0, cy), Align2::LEFT_CENTER, "flux", theme::bold(15.0), p.text);
         let menu = widgets::icon_button_at(ui, Rect::from_center_size(pos2(full.left() + 98.0, cy), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
         self.app_menu(&menu);
+        // ← → ako v hornej lište (navButtons v app.js)
+        let (back, fwd) = (self.hist_i > 0, self.hist_i + 1 < self.hist.len());
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(full.left() + 132.0, cy), vec2(28.0, 28.0)), "arrowLeft", 16.0, &p, back).on_hover_text(t("Back")).clicked() {
+            self.go(true);
+        }
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(full.left() + 162.0, cy), vec2(28.0, 28.0)), "arrowRight", 16.0, &p, fwd).on_hover_text(t("Forward")).clicked() {
+            self.go(false);
+        }
         let set_r = Rect::from_center_size(pos2(full.right() - super::chrome::CONTROLS_W - 24.0, cy), vec2(30.0, 30.0));
         if widgets::icon_button_at(ui, set_r, "settings", 16.0, &p, true).on_hover_text(t("Settings")).clicked() {
             self.open_settings("general", &ctx);

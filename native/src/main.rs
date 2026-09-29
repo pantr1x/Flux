@@ -15,7 +15,25 @@ mod update;
 mod wall;
 mod widgets;
 
+// priehľadné okno pre živú tapetu (Lively / Wallpaper Engine): pracovná plocha presvitá priamo,
+// Flux nič nedekóduje. Dá sa zvoliť len pri vytvorení okna, preto sa rozhodne zo settings.json vopred.
+pub static TRANSPARENT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn want_transparent() -> bool {
+    let s = flux_core::settings::load();
+    let on = |k: &str, def: bool| s[k].as_bool().unwrap_or(def);
+    let lite = on("lite", false);
+    s["material"].as_str() != Some("none")
+        && on("optFx", !lite)
+        && on("liveWallpaper", true)
+        && s["liveWallMode"].as_str().unwrap_or("see") == "see"
+        && !s["bg"]["type"].is_string()
+        && s["liveCache"]["file"].is_string()
+}
+
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
+    let transparent = want_transparent();
+    TRANSPARENT.store(transparent, std::sync::atomic::Ordering::Relaxed);
     // FLUX_SIZE=1280x780 – veľkosť okna pre testy a porovnanie so screenshotmi Electron Fluxu
     let size = std::env::var("FLUX_SIZE").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]))).unwrap_or([1400.0, 900.0]);
     eframe::NativeOptions {
@@ -23,6 +41,7 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
             .with_title("Flux")
             // vlastná titulná lišta ako v Electron Fluxe (− □ × kreslí app/chrome.rs)
             .with_decorations(false)
+            .with_transparent(transparent)
             .with_inner_size(size)
             .with_min_inner_size([760.0, 480.0])
             .with_icon(std::sync::Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon64.png")).unwrap_or_default())),

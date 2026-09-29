@@ -147,8 +147,9 @@ fn wallpaper_engine() -> Option<Found> {
 
 // beží program? keď je zavretý, na ploche je zas obyčajná tapeta Windows
 fn running() -> (bool, bool) {
-    if !cfg!(windows) {
-        return (true, true); // test mimo Windows (FLUX_STEAM_PATH, LOCALAPPDATA)
+    // test mimo Windows (FLUX_STEAM_PATH, LOCALAPPDATA) a meranie v CI s falošnou Lively tapetou
+    if !cfg!(windows) || std::env::var_os("FLUX_LIVE_TEST").is_some() {
+        return (true, true);
     }
     match quiet("tasklist").args(["/FO", "CSV", "/NH"]).output() {
         Ok(o) => {

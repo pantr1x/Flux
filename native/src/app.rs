@@ -106,7 +106,11 @@ pub struct App {
     wall: crate::wall::Wall,
     live: Arc<std::sync::Mutex<Option<crate::live::Found>>>, // Lively / Wallpaper Engine (zisťuje sa na pozadí)
     live_at: f64,
-    wall_at: f64, // kedy sa naposledy zisťoval zdroj tapety
+    tex_info: String, // vývojár: počet a veľkosť textúr (raz za sekundu)
+    start_trimmed: bool,
+    live_done: Arc<std::sync::atomic::AtomicBool>, // prvé zisťovanie živej tapety skončilo
+    live_saved: Option<crate::live::Found>,        // čo je uložené v settings.liveCache
+    wall_at: f64,                                  // kedy sa naposledy zisťoval zdroj tapety
     pub(crate) upd: crate::update::Updater,
     server: Option<crate::server::Server>, // Live Server (HTML)
     tools: tools::Shared,                  // programovacie jazyky na stiahnutie
@@ -123,6 +127,14 @@ impl App {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let core = Arc::new(Core::load());
+        // naposledy zistená živá tapeta – hneď od štartu, bez prebliknutia tapety Windows
+        let lc = core.setting("liveCache");
+        let live_cache = lc["file"].as_str().map(std::path::PathBuf::from).filter(|p| p.is_file()).map(|file| crate::live::Found {
+            file,
+            video: lc["video"].as_bool().unwrap_or(false),
+            preview: lc["preview"].as_str().map(std::path::PathBuf::from),
+            source: if lc["source"].as_str() == Some("Wallpaper Engine") { "Wallpaper Engine" } else { "Lively Wallpaper" },
+        });
         // svetlá/tmavá podľa témy kódu – ako isDark() v Electron Fluxe
         let code = Code::new(core.setting("codeTheme").as_str().unwrap_or(""));
         let pal = theme::palette_for(code.dark, core.setting("accent").as_str().unwrap_or("mono"), core.setting("darkLift").as_f64().unwrap_or(0.0));
@@ -185,7 +197,11 @@ impl App {
             trim: Default::default(),
             smooth: Default::default(),
             wall: Default::default(),
-            live: Default::default(),
+            live: Arc::new(std::sync::Mutex::new(live_cache.clone())),
+            live_done: Default::default(),
+            tex_info: String::new(),
+            start_trimmed: false,
+            live_saved: live_cache,
             live_at: -100.0,
             wall_at: -100.0,
             upd: Default::default(),
@@ -255,7 +271,15 @@ impl App {
             let lum = self.wall.lum.unwrap_or(0.3);
             let clash = if p.dark { (lum - 0.25).max(0.0) } else { (0.65 - lum).max(0.0) };
             let base_a = if p.dark { 0.62 } else { 0.66 } + (clash * 0.9).min(0.3);
-            let card_a = if (alpha - 0.74).abs() > 0.001 { alpha } else { (if p.dark { 0.9 } else { 0.88 } + clash * 0.2).min(0.96) };
+            // priehľadné okno (živá tapeta): pod kartou nie je rozmazaná kópia → karta plnšia
+            let card_def = if self.see_through() {
+                0.94
+            } else if p.dark {
+                0.9
+            } else {
+                0.88
+            };
+            let card_a = if (alpha - 0.74).abs() > 0.001 { alpha } else { (card_def + clash * 0.2).min(0.96) };
             p.base = p.base.gamma_multiply(base_a);
             p.card = p.card.gamma_multiply(card_a);
         }
@@ -284,10 +308,32 @@ impl App {
         // živá tapeta (Lively Wallpaper / Wallpaper Engine), ak beží – bez vlastného pozadia a keď nie je vypnutá
         if self.get("liveWallpaper").as_bool() != Some(false) {
             if let Some(f) = self.live.lock().unwrap().clone() {
-                return Some(if f.video { Src::Video(f.file, f.preview) } else { Src::Image(f.file) });
+                // priehľadné okno: plocha (aj živá tapeta) presvitá sama, Flux nič nekreslí ani nedekóduje
+                if self.see_through() {
+                    return None;
+                }
+                let mode = self.get("liveWallMode").as_str().unwrap_or("see").to_string();
+                return Some(match (f.video, mode.as_str()) {
+                    (true, "play") => Src::Video(f.file, f.preview),
+                    (true, _) => Src::Still(f.file, f.preview), // jedna snímka, potom sa dekodér uvoľní
+                    _ => Src::Image(f.file),
+                });
+            }
+            // prvé zisťovanie ešte beží (bez uloženej živej tapety): zatiaľ nič, nech tapeta Windows nepreblikne
+            if !self.live_done.load(std::sync::atomic::Ordering::Relaxed) && self.started.elapsed() < Duration::from_secs(2) {
+                return None;
             }
         }
         crate::wall::desktop_wallpaper().map(Src::Image)
+    }
+
+    // priehľadné okno práve ukazuje živú tapetu (okno vytvorené ako priehľadné + tapeta beží + režim „see“)
+    fn see_through(&self) -> bool {
+        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed)
+            && self.wall_on()
+            && self.get("liveWallMode").as_str().unwrap_or("see") == "see"
+            && self.get("liveWallpaper").as_bool() != Some(false)
+            && self.live.lock().unwrap().is_some()
     }
 
     // „Restart to update“: uloží súbory, vymení program a spustí nový
@@ -310,6 +356,7 @@ impl App {
         }
         self.live_at = now;
         let slot = self.live.clone();
+        let done = self.live_done.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let found = crate::live::detect();
@@ -318,7 +365,30 @@ impl App {
                 *cur = found;
                 ctx.request_repaint();
             }
+            done.store(true, std::sync::atomic::Ordering::Relaxed);
         });
+    }
+
+    // posledná zistená živá tapeta sa pamätá v settings.liveCache – pri ďalšom štarte hneď bez prebliknutia
+    // vráti true, keď sa živá tapeta zmenila (treba prepočítať vzhľad)
+    fn sync_live_cache(&mut self) -> bool {
+        let cur = self.live.lock().unwrap().clone();
+        if cur == self.live_saved || !self.live_done.load(std::sync::atomic::Ordering::Relaxed) {
+            return false;
+        }
+        self.live_saved = cur.clone();
+        let v = cur.map(|f| json!({ "file": f.file.to_string_lossy(), "video": f.video, "preview": f.preview.map(|p| p.to_string_lossy().to_string()), "source": f.source }));
+        self.update_settings(|o| match v {
+            Some(v) => {
+                o.insert("liveCache".into(), v);
+            }
+            None => {
+                o.remove("liveCache");
+            }
+        });
+        // tapeta sa zmenila → nový zdroj hneď
+        self.wall_at = -100.0;
+        true
     }
 
     // znova načíta vzhľad z nastavení (farby, veľkosť, hustota, plynulé posúvanie, písmo výstupu)
@@ -415,13 +485,31 @@ impl App {
     fn activate(&mut self, i: usize) {
         self.active = i;
         self.home = false;
-        if let Some(t) = self.tabs.get(i) {
-            let p = t.path.clone();
-            if self.hist.get(self.hist_i) != Some(&p) {
+    }
+
+    // aktuálne miesto pre históriu späť/dopredu: domov, stránka projektu alebo súbor
+    fn place(&self) -> String {
+        if self.start {
+            "home".into()
+        } else if self.home || self.tabs.is_empty() {
+            format!("proj:{}", self.workspace().unwrap_or_default())
+        } else {
+            format!("file:{}", self.tabs[self.active].path)
+        }
+    }
+
+    // na konci snímky: nové miesto → do histórie (miesta sa menia z veľa miest, takto sa nič nevynechá)
+    fn track_place(&mut self) {
+        let p = self.place();
+        if p == "proj:" {
+            return;
+        }
+        if self.hist.get(self.hist_i) != Some(&p) {
+            if !self.hist.is_empty() {
                 self.hist.truncate(self.hist_i + 1);
-                self.hist.push(p);
-                self.hist_i = self.hist.len() - 1;
             }
+            self.hist.push(p);
+            self.hist_i = self.hist.len() - 1;
         }
     }
 
@@ -445,11 +533,23 @@ impl App {
         if let Some(i) = i {
             self.hist_i = i;
             let p = self.hist[i].clone();
-            if let Some(t) = self.tabs.iter().position(|t| t.path == p) {
-                self.active = t;
-                self.home = false;
-            } else {
-                self.open_file(&p);
+            if p == "home" {
+                let now = self.switched.max(0.0);
+                self.open_start(now);
+            } else if let Some(dir) = p.strip_prefix("proj:") {
+                self.start = false;
+                if self.workspace().as_deref() != Some(dir) {
+                    self.open_folder(dir);
+                }
+                self.home = true;
+            } else if let Some(f) = p.strip_prefix("file:") {
+                self.start = false;
+                if let Some(t) = self.tabs.iter().position(|t| t.path == f) {
+                    self.active = t;
+                    self.home = false;
+                } else {
+                    self.open_file(f);
+                }
             }
         }
     }
@@ -675,6 +775,8 @@ impl App {
                 }
                 "tour" => self.tour = Some(arg.parse().unwrap_or(0)),
                 "start" => self.open_start(ctx.input(|i| i.time)),
+                "back" => self.go(true),
+                "fwd" => self.go(false),
                 "preview" => self.open_preview(),
                 "update" => self.upd.check(ctx, 0.0, false),
                 "update-get" => self.upd.download(ctx),
@@ -2247,6 +2349,15 @@ fn ago(ms: u64) -> String {
 }
 
 impl eframe::App for App {
+    // priehľadné okno: kde Flux nič nenakreslí, presvitá plocha (živá tapeta)
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+            [0.0, 0.0, 0.0, 0.0]
+        } else {
+            visuals.panel_fill.to_normalized_gamma_f32()
+        }
+    }
+
     fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = root.ctx().clone();
         let ctx = &ctx;
@@ -2273,9 +2384,14 @@ impl eframe::App for App {
         if focused || self.live_at < 0.0 {
             self.check_live(ctx, ctx.input(|i| i.time));
         }
+        if self.sync_live_cache() {
+            self.apply_look(ctx);
+        }
         // zdroj tapety (súbory, tapeta Windows, živá tapeta) stačí zistiť raz za 3 s, nie pri každom snímku
         let now_w = ctx.input(|i| i.time);
-        if now_w - self.wall_at > 3.0 {
+        // prvé sekundy častejšie (kým dobehne zisťovanie živej tapety), potom raz za 3 s
+        let every = if self.started.elapsed() < Duration::from_secs(4) { 0.25 } else { 3.0 };
+        if now_w - self.wall_at > every {
             self.wall_at = now_w;
             let src = self.wall_source();
             self.wall.want(ctx, src);
@@ -2306,6 +2422,30 @@ impl eframe::App for App {
             }
         }
         self.tour_rects.clear();
+        // po štarte (načítanie písma, tapety, zvýraznenia) raz uvoľniť nepotrebnú pamäť
+        if !self.start_trimmed && self.started.elapsed() > Duration::from_secs(10) {
+            self.start_trimmed = true;
+            if self.core.setting("trimMemory").as_bool() != Some(false) {
+                crate::mem::trim_now();
+            }
+        } else if !self.start_trimmed {
+            ctx.request_repaint_after(Duration::from_secs(10).saturating_sub(self.started.elapsed()));
+        }
+        // rozpis textúr pre vývojára (len keď sú otvorené nastavenia)
+        if self.settings.is_some() && self.developer() && ctx.input(|i| i.time).fract() < 0.05 {
+            let tm = ctx.tex_manager();
+            let tm = tm.read();
+            let (mut n, mut bytes, mut big) = (0, 0usize, vec![]);
+            for (_, m) in tm.allocated() {
+                let b = m.size[0] * m.size[1] * m.bytes_per_pixel;
+                n += 1;
+                bytes += b;
+                if b > 2 << 20 {
+                    big.push(format!("{} {}×{}", m.name, m.size[0], m.size[1]));
+                }
+            }
+            self.tex_info = format!("{n} · {:.1} MB{}", bytes as f64 / 1048576.0, if big.is_empty() { String::new() } else { format!(" ({})", big.join(", ")) });
+        }
         // vývojárske počítadlo snímok: časy za poslednú sekundu
         let t_now = ctx.input(|i| i.time);
         self.frames.push_back(t_now);
@@ -2475,6 +2615,21 @@ impl eframe::App for App {
             });
         }
         self.window_chrome(ctx);
+        // späť/dopredu: tlačidlá myši 4/5 a Alt+←/→ na každej obrazovke (nie v intre)
+        if self.intro.is_none() {
+            let (b, f) = ctx.input_mut(|i| {
+                (
+                    i.pointer.button_pressed(egui::PointerButton::Extra1) || i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowLeft),
+                    i.pointer.button_pressed(egui::PointerButton::Extra2) || i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowRight),
+                )
+            });
+            if b {
+                self.go(true);
+            } else if f {
+                self.go(false);
+            }
+            self.track_place();
+        }
         // vložený WebView2 na mieste panela Live Servera
         self.sync_preview(ctx, _frame);
     }

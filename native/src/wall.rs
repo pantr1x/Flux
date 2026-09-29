@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 pub enum Src {
     Image(PathBuf),
     Video(PathBuf, Option<PathBuf>),
+    Still(PathBuf, Option<PathBuf>), // z videa len jedna snímka – dekodér sa hneď uvoľní (málo pamäte)
 }
 
 // snímka pre UI: obrázok, rozmazaná kópia a jas (pri videu len občas)
@@ -74,6 +75,16 @@ fn load_image(path: &std::path::Path) -> Option<Loaded> {
 }
 
 impl Wall {
+    // vývojár: čo tapeta práve drží
+    pub fn describe(&self) -> String {
+        match &self.source {
+            None => String::new(),
+            Some(Src::Image(_)) => "wallpaper image".into(),
+            Some(Src::Still(..)) => "live wallpaper (still frame)".into(),
+            Some(Src::Video(..)) => "live wallpaper video".into(),
+        }
+    }
+
     // video hrá len keď je okno zamerané a animácie zapnuté (syncVideo v Electron Fluxe)
     pub fn set_playing(&self, on: bool) {
         self.play.store(on, Ordering::Relaxed);
@@ -96,6 +107,12 @@ impl Wall {
         let slot = self.pending.clone();
         let ctx = ctx.clone();
         let (play, stop) = (self.play.clone(), self.stop.clone());
+        // jedna snímka alebo celé video
+        enum Kind {
+            Still,
+            Other,
+        }
+        let src_kind = if matches!(src, Src::Still(..)) { Kind::Still } else { Kind::Other };
         std::thread::spawn(move || match src {
             Src::Image(path) => {
                 if let Some(l) = load_image(&path) {
@@ -103,8 +120,9 @@ impl Wall {
                     ctx.request_repaint();
                 }
             }
-            Src::Video(path, preview) => {
-                if !video::play(&path, &slot, &play, &stop, &ctx) {
+            Src::Video(path, preview) | Src::Still(path, preview) => {
+                let once = matches!(src_kind, Kind::Still);
+                if !video::play(&path, &slot, &play, &stop, &ctx, once) {
                     // video sa nedá prehrať (iný systém, chýba kodek) → náhľad
                     if let Some(l) = preview.as_deref().and_then(load_image) {
                         *slot.lock().unwrap() = Some(l);
@@ -121,7 +139,8 @@ impl Wall {
         let mut fresh = false;
         if let Some(l) = self.pending.lock().unwrap().take() {
             match &mut self.tex {
-                Some(t) if t.size() == l.img.size => t.set(l.img, TextureOptions::LINEAR),
+                // rovnaká veľkosť (snímky videa) → len prepísať obsah, bez novej textúry v ovládači
+                Some(t) if t.size() == l.img.size => t.set_partial([0, 0], l.img, TextureOptions::LINEAR),
                 _ => self.tex = Some(ctx.load_texture("flux-wall", l.img, TextureOptions::LINEAR)),
             }
             if let Some(b) = l.blur {
@@ -218,14 +237,14 @@ mod video {
 
     // vráti false, keď sa video nedá otvoriť ani raz (vtedy sa ukáže náhľad)
     #[cfg(not(windows))]
-    pub fn play(_: &Path, _: &Arc<Mutex<Option<Loaded>>>, _: &AtomicBool, _: &AtomicBool, _: &egui::Context) -> bool {
+    pub fn play(_: &Path, _: &Arc<Mutex<Option<Loaded>>>, _: &AtomicBool, _: &AtomicBool, _: &egui::Context, _: bool) -> bool {
         false
     }
 
     #[cfg(windows)]
-    pub fn play(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context) -> bool {
+    pub fn play(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context, once: bool) -> bool {
         let mut shown = false;
-        let r = unsafe { run(path, slot, play, stop, ctx, &mut shown) };
+        let r = unsafe { run(path, slot, play, stop, ctx, &mut shown, once) };
         if let Err(e) = r {
             eprintln!("video tapeta: {e}");
         }
@@ -268,7 +287,7 @@ mod video {
     }
 
     #[cfg(windows)]
-    unsafe fn run(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context, shown: &mut bool) -> windows::core::Result<()> {
+    unsafe fn run(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context, shown: &mut bool, once: bool) -> windows::core::Result<()> {
         use super::{blurred, luminance};
         use egui::ColorImage;
         use std::sync::atomic::Ordering;
@@ -391,6 +410,10 @@ mod video {
             ctx.request_repaint();
             *shown = true;
             last_shown = Instant::now();
+            // jedna snímka stačí → koniec: čítačka, dekodér aj D3D sa uvoľnia
+            if once {
+                return Ok(());
+            }
         }
         Ok(())
     }
