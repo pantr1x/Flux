@@ -130,19 +130,23 @@ impl App {
                 }
             }
             _ => {
-                let w = if step == "name" {
-                    510.0
-                } else if step == "extras" {
+                // rozšírený zoznam jazykov – aj keď je už vybraný jazyk z „ďalších“ (to isté ako v intro_code)
+                let chosen: Vec<String> = self.core.setting("codeLangs").as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+                let more = intro.more || CODE_LANGS.iter().any(|c| c.3 && c.0 != "explore" && chosen.iter().any(|x| x == c.0));
+                let w = if step == "extras" {
                     645.0
+                } else if step == "code" && more {
+                    600.0
                 } else {
                     510.0
                 };
+                // výška obsahu kroku – mriežka jazykov sa musí zmestiť nad navigáciu (Späť/Pokračovať)
                 let (content_h, skip) = match step {
                     "uilang" => (190.0, false),
                     "name" => (100.0, true),
-                    "code" => (if intro.more { 380.0 } else { 260.0 }, false),
+                    "code" => (if more { 4.0 * (84.0 + 9.0) + 26.0 } else { 2.0 * (112.0 + 9.0) + 26.0 }, false),
                     "extras" => (330.0, true),
-                    _ => (320.0, true),
+                    _ => (370.0, true),
                 };
                 let x0 = cx - w / 2.0;
                 let top = rect.center().y - (content_h + 120.0) / 2.0;
@@ -266,8 +270,17 @@ impl App {
         if !more {
             list.push(("+more", "More languages", "", false));
         }
-        let cols = 4;
-        let (cw, ch) = ((body.width() - 3.0 * 9.0) / cols as f32, if more { 88.0 } else { 112.0 });
+        // viac jazykov = 5 stĺpcov, aby sa 17 kariet zmestilo do 4 riadkov
+        let cols = if more { 5 } else { 4 };
+        let (cw, ch) = ((body.width() - (cols - 1) as f32 * 9.0) / cols as f32, if more { 84.0 } else { 112.0 });
+        // jazyky nie sú súčasťou Fluxu – stiahnu sa až keď ich treba
+        ui.painter().text(
+            pos2(body.left(), body.bottom() - 8.0),
+            Align2::LEFT_CENTER,
+            t("Languages are not part of Flux – they download only when you need them (Settings → Languages)."),
+            theme::ui(11.0),
+            p.text3,
+        );
         let mut toggle = None;
         for (i, (id, label, file, _)) in list.iter().enumerate() {
             let r = Rect::from_min_size(body.min + vec2((i % cols) as f32 * (cw + 9.0), (i / cols) as f32 * (ch + 9.0)), vec2(cw, ch));
@@ -275,7 +288,7 @@ impl App {
             let on = chosen.iter().any(|x| x == id);
             ui.painter().rect_filled(r, CornerRadius::same(12), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
             ui.painter().rect_stroke(r, CornerRadius::same(12), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
-            let ic = Rect::from_center_size(pos2(r.center().x, r.top() + if more { 28.0 } else { 38.0 }), vec2(44.0, 44.0));
+            let ic = Rect::from_center_size(pos2(r.center().x, r.top() + if more { 30.0 } else { 38.0 }), if more { vec2(40.0, 40.0) } else { vec2(44.0, 44.0) });
             ui.painter().rect_filled(ic, CornerRadius::same(10), p.hover);
             if *id == "+more" {
                 widgets::icon_at(ui, ic.center(), 22.0, "plus", p.text2);
@@ -452,6 +465,35 @@ impl App {
         if sr.changed() {
             self.intro_set("darkLift", json!(lift.round()));
             self.apply_look(ctx);
+        }
+        // pomalší počítač = Šetriť pamäť (lite): hneď vidno, ako Flux vyzerá, a koľko pamäte práve berie
+        let lite = self.core.setting("lite").as_bool() == Some(true);
+        let lr = Rect::from_min_size(pos2(body.left(), ly + 46.0 + gh), vec2(lw, 50.0));
+        let resp = ui.interact(lr, ui.id().with("intro-lite"), Sense::click());
+        ui.painter().rect_filled(lr, CornerRadius::same(10), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
+        ui.painter().rect_stroke(lr, CornerRadius::same(10), if lite { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
+        let cb = Rect::from_min_size(pos2(lr.left() + 12.0, lr.center().y - 8.0), vec2(16.0, 16.0));
+        if lite {
+            ui.painter().rect_filled(cb, CornerRadius::same(4), p.text);
+            widgets::icon_at(ui, cb.center(), 11.0, "check", p.card);
+        } else {
+            ui.painter().rect_stroke(cb, CornerRadius::same(4), Stroke::new(1.2, p.text3), StrokeKind::Inside);
+        }
+        ui.painter().text(pos2(lr.left() + 38.0, lr.top() + 17.0), Align2::LEFT_CENTER, t("My computer is slower"), theme::bold(12.0), p.text);
+        widgets::text(ui, pos2(lr.left() + 38.0, lr.top() + 34.0), Align2::LEFT_CENTER, &t("less memory: no blur, wallpaper or animations"), theme::ui(10.5), p.text3, lw - 46.0);
+        if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+            self.intro_set("lite", json!(!lite));
+            self.apply_look(ctx);
+        }
+        // pamäť práve teraz (pod ukážkou)
+        if let Some(mb) = crate::mem::used_mb() {
+            let my = pv.bottom() + 20.0;
+            widgets::icon_at(ui, pos2(pv.left() + 8.0, my), 13.0, "rocket", p.text3);
+            let line = crate::i18n::tf("Flux uses {n} MB right now", &[("n", &format!("{mb:.0}"))]);
+            ui.painter().text(pos2(pv.left() + 22.0, my), Align2::LEFT_CENTER, line, theme::bold(12.0), p.text);
+            let note = if lite { t("Save memory is on – effects and animations are off.") } else { t("Effects and animations are on.") };
+            widgets::text(ui, pos2(pv.left() + 22.0, my + 18.0), Align2::LEFT_CENTER, &note, theme::ui(11.0), p.text3, pv.width() - 24.0);
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
         }
     }
 }

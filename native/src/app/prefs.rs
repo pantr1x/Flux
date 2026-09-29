@@ -41,7 +41,7 @@ pub const FONTS: [(&str, &str); 6] = [
     ("Courier New", "Courier New"),
 ];
 
-const TABS: [(&str, &str, &str); 7] = [
+const TABS: [(&str, &str, &str); 8] = [
     ("general", "settings", "General"),
     ("appearance", "palette", "Appearance"),
     ("editor", "code", "Editor"),
@@ -49,6 +49,7 @@ const TABS: [(&str, &str, &str); 7] = [
     ("tools", "download", "Languages"),
     ("plugins", "puzzle", "Plugins"),
     ("ai", "sparkle", "AI"),
+    ("developer", "flask", "Developer"), // len vývojár (App::developer)
 ];
 
 #[derive(Clone)]
@@ -129,28 +130,40 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             ("Language", vec![Row::Custom("language")]),
             ("Welcome", vec![Row::Button("intro", "Intro", "Replay the first-start intro.", "Intro"), Row::Button("tour", "Feature tour", "A short walk through the main parts of Flux.", "Tour")]),
             ("Shortcuts", vec![Row::Custom("keys")]),
-        ]
-        .into_iter()
-        // vývojárske nastavenia len pre GitHub účet vývojára (devAllowed v updater.js)
-        .chain(app.developer().then(|| {
+        ],
+        // vlastná veľká karta len pre GitHub účet vývojára (devAllowed v updater.js)
+        "developer" if app.developer() => {
             let sha = crate::update::SHA;
-            (
-                "Developer",
-                vec![
-                    Row::Info("Build", format!("{} \u{00B7} {}", env!("CARGO_PKG_VERSION"), &sha[..sha.len().min(7)])),
-                    Row::Button("intro", "Intro", "Replay the first-start intro.", "Intro"),
-                    Row::Button("tour", "Feature tour", "A short walk through the main parts of Flux.", "Tour"),
-                    Row::Button("dev-check", "Check for updates", "Ask the ci-native branch for a newer build now.", "Check now"),
-                    Row::Button("dev-reinstall", "Reinstall the latest build", "Download the newest build from ci-native even if you already have it.", "Reinstall"),
-                    Row::Info("Memory", format!("{} MB", crate::mem::used_mb().map(|m| format!("{m:.0}")).unwrap_or("–".into()))),
-                    Row::Button("dev-trim", "Free memory now", "Move unused memory out of RAM, like when Flux is in the background.", "Trim"),
-                    Row::Toggle("devFps", "Show frames per second", "in the status bar – when nothing moves it should drop to 0"),
-                    Row::Button("dev-data", "Settings folder", "settings.json, translations and backgrounds", "Open"),
-                    Row::Button("dev-exe", "Program folder", "where Flux-Native.exe is", "Open"),
-                ],
-            )
-        }))
-        .collect(),
+            vec![
+                (
+                    "Build & updates",
+                    vec![
+                        Row::Info("Build", format!("{} \u{00B7} {}", env!("CARGO_PKG_VERSION"), &sha[..sha.len().min(7)])),
+                        Row::Button("dev-check", "Check for updates", "Ask the ci-native branch for a newer build now.", "Check now"),
+                        Row::Button("dev-reinstall", "Reinstall the latest build", "Download the newest build from ci-native even if you already have it.", "Reinstall"),
+                    ],
+                ),
+                (
+                    "Intro and tour",
+                    vec![Row::Button("intro", "Intro", "Replay the first-start intro.", "Intro"), Row::Button("tour", "Feature tour", "A short walk through the main parts of Flux.", "Tour")],
+                ),
+                (
+                    "Memory",
+                    vec![
+                        Row::Info("Memory", format!("{} MB", crate::mem::used_mb().map(|m| format!("{m:.0}")).unwrap_or("–".into()))),
+                        Row::Button("dev-trim", "Free memory now", "Move unused memory out of RAM, like when Flux is in the background.", "Trim"),
+                        Row::Toggle("devFps", "Show frames per second", "in the status bar – when nothing moves it should drop to 0"),
+                    ],
+                ),
+                (
+                    "Folders",
+                    vec![
+                        Row::Button("dev-data", "Settings folder", "settings.json, translations and backgrounds", "Open"),
+                        Row::Button("dev-exe", "Program folder", "where Flux-Native.exe is", "Open"),
+                    ],
+                ),
+            ]
+        }
         "appearance" => vec![
             ("Code theme", vec![Row::Custom("themes")]),
             ("Accent color", vec![Row::Custom("accents")]),
@@ -228,6 +241,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         }
         "tools" => vec![("", vec![Row::Custom("tools")])],
         "plugins" => vec![("", vec![Row::Custom("plugins")])],
+        "developer" => vec![], // nie vývojár – karta je skrytá
         _ => vec![("", vec![Row::Custom("ai")])],
     }
 }
@@ -316,7 +330,16 @@ impl App {
         let mut y = fr.bottom() + 12.0;
         let mut go_tab = None;
         let mut go_sub = None;
+        let dev = self.developer();
         for (id, ic, label) in TABS {
+            if id == "developer" && !dev {
+                continue;
+            }
+            // vývojárska karta oddelená čiarou
+            if id == "developer" {
+                ui.painter().hline(nav.left() + 20.0..=nav.right() - 20.0, y + 4.0, Stroke::new(1.0, p.line));
+                y += 10.0;
+            }
             let r = Rect::from_min_size(pos2(nav.left() + 10.0, y), vec2(nav.width() - 20.0, 36.0));
             let resp = ui.interact(r, ui.id().with(("stab", id)), Sense::click());
             let on = id == cur_tab && finding.is_empty();
@@ -331,7 +354,7 @@ impl App {
             }
             y += 38.0;
             // podpoložky (h3) pre General a Appearance
-            if on && (id == "general" || id == "appearance") {
+            if on && (id == "general" || id == "appearance" || id == "developer") {
                 let subs: Vec<&str> = sections(id, self).iter().map(|s| s.0).filter(|s| !s.is_empty()).collect();
                 let top = y;
                 // časť, ktorá je práve navrchu obsahu (scroll spy) – zvýraznenie kĺže

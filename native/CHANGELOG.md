@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.6.0 – 2026-09-29
+
+- **Intro**:
+  - *What do you want to code?* now fits on the screen, even with all languages. It also tells you that languages are not part of Flux: they download only when you need them.
+  - The *Make it yours* step has **My computer is slower**. It turns on Save memory, so you see right away how Flux looks with it, and it shows how much memory Flux uses right now.
+- **File tabs** each sit in their own box.
+- **Developer** is now its own section in Settings, with parts for builds and updates, intro and tour, memory and folders. Only the Flux developer sees it.
+
 ## 0.5.0 – 2026-09-29
 
 ### Home screen like Flux

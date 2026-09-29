@@ -1276,8 +1276,10 @@ impl App {
             }
             let resp = ui.interact(tr.intersect(tabs_clip), ui.id().with(("tab", i)), Sense::click());
             let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered() && !sel, 0.12);
-            if hk > 0.0 {
-                painter.rect_filled(tr, CornerRadius::same(9), p.hover.gamma_multiply(hk));
+            // každá karta má svoj jemný rámik (aktívna ho má výraznejší – kĺzavý indikátor vyššie)
+            if !sel {
+                painter.rect_filled(tr, CornerRadius::same(9), p.card2.lerp_to_gamma(p.hover, hk));
+                painter.rect_stroke(tr, CornerRadius::same(9), Stroke::new(1.0, p.line), StrokeKind::Inside);
             }
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tabs_clip));
             child.set_clip_rect(tabs_clip);
