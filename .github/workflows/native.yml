@@ -1,5 +1,5 @@
 # Flux Native (native/, čistý Rust + egui): zostaví ho na Windows a zmeria pamäť (ako Správca úloh).
-# Výsledok: súhrn behu, vetva ci-native (native.png, memory.txt, Flux-Native.exe na stiahnutie), artefakt Flux-Native.
+# Výsledok: súhrn behu, vetva ci-native (native.png, memory.txt, Flux-Native.exe na stiahnutie, native.json pre aktualizácie), artefakt Flux-Native.
 # Stiahnutie: https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe
 name: Native build
 
@@ -83,6 +83,10 @@ jobs:
           $report | Set-Content out\memory.txt
           # program na stiahnutie a vyskúšanie (bez inštalátora, rovnaké nastavenia ako Electron Flux)
           Copy-Item target\release\flux-native.exe out\Flux-Native.exe
+          # native.json: podľa neho sa Flux Native aktualizuje z Nastavení (update.rs porovná sha so svojím FLUX_SHA)
+          $ver = (Select-String -Path native\Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $hash = (Get-FileHash out\Flux-Native.exe -Algorithm SHA256).Hash.ToLower()
+          @{ version = $ver; sha = $env:GITHUB_SHA; sha256 = $hash; size = (Get-Item out\Flux-Native.exe).Length } | ConvertTo-Json | Set-Content out\native.json -Encoding utf8NoBOM
           $report | ForEach-Object { Write-Host $_ }
           "## Memory`n``````n$($report -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Publish screenshots (branch ci-native)

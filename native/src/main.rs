@@ -5,10 +5,12 @@ mod app;
 mod code;
 mod gen;
 mod i18n;
+mod live;
 mod mem;
 mod smooth;
 mod term;
 mod theme;
+mod update;
 mod wall;
 mod widgets;
 
@@ -29,6 +31,8 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
 }
 
 fn main() -> eframe::Result {
+    // po aktualizácii zmaže starý program
+    update::cleanup();
     // OpenGL (glow) je najúspornejšie; bez ovládača OpenGL (virtuálny stroj, server) záloha cez wgpu (DirectX/Vulkan).
     // FLUX_RENDERER=wgpu vynúti zálohu.
     let forced = std::env::var("FLUX_RENDERER").ok();

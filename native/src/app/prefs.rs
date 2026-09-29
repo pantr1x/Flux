@@ -16,7 +16,7 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
+        "minimap" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "uiZoom" => json!(100),
         "lineNumbers" => json!("on"),
@@ -126,6 +126,11 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                         "Window translucency",
                         "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.",
                         o(&[("wallpaper", "Wallpaper (recommended)"), ("none", "Off")]),
+                    ),
+                    Row::Toggle(
+                        "liveWallpaper",
+                        "Use Lively Wallpaper and Wallpaper Engine",
+                        "when one of them is running, Flux shows the same wallpaper behind its panels – videos play only while Flux is in front",
                     ),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
@@ -596,7 +601,36 @@ impl App {
                 let lr = Rect::from_min_size(pos2(r.left() + 16.0, r.top() + 17.0), vec2(52.0, 52.0));
                 widgets::brand_mark(ui, lr, &p);
                 ui.painter().text(pos2(lr.right() + 14.0, r.top() + 32.0), Align2::LEFT_CENTER, "Flux Native", theme::bold(17.0), p.text);
-                ui.painter().text(pos2(lr.right() + 14.0, r.top() + 55.0), Align2::LEFT_CENTER, tf("Version {v}", &[("v", env!("CARGO_PKG_VERSION"))]), theme::ui(12.5), p.text3);
+                // stav aktualizácie (updatesUI v Electron Fluxe)
+                use crate::update::State as U;
+                let st = self.upd.state();
+                let note = match &st {
+                    _ if !crate::update::enabled() => t("Development build – updates are off"),
+                    U::Idle => String::new(),
+                    U::Checking => t("Checking for updates…"),
+                    U::Latest => t("You have the latest version"),
+                    U::Available { version, .. } => tf("Version {v} is available", &[("v", version)]),
+                    U::Downloading { got, total } => tf("Downloading… {n} %", &[("n", &(got * 100 / (*total).max(1)).min(100).to_string())]),
+                    U::Ready { version } => tf("Version {v} is ready", &[("v", version)]),
+                    U::Error(e) => e.clone(),
+                };
+                let mut line = tf("Version {v}", &[("v", env!("CARGO_PKG_VERSION"))]);
+                if !note.is_empty() {
+                    line = format!("{line} \u{00B7} {note}");
+                }
+                let col = match st {
+                    U::Error(_) => p.red,
+                    U::Available { .. } | U::Ready { .. } => p.green,
+                    _ => p.text3,
+                };
+                widgets::text(ui, pos2(lr.right() + 14.0, r.top() + 55.0), Align2::LEFT_CENTER, &line, theme::ui(12.5), col, r.width() - 420.0);
+                if let U::Downloading { got, total } = st {
+                    let k = (got as f32 / total.max(1) as f32).clamp(0.0, 1.0);
+                    let bar = Rect::from_min_size(pos2(r.left() + 16.0, r.bottom() - 9.0), vec2(r.width() - 32.0, 4.0));
+                    ui.painter().rect_filled(bar, CornerRadius::same(2), p.hover);
+                    ui.painter().rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * k, 4.0)), CornerRadius::same(2), p.accent);
+                    ctx.request_repaint_after(std::time::Duration::from_millis(200));
+                }
                 let mut b = ui.new_child(
                     egui::UiBuilder::new()
                         .max_rect(Rect::from_min_max(pos2(r.right() - 330.0, r.top() + 27.0), pos2(r.right() - 16.0, r.top() + 60.0)))
@@ -604,6 +638,32 @@ impl App {
                 );
                 if widgets::button(&mut b, Some("globe"), &t("All versions"), p.card2, p.text, 30.0, &p).clicked() {
                     flux_core::settings::open_external("https://pantr1x.github.io/Flux/#releases");
+                }
+                if crate::update::enabled() {
+                    match self.upd.state() {
+                        U::Available { .. } | U::Error(_) => {
+                            let avail = matches!(self.upd.state(), U::Available { .. });
+                            let (label, icon) = if avail { (t("Download update"), "download") } else { (t("Check for updates"), "refresh") };
+                            if widgets::button(&mut b, Some(icon), &label, p.accent, p.accent_fg, 30.0, &p).clicked() {
+                                if avail {
+                                    self.upd.download(ctx);
+                                } else {
+                                    self.upd.check(ctx, ctx.input(|i| i.time), false);
+                                }
+                            }
+                        }
+                        U::Ready { .. } => {
+                            if widgets::button(&mut b, Some("refresh"), &t("Restart to update"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                                self.restart_to_update(ctx);
+                            }
+                        }
+                        U::Idle | U::Latest => {
+                            if widgets::button(&mut b, Some("refresh"), &t("Check for updates"), p.card2, p.text, 30.0, &p).clicked() {
+                                self.upd.check(ctx, ctx.input(|i| i.time), false);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 // poznámky k vydaniam (native/CHANGELOG.md)
                 ui.add_space(14.0);

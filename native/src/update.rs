@@ -1,0 +1,189 @@
+// Aktualizácie Flux Native z vetvy ci-native (native.yml tam dáva Flux-Native.exe a native.json):
+// kontrola → stiahnutie vedľa programu (Flux-Native.new) → kontrola sha256 → výmena a nový štart.
+// Spustený .exe sa na Windows nedá prepísať, ale dá sa premenovať – starý ostane ako .old a zmaže sa pri ďalšom štarte.
+// Sťahuje systémový curl (súčasť Windows 10/11), takže Flux nepotrebuje vlastného HTTP klienta.
+use eframe::egui;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+// commit, z ktorého je tento program (native.yml → GITHUB_SHA); „dev“ = vlastná zostava
+pub const SHA: &str = env!("FLUX_SHA");
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum State {
+    Idle,
+    Checking,
+    Latest,
+    Available { version: String, sha: String },
+    Downloading { got: u64, total: u64 },
+    Ready { version: String },
+    Error(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Info {
+    version: String,
+    sha: String,
+    sha256: String,
+    size: u64,
+}
+
+pub struct Updater {
+    pub state: Arc<Mutex<State>>,
+    info: Arc<Mutex<Option<Info>>>,
+    pub last_check: f64,
+}
+
+fn base() -> String {
+    std::env::var("FLUX_UPDATE_URL").unwrap_or_else(|_| "https://raw.githubusercontent.com/pantr1x/Flux/ci-native/".into())
+}
+
+fn curl() -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut c = std::process::Command::new("curl");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000); // bez okna konzoly
+    }
+    c
+}
+
+fn exe() -> Option<PathBuf> {
+    std::env::current_exe().ok()
+}
+
+// po aktualizácii: zmaže starý program (.old), ktorý ešte bežal pri výmene
+pub fn cleanup() {
+    if let Some(e) = exe() {
+        let _ = std::fs::remove_file(e.with_extension("old"));
+        let _ = std::fs::remove_file(e.with_extension("new"));
+    }
+}
+
+// vlastná zostava bez adresy na testy sa neaktualizuje (prepísala by sa verziou z CI)
+pub fn enabled() -> bool {
+    SHA != "dev" || std::env::var("FLUX_UPDATE_URL").is_ok()
+}
+
+impl Default for Updater {
+    fn default() -> Self {
+        Self { state: Arc::new(Mutex::new(State::Idle)), info: Default::default(), last_check: -1e9 }
+    }
+}
+
+impl Updater {
+    pub fn state(&self) -> State {
+        self.state.lock().unwrap().clone()
+    }
+
+    fn set(&self, s: State, ctx: &egui::Context) {
+        *self.state.lock().unwrap() = s;
+        ctx.request_repaint();
+    }
+
+    // zistí, či je v ci-native novší program (iný commit); auto = po stiahnutí hneď pripraviť
+    pub fn check(&mut self, ctx: &egui::Context, now: f64, auto_download: bool) {
+        if !enabled() || matches!(self.state(), State::Checking | State::Downloading { .. } | State::Ready { .. }) {
+            return;
+        }
+        self.last_check = now;
+        self.set(State::Checking, ctx);
+        let (state, info, ctx) = (self.state.clone(), self.info.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let out = curl().args(["-fsSL", "--max-time", "20", &format!("{}native.json", base())]).output();
+            let parsed = out.ok().filter(|o| o.status.success()).and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok());
+            let Some(j) = parsed else {
+                *state.lock().unwrap() = State::Error(crate::i18n::t("Could not check for updates"));
+                ctx.request_repaint();
+                return;
+            };
+            let i = Info {
+                version: j["version"].as_str().unwrap_or("").into(),
+                sha: j["sha"].as_str().unwrap_or("").into(),
+                sha256: j["sha256"].as_str().unwrap_or("").to_lowercase(),
+                size: j["size"].as_u64().unwrap_or(0),
+            };
+            let newer = !i.sha.is_empty() && i.sha != SHA;
+            *state.lock().unwrap() = if newer { State::Available { version: i.version.clone(), sha: i.sha.clone() } } else { State::Latest };
+            *info.lock().unwrap() = Some(i);
+            ctx.request_repaint();
+            if newer && auto_download {
+                download_now(&state, &info, &ctx);
+            }
+        });
+    }
+
+    pub fn download(&self, ctx: &egui::Context) {
+        if !matches!(self.state(), State::Available { .. } | State::Error(_)) {
+            return;
+        }
+        let (state, info, ctx) = (self.state.clone(), self.info.clone(), ctx.clone());
+        std::thread::spawn(move || download_now(&state, &info, &ctx));
+    }
+
+    // vymení program a spustí nový (s rovnakými argumentmi); volajúci potom zavrie okno.
+    // relaunch = false: pri bežnom zavretí Fluxu sa len vymení (autoInstallOnAppQuit v Electron Fluxe)
+    pub fn install(&self, relaunch: bool) -> Result<(), String> {
+        if !matches!(self.state(), State::Ready { .. }) {
+            return Err("not ready".into());
+        }
+        let e = exe().ok_or("no exe")?;
+        let new = e.with_extension("new");
+        let old = e.with_extension("old");
+        let _ = std::fs::remove_file(&old);
+        std::fs::rename(&e, &old).map_err(|x| x.to_string())?;
+        if let Err(x) = std::fs::rename(&new, &e) {
+            let _ = std::fs::rename(&old, &e);
+            return Err(x.to_string());
+        }
+        *self.state.lock().unwrap() = State::Idle;
+        if relaunch {
+            std::process::Command::new(&e).args(std::env::args_os().skip(1)).spawn().map_err(|x| x.to_string())?;
+        }
+        Ok(())
+    }
+}
+
+fn download_now(state: &Arc<Mutex<State>>, info: &Arc<Mutex<Option<Info>>>, ctx: &egui::Context) {
+    let Some(i) = info.lock().unwrap().clone() else { return };
+    let Some(e) = exe() else { return };
+    let new = e.with_extension("new");
+    let _ = std::fs::remove_file(&new);
+    let set = |s: State| {
+        *state.lock().unwrap() = s;
+        ctx.request_repaint();
+    };
+    set(State::Downloading { got: 0, total: i.size });
+    let child = curl().args(["-fsSL", "--max-time", "600", "-o"]).arg(&new).arg(format!("{}Flux-Native.exe", base())).spawn();
+    let Ok(mut child) = child else {
+        return set(State::Error(crate::i18n::t("Download failed")));
+    };
+    // priebeh = veľkosť súboru na disku
+    let ok = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break st.success(),
+            Ok(None) => {
+                let got = std::fs::metadata(&new).map(|m| m.len()).unwrap_or(0);
+                set(State::Downloading { got, total: i.size });
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(_) => break false,
+        }
+    };
+    let bytes = if ok { std::fs::read(&new).ok() } else { None };
+    let good = bytes.map(|b| i.sha256.is_empty() || format!("{:x}", Sha256::digest(&b)) == i.sha256).unwrap_or(false);
+    if !good {
+        let _ = std::fs::remove_file(&new);
+        return set(State::Error(crate::i18n::t("Download failed")));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755));
+    }
+    set(State::Ready { version: i.version });
+}

@@ -100,6 +100,9 @@ pub struct App {
     trim: crate::mem::Trim,
     smooth: crate::smooth::Smooth,
     wall: crate::wall::Wall,
+    live: Arc<std::sync::Mutex<Option<crate::live::Found>>>, // Lively / Wallpaper Engine (zisťuje sa na pozadí)
+    live_at: f64,
+    pub(crate) upd: crate::update::Updater,
 }
 
 impl App {
@@ -168,6 +171,9 @@ impl App {
             trim: Default::default(),
             smooth: Default::default(),
             wall: Default::default(),
+            live: Default::default(),
+            live_at: -100.0,
+            upd: Default::default(),
         };
         crate::i18n::set_language(app.core.setting("language").as_str().unwrap_or("en"));
         if app.core.setting("onboarded").as_bool() != Some(true) || std::env::var("FLUX_INTRO").is_ok() {
@@ -224,14 +230,8 @@ impl App {
             // adaptColors: pri svetlej tapete v tmavej téme (a naopak) sú panely menej priesvitné, aby bol text čitateľný
             let lum = self.wall.lum.unwrap_or(0.3);
             let clash = if p.dark { (lum - 0.25).max(0.0) } else { (0.65 - lum).max(0.0) };
-            let base_a = if p.dark { 0.45 } else { 0.5 } + (clash * 0.9).min(0.4);
-            let card_a = if (alpha - 0.74).abs() > 0.001 {
-                alpha
-            } else if p.dark {
-                0.86
-            } else {
-                0.84
-            };
+            let base_a = if p.dark { 0.62 } else { 0.66 } + (clash * 0.9).min(0.3);
+            let card_a = if (alpha - 0.74).abs() > 0.001 { alpha } else { (if p.dark { 0.9 } else { 0.88 } + clash * 0.2).min(0.96) };
             p.base = p.base.gamma_multiply(base_a);
             p.card = p.card.gamma_multiply(card_a);
         }
@@ -243,7 +243,8 @@ impl App {
         self.get("material").as_str() != Some("none") && self.core.setting("optFx").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true))
     }
 
-    fn wall_source(&self) -> Option<std::path::PathBuf> {
+    fn wall_source(&self) -> Option<crate::wall::Src> {
+        use crate::wall::Src;
         if !self.wall_on() {
             return None;
         }
@@ -252,11 +253,48 @@ impl App {
             if let Some(f) = bg["file"].as_str() {
                 let p = settings::user_data().join("backgrounds").join(f);
                 if p.exists() {
-                    return Some(p);
+                    return Some(Src::Image(p));
                 }
             }
         }
-        crate::wall::desktop_wallpaper()
+        // živá tapeta (Lively Wallpaper / Wallpaper Engine), ak beží – bez vlastného pozadia a keď nie je vypnutá
+        if self.get("liveWallpaper").as_bool() != Some(false) {
+            if let Some(f) = self.live.lock().unwrap().clone() {
+                return Some(if f.video { Src::Video(f.file, f.preview) } else { Src::Image(f.file) });
+            }
+        }
+        crate::wall::desktop_wallpaper().map(Src::Image)
+    }
+
+    // „Restart to update“: uloží súbory, vymení program a spustí nový
+    pub(crate) fn restart_to_update(&mut self, ctx: &egui::Context) {
+        for i in 0..self.tabs.len() {
+            if self.tabs[i].dirty() {
+                self.save(i);
+            }
+        }
+        match self.upd.install(true) {
+            Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Err(e) => self.status = e,
+        }
+    }
+
+    // zistí živú tapetu na pozadí (tasklist + súbory nastavení), najviac raz za 10 s pri zameranom okne
+    fn check_live(&mut self, ctx: &egui::Context, now: f64) {
+        if now - self.live_at < 10.0 || !self.wall_on() || self.get("liveWallpaper").as_bool() == Some(false) || self.core.setting("bg")["type"].is_string() {
+            return;
+        }
+        self.live_at = now;
+        let slot = self.live.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let found = crate::live::detect();
+            let mut cur = slot.lock().unwrap();
+            if *cur != found {
+                *cur = found;
+                ctx.request_repaint();
+            }
+        });
     }
 
     // znova načíta vzhľad z nastavení (farby, veľkosť, hustota, plynulé posúvanie, písmo výstupu)
@@ -562,6 +600,9 @@ impl App {
                         self.set(k, v, ctx);
                     }
                 }
+                "update" => self.upd.check(ctx, 0.0, false),
+                "update-get" => self.upd.download(ctx),
+                "update-install" => self.restart_to_update(ctx),
                 "light" | "dark" => self.set_theme(a == "dark", ctx),
                 "theme" => self.set_code_theme(arg, ctx),
                 "next" => {
@@ -1813,8 +1854,32 @@ impl App {
         if !self.status.is_empty() {
             widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &self.status, small.clone(), p.red, (rect.right() - x - 320.0).max(40.0));
         }
-        // vpravo: Ln/Col, slová, Auto save, jazyk
+        // vpravo: aktualizácia (#st-update), Ln/Col, slová, Auto save, jazyk
         let mut rx = rect.right() - 16.0;
+        use crate::update::State as U;
+        let chip = match self.upd.state() {
+            U::Available { .. } => Some((t("Update available"), false)),
+            U::Downloading { got, total } => Some((crate::i18n::tf("Updating {n} %", &[("n", &(got * 100 / total.max(1)).min(100).to_string())]), false)),
+            U::Ready { .. } => Some((t("Restart to update"), true)),
+            _ => None,
+        };
+        if let Some((label, ready)) = chip {
+            let w = widgets::text_w(ui, &label, theme::bold(11.5)) + 30.0;
+            let cr = Rect::from_min_size(pos2(rx - w, cy - 10.0), vec2(w, 20.0));
+            let resp = ui.interact(cr, ui.id().with("st-update"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+            ui.painter().rect_filled(cr, CornerRadius::same(10), if resp.hovered() { p.accent.lerp_to_gamma(Color32::WHITE, 0.1) } else { p.accent });
+            widgets::icon_at(ui, pos2(cr.left() + 12.0, cy), 11.0, "download", p.accent_fg);
+            ui.painter().text(pos2(cr.left() + 22.0, cy), Align2::LEFT_CENTER, &label, theme::bold(11.5), p.accent_fg);
+            if resp.clicked() {
+                if ready {
+                    self.restart_to_update(ui.ctx());
+                } else {
+                    self.open_settings("general", ui.ctx());
+                    self.upd.download(ui.ctx());
+                }
+            }
+            rx = cr.left() - 16.0;
+        }
         if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
             let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &crate::i18n::t(lang_name(&t.ext())), small.clone(), p.text2, 120.0);
             rx = r.left() - 18.0;
@@ -2069,6 +2134,24 @@ impl eframe::App for App {
         }
         // pamäť na pozadí (trimMemory, predvolene zapnuté)
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        let minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
+        // aktualizácie: pri štarte a potom každých 6 h; autoUpdate = hneď stiahnuť (inak len ponúknuť)
+        let now_t = ctx.input(|i| i.time);
+        if self.intro.is_none() && now_t - self.upd.last_check > 6.0 * 3600.0 {
+            let auto = self.get("autoUpdate").as_bool() != Some(false);
+            self.upd.check(ctx, now_t, auto);
+        }
+        // pri zavretí s pripravenou aktualizáciou sa program len vymení (bez nového štartu)
+        if ctx.input(|i| i.viewport().close_requested()) {
+            let _ = self.upd.install(false);
+        }
+        // živá tapeta: pri štarte a potom pri zameranom okne
+        if focused || self.live_at < 0.0 {
+            self.check_live(ctx, ctx.input(|i| i.time));
+        }
+        let src = self.wall_source();
+        self.wall.want(ctx, src);
+        self.wall.set_playing(focused && !minimized && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true)));
         if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {
             ctx.request_repaint_after(d);
         }
@@ -2114,6 +2197,8 @@ impl eframe::App for App {
             // jedna zaoblená karta: editor/stránka projektu, Výstup/Terminál, stavový riadok (#card)
             let card_r = Rect::from_min_max(pos2(full.left() + lpad, top.bottom()), pos2(full.right() - rpad, full.bottom() - GAP));
             ui.painter().add(egui::Shadow { offset: [0, 8], blur: 30, spread: 0, color: Color32::from_black_alpha(if p.dark { 110 } else { 25 }) }.as_shape(card_r, CornerRadius::same(radius)));
+            // pod kartou rozmazaná tapeta (ako backdrop-filter) – priesvitná karta potom neruší textom tapety
+            self.wall.paint_blurred(ui.painter(), card_r, radius);
             ui.painter().rect_filled(card_r, CornerRadius::same(radius), p.card);
             ui.painter().rect_stroke(card_r, CornerRadius::same(radius), Stroke::new(1.0, p.line), StrokeKind::Outside);
             let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
