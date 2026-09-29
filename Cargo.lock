@@ -764,6 +764,7 @@ checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
  "num-traits",
+ "pure-rust-locales",
  "serde",
  "windows-link",
 ]
@@ -1691,9 +1692,10 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "alacritty_terminal",
+ "chrono",
  "dirs 6.0.0",
  "eframe",
  "egui_extras",
@@ -1707,6 +1709,7 @@ dependencies = [
  "syntect",
  "windows",
  "windows-sys 0.59.0",
+ "wry",
 ]
 
 [[package]]
@@ -4282,6 +4285,12 @@ name = "profiling"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
+
+[[package]]
+name = "pure-rust-locales"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "869675ad2d7541aea90c6d88c81f46a7f4ea9af8cd0395d38f11a95126998a0d"
 
 [[package]]
 name = "pxfm"

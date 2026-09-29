@@ -187,6 +187,7 @@
  "Copy path": "Kopírovať cestu",
  "Could not check for updates": "Nepodarilo sa zistiť aktualizácie",
  "Could not check for updates: {msg}": "Aktualizácie sa nepodarilo skontrolovať: {msg}",
+ "Could not create the project.": "Projekt sa nepodarilo vytvoriť.",
  "Could not download the language. Check your internet connection.": "Jazyk sa nepodarilo stiahnuť. Skontroluj internet.",
  "Could not load comments: {msg}": "Komentáre sa nepodarilo načítať: {msg}",
  "Could not load plugins: {msg}": "Pluginy sa nepodarilo načítať: {msg}",

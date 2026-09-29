@@ -180,6 +180,7 @@
  "Copy path",
  "Could not check for updates",
  "Could not check for updates: {msg}",
+ "Could not create the project.",
  "Could not download the language. Check your internet connection.",
  "Could not load comments: {msg}",
  "Could not load plugins: {msg}",

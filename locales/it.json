@@ -176,6 +176,7 @@
  "Copy path": "Copia percorso",
  "Could not check for updates": "Impossibile cercare aggiornamenti",
  "Could not check for updates: {msg}": "Impossibile controllare gli aggiornamenti: {msg}",
+ "Could not create the project.": "Impossibile creare il progetto.",
  "Could not download the language. Check your internet connection.": "Impossibile scaricare il linguaggio. Controlla la connessione.",
  "Could not load comments: {msg}": "Impossibile caricare i commenti: {msg}",
  "Could not load plugins: {msg}": "Impossibile caricare i plugin: {msg}",

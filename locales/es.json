@@ -185,6 +185,7 @@
  "Copy path": "Copiar ruta",
  "Could not check for updates": "No se pudieron buscar actualizaciones",
  "Could not check for updates: {msg}": "No se pudieron buscar actualizaciones: {msg}",
+ "Could not create the project.": "No se pudo crear el proyecto.",
  "Could not download the language. Check your internet connection.": "No se pudo descargar el idioma. Revisa tu conexión a internet.",
  "Could not load comments: {msg}": "No se pudieron cargar los comentarios: {msg}",
  "Could not load plugins: {msg}": "No se pudieron cargar los plugins: {msg}",

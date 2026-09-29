@@ -503,7 +503,7 @@ fn section_card(ui: &egui::Ui, r: Rect, icon: &str, title: &str, p: &crate::them
 }
 
 // mäkká kruhová žiara: stred farby → okraj priehľadný (mesh s prechodom farieb)
-fn glow(ui: &egui::Ui, c: egui::Pos2, r: f32, color: Color32) {
+pub(super) fn glow(ui: &egui::Ui, c: egui::Pos2, r: f32, color: Color32) {
     let mut mesh = egui::Mesh::default();
     mesh.colored_vertex(c, color);
     let n = 64;

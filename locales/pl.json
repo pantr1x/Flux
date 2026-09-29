@@ -176,6 +176,7 @@
  "Copy path": "Kopiuj ścieżkę",
  "Could not check for updates": "Nie udało się sprawdzić aktualizacji",
  "Could not check for updates: {msg}": "Nie udało się sprawdzić aktualizacji: {msg}",
+ "Could not create the project.": "Nie udało się utworzyć projektu.",
  "Could not download the language. Check your internet connection.": "Nie udało się pobrać języka. Sprawdź połączenie z internetem.",
  "Could not load comments: {msg}": "Nie udało się wczytać komentarzy: {msg}",
  "Could not load plugins: {msg}": "Nie udało się wczytać wtyczek: {msg}",

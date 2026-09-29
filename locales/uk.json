@@ -176,6 +176,7 @@
  "Copy path": "Копіювати шлях",
  "Could not check for updates": "Не вдалося перевірити оновлення",
  "Could not check for updates: {msg}": "Не вдалося перевірити оновлення: {msg}",
+ "Could not create the project.": "Не вдалося створити проєкт.",
  "Could not download the language. Check your internet connection.": "Не вдалося завантажити мову. Перевірте підключення до інтернету.",
  "Could not load comments: {msg}": "Не вдалося завантажити коментарі: {msg}",
  "Could not load plugins: {msg}": "Не вдалося завантажити плагіни: {msg}",

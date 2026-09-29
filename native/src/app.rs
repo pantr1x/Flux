@@ -3,9 +3,11 @@
 // Výstupom/Terminálom a stavovým riadkom; bez otvoreného súboru stránka projektu. Logika je v flux-core.
 mod chrome;
 mod editing;
+mod home;
 mod intro;
 mod menus;
 mod prefs;
+mod preview;
 mod tools;
 mod tour;
 
@@ -106,8 +108,12 @@ pub struct App {
     live_at: f64,
     wall_at: f64, // kedy sa naposledy zisťoval zdroj tapety
     pub(crate) upd: crate::update::Updater,
-    server: Option<crate::server::Server>,   // Live Server (HTML)
-    tools: tools::Shared,                    // programovacie jazyky na stiahnutie
+    server: Option<crate::server::Server>, // Live Server (HTML)
+    tools: tools::Shared,                  // programovacie jazyky na stiahnutie
+    start: bool,                           // domov Fluxu (logo)
+    start_q: String,                       // hľadanie projektu na domove
+    start_opened: f64,
+    preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
     tour_rects: HashMap<&'static str, Rect>, // kde sú časti okna (pre prehliadku)
     frames: std::collections::VecDeque<f64>, // časy snímok (vývojárske počítadlo)
@@ -185,6 +191,10 @@ impl App {
             upd: Default::default(),
             server: None,
             tools: Default::default(),
+            start: false,
+            start_q: String::new(),
+            start_opened: 0.0,
+            preview: None,
             tour: None,
             tour_rects: HashMap::new(),
             frames: Default::default(),
@@ -483,8 +493,14 @@ impl App {
     }
 
     // spustí Live Server nad projektom (alebo priečinkom súboru) a otvorí stránku v prehliadači
+    // Live Server → panel so stránkou vedľa kódu
     fn live_server(&mut self) {
-        let Some(tab) = self.tabs.get(self.active) else { return };
+        self.open_preview();
+    }
+
+    // spustí server nad projektom (alebo priečinkom súboru) a vráti adresu stránky aktívneho súboru
+    fn live_url(&mut self) -> Option<String> {
+        let tab = self.tabs.get(self.active)?;
         let file = tab.path.clone();
         let root = self.workspace().filter(|w| file.starts_with(w.as_str())).map(std::path::PathBuf::from).or_else(|| Path::new(&file).parent().map(|p| p.to_path_buf())).unwrap_or_default();
         if self.server.as_ref().map(|s| s.root != root).unwrap_or(true) {
@@ -492,7 +508,7 @@ impl App {
                 Ok(s) => self.server = Some(s),
                 Err(e) => {
                     self.status = e.to_string();
-                    return;
+                    return None;
                 }
             }
         }
@@ -502,9 +518,7 @@ impl App {
         } else {
             Path::new(&file).parent().map(|d| d.join("index.html").to_string_lossy().to_string()).unwrap_or(file)
         };
-        if let Some(s) = &self.server {
-            settings::open_external(&s.url(&page));
-        }
+        self.server.as_ref().map(|s| s.url(&page))
     }
 
     fn run(&mut self) {
@@ -660,6 +674,8 @@ impl App {
                     }
                 }
                 "tour" => self.tour = Some(arg.parse().unwrap_or(0)),
+                "start" => self.open_start(ctx.input(|i| i.time)),
+                "preview" => self.open_preview(),
                 "update" => self.upd.check(ctx, 0.0, false),
                 "update-get" => self.upd.download(ctx),
                 "update-install" => self.restart_to_update(ctx),
@@ -708,8 +724,10 @@ impl App {
         if resp.hovered() {
             ui.painter().rect_filled(brand, CornerRadius::same(8), p.hover);
         }
-        if resp.clicked() {
-            self.home = true;
+        // logo otvorí domov Fluxu (ako .brand v Electron Fluxe)
+        if resp.on_hover_text(t("Home")).clicked() {
+            let now = ui.ctx().input(|i| i.time);
+            self.open_start(now);
         }
         widgets::brand_mark(ui, Rect::from_min_size(pos2(brand.left() + 4.0, r.center().y - 10.0), vec2(20.0, 20.0)), &p);
         ui.painter().text(pos2(brand.left() + 32.0, r.center().y), Align2::LEFT_CENTER, "flux", theme::bold(15.0), p.text);
@@ -967,7 +985,8 @@ impl App {
                     });
                     self.tour_rects.insert("files", Rect::from_min_size(tb.response.rect.min, vec2(4.0 * 30.0 + 4.0, tb.response.rect.height())));
                     ui.add_space(4.0);
-                    let h = (ui.available_height() - footer_h).max(40.0);
+                    // strom končí presne nad pätou (aj s medzerou medzi prvkami)
+                    let h = (ui.max_rect().bottom() - footer_h - ui.cursor().top() - ui.spacing().item_spacing.y - 2.0).max(40.0);
                     let sk = egui::Id::new("sa-tree");
                     let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
                     let mut sa = egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]);
@@ -991,10 +1010,12 @@ impl App {
                             }
                         }
                     });
-                    ui.add_space((ui.available_height() - footer_h).max(0.0));
                 }
                 // ---- päta: Nastavenia, skratky, svetlá/tmavá ----
-                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), footer_h), Sense::hover());
+                // pevne na spodku panela: čiara = horná čiara stavového riadka karty, text v jeho strede
+                // (nie podľa toku rozloženia – medzery medzi prvkami ju posúvali nižšie)
+                let mr = ui.max_rect();
+                let r = Rect::from_min_max(pos2(mr.left(), mr.bottom() - footer_h), pos2(mr.right(), mr.bottom()));
                 ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0, p.line));
                 let s = Rect::from_min_size(pos2(r.left(), r.center().y - 12.0), vec2(96.0, 24.0));
                 self.tour_rects.insert("settings", r);
@@ -1166,7 +1187,7 @@ impl App {
                 if self.running {
                     self.out.pty.kill();
                 } else if web && live_on {
-                    self.server = None;
+                    self.close_preview();
                 } else {
                     self.run();
                 }
@@ -2289,98 +2310,137 @@ impl eframe::App for App {
         while self.frames.front().is_some_and(|f| t_now - f > 1.0) {
             self.frames.pop_front();
         }
-        if self.side_open {
+        // domov Fluxu namiesto bočného panela a karty
+        if self.start {
+            egui::CentralPanel::default().frame(Frame::new()).show(root, |ui| {
+                let r = ui.max_rect();
+                self.start_ui(ui, r);
+            });
+        }
+        if self.side_open && !self.start {
             self.sidebar(root);
         }
         let p = self.pal;
         let radius = self.radius();
         let side_right = self.get("sidePos").as_str() == Some("right");
         let now = ctx.input(|i| i.time);
-        egui::CentralPanel::default().frame(Frame::new().fill(p.base)).show(root, |ui| {
-            let full = ui.max_rect();
-            let (lpad, rpad) = if !self.side_open {
-                (GAP, GAP)
-            } else if side_right {
-                (GAP, 0.0)
-            } else {
-                (0.0, GAP)
-            };
-            let top = Rect::from_min_max(pos2(full.left() + if self.side_open && !side_right { 0.0 } else { GAP }, full.top()), pos2(full.right() - rpad, full.top() + TOP_H));
-            self.top_bar(ui, top);
-            // jedna zaoblená karta: editor/stránka projektu, Výstup/Terminál, stavový riadok (#card)
-            let card_r = Rect::from_min_max(pos2(full.left() + lpad, top.bottom()), pos2(full.right() - rpad, full.bottom() - GAP));
-            ui.painter().add(egui::Shadow { offset: [0, 8], blur: 30, spread: 0, color: Color32::from_black_alpha(if p.dark { 110 } else { 25 }) }.as_shape(card_r, CornerRadius::same(radius)));
-            // pod kartou rozmazaná tapeta (ako backdrop-filter) – priesvitná karta potom neruší textom tapety
-            self.wall.paint_blurred(ui.painter(), card_r, radius);
-            ui.painter().rect_filled(card_r, CornerRadius::same(radius), p.card);
-            ui.painter().rect_stroke(card_r, CornerRadius::same(radius), Stroke::new(1.0, p.line), StrokeKind::Outside);
-            let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
-            card_ui.set_clip_rect(card_r.shrink(1.0));
-            let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - 28.0), card_r.max);
-            self.tour_rects.insert("status", status);
-            self.status_bar(&mut card_ui, status);
-            let mut main = Rect::from_min_max(card_r.min, pos2(card_r.right(), status.top()));
-            let show_editor = !self.home && !self.tabs.is_empty();
-            let pos = self.get("panelPos").as_str().unwrap_or("bottom").to_string();
-            if self.panel_open && show_editor {
-                // Výstup/Terminál dole, vpravo alebo vľavo (panelPos) s ťahadlom
-                let panel = if pos == "bottom" {
-                    let h = self.panel_h.clamp(90.0, (main.height() - 120.0).max(90.0));
-                    Rect::from_min_max(pos2(main.left(), main.bottom() - h), main.max)
+        // panel Live Servera sleduje aktívnu stránku
+        if self.preview.is_some() && self.is_web_file() {
+            if let Some(u) = self.live_url() {
+                if let Some(pv) = self.preview.as_mut() {
+                    pv.url = u;
+                }
+            }
+        }
+        if !self.start {
+            egui::CentralPanel::default().frame(Frame::new().fill(p.base)).show(root, |ui| {
+                let full = ui.max_rect();
+                let (lpad, rpad) = if !self.side_open {
+                    (GAP, GAP)
+                } else if side_right {
+                    (GAP, 0.0)
                 } else {
-                    let w = self.panel_w.clamp(220.0, (main.width() - 300.0).max(220.0));
-                    if pos == "right" {
-                        Rect::from_min_max(pos2(main.right() - w, main.top()), main.max)
+                    (0.0, GAP)
+                };
+                let top = Rect::from_min_max(pos2(full.left() + if self.side_open && !side_right { 0.0 } else { GAP }, full.top()), pos2(full.right() - rpad, full.top() + TOP_H));
+                self.top_bar(ui, top);
+                // jedna zaoblená karta: editor/stránka projektu, Výstup/Terminál, stavový riadok (#card)
+                let card_r = Rect::from_min_max(pos2(full.left() + lpad, top.bottom()), pos2(full.right() - rpad, full.bottom() - GAP));
+                ui.painter().add(egui::Shadow { offset: [0, 8], blur: 30, spread: 0, color: Color32::from_black_alpha(if p.dark { 110 } else { 25 }) }.as_shape(card_r, CornerRadius::same(radius)));
+                // pod kartou rozmazaná tapeta (ako backdrop-filter) – priesvitná karta potom neruší textom tapety
+                self.wall.paint_blurred(ui.painter(), card_r, radius);
+                ui.painter().rect_filled(card_r, CornerRadius::same(radius), p.card);
+                ui.painter().rect_stroke(card_r, CornerRadius::same(radius), Stroke::new(1.0, p.line), StrokeKind::Outside);
+                let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
+                card_ui.set_clip_rect(card_r.shrink(1.0));
+                let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - 28.0), card_r.max);
+                self.tour_rects.insert("status", status);
+                self.status_bar(&mut card_ui, status);
+                let mut main = Rect::from_min_max(card_r.min, pos2(card_r.right(), status.top()));
+                // Live Server vpravo na karte (šírka sa dá ťahať)
+                if self.preview.is_some() {
+                    let pw = {
+                        let pv = self.preview.as_mut().unwrap();
+                        if pv.width <= 0.0 {
+                            pv.width = (main.width() * 0.45).round();
+                        }
+                        pv.width = pv.width.clamp(280.0, (main.width() - 320.0).max(280.0));
+                        pv.width
+                    };
+                    let pr = Rect::from_min_max(pos2(main.right() - pw, main.top()), main.max);
+                    let grip = Rect::from_min_max(pos2(pr.left() - 3.0, pr.top()), pos2(pr.left() + 3.0, pr.bottom()));
+                    let gr = card_ui.interact(grip, card_ui.id().with("pv-grip"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeColumn);
+                    if gr.dragged() {
+                        if let Some(pv) = self.preview.as_mut() {
+                            pv.width = (pv.width - gr.drag_delta().x).max(280.0);
+                        }
+                    }
+                    self.preview_ui(&mut card_ui, pr);
+                    main.max.x = pr.left();
+                }
+                let show_editor = !self.home && !self.tabs.is_empty();
+                let pos = self.get("panelPos").as_str().unwrap_or("bottom").to_string();
+                if self.panel_open && show_editor {
+                    // Výstup/Terminál dole, vpravo alebo vľavo (panelPos) s ťahadlom
+                    let panel = if pos == "bottom" {
+                        let h = self.panel_h.clamp(90.0, (main.height() - 120.0).max(90.0));
+                        Rect::from_min_max(pos2(main.left(), main.bottom() - h), main.max)
                     } else {
-                        Rect::from_min_max(main.min, pos2(main.left() + w, main.bottom()))
+                        let w = self.panel_w.clamp(220.0, (main.width() - 300.0).max(220.0));
+                        if pos == "right" {
+                            Rect::from_min_max(pos2(main.right() - w, main.top()), main.max)
+                        } else {
+                            Rect::from_min_max(main.min, pos2(main.left() + w, main.bottom()))
+                        }
+                    };
+                    let grip = match pos.as_str() {
+                        "bottom" => Rect::from_min_max(pos2(panel.left(), panel.top() - 3.0), pos2(panel.right(), panel.top() + 3.0)),
+                        "right" => Rect::from_min_max(pos2(panel.left() - 3.0, panel.top()), pos2(panel.left() + 3.0, panel.bottom())),
+                        _ => Rect::from_min_max(pos2(panel.right() - 3.0, panel.top()), pos2(panel.right() + 3.0, panel.bottom())),
+                    };
+                    let gr =
+                        card_ui.interact(grip, card_ui.id().with("grip"), Sense::drag()).on_hover_cursor(if pos == "bottom" { egui::CursorIcon::ResizeRow } else { egui::CursorIcon::ResizeColumn });
+                    if gr.dragged() {
+                        let d = gr.drag_delta();
+                        match pos.as_str() {
+                            "bottom" => self.panel_h = (panel.height() - d.y).max(90.0),
+                            "right" => self.panel_w = (panel.width() - d.x).max(220.0),
+                            _ => self.panel_w = (panel.width() + d.x).max(220.0),
+                        }
                     }
-                };
-                let grip = match pos.as_str() {
-                    "bottom" => Rect::from_min_max(pos2(panel.left(), panel.top() - 3.0), pos2(panel.right(), panel.top() + 3.0)),
-                    "right" => Rect::from_min_max(pos2(panel.left() - 3.0, panel.top()), pos2(panel.left() + 3.0, panel.bottom())),
-                    _ => Rect::from_min_max(pos2(panel.right() - 3.0, panel.top()), pos2(panel.right() + 3.0, panel.bottom())),
-                };
-                let gr = card_ui.interact(grip, card_ui.id().with("grip"), Sense::drag()).on_hover_cursor(if pos == "bottom" { egui::CursorIcon::ResizeRow } else { egui::CursorIcon::ResizeColumn });
-                if gr.dragged() {
-                    let d = gr.drag_delta();
+                    self.bottom_panel(&mut card_ui, panel, &pos);
                     match pos.as_str() {
-                        "bottom" => self.panel_h = (panel.height() - d.y).max(90.0),
-                        "right" => self.panel_w = (panel.width() - d.x).max(220.0),
-                        _ => self.panel_w = (panel.width() + d.x).max(220.0),
+                        "bottom" => main.max.y = panel.top(),
+                        "right" => main.max.x = panel.left(),
+                        _ => main.min.x = panel.right(),
+                    }
+                } else if show_editor {
+                    // skrytý panel: malé tlačidlo na jeho vrátenie
+                    let b = Rect::from_center_size(pos2(main.right() - 136.0, main.bottom() - 18.0), vec2(26.0, 26.0));
+                    if widgets::icon_button_at(&mut card_ui, b, "panel", 15.0, &p, true).on_hover_text(t("Show Output")).clicked() {
+                        self.panel_open = true;
                     }
                 }
-                self.bottom_panel(&mut card_ui, panel, &pos);
-                match pos.as_str() {
-                    "bottom" => main.max.y = panel.top(),
-                    "right" => main.max.x = panel.left(),
-                    _ => main.min.x = panel.right(),
+                // prechod pri zmene súboru/stránky: obsah jemne „vybledne“ dnu (transitions)
+                let key = if show_editor { self.tabs[self.active].path.clone() } else { format!("home:{:?}", self.workspace()) };
+                if key != self.shown {
+                    self.shown = key;
+                    self.switched = now;
                 }
-            } else if show_editor {
-                // skrytý panel: malé tlačidlo na jeho vrátenie
-                let b = Rect::from_center_size(pos2(main.right() - 136.0, main.bottom() - 18.0), vec2(26.0, 26.0));
-                if widgets::icon_button_at(&mut card_ui, b, "panel", 15.0, &p, true).on_hover_text(t("Show Output")).clicked() {
-                    self.panel_open = true;
+                if show_editor {
+                    self.editor(&mut card_ui, main);
+                } else {
+                    self.project_page(&mut card_ui, main);
                 }
-            }
-            // prechod pri zmene súboru/stránky: obsah jemne „vybledne“ dnu (transitions)
-            let key = if show_editor { self.tabs[self.active].path.clone() } else { format!("home:{:?}", self.workspace()) };
-            if key != self.shown {
-                self.shown = key;
-                self.switched = now;
-            }
-            if show_editor {
-                self.editor(&mut card_ui, main);
-            } else {
-                self.project_page(&mut card_ui, main);
-            }
-            if self.anim_on() {
-                let k = ((now - self.switched) / 0.24).clamp(0.0, 1.0) as f32;
-                if k < 1.0 {
-                    card_ui.painter().rect_filled(main.shrink(1.0), 0.0, p.card.gamma_multiply(1.0 - k * k));
-                    ctx.request_repaint();
+                if self.anim_on() {
+                    let k = ((now - self.switched) / 0.24).clamp(0.0, 1.0) as f32;
+                    if k < 1.0 {
+                        card_ui.painter().rect_filled(main.shrink(1.0), 0.0, p.card.gamma_multiply(1.0 - k * k));
+                        ctx.request_repaint();
+                    }
                 }
-            }
-        });
+            });
+        }
         // paleta a potvrdenie nad všetkým
         if self.palette.is_some() {
             let full = ctx.content_rect();
@@ -2413,5 +2473,7 @@ impl eframe::App for App {
             });
         }
         self.window_chrome(ctx);
+        // vložený WebView2 na mieste panela Live Servera
+        self.sync_preview(ctx, _frame);
     }
 }

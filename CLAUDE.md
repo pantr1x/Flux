@@ -46,6 +46,13 @@ Flux is a small code editor for Windows 10/11, built with Electron and Monaco. I
     - HTML/CSS files (and JS with an `index.html` next to it) show **Live Server** instead of ▶ Run (`is_web_file()`), and running starts `live_server()`.
     - The single top-bar button turns into **Stop** while a program or the server runs, and the address chip reopens the page.
     - Test: `FLUX_TEST='1:open=index.html;2:run'` + `curl 127.0.0.1:5500/`.
+  - `app/preview.rs`: the Live Server panel on the right of the card (`App.preview`, draggable width; toolbar with address, Full/Tablet/Phone, reload, open in browser, ×).
+    - On Windows the page is an embedded WebView2 child window (`wry`, `build_as_child(frame)`). `sync_preview()` runs at the end of `ui()`: it sets the bounds (egui points × `zoom_factor`) and hides the web view while anything egui draws on top of it (settings, palette, menus, tour, intro, home screen).
+    - Elsewhere, or if WebView2 fails, the panel shows an *Open in browser* card and opens the browser. `FLUX_TEST` action `preview`.
+  - `app/home.rs`: Flux's home screen (`openStart()` in `app.js`), opened by the logo, ☰ → Home and `FLUX_TEST` action `start`.
+    - It shows a greeting with a localized date (`chrono` `unstable-locales`), total stats, action cards, pinned cards, recent rows with search, recent files, the `START_CHOICES` templates (texts copied from `templates.js`) and the tip of the day.
+    - A template writes files into the open project, or creates `python-project` / `my-website` / `js-project` (with `-2`… if taken).
+  - Sidebar footer: an absolute rect `[panel bottom − 28, panel bottom]` (the panel has `GAP` bottom margin), so its line is the status bar's top line. Don't place it through the layout flow: item spacing pushed it lower.
   - `app/tools.rs` + `crates/flux-core/src/toolchains.rs`: Settings → Languages. This is a 1:1 port of `src/main/toolchains.js`: probe, `winget install|upgrade` with progress, a PATH refresh from the registry, `addRPath`, and `winget upgrade` for updates. State lives in `App.tools` (a shared `Mutex`); installs run one after another from a queue.
   - `app/tour.rs`: the feature tour (the same 6 steps as `TOUR` in `onboarding.js`). The targets are `App.tour_rects`, filled while drawing (`projects`, `files`, `brand`, `run`, `status`, `settings`); missing ones are skipped. `FLUX_TEST` action `tour=<step>`.
   - Settings → General → **Developer**: shown only when `settings.github.user.login` is `pantr1x` (the same shared `settings.json` Electron writes after GitHub sign-in), or with `FLUX_DEV=1`.

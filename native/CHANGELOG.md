@@ -2,6 +2,20 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.5.0 – 2026-09-29
+
+### Home screen like Flux
+- **Click the logo** (or ☰ → Home) to open Flux's home screen. It shows a greeting with today's date, your coding time, runs, lines of code and projects.
+- **New project, Open folder and Open file** are big buttons at the top.
+- **Projects**: pinned projects as cards, recent ones as rows, and a search box. Recent files are listed below.
+- **Start something new**: Python, Python window, Python game, HTML page, Web project, JavaScript or an empty file, each with one click. Plus a tip of the day.
+
+### Live Server beside your code
+- **Live Server** now opens the page on the right side of Flux, next to your code, and reloads it every time you save. You can switch between full width, tablet and phone, reload it, open it in your browser, or close it with ×. Drag its edge to make it wider.
+
+### Tidier sidebar
+- **Settings** at the bottom of the sidebar now sits exactly level with the line above the status bar.
+
 ## 0.4.0 – 2026-09-29
 
 ### Run, Stop and Live Server

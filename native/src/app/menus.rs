@@ -175,7 +175,7 @@ impl App {
                 if self.running {
                     self.out.pty.kill();
                 } else {
-                    self.server = None;
+                    self.close_preview();
                 }
             }
             "terminal" => {
@@ -186,7 +186,7 @@ impl App {
             "sidebar" => self.side_open = !self.side_open,
             "panel" => self.panel_open = !self.panel_open,
             "theme" => self.set_theme(!self.pal.dark, ctx),
-            "home" => self.home = true,
+            "home" => self.open_start(ctx.input(|i| i.time)),
             "website" => flux_core::settings::open_external("https://pantr1x.github.io/Flux/"),
             "star" => flux_core::settings::open_external("https://github.com/pantr1x/Flux"),
             "issue" => flux_core::settings::open_external("https://github.com/pantr1x/Flux/issues/new"),
