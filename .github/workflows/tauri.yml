@@ -57,7 +57,7 @@ jobs:
             while ($added) { $added = $false; foreach ($p in $all) { if ($ids -contains $p.ParentProcessId -and -not ($ids -contains $p.ProcessId)) { $ids += $p.ProcessId; $added = $true } } }
             $ids
           }
-          function Measure($rootPid) {
+          function Get-FluxMem($rootPid) {
             # „Pamäť“ zo Správcu úloh = súkromná pracovná množina; id a hodnota v tom istom riadku (žiadne párovanie podľa mena)
             $ids = Tree $rootPid
             $perf = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $ids -contains [int]$_.IDProcess }
@@ -69,13 +69,14 @@ jobs:
               count = $ids.Count
             }
           }
-          function Run($label, $exe, $argList) {
+          function Start-FluxRun($label, $exe, $argList) {
             $p = if ($argList) { Start-Process $exe -ArgumentList $argList -PassThru } else { Start-Process $exe -PassThru }
             Start-Sleep 40
             Shot $label
             # tri merania po 5 s, berie sa stredné
-            $ms = @(); for ($i = 0; $i -lt 3; $i++) { $ms += Measure $p.Id; Start-Sleep 5 }
-            $mid = ($ms | Sort-Object { $_.priv })[1]
+            $ms = @(); for ($i = 0; $i -lt 3; $i++) { $ms += ,(Get-FluxMem $p.Id); Start-Sleep 5 }
+            $mid = @($ms | Sort-Object { $_['priv'] })[[math]::Floor($ms.Count / 2)]
+            if (-not $mid) { $mid = $ms[-1] }
             $out = @("$label : $($mid.priv) MB private (Task Manager), $($mid.ws) MB working set, $($mid.count) processes") + ($mid.rows | ForEach-Object { "   $_" })
             Stop-Process -Id (Tree $p.Id) -Force -ErrorAction SilentlyContinue
             Start-Sleep 3
@@ -90,10 +91,10 @@ jobs:
           $report = @()
           $td = "$env:RUNNER_TEMP\ud-tauri"; Settings $td
           $env:FLUX_USER_DATA = $td
-          $report += Run 'tauri' (Get-ChildItem desktop\target\release\flux.exe).FullName $null
+          try { $report += Start-FluxRun 'tauri' (Get-ChildItem desktop\target\release\flux.exe).FullName $null } catch { $report += "tauri: measurement failed: $_" }
           Remove-Item Env:FLUX_USER_DATA
           $ed = "$env:RUNNER_TEMP\ud-electron"; Settings $ed
-          $report += Run 'electron' (Get-ChildItem release\win-unpacked\Flux.exe).FullName "--user-data-dir=$ed"
+          try { $report += Start-FluxRun 'electron' (Get-ChildItem release\win-unpacked\Flux.exe).FullName "--user-data-dir=$ed" } catch { $report += "electron: measurement failed: $_" }
           $report += "Installer sizes:"
           Get-ChildItem desktop\target\release\bundle\nsis\*.exe | ForEach-Object { $report += "  Tauri: $([math]::Round($_.Length / 1MB, 1)) MB" }
           $report | Set-Content out\memory.txt
