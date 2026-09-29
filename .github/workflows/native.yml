@@ -1,5 +1,6 @@
 # Flux Native (native/, čistý Rust + egui): zostaví ho na Windows a zmeria pamäť (ako Správca úloh).
-# Výsledok: súhrn behu, vetva ci-native (native.png, memory.txt), artefakt Flux-Native.
+# Výsledok: súhrn behu, vetva ci-native (native.png, memory.txt, Flux-Native.exe na stiahnutie), artefakt Flux-Native.
+# Stiahnutie: https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe
 name: Native build
 
 on:
@@ -80,6 +81,8 @@ jobs:
           try { $report += Start-FluxRun 'native' (Get-ChildItem target\release\flux-native.exe).FullName $null } catch { $report += "native: measurement failed: $_" }
           $report += "Program size: $([math]::Round((Get-Item target\release\flux-native.exe).Length / 1MB, 1)) MB"
           $report | Set-Content out\memory.txt
+          # program na stiahnutie a vyskúšanie (bez inštalátora, rovnaké nastavenia ako Electron Flux)
+          Copy-Item target\release\flux-native.exe out\Flux-Native.exe
           $report | ForEach-Object { Write-Host $_ }
           "## Memory`n``````n$($report -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Publish screenshots (branch ci-native)
