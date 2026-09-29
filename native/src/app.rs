@@ -1,7 +1,10 @@
 // Flux Native – okno v rovnakom rozložení ako Electron Flux: bočný panel (logo, projekty, voľné súbory, strom, Nastavenia),
 // horná lišta (späť/dopredu, karty súborov, hľadanie, AI, ▶ Run), zaoblená karta s editorom + minimapou,
 // Výstupom/Terminálom a stavovým riadkom; bez otvoreného súboru stránka projektu. Logika je v flux-core.
+mod intro;
+
 use crate::code::Code;
+use crate::i18n::t;
 use crate::term::TermView;
 use crate::theme::{self, Pal, GAP, RADIUS, SIDE_W, TOP_H};
 use crate::widgets::{self, Lead};
@@ -79,6 +82,8 @@ pub struct App {
     started: Instant,
     cursor: (usize, usize),
     scroll_to: Option<f32>,
+    intro: Option<intro::Intro>,
+    trim: crate::mem::Trim,
 }
 
 impl App {
@@ -87,7 +92,7 @@ impl App {
         let core = Arc::new(Core::load());
         // svetlá/tmavá podľa témy kódu – ako isDark() v Electron Fluxe
         let code = Code::new(core.setting("codeTheme").as_str().unwrap_or(""));
-        let pal = theme::palette(code.dark);
+        let pal = theme::palette_for(code.dark, core.setting("accent").as_str().unwrap_or("mono"), core.setting("darkLift").as_f64().unwrap_or(0.0));
         theme::fonts(&cc.egui_ctx);
         theme::apply(&cc.egui_ctx, &pal);
         // udalosti z jadra (výstup programu, terminál, zmeny súborov) → fronta + prekreslenie
@@ -133,8 +138,14 @@ impl App {
             started: Instant::now(),
             cursor: (1, 1),
             scroll_to: None,
+            intro: None,
+            trim: Default::default(),
         };
-        app.out.feed("\x1b[90mProgram output appears here. Press \x1b[0;1mF5\x1b[0;90m or \u{25B6} Run.\x1b[0m\r\n");
+        crate::i18n::set_language(app.core.setting("language").as_str().unwrap_or("en"));
+        if app.core.setting("onboarded").as_bool() != Some(true) || std::env::var("FLUX_INTRO").is_ok() {
+            app.intro = Some(intro::Intro::new(app.core.setting("userName").as_str().unwrap_or("")));
+        }
+        app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         app.reload_projects();
         if let Some(last) = app.core.setting("lastFolder").as_str().map(String::from) {
             app.open_folder(&last);
@@ -154,6 +165,16 @@ impl App {
             app.test = t.split(';').filter_map(|p| p.split_once(':').map(|(a, b)| (a.parse().unwrap_or(0.0), b.to_string()))).collect();
         }
         app
+    }
+
+    fn palette(&self) -> Pal {
+        theme::palette_for(self.code.dark, self.core.setting("accent").as_str().unwrap_or("mono"), self.core.setting("darkLift").as_f64().unwrap_or(0.0))
+    }
+
+    // znova načíta farby z nastavení (accent, darkLift)
+    fn apply_look(&mut self, ctx: &egui::Context) {
+        self.pal = self.palette();
+        theme::apply(ctx, &self.pal);
     }
 
     fn workspace(&self) -> Option<String> {
@@ -334,9 +355,8 @@ impl App {
                     if let Some(e) = v["error"].as_str() {
                         self.out.feed(&format!("\r\n\x1b[31m{e}\x1b[0m\r\n"));
                     }
-                    let (color, word) = if code == 0 { ("32", "Finished") } else { ("31", "Exited with code") };
-                    let tail = if code == 0 { String::new() } else { format!(" {code}") };
-                    self.out.feed(&format!("\r\n\x1b[{color}m{word}{tail}\x1b[0m \x1b[90min {:.2} s\x1b[0m\r\n", v["ms"].as_u64().unwrap_or(0) as f64 / 1000.0));
+                    let (color, word) = if code == 0 { ("32", t("Finished")) } else { ("31", crate::i18n::tf("Exited with code {code}", &[("code", &code.to_string())])) };
+                    self.out.feed(&format!("\r\n\x1b[{color}m{word}\x1b[0m \x1b[90min {:.2} s\x1b[0m\r\n", v["ms"].as_u64().unwrap_or(0) as f64 / 1000.0));
                 }
                 "shell:data" => self.sh.feed(v.as_str().unwrap_or("")),
                 "shell:exit" => self.shell_started = false,
@@ -406,6 +426,11 @@ impl App {
                 "home" => self.home = true,
                 "light" | "dark" => self.set_theme(a == "dark", ctx),
                 "theme" => self.set_code_theme(arg, ctx),
+                "next" => {
+                    if let Some(i) = self.intro.as_mut() {
+                        i.step = (i.step + 1).min(intro::STEPS.len() - 1);
+                    }
+                }
                 _ => {}
             }
         }
@@ -421,7 +446,7 @@ impl App {
 
     fn set_code_theme(&mut self, id: &str, ctx: &egui::Context) {
         self.code = Code::new(id);
-        self.pal = theme::palette(self.code.dark);
+        self.pal = self.palette();
         theme::apply(ctx, &self.pal);
         let dark = self.code.dark;
         let id = id.to_string();
@@ -445,10 +470,10 @@ impl App {
         }
         widgets::brand_mark(ui, Rect::from_min_size(pos2(brand.left() + 4.0, r.center().y - 10.0), vec2(20.0, 20.0)), &p);
         ui.painter().text(pos2(brand.left() + 32.0, r.center().y), Align2::LEFT_CENTER, "flux", theme::bold(15.0), p.text);
-        widgets::icon_button_at(ui, Rect::from_center_size(pos2(brand.right() + 17.0, r.center().y), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text("Menu");
+        widgets::icon_button_at(ui, Rect::from_center_size(pos2(brand.right() + 17.0, r.center().y), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
         if with_toggle {
             let t = Rect::from_center_size(pos2(r.right() - 14.0, r.center().y), vec2(28.0, 28.0));
-            if widgets::icon_button_at(ui, t, "sidebar", 16.0, &p, true).on_hover_text("Hide sidebar").clicked() {
+            if widgets::icon_button_at(ui, t, "sidebar", 16.0, &p, true).on_hover_text(crate::i18n::t("Hide sidebar")).clicked() {
                 self.side_open = false;
             }
         }
@@ -464,7 +489,7 @@ impl App {
         if let Some(main) = langs.first() {
             parts.push(if langs.len() > 1 { format!("{} +{}", kind_name(main), langs.len() - 1) } else { kind_name(main).to_string() });
         }
-        parts.push(format!("{files} {}", if files == 1 { "file" } else { "files" }));
+        parts.push(format!("{files} {}", if files == 1 { t("file") } else { t("files") }));
         let secs = self.core.setting("projectTime")[dir].as_u64().unwrap_or(0);
         if secs >= 60 {
             parts.push(format_time(secs));
@@ -482,8 +507,8 @@ impl App {
             self.side_top(ui, true);
             let ws = self.workspace();
             // ---- PROJECTS ----
-            if widgets::section(ui, "PROJECTS", Some("folderOpen"), &p).map(|r| r.on_hover_text("Open folder").clicked()) == Some(true) {
-                if let Some(d) = rfd::FileDialog::new().set_title("Open folder").pick_folder() {
+            if widgets::section(ui, &t("Projects").to_uppercase(), Some("folderOpen"), &p).map(|r| r.on_hover_text(t("Open folder")).clicked()) == Some(true) {
+                if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
                     self.open_folder(&d.to_string_lossy());
                 }
             }
@@ -530,17 +555,19 @@ impl App {
                         }
                     }
                 }
-            } else if widgets::row(ui, false, 10.0, Lead::Line("plus"), "New project", None, false, &p).clicked() {
+            } else if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New project"), None, false, &p).clicked() {
                 self.new_project = Some(String::new());
             }
-            if hidden > 0 && widgets::row(ui, false, 10.0, Lead::Line(if self.show_hidden { "eyeOff" } else { "eye" }), &format!("{hidden} hidden"), None, false, &p).clicked() {
+            if hidden > 0
+                && widgets::row(ui, false, 10.0, Lead::Line(if self.show_hidden { "eyeOff" } else { "eye" }), &crate::i18n::tf("{n} hidden", &[("n", &hidden.to_string())]), None, false, &p).clicked()
+            {
                 self.show_hidden = !self.show_hidden;
             }
             // ---- FILES (súbory otvorené mimo projektu) ----
             if !self.recent_files.is_empty() {
                 widgets::separator(ui, &p);
-                if widgets::section(ui, "FILES", Some("filePlus"), &p).map(|r| r.on_hover_text("New file").clicked()) == Some(true) {
-                    if let Some(f) = rfd::FileDialog::new().set_title("New file").save_file() {
+                if widgets::section(ui, &t("Files").to_uppercase(), Some("filePlus"), &p).map(|r| r.on_hover_text(t("New file")).clicked()) == Some(true) {
+                    if let Some(f) = rfd::FileDialog::new().set_title(t("New file")).save_file() {
                         let f = f.to_string_lossy().to_string();
                         if fsops::create(&f, false).is_ok() {
                             fsops::allow_file(&self.core, &f);
@@ -569,16 +596,16 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.add_space(4.0);
-                    if widgets::icon_button(ui, "filePlus", &p, true).on_hover_text("New file").clicked() {
+                    if widgets::icon_button(ui, "filePlus", &p, true).on_hover_text(t("New file")).clicked() {
                         self.new_item = Some((false, String::new()));
                     }
-                    if widgets::icon_button(ui, "folderPlus", &p, true).on_hover_text("New folder").clicked() {
+                    if widgets::icon_button(ui, "folderPlus", &p, true).on_hover_text(t("New folder")).clicked() {
                         self.new_item = Some((true, String::new()));
                     }
-                    if widgets::icon_button(ui, "refresh", &p, true).on_hover_text("Refresh").clicked() {
+                    if widgets::icon_button(ui, "refresh", &p, true).on_hover_text(t("Refresh")).clicked() {
                         self.tree.clear();
                     }
-                    if widgets::icon_button(ui, "collapse", &p, true).on_hover_text("Collapse all").clicked() {
+                    if widgets::icon_button(ui, "collapse", &p, true).on_hover_text(t("Collapse all")).clicked() {
                         self.open_dirs.clear();
                     }
                 });
@@ -586,7 +613,8 @@ impl App {
                 let h = (ui.available_height() - footer_h).max(40.0);
                 egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]).show(ui, |ui| {
                     if let Some((is_dir, name)) = &mut self.new_item {
-                        let r = ui.add(egui::TextEdit::singleline(name).hint_text(if *is_dir { "Folder name" } else { "File name" }).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5)));
+                        let r =
+                            ui.add(egui::TextEdit::singleline(name).hint_text(if *is_dir { t("Folder name") } else { t("File name") }).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5)));
                         r.request_focus();
                         if r.lost_focus() {
                             let (d, n) = (*is_dir, name.trim().to_string());
@@ -608,6 +636,18 @@ impl App {
                     self.tree_ui(ui, &w, 0);
                 });
             } else {
+                // bez priečinka: „No folder is open.“ + Open folder
+                widgets::separator(ui, &p);
+                ui.add_space(40.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new(t("No folder is open.")).color(p.text3).size(12.5));
+                    ui.add_space(6.0);
+                    if widgets::button(ui, None, &t("Open folder"), p.accent, p.accent_fg, 28.0, &p).clicked() {
+                        if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
+                            self.open_folder(&d.to_string_lossy());
+                        }
+                    }
+                });
                 ui.add_space((ui.available_height() - footer_h).max(0.0));
             }
             // ---- päta: Nastavenia, skratky, svetlá/tmavá ----
@@ -619,14 +659,14 @@ impl App {
                 ui.painter().rect_filled(s, CornerRadius::same(8), p.hover);
             }
             widgets::icon_at(ui, pos2(s.left() + 15.0, s.center().y), 15.0, "settings", p.text2);
-            ui.painter().text(pos2(s.left() + 31.0, s.center().y), Align2::LEFT_CENTER, "Settings", theme::bold(13.0), p.text2);
-            if sr.on_hover_text("Settings are coming to Flux Native soon").clicked() {
+            ui.painter().text(pos2(s.left() + 31.0, s.center().y), Align2::LEFT_CENTER, t("Settings"), theme::bold(13.0), p.text2);
+            if sr.on_hover_text(t("Settings are coming to Flux Native soon")).clicked() {
                 self.status = "Settings are coming to Flux Native soon.".into();
             }
             let sun = Rect::from_center_size(pos2(r.right() - 12.0, s.center().y), vec2(26.0, 26.0));
             let cmd = sun.translate(vec2(-26.0, 0.0));
-            widgets::icon_button_at(ui, cmd, "command", 15.0, &p, true).on_hover_text("F5 Run \u{00B7} Ctrl+S Save \u{00B7} Ctrl+O Open folder \u{00B7} Ctrl+W Close");
-            if widgets::icon_button_at(ui, sun, if p.dark { "sun" } else { "moon" }, 15.0, &p, true).on_hover_text("Light / dark").clicked() {
+            widgets::icon_button_at(ui, cmd, "command", 15.0, &p, true).on_hover_text(t("F5 Run · Ctrl+S Save · Ctrl+O Open folder · Ctrl+W Close"));
+            if widgets::icon_button_at(ui, sun, if p.dark { "sun" } else { "moon" }, 15.0, &p, true).on_hover_text(t("Light / dark")).clicked() {
                 self.set_theme(!p.dark, ui.ctx());
             }
         });
@@ -672,17 +712,17 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(x + 8.0, r.top()), vec2(140.0, TOP_H))));
             self.side_top(&mut child, false);
             x += 138.0;
-            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "sidebar", 16.0, &p, true).on_hover_text("Show sidebar").clicked() {
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "sidebar", 16.0, &p, true).on_hover_text(t("Show sidebar")).clicked() {
                 self.side_open = true;
             }
             x += 30.0;
         }
         let back = self.hist_i > 0;
         let fwd = self.hist_i + 1 < self.hist.len();
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "arrowLeft", 16.0, &p, back).on_hover_text("Back").clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "arrowLeft", 16.0, &p, back).on_hover_text(t("Back")).clicked() {
             self.go(true);
         }
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 44.0, cy), vec2(28.0, 28.0)), "arrowRight", 16.0, &p, fwd).on_hover_text("Forward").clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 44.0, cy), vec2(28.0, 28.0)), "arrowRight", 16.0, &p, fwd).on_hover_text(t("Forward")).clicked() {
             self.go(false);
         }
         x += 70.0;
@@ -695,11 +735,11 @@ impl App {
             let sr = ui.interact(stop, ui.id().with("stop"), if self.running { Sense::click() } else { Sense::hover() });
             ui.painter().rect_filled(stop, CornerRadius::same(10), if self.running && sr.hovered() { p.active } else { p.hover });
             widgets::icon_at(ui, stop.center(), 12.0, "stop", if self.running { p.red } else { p.text3.gamma_multiply(0.6) });
-            if self.running && sr.on_hover_text("Stop").clicked() {
+            if self.running && sr.on_hover_text(t("Stop")).clicked() {
                 self.out.pty.kill();
             }
             rx -= 37.0;
-            let run_w = 75.0;
+            let run_w = widgets::text_w(ui, &t("Run"), theme::bold(13.5)) + 46.0;
             let run = Rect::from_min_size(pos2(rx - run_w, cy - 15.0), vec2(run_w, 30.0));
             let rr = ui.interact(run, ui.id().with("run"), Sense::click());
             let fill = if !can_run {
@@ -713,8 +753,8 @@ impl App {
             };
             ui.painter().rect_filled(run, CornerRadius::same(10), fill);
             widgets::icon_at(ui, pos2(run.left() + 18.0, cy), 14.0, "play", p.accent_fg);
-            ui.painter().text(pos2(run.left() + 32.0, cy), Align2::LEFT_CENTER, "Run", theme::bold(13.5), p.accent_fg);
-            if can_run && rr.on_hover_text("Run (F5)").on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+            ui.painter().text(pos2(run.left() + 32.0, cy), Align2::LEFT_CENTER, t("Run"), theme::bold(13.5), p.accent_fg);
+            if can_run && rr.on_hover_text(t("Run (F5)")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 self.run();
             }
             rx -= run_w + 7.0;
@@ -724,9 +764,9 @@ impl App {
         ui.painter().rect_filled(ai, CornerRadius::same(10), if ar.hovered() { p.active } else { p.hover });
         widgets::icon_at(ui, pos2(ai.left() + 17.0, cy), 14.0, "sparkle", p.text2);
         ui.painter().text(pos2(ai.left() + 29.0, cy), Align2::LEFT_CENTER, "AI", theme::bold(13.0), p.text2);
-        ar.on_hover_text("Claude AI is coming to Flux Native soon");
+        ar.on_hover_text(t("Claude AI is coming to Flux Native soon"));
         rx -= 63.0;
-        widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(30.0, 30.0)), "search", 16.0, &p, true).on_hover_text("Search (coming soon)");
+        widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(30.0, 30.0)), "search", 16.0, &p, true).on_hover_text(t("Search (coming soon)"));
         rx -= 36.0;
         // karty súborov
         let mut close = None;
@@ -932,13 +972,35 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         child.set_clip_rect(rect);
         let Some(ws) = self.workspace() else {
-            child.vertical_centered(|ui| {
-                ui.add_space(rect.height() * 0.32);
-                widgets::brand_mark(ui, Rect::from_center_size(pos2(rect.center().x, ui.cursor().top() + 28.0), vec2(56.0, 56.0)), &p);
-                ui.add_space(72.0);
-                ui.label(egui::RichText::new("Welcome to Flux").font(theme::bold(26.0)));
-                ui.label(egui::RichText::new("Open a folder with Ctrl+O, or create a new project in the sidebar.").color(p.text2));
-            });
+            // bez priečinka: logo, „flux“ a tri akcie (ako prázdny stav v Electron Fluxe)
+            let (cx, cy) = (rect.center().x, rect.center().y - 20.0);
+            let sub = t("Open a project folder and run your code with one click.");
+            let tw = widgets::text_w(ui, &sub, theme::ui(12.5)).max(200.0) + 60.0;
+            let x0 = cx - tw / 2.0;
+            let lr = Rect::from_min_size(pos2(x0, cy - 48.0), vec2(48.0, 48.0));
+            ui.painter().rect_filled(lr, CornerRadius::same(12), Color32::from_rgb(0x11, 0x11, 0x14));
+            ui.painter().rect_stroke(lr, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+            widgets::icon_at(ui, lr.center(), 22.0, "code", Color32::WHITE);
+            ui.painter().text(pos2(lr.right() + 12.0, cy - 33.0), Align2::LEFT_CENTER, "flux", theme::bold(26.0), p.text);
+            ui.painter().text(pos2(lr.right() + 12.0, cy - 10.0), Align2::LEFT_CENTER, &sub, theme::ui(12.5), p.text2);
+            let mut acts = child.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(x0, cy + 14.0), vec2(tw + 60.0, 32.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+            acts.spacing_mut().item_spacing.x = 6.0;
+            if widgets::button(&mut acts, Some("plus"), &t("New project"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                self.new_project = Some(String::new());
+            }
+            if widgets::button(&mut acts, Some("folderOpen"), &t("Open folder"), p.card2, p.text, 30.0, &p).clicked() {
+                if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
+                    self.open_folder(&d.to_string_lossy());
+                }
+            }
+            if widgets::button(&mut acts, Some("file"), &t("Open file"), p.card2, p.text, 30.0, &p).clicked() {
+                if let Some(f) = rfd::FileDialog::new().set_title(t("Open file")).pick_file() {
+                    let f = f.to_string_lossy().to_string();
+                    fsops::allow_file(&self.core, &f);
+                    self.reload_projects();
+                    self.open_file(&f);
+                }
+            }
             return;
         };
         let meta = self.core.setting("projectMeta")[&ws].clone();
@@ -982,12 +1044,13 @@ impl App {
                     .layout(egui::Layout::right_to_left(egui::Align::Center)),
             );
             acts.spacing_mut().item_spacing.x = 6.0;
-            if widgets::button(&mut acts, Some("filePlus"), "New file", p.card2, p.text, 32.0, &p).clicked() {
+            if widgets::button(&mut acts, Some("filePlus"), &t("New file"), p.card2, p.text, 32.0, &p).clicked() {
                 self.new_item = Some((false, String::new()));
             }
             if let Some((name, path)) = &main_file {
                 let web = name.ends_with(".html");
-                if widgets::button(&mut acts, Some(if web { "globe" } else { "play" }), if web { "Open page" } else { "Run it" }, p.accent, p.accent_fg, 32.0, &p).on_hover_text(name).clicked() {
+                if widgets::button(&mut acts, Some(if web { "globe" } else { "play" }), &if web { t("Open page") } else { t("Run it") }, p.accent, p.accent_fg, 32.0, &p).on_hover_text(name).clicked()
+                {
                     if web {
                         settings::open_external(path);
                     } else {
@@ -1016,7 +1079,7 @@ impl App {
                 ui.painter().rect_filled(ib, CornerRadius::same(8), p.active);
                 widgets::icon_at(ui, ib.center(), 14.0, ic, p.text);
                 widgets::text(ui, pos2(t.left() + 16.0, t.top() + 31.0), Align2::LEFT_CENTER, val, theme::bold(if val.len() > 8 { 18.0 } else { 24.0 }), p.text, tw - 64.0);
-                ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, *label, theme::ui(12.5), p.text3);
+                ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, crate::i18n::t(label), theme::ui(12.5), p.text3);
             }
             ui.add_space(22.0);
             // ---- súbory (podľa druhu) a TO-DO ----
@@ -1030,7 +1093,7 @@ impl App {
             let mut y = fc.top() + 16.0;
             let mut open = None;
             for (title, files) in &groups {
-                caption(ui, pos2(fc.left() + 16.0, y + 8.0), title, &p);
+                caption(ui, pos2(fc.left() + 16.0, y + 8.0), &t(title).to_uppercase(), &p);
                 ui.painter().text(pos2(fc.right() - 16.0, y + 8.0), Align2::RIGHT_CENTER, files.len().to_string(), theme::bold(10.5), p.text3);
                 y += 26.0;
                 for (name, path) in files {
@@ -1054,7 +1117,7 @@ impl App {
                 y += 12.0;
             }
             if groups.is_empty() {
-                ui.painter().text(pos2(fc.center().x, fc.center().y), Align2::CENTER_CENTER, "No files yet \u{2013} create one with New file.", theme::ui(13.0), p.text3);
+                ui.painter().text(pos2(fc.center().x, fc.center().y), Align2::CENTER_CENTER, t("No files yet – create one with New file."), theme::ui(13.0), p.text3);
             }
             if let Some(f) = open {
                 self.open_file(&f);
@@ -1065,7 +1128,7 @@ impl App {
             let th = 104.0 + todos.len() as f32 * 36.0;
             let tc = Rect::from_min_size(pos2(left + lw + 18.0, cards.top()), vec2(inner_w - lw - 18.0, th));
             card(ui, tc, 14, &p);
-            caption(ui, pos2(tc.left() + 16.0, tc.top() + 24.0), "TO-DO", &p);
+            caption(ui, pos2(tc.left() + 16.0, tc.top() + 24.0), &t("To-do").to_uppercase(), &p);
             ui.painter().text(pos2(tc.right() - 16.0, tc.top() + 24.0), Align2::RIGHT_CENTER, format!("{done} / {}", todos.len()), theme::bold(10.5), p.text3);
             let input = Rect::from_min_size(pos2(tc.left() + 16.0, tc.top() + 41.0), vec2(tc.width() - 32.0, 40.0));
             ui.painter().rect_filled(input, CornerRadius::same(10), p.card2);
@@ -1136,14 +1199,14 @@ impl App {
         ui.painter().rect_filled(group, CornerRadius::same(8), p.card2);
         let mut x = group.left() + 2.0;
         for (b, label) in [(Bottom::Output, "Output"), (Bottom::Terminal, "Terminal")] {
-            let w = widgets::text_w(ui, label, theme::bold(12.5)) + 20.0;
+            let w = widgets::text_w(ui, &t(label), theme::bold(12.5)) + 20.0;
             let r = Rect::from_min_size(pos2(x, group.top() + 2.0), vec2(w, 20.0));
             let resp = ui.interact(r, ui.id().with(label), Sense::click());
             let sel = self.bottom == b;
             if sel {
                 ui.painter().rect_filled(r, CornerRadius::same(6), p.active);
             }
-            ui.painter().text(r.center(), Align2::CENTER_CENTER, label, theme::bold(12.5), if sel || resp.hovered() { p.text } else { p.text3 });
+            ui.painter().text(r.center(), Align2::CENTER_CENTER, t(label), theme::bold(12.5), if sel || resp.hovered() { p.text } else { p.text3 });
             if resp.clicked() {
                 self.bottom = b;
                 if b == Bottom::Terminal {
@@ -1156,10 +1219,10 @@ impl App {
             x += w;
         }
         let cy = group.center().y;
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 22.0, cy), vec2(26.0, 26.0)), "panel", 15.0, &p, true).on_hover_text("Hide panel").clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 22.0, cy), vec2(26.0, 26.0)), "panel", 15.0, &p, true).on_hover_text(t("Hide panel")).clicked() {
             self.panel_open = false;
         }
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 60.0, cy), vec2(26.0, 26.0)), "trash", 15.0, &p, true).on_hover_text("Clear").clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 60.0, cy), vec2(26.0, 26.0)), "trash", 15.0, &p, true).on_hover_text(t("Clear")).clicked() {
             if self.bottom == Bottom::Output {
                 self.out.clear();
             } else {
@@ -1193,9 +1256,9 @@ impl App {
             let r = widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, if src == "PATH" { "PATH" } else { src }, theme::ui(11.0), p.text3, 120.0);
             x = r.right() + 18.0;
         }
-        let (dot, label) = if self.running { (p.green, "Running") } else { (p.text3, "Ready") };
+        let (dot, label) = if self.running { (p.green, t("Running")) } else { (p.text3, t("Ready")) };
         ui.painter().circle_filled(pos2(x + 3.0, cy), 3.0, dot);
-        let r = widgets::text(ui, pos2(x + 11.0, cy), Align2::LEFT_CENTER, label, small.clone(), if self.running { p.green } else { p.text3 }, 100.0);
+        let r = widgets::text(ui, pos2(x + 11.0, cy), Align2::LEFT_CENTER, &label, small.clone(), if self.running { p.green } else { p.text3 }, 100.0);
         x = r.right() + 18.0;
         if !self.status.is_empty() {
             widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &self.status, small.clone(), p.red, (rect.right() - x - 320.0).max(40.0));
@@ -1203,19 +1266,27 @@ impl App {
         // vpravo: Ln/Col, slová, Auto save, jazyk
         let mut rx = rect.right() - 16.0;
         if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
-            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, lang_name(&t.ext()), small.clone(), p.text2, 120.0);
+            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &crate::i18n::t(lang_name(&t.ext())), small.clone(), p.text2, 120.0);
             rx = r.left() - 18.0;
         }
         if self.core.setting("autosave").as_bool() != Some(false) {
-            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, "Auto save", small.clone(), p.text2, 100.0);
+            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &t("Auto save"), small.clone(), p.text2, 100.0);
             widgets::icon_at(ui, pos2(r.left() - 9.0, cy), 12.0, "save", p.text2);
             rx = r.left() - 34.0;
         }
         if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
             let words = t.text.split_whitespace().count();
-            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &format!("{words} words"), small.clone(), p.text3, 100.0);
+            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &crate::i18n::tf("{n} words", &[("n", &words.to_string())]), small.clone(), p.text3, 100.0);
             rx = r.left() - 18.0;
-            widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &format!("Ln {}, Col {}", self.cursor.0, self.cursor.1), small, p.text3, 120.0);
+            widgets::text(
+                ui,
+                pos2(rx, cy),
+                Align2::RIGHT_CENTER,
+                &crate::i18n::tf("Ln {line}, Col {col}", &[("line", &self.cursor.0.to_string()), ("col", &self.cursor.1.to_string())]),
+                small,
+                p.text3,
+                120.0,
+            );
         }
     }
 
@@ -1235,7 +1306,7 @@ impl App {
             self.run();
         }
         if open {
-            if let Some(d) = rfd::FileDialog::new().set_title("Open folder").pick_folder() {
+            if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
                 self.open_folder(&d.to_string_lossy());
             }
         }
@@ -1260,19 +1331,19 @@ fn caption(ui: &egui::Ui, pos: egui::Pos2, s: &str, p: &Pal) {
 
 // súbory v koreni projektu podľa druhu – ako „Pages / Styles / Scripts“ na stránke projektu v Electron Fluxe
 fn file_groups(items: &[(String, String, bool)]) -> Vec<(&'static str, Vec<(String, String)>)> {
-    let order = ["PAGES", "STYLES", "SCRIPTS", "PYTHON", "CODE", "NOTES"];
+    let order = ["Pages", "Styles", "Scripts", "Python", "Code", "Notes"];
     let mut groups: Vec<(&'static str, Vec<(String, String)>)> = order.iter().map(|g| (*g, vec![])).collect();
     for (name, path, is_dir) in items {
         if *is_dir {
             continue;
         }
         let g = match ext_of(name).as_str() {
-            "html" | "htm" => "PAGES",
-            "css" | "scss" => "STYLES",
-            "js" | "mjs" | "ts" | "jsx" | "tsx" => "SCRIPTS",
-            "py" | "pyw" => "PYTHON",
-            "c" | "h" | "cpp" | "hpp" | "rs" | "go" | "java" | "cs" | "rb" | "php" | "lua" | "zig" | "r" | "jl" => "CODE",
-            "md" | "txt" => "NOTES",
+            "html" | "htm" => "Pages",
+            "css" | "scss" => "Styles",
+            "js" | "mjs" | "ts" | "jsx" | "tsx" => "Scripts",
+            "py" | "pyw" => "Python",
+            "c" | "h" | "cpp" | "hpp" | "rs" | "go" | "java" | "cs" | "rb" | "php" | "lua" | "zig" | "r" | "jl" => "Code",
+            "md" | "txt" => "Notes",
             _ => continue,
         };
         if let Some(x) = groups.iter_mut().find(|x| x.0 == g) {
@@ -1378,15 +1449,15 @@ fn ago(ms: u64) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
     let s = now.saturating_sub(ms) / 1000;
     match s {
-        0..=59 => "just now".into(),
-        60..=3599 => format!("{} min ago", s / 60),
-        3600..=86399 => format!("{} h ago", s / 3600),
+        0..=59 => t("just now"),
+        60..=3599 => crate::i18n::tf("{n} min ago", &[("n", &(s / 60).to_string())]),
+        3600..=86399 => crate::i18n::tf("{n} h ago", &[("n", &(s / 3600).to_string())]),
         _ => {
             let d = s / 86400;
             if d == 1 {
-                "yesterday".into()
+                t("yesterday")
             } else {
-                format!("{d} days ago")
+                crate::i18n::tf("{n} days ago", &[("n", &d.to_string())])
             }
         }
     }
@@ -1398,6 +1469,16 @@ impl eframe::App for App {
         let ctx = &ctx;
         self.events();
         self.run_tests(ctx);
+        // pamäť na pozadí (trimMemory, predvolene zapnuté)
+        let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
+        if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {
+            ctx.request_repaint_after(d);
+        }
+        if self.intro.is_some() {
+            let r = root.max_rect();
+            egui::CentralPanel::default().frame(Frame::new().fill(self.pal.base)).show(root, |ui| self.intro_ui(ui, r));
+            return;
+        }
         self.shortcuts(ctx);
         // automatické ukladanie 1 s po poslednej zmene
         if let Some(t) = self.last_edit {
@@ -1444,7 +1525,7 @@ impl eframe::App for App {
             } else if show_editor {
                 // skrytý panel: malé tlačidlo na jeho vrátenie
                 let b = Rect::from_center_size(pos2(main.right() - 136.0, main.bottom() - 18.0), vec2(26.0, 26.0));
-                if widgets::icon_button_at(&mut card_ui, b, "panel", 15.0, &p, true).on_hover_text("Show Output").clicked() {
+                if widgets::icon_button_at(&mut card_ui, b, "panel", 15.0, &p, true).on_hover_text(t("Show Output")).clicked() {
                     self.panel_open = true;
                 }
             }

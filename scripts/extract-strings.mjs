@@ -1,5 +1,5 @@
 // Vytiahne všetky texty na preklad (t('…')) + texty zo zoznamov (šablóny, odznaky…) do locales/en.keys.json.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 
 const files = ['src/renderer/app.js', 'src/renderer/onboarding.js', 'src/renderer/activity.js', 'src/renderer/tools.js', 'src/renderer/editorExtras.js', 'src/main/toolchains.js', 'src/renderer/aiPanel.js', 'src/renderer/github.js', 'src/renderer/userShortcuts.js', 'src/main/ai.js', 'src/main/github.js', 'src/main/main.js', 'src/main/runner.js', 'src/renderer/keymap.js', 'src/renderer/pluginHost.js', 'src/renderer/pluginsUI.js', 'src/main/plugins.js', 'src/renderer/themeStudio.js', 'src/renderer/updatesUI.js', 'src/main/updater.js', 'src/main/mcpServer.js', 'src/renderer/together.js', 'src/renderer/menubar.js', 'src/main/pluginScan.js'];
 const keys = new Set();
@@ -17,6 +17,11 @@ for (const f of files) {
     const v = lit(m[1], m[2]);
     if (/[a-z]/i.test(v) && !/^[\w.-]+\.(py|html|css|js|txt)$/.test(v)) keys.add(v);
   }
+}
+// Flux Native (Rust): t("…") a tf("…", …) v native/src/**/*.rs
+const rsFiles = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? rsFiles(`${d}/${e.name}`) : e.name.endsWith('.rs') && e.name !== 'gen.rs' ? [`${d}/${e.name}`] : []));
+for (const f of rsFiles('native/src')) {
+  for (const m of readFileSync(f, 'utf8').matchAll(/\bt[f]?\("((?:\\.|[^"\\])*)"/g)) keys.add(m[1].replace(/\\"/g, '"').replace(/\\u\{2026\}/g, '…'));
 }
 // pluginScan.js: [/regex/, 'block' | 'warn', 'Popis nálezu']
 for (const m of readFileSync('src/main/pluginScan.js', 'utf8').matchAll(/'(?:block|warn)', '([^']+)'\]/g)) keys.add(m[1]);

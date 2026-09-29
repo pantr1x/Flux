@@ -32,7 +32,47 @@ fn rgba(r: u8, g: u8, b: u8, a: f32) -> Color32 {
     Color32::from_rgba_unmultiplied(r, g, b, (a * 255.0).round() as u8)
 }
 
-pub fn palette(dark: bool) -> Pal {
+// ACCENTS z app.js (mono = biela v tmavej, čierna vo svetlej téme)
+pub const ACCENTS: [(&str, u32); 13] = [
+    ("mono", 0),
+    ("violet", 0x8b7bff),
+    ("indigo", 0x6366f1),
+    ("blue", 0x4f9dff),
+    ("sky", 0x38bdf8),
+    ("teal", 0x2ec4b6),
+    ("green", 0x3ecf8e),
+    ("lime", 0xa3d635),
+    ("yellow", 0xf5c542),
+    ("orange", 0xff9f5a),
+    ("red", 0xff5f6d),
+    ("pink", 0xff6fb1),
+    ("gray", 0x9ca3af),
+];
+
+pub fn hex(c: u32) -> Color32 {
+    Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
+}
+
+// Paleta podľa nastavení: téma kódu (tmavá/svetlá), accent (meno alebo #hex) a darkLift (0–100).
+pub fn palette_for(dark: bool, accent: &str, lift: f64) -> Pal {
+    let mut p = base_palette(dark);
+    let a = ACCENTS.iter().find(|(n, _)| *n == accent).map(|(_, c)| *c).or_else(|| u32::from_str_radix(accent.trim_start_matches('#'), 16).ok().filter(|_| accent.starts_with('#')));
+    if let Some(c) = a.filter(|c| *c != 0) {
+        p.accent = hex(c);
+        // readableOn() z app.js
+        let (r, g, b) = ((c >> 16) & 255, (c >> 8) & 255, c & 255);
+        p.accent_fg = if 0.299 * r as f64 + 0.587 * g as f64 + 0.114 * b as f64 > 160.0 { hex(0x16161a) } else { Color32::WHITE };
+    }
+    // --dark-lift: biela vrstva cez tmavé plochy (0.0038 na jednotku)
+    let l = (lift.clamp(0.0, 100.0) * 0.0038) as f32;
+    if dark && l > 0.0 {
+        p.base = p.base.lerp_to_gamma(Color32::WHITE, l);
+        p.card = p.card.lerp_to_gamma(Color32::WHITE, l);
+    }
+    p
+}
+
+fn base_palette(dark: bool) -> Pal {
     if dark {
         Pal {
             dark,

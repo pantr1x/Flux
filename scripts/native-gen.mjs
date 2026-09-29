@@ -57,5 +57,15 @@ for (const [id, th] of Object.entries(THEMES)) {
 }
 out += '        _ => return None,\n    })\n}\n';
 
+// vlajky jazykov (src/renderer/flags.js)
+const fsrc = fs.readFileSync(new URL('src/renderer/flags.js', root), 'utf8').replace(/^export /gm, '').replace(/^import .*$/gm, '') + '\nreturn { FLAGS, flag };';
+const { FLAGS, flag } = new Function(fsrc)();
+out += '\npub fn flag(code: &str) -> Option<&\'static str> {\n    Some(match code {\n';
+for (const code of Object.keys(FLAGS)) {
+  const svg = flag(code, 30).replace(/ class="flag"| aria-hidden="true"/g, '').replace(/<svg /, '<svg xmlns="http://www.w3.org/2000/svg" ');
+  out += `        ${rs(code)} => ${rs(svg)},\n`;
+}
+out += '        _ => return None,\n    })\n}\n';
+
 fs.writeFileSync(new URL('native/src/gen.rs', root), out);
-console.log('native/src/gen.rs:', Object.keys(FILE_ICONS).length, 'file icons,', Object.keys(paths).length, 'line icons,', Object.keys(THEMES).length, 'code themes');
+console.log('native/src/gen.rs:', Object.keys(FILE_ICONS).length, 'file icons,', Object.keys(paths).length, 'line icons,', Object.keys(THEMES).length, 'code themes,', Object.keys(FLAGS).length, 'flags');
