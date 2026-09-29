@@ -59,7 +59,13 @@ impl TermView {
             Some(match n {
                 NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground => p.text,
                 NamedColor::Background => return None,
-                NamedColor::Black => if p.dark { Color32::from_rgb(0x2a, 0x2a, 0x35) } else { Color32::from_rgb(0x1d, 0x1d, 0x24) },
+                NamedColor::Black => {
+                    if p.dark {
+                        Color32::from_rgb(0x2a, 0x2a, 0x35)
+                    } else {
+                        Color32::from_rgb(0x1d, 0x1d, 0x24)
+                    }
+                }
                 NamedColor::Red | NamedColor::BrightRed => p.red,
                 NamedColor::Green | NamedColor::BrightGreen => p.green,
                 NamedColor::Yellow | NamedColor::BrightYellow => Color32::from_rgb(0xf5, 0xb9, 0x4a),
@@ -76,8 +82,22 @@ impl TermView {
             Color::Spec(rgb) => Some(Color32::from_rgb(rgb.r, rgb.g, rgb.b)),
             Color::Indexed(i) => {
                 const N: [NamedColor; 16] = [
-                    NamedColor::Black, NamedColor::Red, NamedColor::Green, NamedColor::Yellow, NamedColor::Blue, NamedColor::Magenta, NamedColor::Cyan, NamedColor::White,
-                    NamedColor::BrightBlack, NamedColor::BrightRed, NamedColor::BrightGreen, NamedColor::BrightYellow, NamedColor::BrightBlue, NamedColor::BrightMagenta, NamedColor::BrightCyan, NamedColor::BrightWhite,
+                    NamedColor::Black,
+                    NamedColor::Red,
+                    NamedColor::Green,
+                    NamedColor::Yellow,
+                    NamedColor::Blue,
+                    NamedColor::Magenta,
+                    NamedColor::Cyan,
+                    NamedColor::White,
+                    NamedColor::BrightBlack,
+                    NamedColor::BrightRed,
+                    NamedColor::BrightGreen,
+                    NamedColor::BrightYellow,
+                    NamedColor::BrightBlue,
+                    NamedColor::BrightMagenta,
+                    NamedColor::BrightCyan,
+                    NamedColor::BrightWhite,
                 ];
                 if i < 16 {
                     return named(N[i as usize]);

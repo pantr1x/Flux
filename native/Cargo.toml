@@ -13,7 +13,8 @@ flux-core = { path = "../crates/flux-core" }
 serde_json = "1"
 dirs = "6"
 eframe = { version = "0.36", default-features = false, features = ["glow", "wgpu", "default_fonts", "x11", "wayland"] }
-egui_extras = { version = "0.36", features = ["syntect"] }
+egui_extras = { version = "0.36", features = ["syntect", "svg"] }
+syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }
 alacritty_terminal = "0.26"
 rfd = "0.15"
 notify = "8"

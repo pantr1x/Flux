@@ -153,6 +153,53 @@ pub fn stats(dir: &str) -> Value {
     json!({ "files": files.len(), "lines": 0, "chars": 0, "lastModified": 0, "kinds": {}, "time": 0 })
 }
 
+// Súhrn projektu pre bočný panel a stránku projektu: počet súborov a riadkov, jazyky (od najčastejšieho),
+// posledná zmena (ms od 1970). Jazyky majú rovnaké mená ako „kind“ v Electron Fluxe (python, web, node…).
+pub fn summary(dir: &str) -> Value {
+    let mut files = vec![];
+    walk(Path::new(dir), 0, &mut files);
+    let mut kinds: Vec<(&str, usize)> = vec![];
+    let (mut lines, mut last) = (0usize, 0u128);
+    for f in &files {
+        let ext = f.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let kind = match ext.as_str() {
+            "py" | "pyw" => "python",
+            "html" | "htm" | "css" | "scss" => "web",
+            "js" | "mjs" | "cjs" | "ts" | "jsx" | "tsx" => "node",
+            "java" => "java",
+            "c" | "h" | "cpp" | "cc" | "hpp" => "cpp",
+            "go" => "go",
+            "cs" => "csharp",
+            "rs" => "rust",
+            "rb" => "ruby",
+            "php" => "php",
+            "lua" => "lua",
+            "zig" => "zig",
+            "r" => "r",
+            "jl" => "julia",
+            _ => "",
+        };
+        let Ok(meta) = f.metadata() else { continue };
+        if let Ok(m) = meta.modified() {
+            last = last.max(m.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+        }
+        if kind.is_empty() {
+            continue;
+        }
+        match kinds.iter_mut().find(|k| k.0 == kind) {
+            Some(k) => k.1 += 1,
+            None => kinds.push((kind, 1)),
+        }
+        if meta.len() < 1_000_000 {
+            if let Ok(t) = std::fs::read_to_string(f) {
+                lines += t.lines().count();
+            }
+        }
+    }
+    kinds.sort_by(|a, b| b.1.cmp(&a.1));
+    json!({ "files": files.len(), "lines": lines, "langs": kinds.iter().map(|k| k.0).collect::<Vec<_>>(), "last": last as u64 })
+}
+
 // ---------- ďalšie operácie so súbormi a projektmi ----------
 fn update_projects(s: &Flux, f: impl FnOnce(&mut serde_json::Map<String, Value>)) {
     let mut set = s.settings.lock().unwrap();

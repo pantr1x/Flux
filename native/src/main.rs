@@ -2,16 +2,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod code;
+mod gen;
 mod term;
 mod theme;
 mod widgets;
 
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
-    eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default().with_title("Flux").with_inner_size([1400.0, 900.0]).with_min_inner_size([760.0, 480.0]),
-        renderer,
-        ..Default::default()
-    }
+    // FLUX_SIZE=1280x780 – veľkosť okna pre testy a porovnanie so screenshotmi Electron Fluxu
+    let size = std::env::var("FLUX_SIZE").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]))).unwrap_or([1400.0, 900.0]);
+    eframe::NativeOptions { viewport: eframe::egui::ViewportBuilder::default().with_title("Flux").with_inner_size(size).with_min_inner_size([760.0, 480.0]), renderer, ..Default::default() }
 }
 
 fn main() -> eframe::Result {
