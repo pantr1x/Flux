@@ -328,8 +328,8 @@ impl App {
                 }
                 let mode = self.get("liveWallMode").as_str().unwrap_or("see").to_string();
                 return Some(match (f.video, mode.as_str()) {
-                    (true, "play") => Src::Video(f.file, f.preview),
-                    (true, _) => Src::Still(f.file, f.preview), // jedna snímka, potom sa dekodér uvoľní
+                    (true, "play" | "see") => Src::Video(f.file, f.preview), // „see“ z 0.7–0.8.3 = pohyblivá
+                    (true, _) => Src::Still(f.file, f.preview),              // jedna snímka, potom sa dekodér uvoľní
                     _ => Src::Image(f.file),
                 });
             }
@@ -2481,6 +2481,8 @@ impl eframe::App for App {
         }
         self.tour_rects.clear();
         // po štarte (načítanie písma, tapety, zvýraznenia) raz uvoľniť nepotrebnú pamäť
+        // výsledky GitHubu (prihlásenie, import, nový repozitár) aj keď okná nie sú otvorené
+        self.gh_poll(&ctx);
         // Flux beží a kreslí → ďalší štart normálny (boot.rs)
         if !self.boot_ok && self.started.elapsed() > Duration::from_secs(3) {
             self.boot_ok = true;

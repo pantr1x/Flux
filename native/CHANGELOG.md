@@ -2,6 +2,17 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.8.5 – 2026-09-29
+
+### Live wallpaper moves again
+- Lively Wallpaper and Wallpaper Engine **play behind Flux's panels again**, like before 0.7. Flux shows your wallpaper right from the start. If you want to save memory, pick *Still image* in Settings → Appearance → Window → Live wallpaper.
+
+### New project window
+- No more choosing a language: pick an **icon**, a **name**, an optional description and **where** it goes.
+- **On this computer**: a new folder in Flux Projects.
+- **New on GitHub**: Flux creates the folder, a new repository on your GitHub account (private or public) and uploads the first version.
+- **Import from GitHub**: pick one of your repositories, or paste a link to any public one. Flux downloads it and opens it.
+
 ## 0.8.4 – 2026-09-29
 
 ### Fixed: Flux Native did not open with Lively Wallpaper or Wallpaper Engine

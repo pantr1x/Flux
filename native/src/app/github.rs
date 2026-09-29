@@ -39,7 +39,9 @@ pub struct GhState {
     pub repos: Option<Vec<Repo>>,
     pub loading: bool,
     pub cloning: Option<String>,
-    pub opened: Option<String>, // naklonovaný priečinok – UI ho otvorí
+    pub opened: Option<String>,    // naklonovaný priečinok – UI ho otvorí
+    pub published: Option<String>, // adresa nového repozitára na GitHube
+    pub publish_err: Option<String>,
     pub avatar: Option<egui::ColorImage>,
 }
 
@@ -221,14 +223,13 @@ fn clone(sh: Arc<Mutex<GhState>>, full: String, ctx: egui::Context) {
                 i += 1;
             }
             std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-            let mut c = git();
-            // token len ako hlavička pre github.com cez premenné prostredia – nie v príkazovom riadku ani v .git/config
-            if let Some(tok) = secret::get("github") {
-                c.env("GIT_CONFIG_COUNT", "1")
-                    .env("GIT_CONFIG_KEY_0", "http.https://github.com/.extraheader")
-                    .env("GIT_CONFIG_VALUE_0", format!("AUTHORIZATION: basic {}", b64(format!("x-access-token:{tok}").as_bytes())));
-            }
-            let out = c.arg("clone").arg(format!("https://github.com/{full}.git")).arg(&dir).current_dir(&root).output().map_err(|_| t("Git is not installed. Install it in Settings → Languages."))?;
+            let out = git_auth()
+                .arg("clone")
+                .arg(format!("https://github.com/{full}.git"))
+                .arg(&dir)
+                .current_dir(&root)
+                .output()
+                .map_err(|_| t("Git is not installed. Install it in Settings → Languages."))?;
             if !out.status.success() {
                 let err = String::from_utf8_lossy(&out.stderr);
                 return Err(err.trim().lines().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"));
@@ -243,6 +244,75 @@ fn clone(sh: Arc<Mutex<GhState>>, full: String, ctx: egui::Context) {
         }
         ctx.request_repaint();
     });
+}
+
+// git s tokenom ako hlavičkou pre github.com (premenné prostredia, nie príkazový riadok ani .git/config)
+fn git_auth() -> std::process::Command {
+    let mut c = git();
+    if let Some(tok) = secret::get("github") {
+        c.env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "http.https://github.com/.extraheader")
+            .env("GIT_CONFIG_VALUE_0", format!("AUTHORIZATION: basic {}", b64(format!("x-access-token:{tok}").as_bytes())));
+    }
+    c
+}
+
+// nový repozitár na GitHube z priečinka projektu: vytvorí repo, git init, prvý commit, push
+fn publish(sh: Arc<Mutex<GhState>>, dir: String, name: String, desc: String, private: bool, author: (String, String), ctx: egui::Context) {
+    sh.lock().unwrap().busy = true;
+    std::thread::spawn(move || {
+        let res = (|| -> Result<String, String> {
+            let token = secret::get("github").ok_or_else(|| t("Sign in with GitHub"))?;
+            let body = json!({ "name": name, "description": desc, "private": private }).to_string();
+            let v = net::json("POST", &format!("{}/user/repos", api_base()), &headers(&token), Some(&body))?;
+            let url = v["clone_url"].as_str().ok_or("GitHub did not answer")?.to_string();
+            let html = v["html_url"].as_str().unwrap_or(&url).to_string();
+            let readme = Path::new(&dir).join("README.md");
+            if !readme.exists() {
+                let _ = std::fs::write(&readme, format!("# {name}\n\n{desc}\n"));
+            }
+            let run = |args: &[&str], auth: bool| -> Result<(), String> {
+                let mut c = if auth { git_auth() } else { git() };
+                let out = c
+                    .args(["-c", &format!("user.name={}", author.0), "-c", &format!("user.email={}", author.1)])
+                    .args(args)
+                    .current_dir(&dir)
+                    .output()
+                    .map_err(|_| t("Git is not installed. Install it in Settings → Languages."))?;
+                if out.status.success() {
+                    Ok(())
+                } else {
+                    Err(String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or("git").to_string())
+                }
+            };
+            if !Path::new(&dir).join(".git").exists() {
+                run(&["init", "-b", "main"], false)?;
+            }
+            run(&["add", "-A"], false)?;
+            let _ = run(&["commit", "-m", "First commit"], false);
+            let _ = run(&["remote", "remove", "origin"], false);
+            run(&["remote", "add", "origin", &url], false)?;
+            run(&["push", "-u", "origin", "HEAD:main"], true)?;
+            Ok(html)
+        })();
+        let mut s = sh.lock().unwrap();
+        s.busy = false;
+        match res {
+            Ok(h) => s.published = Some(h),
+            Err(e) => s.publish_err = Some(e),
+        }
+        ctx.request_repaint();
+    });
+}
+
+// owner/repo z odkazu (https://github.com/owner/repo(.git), git@github.com:owner/repo, owner/repo)
+pub(super) fn repo_of(link: &str) -> Option<String> {
+    let l = link.trim().trim_end_matches('/').trim_end_matches(".git");
+    let rest = l.rsplit_once("github.com/").map(|x| x.1).or(l.rsplit_once("github.com:").map(|x| x.1)).unwrap_or(l);
+    let mut it = rest.split('/').filter(|x| !x.is_empty());
+    let (o, r) = (it.next()?, it.next()?);
+    let ok = |x: &str| !x.is_empty() && x.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    (ok(o) && ok(r)).then(|| format!("{o}/{r}"))
 }
 
 fn fetch_avatar(sh: Arc<Mutex<GhState>>, url: String, ctx: egui::Context) {
@@ -304,12 +374,56 @@ impl App {
         load_repos(self.gh.shared.clone(), ctx.clone());
     }
 
+    // pre okno Nový projekt
+    pub(super) fn gh_connected(&mut self) -> bool {
+        *self.gh.connected.get_or_insert_with(|| secret::get("github").is_some())
+    }
+
+    pub(super) fn gh_state(&self) -> (bool, Option<String>, Option<String>) {
+        let s = self.gh.shared.lock().unwrap();
+        (s.busy, s.error.clone(), s.cloning.clone())
+    }
+
+    pub(super) fn gh_import(&mut self, full: &str, ctx: &egui::Context) {
+        self.gh.shared.lock().unwrap().error = None;
+        clone(self.gh.shared.clone(), full.to_string(), ctx.clone());
+    }
+
+    pub(super) fn gh_repos(&mut self, ui: &mut egui::Ui, w: f32, ctx: &egui::Context) {
+        let (loaded, loading, cloning) = {
+            let s = self.gh.shared.lock().unwrap();
+            (s.repos.is_some(), s.loading, s.cloning.clone())
+        };
+        if !loaded && !loading {
+            load_repos(self.gh.shared.clone(), ctx.clone());
+        }
+        self.repo_list(ui, w, cloning.as_deref(), ctx);
+    }
+
+    pub(super) fn gh_publish(&mut self, dir: &str, name: &str, desc: &str, private: bool, ctx: &egui::Context) {
+        let u = self.core.setting("github")["user"].clone();
+        let login = u["login"].as_str().unwrap_or("flux").to_string();
+        let author = (u["name"].as_str().unwrap_or(&login).to_string(), format!("{}+{login}@users.noreply.github.com", u["id"].as_u64().unwrap_or(0)));
+        self.gh.shared.lock().unwrap().error = None;
+        publish(self.gh.shared.clone(), dir.into(), name.into(), desc.into(), private, author, ctx.clone());
+    }
+
     // výsledky z vlákien: nový účet do nastavení, naklonovaný projekt otvoriť
     pub(super) fn gh_poll(&mut self, ctx: &egui::Context) {
         let (user, opened, avatar) = {
             let mut s = self.gh.shared.lock().unwrap();
             (s.user.take(), s.opened.take(), s.avatar.take())
         };
+        let (published, perr) = {
+            let mut s = self.gh.shared.lock().unwrap();
+            (s.published.take(), s.publish_err.take())
+        };
+        if let Some(h) = published {
+            self.note(tf("Published on GitHub: {url}", &[("url", &h)]));
+        }
+        if let Some(e) = perr {
+            self.status = format!("GitHub: {e}");
+        }
         if let Some(u) = user {
             self.update_settings(|o| {
                 o.insert("github".into(), json!({ "user": u }));
@@ -324,6 +438,7 @@ impl App {
         }
         if let Some(d) = opened {
             self.settings = None;
+            self.new_project = None;
             self.start = false;
             self.open_folder(&d);
         }
