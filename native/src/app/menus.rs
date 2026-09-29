@@ -170,7 +170,14 @@ impl App {
                 self.settings_jump("Shortcuts");
             }
             "run" => self.run(),
-            "stop" => self.out.pty.kill(),
+            "stop" => {
+                // zastaví program, inak Live Server
+                if self.running {
+                    self.out.pty.kill();
+                } else {
+                    self.server = None;
+                }
+            }
             "terminal" => {
                 self.panel_open = true;
                 self.bottom = Bottom::Terminal;

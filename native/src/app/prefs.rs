@@ -69,12 +69,45 @@ pub struct SettingsUi {
     find: String,
     jump: Option<String>,
     pub opened: f64,
+    notes_open: std::collections::HashSet<String>, // rozbalené verzie v poznámkach k vydaniam
+    spy: Option<String>,                           // časť, ktorá je práve navrchu (zvýraznená v ponuke)
+    spy_hold: f64,                                 // po kliknutí na podpoložku chvíľu nemeniť zvýraznenie
 }
 
 impl SettingsUi {
     pub fn new(tab: &str, now: f64) -> Self {
-        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now }
+        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), spy: None, spy_hold: 0.0 }
     }
+}
+
+// native/CHANGELOG.md rozdelený na verzie (raz za beh)
+pub struct Note {
+    pub ver: String,
+    pub date: String,
+    pub summary: String,
+    pub lines: Vec<&'static str>,
+}
+
+pub fn release_notes() -> &'static [Note] {
+    static NOTES: std::sync::OnceLock<Vec<Note>> = std::sync::OnceLock::new();
+    NOTES.get_or_init(|| {
+        let mut out: Vec<Note> = vec![];
+        for line in include_str!("../../CHANGELOG.md").lines() {
+            if let Some(h) = line.strip_prefix("## ") {
+                let (ver, date) = h.split_once(" – ").map(|(a, b)| (a.trim().to_string(), b.trim().to_string())).unwrap_or((h.trim().to_string(), String::new()));
+                out.push(Note { ver, date, summary: String::new(), lines: vec![] });
+            } else if let Some(n) = out.last_mut() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                if let Some(h) = line.strip_prefix("### ") {
+                    n.summary = if n.summary.is_empty() { h.to_string() } else { format!("{} \u{00B7} {h}", n.summary) };
+                }
+                n.lines.push(line);
+            }
+        }
+        out
+    })
 }
 
 fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
@@ -94,9 +127,30 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 ],
             ),
             ("Language", vec![Row::Custom("language")]),
-            ("Welcome", vec![Row::Button("intro", "Intro and tour", "Replay the first-start intro or the feature tour.", "Intro")]),
+            ("Welcome", vec![Row::Button("intro", "Intro", "Replay the first-start intro.", "Intro"), Row::Button("tour", "Feature tour", "A short walk through the main parts of Flux.", "Tour")]),
             ("Shortcuts", vec![Row::Custom("keys")]),
-        ],
+        ]
+        .into_iter()
+        // vývojárske nastavenia len pre GitHub účet vývojára (devAllowed v updater.js)
+        .chain(app.developer().then(|| {
+            let sha = crate::update::SHA;
+            (
+                "Developer",
+                vec![
+                    Row::Info("Build", format!("{} \u{00B7} {}", env!("CARGO_PKG_VERSION"), &sha[..sha.len().min(7)])),
+                    Row::Button("intro", "Intro", "Replay the first-start intro.", "Intro"),
+                    Row::Button("tour", "Feature tour", "A short walk through the main parts of Flux.", "Tour"),
+                    Row::Button("dev-check", "Check for updates", "Ask the ci-native branch for a newer build now.", "Check now"),
+                    Row::Button("dev-reinstall", "Reinstall the latest build", "Download the newest build from ci-native even if you already have it.", "Reinstall"),
+                    Row::Info("Memory", format!("{} MB", crate::mem::used_mb().map(|m| format!("{m:.0}")).unwrap_or("–".into()))),
+                    Row::Button("dev-trim", "Free memory now", "Move unused memory out of RAM, like when Flux is in the background.", "Trim"),
+                    Row::Toggle("devFps", "Show frames per second", "in the status bar – when nothing moves it should drop to 0"),
+                    Row::Button("dev-data", "Settings folder", "settings.json, translations and backgrounds", "Open"),
+                    Row::Button("dev-exe", "Program folder", "where Flux-Native.exe is", "Open"),
+                ],
+            )
+        }))
+        .collect(),
         "appearance" => vec![
             ("Code theme", vec![Row::Custom("themes")]),
             ("Accent color", vec![Row::Custom("accents")]),
@@ -280,19 +334,28 @@ impl App {
             if on && (id == "general" || id == "appearance") {
                 let subs: Vec<&str> = sections(id, self).iter().map(|s| s.0).filter(|s| !s.is_empty()).collect();
                 let top = y;
+                // časť, ktorá je práve navrchu obsahu (scroll spy) – zvýraznenie kĺže
+                let spy = self.settings.as_ref().and_then(|s| s.spy.clone()).unwrap_or_else(|| subs.first().map(|s| s.to_string()).unwrap_or_default());
+                ui.painter().vline(nav.left() + 33.0, top..=top + subs.len() as f32 * 26.0, Stroke::new(1.0, p.line));
+                if let Some(i) = subs.iter().position(|s| *s == spy) {
+                    let ty = ctx.animate_value_with_time(egui::Id::new(("spy-y", id)), top + i as f32 * 26.0, if anim { 0.18 } else { 0.0 });
+                    let r = Rect::from_min_size(pos2(nav.left() + 42.0, ty), vec2(nav.width() - 52.0, 26.0));
+                    ui.painter().rect_filled(r, CornerRadius::same(7), p.active);
+                    ui.painter().vline(nav.left() + 33.0, ty + 5.0..=ty + 21.0, Stroke::new(2.0, p.text));
+                }
                 for s in subs {
                     let r = Rect::from_min_size(pos2(nav.left() + 42.0, y), vec2(nav.width() - 52.0, 26.0));
                     let resp = ui.interact(r, ui.id().with(("ssub", s)), Sense::click());
-                    if resp.hovered() {
+                    let cur = s == spy;
+                    if resp.hovered() && !cur {
                         ui.painter().rect_filled(r, CornerRadius::same(7), p.hover);
                     }
-                    widgets::text(ui, pos2(r.left() + 10.0, r.center().y), Align2::LEFT_CENTER, &t(s), theme::ui(12.5), if resp.hovered() { p.text } else { p.text2 }, r.width() - 14.0);
-                    if resp.clicked() {
+                    widgets::text(ui, pos2(r.left() + 10.0, r.center().y), Align2::LEFT_CENTER, &t(s), theme::ui(12.5), if resp.hovered() || cur { p.text } else { p.text2 }, r.width() - 14.0);
+                    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                         go_sub = Some(s.to_string());
                     }
                     y += 26.0;
                 }
-                ui.painter().vline(nav.left() + 33.0, top..=y, Stroke::new(1.0, p.line));
                 y += 6.0;
             }
         }
@@ -300,11 +363,15 @@ impl App {
         if let Some(tb) = go_tab {
             let st = self.settings.as_mut().unwrap();
             st.tab = tb;
+            st.spy = None;
             st.find.clear();
             st.opened = ctx.input(|i| i.time) - 0.1;
         }
         if let Some(s) = go_sub {
-            self.settings.as_mut().unwrap().jump = Some(s);
+            let st = self.settings.as_mut().unwrap();
+            st.spy = Some(s.clone());
+            st.spy_hold = ctx.input(|i| i.time) + 0.6;
+            st.jump = Some(s);
         }
         // ---- pravá časť: hlavička + obsah ----
         let main = Rect::from_min_max(pos2(nav.right() + 1.0, card.top()), card.max);
@@ -331,6 +398,7 @@ impl App {
         if let Some(o) = off {
             sa = sa.vertical_scroll_offset(o);
         }
+        let mut tops: Vec<(&'static str, f32)> = vec![];
         let sout = sa.show(&mut bui, |ui| {
             ui.add_space(8.0 + slide);
             let inner = ui.available_width() - 56.0;
@@ -358,6 +426,7 @@ impl App {
                                 if jump.as_deref() == Some(title) {
                                     ui.scroll_to_rect(r, Some(egui::Align::TOP));
                                 }
+                                tops.push((title, r.top()));
                                 ui.add_space(6.0);
                             } else {
                                 ui.add_space(10.0);
@@ -370,6 +439,18 @@ impl App {
             ui.add_space(30.0);
         });
         self.smooth.end(sk, &sout);
+        // scroll spy: posledná časť, ktorej nadpis už prešiel pod hlavičku; na konci zoznamu vždy posledná
+        if finding.is_empty() && !tops.is_empty() && jump.is_none() {
+            let max = (sout.content_size.y - sout.inner_rect.height()).max(0.0);
+            let at_end = sout.state.offset.y >= max - 2.0;
+            let cur = if at_end { tops.last().map(|x| x.0) } else { tops.iter().rev().find(|(_, y)| *y <= body.top() + 60.0).or(tops.first()).map(|x| x.0) };
+            if let (Some(c), Some(st)) = (cur, self.settings.as_mut()) {
+                // kliknutá časť ostane zvýraznená, kým sa k nej obsah nedoscroluje
+                if st.spy.as_deref() != Some(c) && ctx.input(|i| i.time) > st.spy_hold {
+                    st.spy = Some(c.to_string());
+                }
+            }
+        }
     }
 
     fn group(&mut self, ui: &mut egui::Ui, rows: Vec<Row>, w: f32, ctx: &egui::Context) {
@@ -545,8 +626,27 @@ impl App {
         });
     }
 
+    // vývojár = GitHub účet pantr1x prihlásený vo Fluxe (settings.github.user.login, zdieľané s Electron Fluxom);
+    // FLUX_DEV=1 na testy
+    pub(crate) fn developer(&self) -> bool {
+        std::env::var("FLUX_DEV").as_deref() == Ok("1") || self.core.setting("github")["user"]["login"].as_str().map(|l| l.eq_ignore_ascii_case("pantr1x")).unwrap_or(false)
+    }
+
     fn action(&mut self, action: &str, ctx: &egui::Context) {
         match action {
+            "tour" => {
+                self.settings = None;
+                self.tour = Some(0);
+            }
+            "dev-data" => flux_core::settings::open_external(&flux_core::settings::user_data().to_string_lossy()),
+            "dev-exe" => {
+                if let Some(d) = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())) {
+                    flux_core::settings::open_external(&d.to_string_lossy());
+                }
+            }
+            "dev-check" => self.upd.check(ctx, ctx.input(|i| i.time), false),
+            "dev-reinstall" => self.upd.reinstall(ctx),
+            "dev-trim" => crate::mem::trim_now(),
             "intro" => {
                 self.settings = None;
                 self.intro = Some(super::intro::Intro::new(self.get("userName").as_str().unwrap_or("")));
@@ -675,36 +775,79 @@ impl App {
                 ui.add_space(6.0);
                 let start = ui.cursor().top();
                 let bg = ui.painter().add(egui::Shape::Noop);
-                ui.add_space(12.0);
-                for line in include_str!("../../CHANGELOG.md").lines().skip_while(|l| !l.starts_with("## ")) {
-                    let (font, color, indent, text) = if let Some(h) = line.strip_prefix("## ") {
-                        ui.add_space(8.0);
-                        (theme::bold(15.0), p.text, 16.0, h.to_string())
-                    } else if let Some(h) = line.strip_prefix("### ") {
-                        ui.add_space(4.0);
-                        (theme::bold(13.0), p.text2, 16.0, h.to_string())
-                    } else if let Some(b) = line.strip_prefix("- ") {
-                        (theme::ui(12.5), p.text2, 32.0, b.to_string())
-                    } else if line.trim().is_empty() {
-                        continue;
-                    } else {
-                        (theme::ui(12.5), p.text2, 16.0, line.to_string())
-                    };
-                    // **tučné** časti
-                    let mut job = egui::text::LayoutJob::default();
-                    job.wrap.max_width = w - indent - 16.0;
-                    for (i, part) in text.split("**").enumerate() {
-                        let f = if i % 2 == 1 { theme::bold(font.size) } else { font.clone() };
-                        job.append(part, 0.0, egui::TextFormat { font_id: f, color: if i % 2 == 1 { p.text } else { color }, ..Default::default() });
+                ui.add_space(4.0);
+                // každá verzia je sklopený riadok (verzia, dátum, súhrn); klik ju rozbalí
+                let notes = release_notes();
+                let n = notes.len();
+                for (vi, note) in notes.iter().enumerate() {
+                    let open = self.settings.as_ref().map(|s| s.notes_open.contains(&note.ver)).unwrap_or(false);
+                    let (hr, resp) = ui.allocate_exact_size(vec2(w, 46.0), Sense::click());
+                    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+                    let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+                    if hk > 0.0 {
+                        ui.painter().rect_filled(hr.shrink2(vec2(6.0, 2.0)), CornerRadius::same(9), p.hover.gamma_multiply(hk));
                     }
-                    let g = ui.fonts_mut(|f| f.layout_job(job));
-                    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
-                    if indent > 20.0 {
-                        ui.painter().circle_filled(pos2(r.left() + 22.0, r.top() + 9.0), 2.0, p.text3);
+                    let ok = ctx.animate_bool_with_time(resp.id.with("o"), open, 0.15);
+                    // šípka sa otočí pri rozbalení
+                    let c = pos2(hr.left() + 22.0, hr.center().y);
+                    let rot = ok * std::f32::consts::FRAC_PI_2;
+                    let pt = |x: f32, y: f32| c + egui::Vec2::angled(rot) * x + egui::Vec2::angled(rot + std::f32::consts::FRAC_PI_2) * y;
+                    ui.painter().line_segment([pt(-2.5, -4.5), pt(2.5, 0.0)], Stroke::new(1.5, p.text3));
+                    ui.painter().line_segment([pt(2.5, 0.0), pt(-2.5, 4.5)], Stroke::new(1.5, p.text3));
+                    let vw = widgets::text_w(ui, &note.ver, theme::bold(14.0));
+                    ui.painter().text(pos2(hr.left() + 36.0, hr.center().y), Align2::LEFT_CENTER, &note.ver, theme::bold(14.0), p.text);
+                    let mut sx = hr.left() + 36.0 + vw + 14.0;
+                    if vi == 0 {
+                        let cw = widgets::text_w(ui, &t("Latest"), theme::bold(10.5)) + 14.0;
+                        let chip = Rect::from_min_size(pos2(sx - 4.0, hr.center().y - 9.0), vec2(cw, 18.0));
+                        ui.painter().rect_filled(chip, CornerRadius::same(9), p.accent);
+                        ui.painter().text(chip.center(), Align2::CENTER_CENTER, t("Latest"), theme::bold(10.5), p.accent_fg);
+                        sx += cw + 8.0;
                     }
-                    ui.painter().galley(pos2(r.left() + indent, r.top() + 2.0), g, color);
+                    ui.painter().text(pos2(hr.right() - 16.0, hr.center().y), Align2::RIGHT_CENTER, &note.date, theme::ui(12.0), p.text3);
+                    widgets::text(ui, pos2(sx, hr.center().y), Align2::LEFT_CENTER, &note.summary, theme::ui(12.5), p.text2, (hr.right() - 110.0 - sx).max(20.0));
+                    if resp.clicked() {
+                        if let Some(st) = self.settings.as_mut() {
+                            if !st.notes_open.remove(&note.ver) {
+                                st.notes_open.insert(note.ver.clone());
+                            }
+                        }
+                    }
+                    if open {
+                        ui.scope(|ui| {
+                            ui.set_opacity(ok);
+                            for line in &note.lines {
+                                let (font, color, indent, text) = if let Some(h) = line.strip_prefix("### ") {
+                                    ui.add_space(4.0);
+                                    (theme::bold(13.0), p.text2, 36.0, h.to_string())
+                                } else if let Some(b) = line.strip_prefix("- ") {
+                                    (theme::ui(12.5), p.text2, 52.0, b.to_string())
+                                } else {
+                                    (theme::ui(12.5), p.text2, 36.0, line.to_string())
+                                };
+                                // **tučné** časti, *kurzíva* bez hviezdičiek
+                                let mut job = egui::text::LayoutJob::default();
+                                job.wrap.max_width = w - indent - 16.0;
+                                for (i, part) in text.split("**").enumerate() {
+                                    let f = if i % 2 == 1 { theme::bold(font.size) } else { font.clone() };
+                                    job.append(&part.replace('*', ""), 0.0, egui::TextFormat { font_id: f, color: if i % 2 == 1 { p.text } else { color }, ..Default::default() });
+                                }
+                                let g = ui.fonts_mut(|f| f.layout_job(job));
+                                let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
+                                if indent > 40.0 {
+                                    ui.painter().circle_filled(pos2(r.left() + 42.0, r.top() + 9.0), 2.0, p.text3);
+                                }
+                                ui.painter().galley(pos2(r.left() + indent, r.top() + 2.0), g, color);
+                            }
+                            ui.add_space(10.0);
+                        });
+                    }
+                    if vi + 1 < n {
+                        let y = ui.cursor().top();
+                        ui.painter().hline(ui.min_rect().left() + 16.0..=ui.min_rect().left() + w - 16.0, y, Stroke::new(1.0, p.line));
+                    }
                 }
-                ui.add_space(12.0);
+                ui.add_space(4.0);
                 let rr = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
                 ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(12), p.card2));
                 ui.painter().rect_stroke(rr, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
@@ -840,7 +983,8 @@ impl App {
                     self.set("accent", json!(a), ctx);
                 }
             }
-            "tools" | "plugins" | "ai" => {
+            "tools" => self.tools_ui(ui, w, ctx),
+            "plugins" | "ai" => {
                 let text = match id {
                     "tools" => t("Flux keeps its installer small. Programming languages are downloaded from their official sources only when you need them."),
                     "plugins" => t("Plugins"),

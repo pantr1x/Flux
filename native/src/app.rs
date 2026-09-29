@@ -6,6 +6,8 @@ mod editing;
 mod intro;
 mod menus;
 mod prefs;
+mod tools;
+mod tour;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -102,7 +104,13 @@ pub struct App {
     wall: crate::wall::Wall,
     live: Arc<std::sync::Mutex<Option<crate::live::Found>>>, // Lively / Wallpaper Engine (zisťuje sa na pozadí)
     live_at: f64,
+    wall_at: f64, // kedy sa naposledy zisťoval zdroj tapety
     pub(crate) upd: crate::update::Updater,
+    server: Option<crate::server::Server>,   // Live Server (HTML)
+    tools: tools::Shared,                    // programovacie jazyky na stiahnutie
+    tour: Option<usize>,                     // krok prehliadky funkcií
+    tour_rects: HashMap<&'static str, Rect>, // kde sú časti okna (pre prehliadku)
+    frames: std::collections::VecDeque<f64>, // časy snímok (vývojárske počítadlo)
 }
 
 impl App {
@@ -173,7 +181,13 @@ impl App {
             wall: Default::default(),
             live: Default::default(),
             live_at: -100.0,
+            wall_at: -100.0,
             upd: Default::default(),
+            server: None,
+            tools: Default::default(),
+            tour: None,
+            tour_rects: HashMap::new(),
+            frames: Default::default(),
         };
         crate::i18n::set_language(app.core.setting("language").as_str().unwrap_or("en"));
         if app.core.setting("onboarded").as_bool() != Some(true) || std::env::var("FLUX_INTRO").is_ok() {
@@ -452,6 +466,45 @@ impl App {
                 Err(e) => self.status = e,
             }
         }
+        // Live Server: otvorené stránky sa znova načítajú
+        if let Some(s) = &self.server {
+            s.bump();
+        }
+    }
+
+    // HTML, CSS a JS webovej stránky sa „spúšťajú“ cez Live Server (JS s index.html vedľa)
+    fn is_web_file(&self) -> bool {
+        let Some(tab) = self.tabs.get(self.active) else { return false };
+        match tab.ext().as_str() {
+            "html" | "htm" | "css" => true,
+            "js" => Path::new(&tab.path).parent().map(|d| d.join("index.html").exists()).unwrap_or(false),
+            _ => false,
+        }
+    }
+
+    // spustí Live Server nad projektom (alebo priečinkom súboru) a otvorí stránku v prehliadači
+    fn live_server(&mut self) {
+        let Some(tab) = self.tabs.get(self.active) else { return };
+        let file = tab.path.clone();
+        let root = self.workspace().filter(|w| file.starts_with(w.as_str())).map(std::path::PathBuf::from).or_else(|| Path::new(&file).parent().map(|p| p.to_path_buf())).unwrap_or_default();
+        if self.server.as_ref().map(|s| s.root != root).unwrap_or(true) {
+            match crate::server::Server::start(&root) {
+                Ok(s) => self.server = Some(s),
+                Err(e) => {
+                    self.status = e.to_string();
+                    return;
+                }
+            }
+        }
+        // CSS/JS → stránka index.html v tom istom priečinku
+        let page = if matches!(Path::new(&file).extension().and_then(|e| e.to_str()), Some("html" | "htm")) {
+            file
+        } else {
+            Path::new(&file).parent().map(|d| d.join("index.html").to_string_lossy().to_string()).unwrap_or(file)
+        };
+        if let Some(s) = &self.server {
+            settings::open_external(&s.url(&page));
+        }
     }
 
     fn run(&mut self) {
@@ -459,6 +512,9 @@ impl App {
             return;
         }
         self.save(self.active);
+        if self.is_web_file() {
+            return self.live_server();
+        }
         let tab = &self.tabs[self.active];
         let path = tab.path.clone();
         if matches!(tab.ext().as_str(), "py" | "pyw") && self.python.as_ref().and_then(|v| v["path"].as_str()).is_none() {
@@ -522,6 +578,9 @@ impl App {
                     }
                 }
                 "fs:changed" => {
+                    if let Some(s) = &self.server {
+                        s.bump();
+                    }
                     self.tree.clear();
                     if let Some(w) = self.workspace() {
                         self.summarize(&w);
@@ -600,6 +659,7 @@ impl App {
                         self.set(k, v, ctx);
                     }
                 }
+                "tour" => self.tour = Some(arg.parse().unwrap_or(0)),
                 "update" => self.upd.check(ctx, 0.0, false),
                 "update-get" => self.upd.download(ctx),
                 "update-install" => self.restart_to_update(ctx),
@@ -643,6 +703,7 @@ impl App {
         // bočný panel vpravo: vpravo hore sú − □ ×, prepínač panela je v hornej lište
         let with_toggle = with_toggle && self.get("sidePos").as_str() != Some("right");
         let brand = Rect::from_min_size(pos2(r.left() + 2.0, r.center().y - 14.0), vec2(70.0, 28.0));
+        self.tour_rects.insert("brand", brand);
         let resp = ui.interact(brand, ui.id().with("brand"), Sense::click());
         if resp.hovered() {
             ui.painter().rect_filled(brand, CornerRadius::same(8), p.hover);
@@ -759,7 +820,9 @@ impl App {
         (if self.get("sidePos").as_str() == Some("right") { egui::Panel::right("side") } else { egui::Panel::left("side") })
             .resizable(false)
             .exact_size(SIDE_W)
-            .frame(Frame::new().fill(p.base).inner_margin(Margin { left: 8, right: 6, top: 0, bottom: 0 }))
+            .show_separator_line(false)
+            // spodok ako karta: päta končí GAP nad okrajom a je v rovine so stavovým riadkom
+            .frame(Frame::new().fill(p.base).inner_margin(Margin { left: 8, right: 6, top: 0, bottom: GAP as i8 }))
             .show(root, |ui| {
                 self.side_top(ui, true);
                 let ws = self.workspace();
@@ -813,6 +876,7 @@ impl App {
                     }
                 });
                 self.smooth.end(sk, &sout);
+                self.tour_rects.insert("projects", Rect::from_min_size(sout.inner_rect.min, vec2(sout.inner_rect.width(), sout.content_size.y.min(sout.inner_rect.height()))));
                 if let Some((r, d, pinned, hid)) = menu_for {
                     self.project_menu(&r, &d, pinned, hid);
                 }
@@ -882,10 +946,10 @@ impl App {
                     }
                 }
                 // ---- strom súborov projektu ----
-                let footer_h = 36.0;
+                let footer_h = 28.0; // výška stavového riadka karty
                 if let Some(w) = ws.clone() {
                     widgets::separator(ui, &p);
-                    ui.horizontal(|ui| {
+                    let tb = ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         ui.add_space(4.0);
                         if widgets::icon_button(ui, "filePlus", &p, true).on_hover_text(t("New file")).clicked() {
@@ -901,6 +965,7 @@ impl App {
                             self.open_dirs.clear();
                         }
                     });
+                    self.tour_rects.insert("files", Rect::from_min_size(tb.response.rect.min, vec2(4.0 * 30.0 + 4.0, tb.response.rect.height())));
                     ui.add_space(4.0);
                     let h = (ui.available_height() - footer_h).max(40.0);
                     let sk = egui::Id::new("sa-tree");
@@ -931,7 +996,8 @@ impl App {
                 // ---- päta: Nastavenia, skratky, svetlá/tmavá ----
                 let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), footer_h), Sense::hover());
                 ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0, p.line));
-                let s = Rect::from_min_size(pos2(r.left(), r.top() + 5.0), vec2(96.0, 28.0));
+                let s = Rect::from_min_size(pos2(r.left(), r.center().y - 12.0), vec2(96.0, 24.0));
+                self.tour_rects.insert("settings", r);
                 let sr = ui.interact(s, ui.id().with("settings"), Sense::click());
                 if sr.hovered() {
                     ui.painter().rect_filled(s, CornerRadius::same(8), p.hover);
@@ -1070,34 +1136,57 @@ impl App {
         }
         let can_run = !self.tabs.is_empty() && !self.home;
         // na stránke projektu ▶ Run nie je (ako v Electron Fluxe)
-        if can_run || self.running {
-            let stop = Rect::from_min_size(pos2(rx - 30.0, cy - 15.0), vec2(30.0, 30.0));
-            let sr = ui.interact(stop, ui.id().with("stop"), if self.running { Sense::click() } else { Sense::hover() });
-            ui.painter().rect_filled(stop, CornerRadius::same(10), if self.running && sr.hovered() { p.active } else { p.hover });
-            widgets::icon_at(ui, stop.center(), 12.0, "stop", if self.running { p.red } else { p.text3.gamma_multiply(0.6) });
-            if self.running && sr.on_hover_text(t("Stop")).clicked() {
-                self.out.pty.kill();
-            }
-            rx -= 37.0;
-            let run_w = widgets::text_w(ui, &t("Run"), theme::bold(13.5)) + 46.0;
-            let run = Rect::from_min_size(pos2(rx - run_w, cy - 15.0), vec2(run_w, 30.0));
-            let rr = ui.interact(run, ui.id().with("run"), Sense::click());
-            let fill = if !can_run {
-                p.accent.gamma_multiply(0.45)
-            } else if self.running {
-                p.accent.lerp_to_gamma(p.card, 0.3)
-            } else if rr.hovered() {
-                p.accent.lerp_to_gamma(Color32::WHITE, 0.08)
+        // jedno tlačidlo: ▶ Run ↔ ■ Stop; pri HTML/CSS/JS webu Live Server (ako v Electron Fluxe)
+        let web = can_run && self.is_web_file();
+        let live_on = self.server.is_some();
+        if can_run || self.running || live_on {
+            let stopping = self.running || (web && live_on);
+            let (icon, label, tip) = if stopping {
+                ("stop", t("Stop"), if self.running { t("Stop (Shift+F5)") } else { t("Stop Live Server") })
+            } else if web {
+                ("globe", t("Live Server"), t("Open the page in the browser – it reloads when you save (F5)"))
             } else {
-                p.accent
+                ("play", t("Run"), t("Run (F5)"))
             };
-            ui.painter().rect_filled(run, CornerRadius::same(10), fill);
-            widgets::icon_at(ui, pos2(run.left() + 18.0, cy), 14.0, "play", p.accent_fg);
-            ui.painter().text(pos2(run.left() + 32.0, cy), Align2::LEFT_CENTER, t("Run"), theme::bold(13.5), p.accent_fg);
-            if can_run && rr.on_hover_text(t("Run (F5)")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                self.run();
+            let run_w = widgets::text_w(ui, &label, theme::bold(13.5)) + 46.0;
+            let aw = ui.ctx().animate_value_with_time(egui::Id::new("run-w"), run_w, if self.anim_on() { 0.15 } else { 0.0 });
+            let run = Rect::from_min_size(pos2(rx - aw, cy - 15.0), vec2(aw, 30.0));
+            self.tour_rects.insert("run", run);
+            let rr = ui.interact(run, ui.id().with("run"), Sense::click());
+            let hk = ui.ctx().animate_bool_with_time(rr.id.with("h"), rr.hovered(), 0.12);
+            let (bg, fg) = if stopping { (p.red.gamma_multiply(0.16 + 0.08 * hk), p.red) } else { (p.accent.lerp_to_gamma(Color32::WHITE, 0.08 * hk), p.accent_fg) };
+            ui.painter().rect_filled(run, CornerRadius::same(10), bg);
+            if stopping {
+                ui.painter().rect_stroke(run, CornerRadius::same(10), Stroke::new(1.0, p.red.gamma_multiply(0.45)), StrokeKind::Inside);
             }
-            rx -= run_w + 7.0;
+            let clip = ui.painter().with_clip_rect(run);
+            widgets::icon_at(ui, pos2(run.left() + 18.0, cy), if stopping { 12.0 } else { 14.0 }, icon, fg);
+            clip.text(pos2(run.left() + 32.0, cy), Align2::LEFT_CENTER, &label, theme::bold(13.5), fg);
+            if rr.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                if self.running {
+                    self.out.pty.kill();
+                } else if web && live_on {
+                    self.server = None;
+                } else {
+                    self.run();
+                }
+            }
+            rx -= aw + 7.0;
+            // adresa bežiaceho Live Servera (klik ju otvorí znova)
+            if let Some(s) = &self.server {
+                let url = format!("127.0.0.1:{}", s.port);
+                let w = widgets::text_w(ui, &url, theme::ui(12.0)) + 34.0;
+                let r = Rect::from_min_size(pos2(rx - w, cy - 13.0), vec2(w, 26.0));
+                let resp = ui.interact(r, ui.id().with("live-url"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+                ui.painter().rect_filled(r, CornerRadius::same(9), if resp.hovered() { p.active } else { p.hover });
+                ui.painter().circle_filled(pos2(r.left() + 13.0, cy), 3.5, p.green);
+                ui.painter().text(pos2(r.left() + 22.0, cy), Align2::LEFT_CENTER, &url, theme::ui(12.0), p.text2);
+                if resp.on_hover_text(t("Open in browser")).clicked() {
+                    let u = self.tabs.get(self.active).map(|t| s.url(&t.path)).unwrap_or_else(|| format!("http://127.0.0.1:{}/", s.port));
+                    settings::open_external(&u);
+                }
+                rx -= w + 7.0;
+            }
         }
         let ai = Rect::from_min_size(pos2(rx - 56.0, cy - 15.0), vec2(56.0, 30.0));
         let ar = ui.interact(ai, ui.id().with("ai"), Sense::click());
@@ -1622,7 +1711,14 @@ impl App {
             if let Some((name, path)) = &main_file {
                 let web = name.ends_with(".html");
                 if web {
-                    widgets::button(&mut acts, Some("monitor"), &t("Live preview"), p.card2, p.text3, 32.0, &p).on_hover_text(t("Live Server is coming to Flux Native soon"));
+                    // Live preview = Live Server (stránka sa znova načíta pri uložení)
+                    if widgets::button(&mut acts, Some("monitor"), &t("Live preview"), p.card2, p.text, 32.0, &p)
+                        .on_hover_text(t("Open the page in the browser – it reloads when you save (F5)"))
+                        .clicked()
+                    {
+                        self.open_file(path);
+                        self.live_server();
+                    }
                     if widgets::button(&mut acts, Some("globe"), &t("Open page"), p.accent, p.accent_fg, 32.0, &p).on_hover_text(name).clicked() {
                         settings::open_external(path);
                     }
@@ -1851,6 +1947,11 @@ impl App {
         ui.painter().circle_filled(pos2(x + 3.0, cy), 3.0, dot);
         let r = widgets::text(ui, pos2(x + 11.0, cy), Align2::LEFT_CENTER, &label, small.clone(), if self.running { p.green } else { p.text3 }, 100.0);
         x = r.right() + 18.0;
+        // vývojárske počítadlo: snímky za sekundu (pri nečinnosti má byť ~0)
+        if self.developer() && self.get("devFps").as_bool() == Some(true) {
+            let r = widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &format!("{} fps", self.frames.len()), theme::mono(11.0), p.text3, 80.0);
+            x = r.right() + 18.0;
+        }
         if !self.status.is_empty() {
             widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &self.status, small.clone(), p.red, (rect.right() - x - 320.0).max(40.0));
         }
@@ -2149,8 +2250,13 @@ impl eframe::App for App {
         if focused || self.live_at < 0.0 {
             self.check_live(ctx, ctx.input(|i| i.time));
         }
-        let src = self.wall_source();
-        self.wall.want(ctx, src);
+        // zdroj tapety (súbory, tapeta Windows, živá tapeta) stačí zistiť raz za 3 s, nie pri každom snímku
+        let now_w = ctx.input(|i| i.time);
+        if now_w - self.wall_at > 3.0 {
+            self.wall_at = now_w;
+            let src = self.wall_source();
+            self.wall.want(ctx, src);
+        }
         self.wall.set_playing(focused && !minimized && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true)));
         if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {
             ctx.request_repaint_after(d);
@@ -2175,6 +2281,13 @@ impl eframe::App for App {
             } else {
                 ctx.request_repaint_after(Duration::from_millis(1000) - t.elapsed());
             }
+        }
+        self.tour_rects.clear();
+        // vývojárske počítadlo snímok: časy za poslednú sekundu
+        let t_now = ctx.input(|i| i.time);
+        self.frames.push_back(t_now);
+        while self.frames.front().is_some_and(|f| t_now - f > 1.0) {
+            self.frames.pop_front();
         }
         if self.side_open {
             self.sidebar(root);
@@ -2204,6 +2317,7 @@ impl eframe::App for App {
             let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
             card_ui.set_clip_rect(card_r.shrink(1.0));
             let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - 28.0), card_r.max);
+            self.tour_rects.insert("status", status);
             self.status_bar(&mut card_ui, status);
             let mut main = Rect::from_min_max(card_r.min, pos2(card_r.right(), status.top()));
             let show_editor = !self.home && !self.tabs.is_empty();
@@ -2288,6 +2402,14 @@ impl eframe::App for App {
             egui::Area::new(egui::Id::new("settings-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
                 ui.set_min_size(full.size());
                 self.settings_ui(ui, full);
+            });
+        }
+        // prehliadka funkcií nad všetkým
+        if self.tour.is_some() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("tour-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.tour_ui(ui, full);
             });
         }
         self.window_chrome(ctx);

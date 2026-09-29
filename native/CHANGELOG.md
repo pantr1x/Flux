@@ -2,6 +2,24 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.4.0 – 2026-09-29
+
+### Run, Stop and Live Server
+- **One button that changes.** ▶ **Run** turns into **■ Stop** while your program runs. There is no separate stop square any more.
+- **Live Server for websites.** For HTML and CSS files the button says **Live Server**. It opens the page in your browser, and the page reloads every time you save. The top bar shows the address, and the button turns into **Stop**. *Live preview* on the project page does the same.
+
+### Languages
+- **Download programming languages** in Settings → Languages, like in Flux: Python, Node.js, Java, C/C++, Go, C#, Git, Rust and more. You can see what is installed and which version, install a language with one click, and get updates.
+
+### Settings
+- **Release notes are folded.** Every version is one line with a short summary. Click it to read more, including older versions.
+- **The menu follows your scrolling.** The highlighted item in the left menu moves as you scroll, down to *Shortcuts*.
+- **Feature tour**: Settings → General → Welcome shows you the main parts of Flux, step by step.
+
+### Look and speed
+- The sidebar now lines up with the card at the bottom, and the thin light line between them is gone.
+- **Video wallpapers** (Lively Wallpaper, Wallpaper Engine) are decoded on the graphics card. They no longer run slow and use much less memory.
+
 ## 0.3.0 – 2026-09-29
 
 ### Updates from Settings

@@ -232,6 +232,41 @@ mod video {
         shown
     }
 
+    // D3D11 zariadenie + správca pre Media Foundation; None = zostane dekódovanie v procesore
+    #[cfg(windows)]
+    unsafe fn hw_decoder(
+        attrs: &windows::Win32::Media::MediaFoundation::IMFAttributes,
+    ) -> Option<(windows::Win32::Graphics::Direct3D11::ID3D11Device, windows::Win32::Media::MediaFoundation::IMFDXGIDeviceManager)> {
+        use windows::core::Interface;
+        use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
+        use windows::Win32::Graphics::Direct3D10::ID3D10Multithread;
+        use windows::Win32::Graphics::Direct3D11::*;
+        use windows::Win32::Media::MediaFoundation::*;
+        let mut dev = None;
+        D3D11CreateDevice(
+            None,
+            D3D_DRIVER_TYPE_HARDWARE,
+            Default::default(),
+            D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            None,
+            D3D11_SDK_VERSION,
+            Some(&mut dev),
+            None,
+            None,
+        )
+        .ok()?;
+        let dev = dev?;
+        if let Ok(mt) = dev.cast::<ID3D10Multithread>() {
+            let _ = mt.SetMultithreadProtected(true);
+        }
+        let (mut token, mut mgr) = (0u32, None);
+        MFCreateDXGIDeviceManager(&mut token, &mut mgr).ok()?;
+        let mgr = mgr?;
+        mgr.ResetDevice(&dev, token).ok()?;
+        attrs.SetUnknown(&MF_SOURCE_READER_D3D_MANAGER, &mgr).ok()?;
+        Some((dev, mgr))
+    }
+
     #[cfg(windows)]
     unsafe fn run(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context, shown: &mut bool) -> windows::core::Result<()> {
         use super::{blurred, luminance};
@@ -250,6 +285,9 @@ mod video {
         let attrs = attrs.ok_or_else(windows::core::Error::empty)?;
         attrs.SetUINT32(&MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1)?;
         attrs.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)?;
+        // dekódovanie na grafickej karte (D3D11): bez neho sa 4K video dekóduje v procesore – pomaly
+        // (tapeta sa oneskoruje) a so stovkami MB snímok v RAM
+        let _d3d = hw_decoder(&attrs);
         let reader = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), &attrs)?;
         let vs = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
         let _ = reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false);
@@ -311,6 +349,15 @@ mod video {
                     let el = clock.elapsed();
                     if due > el {
                         std::thread::sleep(due - el);
+                    } else if el > due + Duration::from_millis(800) {
+                        // dekódovanie nestíha: skok na aktuálny čas, nech video nebeží spomalene
+                        let mut pv = PROPVARIANT::default();
+                        (*pv.Anonymous.Anonymous).vt = VT_I8;
+                        (*pv.Anonymous.Anonymous).Anonymous.hVal = t0 + (el.as_nanos() / 100) as i64 + 2_000_000;
+                        let _ = reader.SetCurrentPosition(&GUID::zeroed(), &pv);
+                        continue;
+                    } else if *shown && el > due + Duration::from_millis(60) {
+                        continue; // oneskorená snímka – preskočiť bez kopírovania
                     }
                 }
             }
@@ -321,7 +368,8 @@ mod video {
             let (mut ptr, mut len) = (std::ptr::null_mut(), 0u32);
             buf.Lock(&mut ptr, None, Some(&mut len))?;
             let data = std::slice::from_raw_parts(ptr, len as usize);
-            let row = stride.unsigned_abs() as usize;
+            // riadok: podľa typu média, pri snímkach z GPU podľa dĺžky bufferu
+            let row = if stride.unsigned_abs() as usize >= w * 4 && stride.unsigned_abs() as usize * h <= len as usize { stride.unsigned_abs() as usize } else { (len as usize / h.max(1)).max(w * 4) };
             let mut rgba = vec![0u8; w * h * 4];
             for y in 0..h {
                 let sy = if stride < 0 { h - 1 - y } else { y };

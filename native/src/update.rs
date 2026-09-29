@@ -87,7 +87,19 @@ impl Updater {
 
     // zistí, či je v ci-native novší program (iný commit); auto = po stiahnutí hneď pripraviť
     pub fn check(&mut self, ctx: &egui::Context, now: f64, auto_download: bool) {
-        if !enabled() || matches!(self.state(), State::Checking | State::Downloading { .. } | State::Ready { .. }) {
+        self.run_check(ctx, now, auto_download, false);
+    }
+
+    // vývojár: stiahne aktuálnu zostavu z ci-native aj keď je to ten istý commit (aj do vlastnej zostavy)
+    pub fn reinstall(&mut self, ctx: &egui::Context) {
+        if matches!(self.state(), State::Ready { .. }) {
+            *self.state.lock().unwrap() = State::Idle;
+        }
+        self.run_check(ctx, self.last_check, true, true);
+    }
+
+    fn run_check(&mut self, ctx: &egui::Context, now: f64, auto_download: bool, force: bool) {
+        if (!enabled() && !force) || matches!(self.state(), State::Checking | State::Downloading { .. } | State::Ready { .. }) {
             return;
         }
         self.last_check = now;
@@ -107,7 +119,7 @@ impl Updater {
                 sha256: j["sha256"].as_str().unwrap_or("").to_lowercase(),
                 size: j["size"].as_u64().unwrap_or(0),
             };
-            let newer = !i.sha.is_empty() && i.sha != SHA;
+            let newer = !i.sha.is_empty() && (i.sha != SHA || force);
             *state.lock().unwrap() = if newer { State::Available { version: i.version.clone(), sha: i.sha.clone() } } else { State::Latest };
             *info.lock().unwrap() = Some(i);
             ctx.request_repaint();

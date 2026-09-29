@@ -4,6 +4,7 @@ pub mod pty;
 pub mod python;
 pub mod runner;
 pub mod settings;
+pub mod toolchains;
 
 use serde_json::Value;
 use std::sync::{Arc, Mutex};

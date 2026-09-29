@@ -21,7 +21,14 @@ for (const f of files) {
 // Flux Native (Rust): t("…") a tf("…", …) v native/src/**/*.rs
 const rsFiles = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? rsFiles(`${d}/${e.name}`) : e.name.endsWith('.rs') && e.name !== 'gen.rs' ? [`${d}/${e.name}`] : []));
 for (const f of rsFiles('native/src')) {
-  for (const m of readFileSync(f, 'utf8').matchAll(/\bt[f]?\("((?:\\.|[^"\\])*)"/g)) keys.add(m[1].replace(/\\"/g, '"').replace(/\\u\{2026\}/g, '…'));
+  const src = readFileSync(f, 'utf8');
+  for (const m of src.matchAll(/\bt[f]?\("((?:\\.|[^"\\])*)"/g)) keys.add(m[1].replace(/\\"/g, '"').replace(/\\u\{2026\}/g, '…'));
+  // riadky nastavení (prefs.rs): Row::Toggle("kľúč", "Názov", "Popis"), Row::Button("akcia", "Názov", "Popis", "Tlačidlo"), Row::Info("Názov", …)
+  const q = '"((?:\\\\.|[^"\\\\])*)"';
+  for (const m of src.matchAll(new RegExp(`Row::(?:Toggle|Select|Range|Text|Color|Number|Button)\\(\\s*"[\\w-]+",\\s*${q}(?:,\\s*${q})?(?:,\\s*${q})?`, 'g'))) for (const v of m.slice(1)) if (v && /[a-z]/i.test(v)) keys.add(v);
+  for (const m of src.matchAll(new RegExp(`Row::Info\\(\\s*${q}`, 'g'))) keys.add(m[1]);
+  // nadpisy častí: ("Developer", vec![
+  for (const m of src.matchAll(/\(\s*"([A-Z][^"]*)",\s*vec!\[/g)) keys.add(m[1]);
 }
 // pluginScan.js: [/regex/, 'block' | 'warn', 'Popis nálezu']
 for (const m of readFileSync('src/main/pluginScan.js', 'utf8').matchAll(/'(?:block|warn)', '([^']+)'\]/g)) keys.add(m[1]);
