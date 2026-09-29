@@ -77,6 +77,51 @@ jobs:
             exit 1
           }
           "## Smoke test passed" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Experiment – see-through window variants (diagnostics only)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type -Name W2 -Namespace U2 -MemberDefinition @'
+          [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+          [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+          public struct RECT { public int L, T, R, B; }
+          '@
+          New-Item -ItemType Directory out -Force | Out-Null
+          $img = "$env:RUNNER_TEMP\exp-wall.png"
+          $bmp = New-Object System.Drawing.Bitmap 64, 64; $g0 = [System.Drawing.Graphics]::FromImage($bmp); $g0.Clear([System.Drawing.Color]::Red); $bmp.Save($img, [System.Drawing.Imaging.ImageFormat]::Png); $g0.Dispose(); $bmp.Dispose()
+          $proj = "$env:RUNNER_TEMP\exp-proj"; New-Item -ItemType Directory $proj -Force | Out-Null; Set-Content "$proj\main.py" "print(1)"
+          $lines = @()
+          $variants = [ordered]@{ 'glow' = @{}; 'wgpu' = @{ FLUX_RENDERER = 'wgpu' }; 'glow-opaque' = @{ FLUX_TR_OPAQUE = '1' } }
+          $i = 0
+          foreach ($name in $variants.Keys) {
+            $i++
+            $ud = "$env:RUNNER_TEMP\ud-exp-$name"; New-Item -ItemType Directory $ud -Force | Out-Null
+            @{ onboarded = $true; lastFolder = $proj; projects = @(@{ dir = $proj }); autoUpdate = $false; lastSeenVersion = 'x'; liveWallMode = 'see'; liveCache = @{ file = $img; video = $false; preview = $img; source = 'lively' } } | ConvertTo-Json -Depth 5 | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
+            $env:FLUX_USER_DATA = $ud; $env:FLUX_SEE_THROUGH = '1'; $env:FLUX_NO_WATCHDOG = '1'
+            foreach ($k in $variants[$name].Keys) { Set-Item "Env:$k" $variants[$name][$k] }
+            $err = "out\exp-$name.log"
+            $p = Start-Process (Get-ChildItem target\release\flux-native.exe).FullName -PassThru -RedirectStandardError $err -RedirectStandardOutput "out\exp-$name.out"
+            Start-Sleep 15
+            $p.Refresh()
+            $h = $p.MainWindowHandle
+            $vis = if ($h -ne 0) { [U2.W2]::IsWindowVisible($h) } else { $false }
+            $r = New-Object U2.W2+RECT; if ($h -ne 0) { [void][U2.W2]::GetWindowRect($h, [ref]$r) }
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $shot = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($shot); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $px = if ($h -ne 0 -and $r.R -gt $r.L) { $shot.GetPixel([math]::Min($b.Width - 1, [math]::Max(0, [int](($r.L + $r.R) / 2))), [math]::Min($b.Height - 1, [math]::Max(0, [int](($r.T + $r.B) / 2)))) } else { 'n/a' }
+            $shot.Save("out\exp-$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $shot.Dispose()
+            $lines += "$name : exited=$($p.HasExited) hwnd=$h visible=$vis rect=$($r.L),$($r.T),$($r.R),$($r.B) centerPixel=$px"
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+            Start-Sleep 2
+            $lines += (Get-Content $err -ErrorAction SilentlyContinue | Select-Object -First 30 | ForEach-Object { "    $_" })
+            foreach ($k in $variants[$name].Keys) { Remove-Item "Env:$k" }
+          }
+          Remove-Item Env:FLUX_SEE_THROUGH, Env:FLUX_NO_WATCHDOG, Env:FLUX_USER_DATA
+          $lines | Set-Content out\exp.txt
+          $lines | ForEach-Object { Write-Host $_ }
+          "## See-through experiment`n``````n$($lines -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Measure memory (Flux Native)
         shell: pwsh
         run: |

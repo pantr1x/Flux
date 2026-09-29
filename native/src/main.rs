@@ -38,6 +38,7 @@ pub fn want_transparent() -> bool {
 
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
     let transparent = want_transparent();
+    eprintln!("[flux] renderer {renderer:?}, transparent {transparent}");
     TRANSPARENT.store(transparent, std::sync::atomic::Ordering::Relaxed);
     // FLUX_SIZE=1280x780 – veľkosť okna pre testy a porovnanie so screenshotmi Electron Fluxu
     let size = std::env::var("FLUX_SIZE").ok().and_then(|s| s.split_once('x').and_then(|(w, h)| Some([w.parse().ok()?, h.parse().ok()?]))).unwrap_or([1400.0, 900.0]);
@@ -68,6 +69,20 @@ pub fn notice(msg: &str) {
     }
 }
 
+// varovania a chyby z eframe/winit/glutin na stderr (v CI presmerované do súboru)
+struct Log;
+impl log::Log for Log {
+    fn enabled(&self, m: &log::Metadata) -> bool {
+        m.level() <= log::Level::Warn
+    }
+    fn log(&self, r: &log::Record) {
+        if self.enabled(r.metadata()) {
+            eprintln!("[{}] {}: {}", r.level(), r.target(), r.args());
+        }
+    }
+    fn flush(&self) {}
+}
+
 pub fn report(msg: &str) {
     let log = flux_core::settings::user_data().join("flux-native-crash.log");
     let line = format!("[{}] Flux Native {} ({}): {msg}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), env!("CARGO_PKG_VERSION"), update::SHA);
@@ -87,6 +102,7 @@ pub fn report(msg: &str) {
 fn main() -> eframe::Result {
     // po aktualizácii: .new preč, .old zatiaľ ostane (návrat, ak by nová verzia hneď spadla)
     update::cleanup(true);
+    let _ = log::set_logger(&Log).map(|_| log::set_max_level(log::LevelFilter::Warn));
     boot::catch_hard_crashes();
     boot::kill_ghosts();
     boot::begin();

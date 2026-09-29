@@ -2408,7 +2408,8 @@ impl eframe::App for App {
 
     // priehľadné okno: kde Flux nič nenakreslí, presvitá plocha (živá tapeta)
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
-        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+        // FLUX_TR_OPAQUE=1: priehľadné okno, ale nepriehľadné pozadie (diagnostika v CI)
+        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && std::env::var("FLUX_TR_OPAQUE").is_err() {
             [0.0, 0.0, 0.0, 0.0]
         } else {
             visuals.panel_fill.to_normalized_gamma_f32()

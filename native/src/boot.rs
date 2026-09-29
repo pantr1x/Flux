@@ -63,6 +63,7 @@ pub fn window() {
 
 // Flux beží a kreslí → ďalší štart je normálny
 pub fn ok() {
+    eprintln!("[flux] started ok");
     FAILS.store(0, Ordering::Relaxed);
     write("ok", 0);
 }
@@ -198,7 +199,7 @@ pub fn kill_ghosts() {}
 // strážca: ak po 12 s nemá Flux viditeľné okno, spustí sa znova v núdzovom režime a tento proces skončí
 #[cfg(windows)]
 pub fn watchdog() {
-    if safe() {
+    if safe() || std::env::var("FLUX_NO_WATCHDOG").is_ok() {
         return;
     }
     std::thread::spawn(|| {
