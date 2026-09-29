@@ -7,7 +7,7 @@ import fs from 'node:fs';
 const root = new URL('..', import.meta.url);
 let src = fs.readFileSync(new URL('src/renderer/icons.js', root), 'utf8').replace(/^export /gm, '');
 src += '\nreturn { paths, FILLED, FILE_ICONS, EXT_ICON, icon };';
-const { paths, FILE_ICONS, EXT_ICON, icon } = new Function(src)();
+const { paths, FILLED, FILE_ICONS, EXT_ICON, icon } = new Function(src)();
 
 const rs = (s) => JSON.stringify(s);
 let out = '// Vygenerované: node scripts/native-gen.mjs (zdroj src/renderer/icons.js a themes.js). Neupravovať ručne.\n\n';
@@ -39,7 +39,7 @@ out += '        _ => "file",\n    }\n}\n\n';
 
 // čiarové ikony (biele, farbu dá tint)
 out += 'pub fn line(name: &str) -> Option<&\'static str> {\n    Some(match name {\n';
-for (const name of Object.keys(paths)) {
+for (const name of [...Object.keys(paths), ...Object.keys(FILLED)]) {
   const svg = icon(name, 24).replace(/ class="icon"| aria-hidden="true"/g, '').replace(/currentColor/g, '#fff').replace(/<svg /, '<svg xmlns="http://www.w3.org/2000/svg" ');
   out += `        ${rs(name)} => ${rs(svg)},\n`;
 }

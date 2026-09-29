@@ -7,6 +7,8 @@ mod gen;
 mod i18n;
 mod live;
 mod mem;
+mod net;
+mod secret;
 mod server;
 mod smooth;
 mod term;

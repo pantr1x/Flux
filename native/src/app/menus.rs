@@ -119,6 +119,7 @@ impl App {
     // vykoná príkaz (z ponuky, palety alebo skratky)
     pub(super) fn act(&mut self, id: &str, ctx: &egui::Context) {
         match id {
+            "ai" => self.toggle_ai(),
             "new-file" => {
                 if self.workspace().is_some() {
                     self.new_item = Some((false, String::new()));

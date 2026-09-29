@@ -2,6 +2,23 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.8.0 – 2026-09-29
+
+### Settings like in Flux
+- **Settings look like Flux again.** The window has the same size and shape, sits in the middle of the screen and no longer reaches the bottom edge. The menu, the sections and the rows look the same too.
+- **New rows:** *Panel transparency* and your own **Background** picture (Appearance), and *Reset advanced* (General → Memory & speed).
+- **Plugins** shows what is built into Flux Native: GitHub, Claude AI, Live Server and Languages.
+
+### GitHub
+- Settings → **GitHub**: press **Sign in**, confirm the code in your browser, and you are connected. You can also paste a token.
+- **Open a repository**: pick one of your repositories and Flux downloads it and opens it as a project.
+- Your GitHub key is stored encrypted on this computer.
+
+### Claude AI
+- Settings → **AI**: paste your Anthropic API key, choose the model and press **Test** to check it.
+- **MCP connectors**: add remote MCP servers (name, address and an optional token), and Claude can use their tools while it answers.
+- **Ctrl+I** or the **AI** button opens Claude on the right side. Claude sees the open file, and code in answers has **Copy** and **Insert** buttons.
+
 ## 0.7.0 – 2026-09-29
 
 ### Much less memory with Lively Wallpaper and Wallpaper Engine

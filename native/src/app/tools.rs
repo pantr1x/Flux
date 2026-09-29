@@ -126,19 +126,22 @@ fn enqueue(tools: &Shared, ctx: &egui::Context, id: &'static str, upgrade: bool)
 }
 
 impl App {
-    pub(super) fn tools_ui(&mut self, ui: &mut egui::Ui, w: f32, ctx: &egui::Context) {
+    // only = jeden jazyk (napr. Git v karte GitHub) bez úvodu a tlačidla „Skontrolovať znova“
+    pub(super) fn tools_ui(&mut self, ui: &mut egui::Ui, w: f32, ctx: &egui::Context, only: Option<&str>) {
         let p = self.pal;
         refresh(&self.tools, ctx, false);
-        ui.add_space(4.0);
-        ui.add(
-            egui::Label::new(
-                egui::RichText::new(t("Flux keeps its installer small. Programming languages are downloaded from their official sources only when you need them."))
-                    .font(theme::ui(12.5))
-                    .color(p.text2),
-            )
-            .wrap(),
-        );
-        ui.add_space(10.0);
+        if only.is_none() {
+            ui.add_space(4.0);
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(t("Flux keeps its installer small. Programming languages are downloaded from their official sources only when you need them."))
+                        .font(theme::ui(12.5))
+                        .color(p.text2),
+                )
+                .wrap(),
+            );
+            ui.add_space(10.0);
+        }
         let s = self.tools.lock().unwrap();
         let Some((list, can_install)) = s.status.clone() else {
             drop(s);
@@ -154,10 +157,14 @@ impl App {
         let start = ui.cursor().top();
         let bg = ui.painter().add(egui::Shape::Noop);
         let mut act: Option<(&'static str, &'static str)> = None;
+        let mut first = true;
         for (i, tc) in TOOLCHAINS.iter().enumerate() {
+            if only.is_some_and(|o| o != tc.id) {
+                continue;
+            }
             let st = &list[i];
             let (r, _) = ui.allocate_exact_size(vec2(w, 56.0), Sense::hover());
-            if i > 0 {
+            if !std::mem::take(&mut first) {
                 ui.painter().hline(r.left() + 16.0..=r.right() - 16.0, r.top(), Stroke::new(1.0, p.line));
             }
             widgets::file_icon(ui, Rect::from_min_size(pos2(r.left() + 16.0, r.center().y - 11.0), vec2(22.0, 22.0)), file_of(tc.id));
@@ -214,10 +221,13 @@ impl App {
             }
         }
         let rr = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
-        ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(12), p.card2));
-        ui.painter().rect_stroke(rr, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(14), p.hover));
+        ui.painter().rect_stroke(rr, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
         if let Some((id, what)) = act {
             enqueue(&self.tools, ctx, id, what == "update");
+        }
+        if only.is_some() {
+            return;
         }
         ui.add_space(10.0);
         if widgets::button(ui, Some("refresh"), &t("Check again"), p.card2, p.text, 30.0, &p).clicked() {

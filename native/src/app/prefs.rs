@@ -42,7 +42,7 @@ pub const FONTS: [(&str, &str); 6] = [
     ("Courier New", "Courier New"),
 ];
 
-const TABS: [(&str, &str, &str); 8] = [
+const TABS: [(&str, &str, &str); 9] = [
     ("general", "settings", "General"),
     ("appearance", "palette", "Appearance"),
     ("editor", "code", "Editor"),
@@ -50,6 +50,7 @@ const TABS: [(&str, &str, &str); 8] = [
     ("tools", "download", "Languages"),
     ("plugins", "puzzle", "Plugins"),
     ("ai", "sparkle", "AI"),
+    ("github", "github", "GitHub"),
     ("developer", "flask", "Developer"), // len vývojár (App::developer)
 ];
 
@@ -63,6 +64,7 @@ enum Row {
     Color(&'static str, &'static str, &'static str),
     Button(&'static str, &'static str, &'static str, &'static str), // (akcia, názov, popis, tlačidlo)
     Info(&'static str, String),
+    Lead(&'static str), // úvodný odsek sekcie (.s-lead)
     Custom(&'static str),
 }
 
@@ -126,6 +128,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Toggle("trimMemory", "Free memory when Flux is in the background", "Windows moves unused memory out of RAM while you work in another app. Switching back can take a moment."),
                     Row::Toggle("optFx", "Transparency and blur", "see-through panels and your blurred wallpaper"),
                     Row::Toggle("optAnim", "Animations", "windows, menus and cards glide in and out"),
+                    Row::Button("opt-reset", "Reset advanced", "every part follows “Save memory” again", "Reset"),
                 ],
             ),
             ("Language", vec![Row::Custom("language")]),
@@ -191,6 +194,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Color("uiBase", "Background", "behind the panels"),
                     Row::Color("uiCard", "Panels", "editor, sidebar and windows"),
                     Row::Color("uiLine", "Borders", "lines between parts"),
+                    Row::Range("cardAlpha", "Panel transparency", "how much the background shines through the panels", 30.0, 100.0, 1.0),
                     Row::Button("colors-reset", "Reset all colors", "back to the colors of your theme", "Reset"),
                 ],
             ),
@@ -210,6 +214,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                         "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.",
                         o(&[("wallpaper", "Wallpaper (recommended)"), ("none", "Off")]),
                     ),
+                    Row::Button("bg-pick", "Background", "your own picture instead of the Windows wallpaper", "Image…"),
                     Row::Toggle("liveWallpaper", "Use Lively Wallpaper and Wallpaper Engine", "when one of them is running, Flux shows the same wallpaper behind its panels"),
                     Row::Select(
                         "liveWallMode",
@@ -269,9 +274,20 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             ]
         }
         "tools" => vec![("", vec![Row::Custom("tools")])],
-        "plugins" => vec![("", vec![Row::Custom("plugins")])],
+        "plugins" => {
+            vec![("", vec![Row::Lead("Plugins add features to Flux. In Flux Native these parts are built in – community plugins come later.")]), ("Built into Flux", vec![Row::Custom("plugins")])]
+        }
+        "github" => vec![
+            ("", vec![Row::Lead("Connect your GitHub account to open your repositories as projects and to save (push) your work online.")]),
+            ("Account", vec![Row::Custom("gh-account")]),
+            ("Git", vec![Row::Custom("gh-git")]),
+        ],
         "developer" => vec![], // nie vývojár – karta je skrytá
-        _ => vec![("", vec![Row::Custom("ai")])],
+        _ => vec![
+            ("", vec![Row::Lead("Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.")]),
+            ("API key", vec![Row::Custom("ai-key")]),
+            ("MCP connectors", vec![Row::Lead("Connect remote MCP servers (for example GitHub, Linear or your own) – Claude can then use their tools while answering."), Row::Custom("ai-mcp")]),
+        ],
     }
 }
 
@@ -281,6 +297,7 @@ fn row_words(r: &Row) -> String {
         Row::Number(_, a, ..) => t(a),
         Row::Button(_, a, b, _) => format!("{} {}", t(a), t(b)),
         Row::Info(a, b) => format!("{} {}", t(a), b),
+        Row::Lead(a) => t(a),
         Row::Custom(id) => id.to_string(),
     }
     .to_lowercase()
@@ -330,21 +347,22 @@ impl App {
         }
         // stmavenie pozadia; klik mimo zavrie
         let bg = ui.interact(full, ui.id().with("s-dim"), Sense::click());
-        ui.painter().rect_filled(full, 0.0, Color32::from_black_alpha((if p.dark { 90.0 } else { 40.0 } * k) as u8));
-        let w = (full.width() - 140.0).clamp(640.0, 1000.0);
-        let h = full.height() - 78.0;
+        ui.painter().rect_filled(full, 0.0, Color32::from_black_alpha((77.0 * k) as u8));
+        // .s-card: min(1000px, 94vw) × min(740px, 90vh), v strede
+        let w = (full.width() * 0.94).min(1000.0);
+        let h = (full.height() * 0.9).min(740.0);
         let card = Rect::from_center_size(full.center(), vec2(w, h) * (0.97 + 0.03 * k));
         if bg.clicked() && !card.contains(bg.interact_pointer_pos().unwrap_or_default()) {
             self.settings = None;
             return;
         }
         let alpha = k;
-        ui.painter().add(egui::Shadow { offset: [0, 18], blur: 50, spread: 0, color: Color32::from_black_alpha((120.0 * alpha) as u8) }.as_shape(card, CornerRadius::same(16)));
-        ui.painter().rect_filled(card, CornerRadius::same(16), p.solid.gamma_multiply(0.3 + 0.7 * alpha));
-        ui.painter().rect_stroke(card, CornerRadius::same(16), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        ui.painter().add(egui::Shadow { offset: [0, 30], blur: 90, spread: 0, color: Color32::from_black_alpha((128.0 * alpha) as u8) }.as_shape(card, CornerRadius::same(20)));
+        ui.painter().rect_filled(card, CornerRadius::same(20), p.solid.gamma_multiply(0.3 + 0.7 * alpha));
+        ui.painter().rect_stroke(card, CornerRadius::same(20), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
         // ---- ľavá ponuka ----
         let nav = Rect::from_min_size(card.min, vec2(210.0, card.height()));
-        ui.painter().rect_filled(nav, CornerRadius { nw: 16, sw: 16, ne: 0, se: 0 }, p.card2);
+        ui.painter().rect_filled(nav, CornerRadius { nw: 20, sw: 20, ne: 0, se: 0 }, p.text.gamma_multiply(0.03));
         ui.painter().vline(nav.right(), nav.y_range(), Stroke::new(1.0, p.line));
         ui.painter().text(pos2(nav.left() + 20.0, nav.top() + 31.0), Align2::LEFT_CENTER, t("Settings"), theme::bold(18.0), p.text);
         let fr = Rect::from_min_size(pos2(nav.left() + 10.0, nav.top() + 60.0), vec2(nav.width() - 20.0, 32.0));
@@ -376,8 +394,21 @@ impl App {
             if hov > 0.0 {
                 ui.painter().rect_filled(r, CornerRadius::same(10), if on { p.active } else { p.hover.gamma_multiply(hov) });
             }
-            widgets::icon_at(ui, pos2(r.left() + 17.0, r.center().y), 15.0, ic, if on { p.text } else { p.text2 });
-            ui.painter().text(pos2(r.left() + 36.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::bold(13.0), if on { p.text } else { p.text2 });
+            // aktívna karta: ikona vo farbe zvýraznenia (.s-tab.on svg)
+            widgets::icon_at(
+                ui,
+                pos2(r.left() + 20.0, r.center().y),
+                16.0,
+                ic,
+                if on {
+                    p.accent
+                } else if resp.hovered() {
+                    p.text
+                } else {
+                    p.text2
+                },
+            );
+            ui.painter().text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::bold(13.0), if on || resp.hovered() { p.text } else { p.text2 });
             if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 go_tab = Some(id.to_string());
             }
@@ -411,7 +442,7 @@ impl App {
                 y += 6.0;
             }
         }
-        ui.painter().text(pos2(nav.left() + 20.0, nav.bottom() - 22.0), Align2::LEFT_CENTER, format!("Flux Native {}", env!("CARGO_PKG_VERSION")), theme::ui(12.0), p.text3);
+        ui.painter().text(pos2(nav.left() + 20.0, nav.bottom() - 20.0), Align2::LEFT_CENTER, format!("Flux Native {}", env!("CARGO_PKG_VERSION")), theme::ui(11.0), p.text3);
         if let Some(tb) = go_tab {
             let st = self.settings.as_mut().unwrap();
             st.tab = tb;
@@ -469,7 +500,7 @@ impl App {
                         ui.vertical(|ui| {
                             ui.set_width(inner);
                             if !title.is_empty() {
-                                ui.add_space(14.0);
+                                ui.add_space(22.0);
                                 let (r, _) = ui.allocate_exact_size(vec2(inner, 22.0), Sense::hover());
                                 let mut job = egui::text::LayoutJob::default();
                                 job.append(&t(title).to_uppercase(), 0.0, egui::TextFormat { font_id: theme::bold(11.0), color: p.text3, extra_letter_spacing: 1.0, ..Default::default() });
@@ -479,11 +510,20 @@ impl App {
                                     ui.scroll_to_rect(r, Some(egui::Align::TOP));
                                 }
                                 tops.push((title, r.top()));
-                                ui.add_space(6.0);
+                                ui.add_space(4.0);
                             } else {
                                 ui.add_space(10.0);
                             }
-                            self.group(ui, rows, inner, &ctx);
+                            // úvodné odseky (.s-lead) nad skupinou
+                            let mut rows = rows;
+                            while let Some(Row::Lead(text)) = rows.first().cloned() {
+                                rows.remove(0);
+                                ui.add(egui::Label::new(egui::RichText::new(t(text)).font(theme::ui(13.0)).color(p.text2)).wrap());
+                                ui.add_space(12.0);
+                            }
+                            if !rows.is_empty() {
+                                self.group(ui, rows, inner, &ctx);
+                            }
                         });
                     });
                 }
@@ -507,7 +547,8 @@ impl App {
 
     fn group(&mut self, ui: &mut egui::Ui, rows: Vec<Row>, w: f32, ctx: &egui::Context) {
         let p = self.pal;
-        let custom_only = rows.len() == 1 && matches!(rows[0], Row::Custom(id) if matches!(id, "themes" | "accents" | "language" | "keys" | "tools" | "plugins" | "ai" | "about"));
+        let custom_only = rows.len() == 1
+            && matches!(rows[0], Row::Custom(id) if matches!(id, "themes" | "accents" | "language" | "keys" | "tools" | "plugins" | "about" | "gh-account" | "gh-git" | "ai-key" | "ai-mcp"));
         if custom_only {
             if let Row::Custom(id) = rows[0] {
                 self.custom(ui, id, w, ctx);
@@ -521,9 +562,9 @@ impl App {
             let top = ui.cursor().top();
             // riadok s odsadením 16 px zľava aj sprava (ovládacie prvky nevyčnievajú z rámika)
             ui.horizontal(|ui| {
-                ui.set_min_height(54.0);
+                ui.set_min_height(52.0);
                 ui.add_space(16.0);
-                ui.allocate_ui_with_layout(vec2(w - 32.0, 54.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.allocate_ui_with_layout(vec2(w - 32.0, 52.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     ui.set_max_width(w - 32.0);
                     self.row(ui, row, w - 32.0, ctx);
                 });
@@ -535,8 +576,8 @@ impl App {
             let _ = top;
         }
         let r = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
-        ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(12), p.card2));
-        ui.painter().rect_stroke(r, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(14), p.hover));
+        ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
     }
 
     fn label(&self, ui: &mut egui::Ui, title: &str, hint: &str, w: f32) {
@@ -546,7 +587,7 @@ impl App {
             ui.add_space(9.0);
             ui.label(egui::RichText::new(t(title)).font(theme::bold(13.0)).color(p.text));
             if !hint.is_empty() {
-                ui.add(egui::Label::new(egui::RichText::new(t(hint)).font(theme::ui(11.5)).color(p.text3)).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(t(hint)).font(theme::ui(12.0)).color(p.text3)).wrap());
             }
             ui.add_space(9.0);
         });
@@ -663,6 +704,9 @@ impl App {
                 });
             }
             Row::Info(title, value) => self.label_owned(ui, title, &value, lw),
+            Row::Lead(text) => {
+                ui.add(egui::Label::new(egui::RichText::new(t(text)).font(theme::ui(13.0)).color(p.text2)).wrap());
+            }
             Row::Custom(id) => self.custom(ui, id, w, ctx),
         }
     }
@@ -712,6 +756,32 @@ impl App {
             "dev-check" => self.upd.check(ctx, ctx.input(|i| i.time), false),
             "dev-reinstall" => self.upd.reinstall(ctx),
             "dev-trim" => crate::mem::trim_now(),
+            "opt-reset" => {
+                for k in ["optPyAc", "optFx", "optAnim", "optEditorFx", "optJsLimit", "pyMemory", "lspIdle"] {
+                    self.update_settings(|o| {
+                        o.remove(k);
+                    });
+                }
+                self.apply_look(ctx);
+            }
+            // vlastný obrázok na pozadí → userData/backgrounds (settings.bg ako v Electron Fluxe)
+            "bg-pick" => {
+                if let Some(f) = rfd::FileDialog::new().set_title(t("Background")).add_filter(t("Images"), &["png", "jpg", "jpeg", "webp", "bmp", "gif"]).pick_file() {
+                    let dir = flux_core::settings::user_data().join("backgrounds");
+                    let _ = std::fs::create_dir_all(&dir);
+                    let name = f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "bg.png".into());
+                    let file = format!("{}-{name}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+                    if std::fs::copy(&f, dir.join(&file)).is_ok() {
+                        self.set("bg", json!({ "type": "image", "file": file, "name": name }), ctx);
+                    }
+                }
+            }
+            "bg-reset" => {
+                self.update_settings(|o| {
+                    o.remove("bg");
+                });
+                self.apply_look(ctx);
+            }
             "intro" => {
                 self.settings = None;
                 self.intro = Some(super::intro::Intro::new(self.get("userName").as_str().unwrap_or("")));
@@ -761,8 +831,8 @@ impl App {
         match id {
             "about" => {
                 let (r, _) = ui.allocate_exact_size(vec2(w, 86.0), Sense::hover());
-                ui.painter().rect_filled(r, CornerRadius::same(12), p.card2);
-                ui.painter().rect_stroke(r, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                ui.painter().rect_filled(r, CornerRadius::same(14), p.hover);
+                ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
                 let lr = Rect::from_min_size(pos2(r.left() + 16.0, r.top() + 17.0), vec2(52.0, 52.0));
                 widgets::brand_mark(ui, lr, &p);
                 ui.painter().text(pos2(lr.right() + 14.0, r.top() + 32.0), Align2::LEFT_CENTER, "Flux Native", theme::bold(17.0), p.text);
@@ -914,8 +984,8 @@ impl App {
                 }
                 ui.add_space(4.0);
                 let rr = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
-                ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(12), p.card2));
-                ui.painter().rect_stroke(rr, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(14), p.hover));
+                ui.painter().rect_stroke(rr, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
             }
             "memory" => {
                 let mb = crate::mem::used_mb();
@@ -977,8 +1047,8 @@ impl App {
                     }
                 }
                 let r = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
-                ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(12), p.card2));
-                ui.painter().rect_stroke(r, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(14), p.hover));
+                ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
             }
             "themes" => {
                 let cur = self.get("codeTheme").as_str().unwrap_or("").to_string();
@@ -1011,8 +1081,8 @@ impl App {
             "accents" => {
                 let cur = self.get("accent").as_str().unwrap_or("mono").to_string();
                 let (r, _) = ui.allocate_exact_size(vec2(w, 56.0), Sense::hover());
-                ui.painter().rect_filled(r, CornerRadius::same(12), p.card2);
-                ui.painter().rect_stroke(r, CornerRadius::same(12), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                ui.painter().rect_filled(r, CornerRadius::same(14), p.hover);
+                ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
                 let mut pick = None;
                 for (i, (name, hex)) in ACCENTS.iter().enumerate() {
                     let c = pos2(r.left() + 28.0 + i as f32 * 34.0, r.center().y);
@@ -1048,17 +1118,46 @@ impl App {
                     self.set("accent", json!(a), ctx);
                 }
             }
-            "tools" => self.tools_ui(ui, w, ctx),
-            "plugins" | "ai" => {
-                let text = match id {
-                    "tools" => t("Flux keeps its installer small. Programming languages are downloaded from their official sources only when you need them."),
-                    "plugins" => t("Plugins"),
-                    _ => t("Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer."),
-                };
-                ui.add_space(6.0);
-                ui.add(egui::Label::new(egui::RichText::new(text).font(theme::ui(13.0)).color(p.text2)).wrap());
-                ui.add_space(10.0);
-                ui.label(egui::RichText::new(t("This part is coming to Flux Native soon – for now use it in Flux.")).font(theme::ui(12.5)).color(p.text3));
+            "tools" => self.tools_ui(ui, w, ctx, None),
+            "gh-account" | "gh-git" => self.github_ui(ui, id, w, ctx),
+            "ai-key" | "ai-mcp" => self.ai_settings_ui(ui, id, w, ctx),
+            // zabudované časti ako karty (createPluginsUI({ builtins }))
+            "plugins" => {
+                let cards = [
+                    ("github", "GitHub", t("Open your repositories as projects and sign in with your GitHub account."), Some("github")),
+                    ("sparkle", "Claude AI", t("A coding assistant next to your code (Ctrl+I), with MCP connectors."), Some("ai")),
+                    ("globe", "Live Server", t("Your web page next to the code, reloaded every time you save."), None),
+                    ("download", "Languages", t("Python, Node.js, Java, C/C++ and more, downloaded only when you need them."), Some("tools")),
+                ];
+                let cw = (w - 12.0) / 2.0;
+                let (area, _) = ui.allocate_exact_size(vec2(w, 2.0 * 96.0 + 12.0), Sense::hover());
+                let mut go = None;
+                for (i, (ic, name, desc, tab)) in cards.iter().enumerate() {
+                    let r = Rect::from_min_size(area.min + vec2((i % 2) as f32 * (cw + 12.0), (i / 2) as f32 * 108.0), vec2(cw, 96.0));
+                    let resp = ui.interact(r, ui.id().with(("plug", i)), Sense::click());
+                    let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered() && tab.is_some(), 0.12);
+                    ui.painter().rect_filled(r, CornerRadius::same(14), p.hover.lerp_to_gamma(p.active, hk));
+                    ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
+                    let ir = Rect::from_min_size(r.min + vec2(14.0, 14.0), vec2(34.0, 34.0));
+                    ui.painter().rect_filled(ir, CornerRadius::same(10), p.card2);
+                    widgets::icon_at(ui, ir.center(), 17.0, ic, p.text);
+                    ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 9.0), Align2::LEFT_CENTER, *name, theme::bold(13.5), p.text);
+                    ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, t("Built into Flux"), theme::ui(11.0), p.green);
+                    let mut job = egui::text::LayoutJob::single_section(desc.clone(), egui::TextFormat { font_id: theme::ui(12.0), color: p.text3, ..Default::default() });
+                    job.wrap.max_width = cw - 28.0;
+                    job.wrap.max_rows = 2;
+                    let g = ui.fonts_mut(|f| f.layout_job(job));
+                    ui.painter().galley(pos2(r.left() + 14.0, ir.bottom() + 8.0), g, p.text3);
+                    if let (true, Some(tb)) = (resp.on_hover_cursor(if tab.is_some() { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Default }).clicked(), tab) {
+                        go = Some(*tb);
+                    }
+                }
+                if let Some(tb) = go {
+                    if let Some(st) = self.settings.as_mut() {
+                        st.tab = tb.to_string();
+                        st.spy = None;
+                    }
+                }
             }
             _ => {}
         }
@@ -1082,7 +1181,7 @@ impl App {
 }
 
 // prepínač ako input.switch v Electron Fluxe (36×20, kolieska sa posúva)
-fn switch(ui: &mut egui::Ui, on: &mut bool, p: &crate::theme::Pal, anim: bool) -> bool {
+pub(super) fn switch(ui: &mut egui::Ui, on: &mut bool, p: &crate::theme::Pal, anim: bool) -> bool {
     let (r, resp) = ui.allocate_exact_size(vec2(36.0, 20.0), Sense::click());
     let k = ui.ctx().animate_bool_with_time(resp.id, *on, if anim { 0.14 } else { 0.0 });
     let bg = p.hover.lerp_to_gamma(p.accent, k);

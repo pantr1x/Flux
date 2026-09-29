@@ -26,7 +26,7 @@ for (const f of rsFiles('native/src')) {
   // riadky nastavení (prefs.rs): Row::Toggle("kľúč", "Názov", "Popis"), Row::Button("akcia", "Názov", "Popis", "Tlačidlo"), Row::Info("Názov", …)
   const q = '"((?:\\\\.|[^"\\\\])*)"';
   for (const m of src.matchAll(new RegExp(`Row::(?:Toggle|Select|Range|Text|Color|Number|Button)\\(\\s*"[\\w-]+",\\s*${q}(?:,\\s*${q})?(?:,\\s*${q})?`, 'g'))) for (const v of m.slice(1)) if (v && /[a-z]/i.test(v)) keys.add(v);
-  for (const m of src.matchAll(new RegExp(`Row::Info\\(\\s*${q}`, 'g'))) keys.add(m[1]);
+  for (const m of src.matchAll(new RegExp(`Row::(?:Info|Lead)\\(\\s*${q}`, 'g'))) keys.add(m[1]);
   // nadpisy častí: ("Developer", vec![
   for (const m of src.matchAll(/\(\s*"([A-Z][^"]*)",\s*vec!\[/g)) keys.add(m[1]);
 }

@@ -1,8 +1,10 @@
 // Flux Native – okno v rovnakom rozložení ako Electron Flux: bočný panel (logo, projekty, voľné súbory, strom, Nastavenia),
 // horná lišta (späť/dopredu, karty súborov, hľadanie, AI, ▶ Run), zaoblená karta s editorom + minimapou,
 // Výstupom/Terminálom a stavovým riadkom; bez otvoreného súboru stránka projektu. Logika je v flux-core.
+mod ai;
 mod chrome;
 mod editing;
+mod github;
 mod home;
 mod intro;
 mod menus;
@@ -113,6 +115,9 @@ pub struct App {
     wall_at: f64,                                  // kedy sa naposledy zisťoval zdroj tapety
     pub(crate) upd: crate::update::Updater,
     server: Option<crate::server::Server>, // Live Server (HTML)
+    ok_status: String,                     // hlásenie o úspechu (zelené); ostatné v status sú chyby
+    ai: ai::AiUi,                          // Claude: nastavenia a panel
+    gh: github::GhUi,                      // GitHub účet a repozitáre
     tools: tools::Shared,                  // programovacie jazyky na stiahnutie
     start: bool,                           // domov Fluxu (logo)
     start_q: String,                       // hľadanie projektu na domove
@@ -206,6 +211,9 @@ impl App {
             wall_at: -100.0,
             upd: Default::default(),
             server: None,
+            ok_status: String::new(),
+            ai: Default::default(),
+            gh: Default::default(),
             tools: Default::default(),
             start: false,
             start_q: String::new(),
@@ -416,6 +424,12 @@ impl App {
 
     fn open_settings(&mut self, tab: &str, ctx: &egui::Context) {
         self.settings = Some(prefs::SettingsUi::new(tab, ctx.input(|i| i.time)));
+    }
+
+    // hlásenie o úspechu v stavovom riadku (zelené)
+    fn note(&mut self, s: String) {
+        self.ok_status = s.clone();
+        self.status = s;
     }
 
     fn workspace(&self) -> Option<String> {
@@ -766,6 +780,10 @@ impl App {
                     }
                 }
                 "settings" => self.open_settings(if arg.is_empty() { "general" } else { arg }, ctx),
+                "ai" => self.toggle_ai(),
+                "gh-signin" => self.gh_sign_in(ctx),
+                "gh-pick" => self.gh_pick(ctx),
+                "ask" => self.ai_ask(arg, ctx),
                 "set" => {
                     // set=kľúč:hodnota (JSON), napr. set=panelPos:"right"
                     if let Some((k, v)) = arg.split_once(':') {
@@ -1316,7 +1334,12 @@ impl App {
         ui.painter().rect_filled(ai, CornerRadius::same(10), if ar.hovered() { p.active } else { p.hover });
         widgets::icon_at(ui, pos2(ai.left() + 17.0, cy), 14.0, "sparkle", p.text2);
         ui.painter().text(pos2(ai.left() + 29.0, cy), Align2::LEFT_CENTER, "AI", theme::bold(13.0), p.text2);
-        ar.on_hover_text(t("Claude AI is coming to Flux Native soon"));
+        if self.ai.open {
+            ui.painter().rect_stroke(ai, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        }
+        if ar.on_hover_text(t("Claude AI (Ctrl+I)")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+            self.toggle_ai();
+        }
         rx -= 63.0;
         if self.get("showSearch").as_bool() != Some(false) && self.get("searchWide").as_bool() == Some(true) {
             // široké pole hľadania (body.search-wide #topsearch): 🔍 Search … Ctrl+Shift+A
@@ -2078,7 +2101,7 @@ impl App {
             x = r.right() + 18.0;
         }
         if !self.status.is_empty() {
-            widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &self.status, small.clone(), p.red, (rect.right() - x - 320.0).max(40.0));
+            widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &self.status, small.clone(), if self.status == self.ok_status { p.green } else { p.red }, (rect.right() - x - 320.0).max(40.0));
         }
         // vpravo: aktualizácia (#st-update), Ln/Col, slová, Auto save, jazyk
         let mut rx = rect.right() - 16.0;
@@ -2154,6 +2177,7 @@ impl App {
             let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
             [
                 (i.consume_key(c, egui::Key::P), "quick-open"),
+                (i.consume_key(c, egui::Key::I), "ai"),
                 (i.consume_key(cs, egui::Key::A), "search"),
                 (i.consume_key(cs, egui::Key::P), "commands"),
                 (i.consume_key(cs, egui::Key::N), "new-project"),
@@ -2519,6 +2543,21 @@ impl eframe::App for App {
                     }
                     self.preview_ui(&mut card_ui, pr);
                     main.max.x = pr.left();
+                }
+                // Claude vpravo na karte (šírka sa dá ťahať)
+                if self.ai.open {
+                    if self.ai.width <= 0.0 {
+                        self.ai.width = 380.0;
+                    }
+                    self.ai.width = self.ai.width.clamp(300.0, (main.width() - 320.0).max(300.0));
+                    let ar = Rect::from_min_max(pos2(main.right() - self.ai.width, main.top()), main.max);
+                    let grip = Rect::from_min_max(pos2(ar.left() - 3.0, ar.top()), pos2(ar.left() + 3.0, ar.bottom()));
+                    let gr = card_ui.interact(grip, card_ui.id().with("ai-grip"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeColumn);
+                    if gr.dragged() {
+                        self.ai.width = (self.ai.width - gr.drag_delta().x).max(300.0);
+                    }
+                    self.ai_panel(&mut card_ui, ar);
+                    main.max.x = ar.left();
                 }
                 let show_editor = !self.home && !self.tabs.is_empty();
                 let pos = self.get("panelPos").as_str().unwrap_or("bottom").to_string();
