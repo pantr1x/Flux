@@ -1,5 +1,4 @@
 import * as monaco from 'monaco-editor';
-import { emmetHTML, emmetCSS } from 'emmet-monaco-es';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -938,9 +937,18 @@ function createEditor() {
     toast,
   }));
 
-  // HTML / CSS: Emmet (napr. „div.card>p*3“ + Tab).
-  emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
-  emmetCSS(monaco, ['css', 'scss', 'less'], { tokenizer: 'standard' });
+  // HTML / CSS: Emmet (napr. „div.card>p*3“ + Tab) – načíta sa až pri prvom HTML/CSS súbore.
+  let emmet = null;
+  const needEmmet = (model) => {
+    if (emmet || !['html', 'css', 'scss', 'less'].includes(model.getLanguageId())) return;
+    emmet = import('emmet-monaco-es').then(({ emmetHTML, emmetCSS }) => {
+      emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
+      emmetCSS(monaco, ['css', 'scss', 'less'], { tokenizer: 'standard' });
+    });
+  };
+  monaco.editor.onDidCreateModel(needEmmet);
+  monaco.editor.getModels().forEach(needEmmet);
+  monaco.editor.onDidChangeModelLanguage?.((e) => needEmmet(e.model));
 
   // JavaScript: nápoveda áno, ale bez falošných chýb o chýbajúcich moduloch.
   monaco.typescript?.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false });

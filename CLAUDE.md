@@ -228,6 +228,7 @@ A language needs: an entry in `TOOLCHAINS` (`src/main/toolchains.js` – `probe`
   - The message is sent by a tiny C# helper, `userData/bin/flux-keepactive.exe`. `ensure()` compiles it once with the `csc.exe` of .NET Framework 4 in `%WINDIR%`, so there is no native module, and it changes nothing in the quick-update `base`.
   - Without `csc`, Acrylic simply greys as before. The `keepAcrylic: false` setting turns it off.
   - `FLUX_FAKE_MICA=1` makes Linux tests resolve `auto` to `acrylic`.
+- **MCP bridge never steals focus:** when `mcp-bridge.js` (run by Claude Desktop) has to start Flux, it passes `--background`. `second-instance` ignores such starts, and a first start with it uses `showInactive()`. The bridge file in `userData` is refreshed at every start while the MCP server is on.
 - **Live wallpapers:** `src/main/liveWallpaper.js` → `detect()`.
   - **When it runs:** only when there is no own background and `liveWallpaper` is not off. The result is cached for 10 s.
   - **Lively Wallpaper:** it reads `%LOCALAPPDATA%\Lively Wallpaper\WallpaperLayout.json`, or the Store package path, and then each `LivelyInfo.json`.
@@ -262,6 +263,8 @@ Always on, whatever the settings:
 - **GPU:**
   - Do **not** use `in-process-gpu`. On Windows it left the window blank in 1.4.35.3, although it worked under xvfb.
   - If the GPU process dies (`child-process-gone`, `type: 'GPU'`), Flux sets `settings.gpuSafe = true`, and later starts use `--disable-gpu-compositing`.
+- **Code splitting:** `scripts/build.mjs` builds the renderer with esbuild `splitting: true` (`dist/renderer/chunks/`). Every `import()` becomes its own file, loaded only when needed, e.g. Monaco language tokenizers and modes. Emmet (`emmet-monaco-es`) is imported at the first HTML/CSS model (`needEmmet`). Measured: start 1.9 s → 1.6 s, window process −11 MB.
+- **V8:** `js-flags=--optimize-for-size` (plus `--max-old-space-size=512` with `optJsLimit`). One `js-flags` switch only, because a second `appendSwitch` would replace the first.
 - **Idle trimming:** 2 minutes after the window loses focus, the session cache is cleared and `webFrame.clearCache()` runs (`app:trim`).
 - **Pyright** stops after 5 minutes of the window being unfocused.
 - **Project stats:** `projectStats()` in `main.js` scans only the open project (`workspace`). Other projects get the numbers saved at their last visit (`userData/project-stats.json`, `files: null` when never scanned).

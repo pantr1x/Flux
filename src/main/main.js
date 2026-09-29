@@ -417,7 +417,7 @@ function createWindow() {
     },
   });
   win.removeMenu();
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => (backgroundStart ? win.showInactive() : win.show()));
   win.loadURL('app://flux/index.html');
 
   // Odkazy z editora/preview otvárať v systémovom prehliadači.
@@ -1672,10 +1672,14 @@ app.on('child-process-gone', (_e, d) => {
   saveSettings();
 });
 // Menej pamäte pre JavaScript okna (Advanced → Limit memory of the window) a bez plynulého posúvania, keď sú animácie vypnuté.
-if (settings.optJsLimit ?? settings.lite) app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+// JavaScript motor: menší kód namiesto o chlp rýchlejšieho (meranie: okno −5 MB, štart rovnaký);
+// „Limit memory of the window“ pridá strop haldy.
+app.commandLine.appendSwitch('js-flags', ['--optimize-for-size', ...((settings.optJsLimit ?? settings.lite) ? ['--max-old-space-size=512'] : [])].join(' '));
 if (!optOn('optAnim')) app.commandLine.appendSwitch('disable-smooth-scrolling');
+// Spustenie na pozadí (most MCP pre Claude Desktop) nesmie okno vytiahnuť dopredu ani mu dať fokus.
+const backgroundStart = process.argv.includes('--background');
 app.on('second-instance', (_e, argv, cwd) => {
-  if (!win) return;
+  if (!win || argv.includes('--background')) return;
   const files = filesFromArgv(argv, cwd).map(allowFile).filter(Boolean);
   if (files.length) send('open-files', files);
   if (win.isMinimized()) win.restore();
@@ -1759,7 +1763,13 @@ app.whenReady().then(() => {
   createWindow();
   setTimeout(() => autoUpdateToolchains().catch(() => {}), 20000);
   updater.start();
-  if (settings.mcpServer?.enabled) mcp.start().catch(() => {});
+  if (settings.mcpServer?.enabled) {
+    mcp.start().catch(() => {});
+    // Claude Desktop spúšťa vždy userData/mcp-bridge.js – obnoviť ho, nech má opravy aj bez nového pripojenia
+    try {
+      mcpBridgeFile();
+    } catch {}
+  }
 });
 
 app.on('window-all-closed', () => {

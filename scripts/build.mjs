@@ -24,6 +24,9 @@ await Promise.all([
     entryPoints: { app: 'src/renderer/app.js' },
     outdir: out,
     format: 'esm',
+    // import() (jazyky Monaco, zriedka používané časti Fluxu) → samostatné súbory, načítajú sa až keď treba
+    splitting: true,
+    chunkNames: 'chunks/[name]-[hash]',
   }),
   build({
     ...common,

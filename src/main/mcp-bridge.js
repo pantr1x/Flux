@@ -20,7 +20,8 @@ function launchFlux() {
     delete env.ELECTRON_RUN_AS_NODE;
     // V rozšírení pre Claude Desktop beží most v Node od Claude – cestu k Fluxu dostane v FLUX_EXE.
     const exe = process.env.FLUX_EXE || process.execPath;
-    spawn(exe, [], { detached: true, stdio: 'ignore', env, windowsHide: false }).unref();
+    // --background: Flux sa spustí bez toho, aby ťa vytrhol z programu, v ktorom práve si
+    spawn(exe, ['--background'], { detached: true, stdio: 'ignore', env, windowsHide: false }).unref();
   } catch {}
 }
 async function send(body) {
