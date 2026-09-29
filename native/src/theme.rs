@@ -5,7 +5,6 @@ use std::sync::Arc;
 // rozmery z :root v styles.css
 pub const TOP_H: f32 = 44.0;
 pub const SIDE_W: f32 = 248.0;
-pub const RADIUS: u8 = 14;
 pub const GAP: f32 = 8.0;
 
 #[derive(Clone, Copy)]
@@ -163,7 +162,7 @@ pub fn mono(size: f32) -> FontId {
 }
 
 // Písma Windows (Segoe UI, Cascadia Mono); na Linuxe DejaVu; inak zostanú pribalené písma egui (aj ako záloha znakov).
-pub fn fonts(ctx: &egui::Context) {
+pub fn fonts(ctx: &egui::Context, code_font: &str) {
     let mut defs = FontDefinitions::default();
     let win = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
     let fonts_dir = std::path::Path::new(&win).join("Fonts");
@@ -177,7 +176,29 @@ pub fn fonts(ctx: &egui::Context) {
         }
     };
     add(&mut defs, "ui", &["segoeui.ttf", "DejaVuSans.ttf"], FontFamily::Proportional);
-    add(&mut defs, "code", &["CascadiaMono.ttf", "CascadiaCode.ttf", "consola.ttf", "DejaVuSansMono.ttf"], FontFamily::Monospace);
+    // písmo kódu podľa nastavenia fontFamily (FONTS v app.js), s náhradou
+    let mut files: Vec<&str> = match code_font {
+        "Cascadia Code" => vec!["CascadiaCode.ttf"],
+        "Cascadia Mono" => vec!["CascadiaMono.ttf"],
+        "JetBrains Mono" => vec!["JetBrainsMono-Regular.ttf"],
+        "Fira Code" => vec!["FiraCode-Regular.ttf"],
+        "Courier New" => vec!["cour.ttf"],
+        _ => vec!["consola.ttf"],
+    };
+    files.extend(["CascadiaMono.ttf", "consola.ttf", "DejaVuSansMono.ttf"]);
+    // písma nainštalované len pre používateľa
+    let user = std::env::var("LOCALAPPDATA").map(|l| std::path::Path::new(&l).join("Microsoft\\Windows\\Fonts")).ok();
+    let mut added = false;
+    if let Some(u) = &user {
+        if let Some(b) = std::fs::read(u.join(files[0])).ok() {
+            defs.font_data.insert("code".into(), Arc::new(FontData::from_owned(b)));
+            defs.families.entry(FontFamily::Monospace).or_default().insert(0, "code".into());
+            added = true;
+        }
+    }
+    if !added {
+        add(&mut defs, "code", &files, FontFamily::Monospace);
+    }
     let bold = FontFamily::Name("bold".into());
     defs.families.insert(bold.clone(), fallback);
     add(&mut defs, "ui-bold", &["seguisb.ttf", "segoeuib.ttf", "DejaVuSans-Bold.ttf"], bold);

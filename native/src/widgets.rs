@@ -132,6 +132,13 @@ pub fn icon_button(ui: &mut egui::Ui, name: &str, p: &Pal, enabled: bool) -> Res
     icon_button_at(ui, r, name, 16.0, p, enabled)
 }
 
+static DENSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+// hustota „compact“ – nižšie riadky v bočnom paneli
+pub fn set_dense(on: bool) {
+    DENSE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub enum Lead<'a> {
     File(&'a str),         // meno súboru → farebná ikona
     Folder { open: bool }, // šípka + priečinok
@@ -140,16 +147,18 @@ pub enum Lead<'a> {
 
 // Riadok v bočnom paneli: .row (28 px) alebo dvojriadkový s podnadpisom (projekty, voľné súbory).
 pub fn row(ui: &mut egui::Ui, selected: bool, indent: f32, lead: Lead, name: &str, sub: Option<&str>, bold: bool, p: &Pal) -> Response {
-    let h = if sub.is_some() { 38.0 } else { 28.0 };
+    let dense = DENSE.load(std::sync::atomic::Ordering::Relaxed);
+    let h = match (sub.is_some(), dense) {
+        (true, false) => 38.0,
+        (true, true) => 34.0,
+        (false, false) => 28.0,
+        (false, true) => 24.0,
+    };
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click());
     let hovered = resp.hovered();
-    let bg = if selected {
-        p.active
-    } else if hovered {
-        p.hover
-    } else {
-        Color32::TRANSPARENT
-    };
+    // plynulé zvýraznenie pri prejdení myšou
+    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), hovered, ui.style().animation_time);
+    let bg = if selected { p.active } else { p.hover.gamma_multiply(hk) };
     ui.painter().rect_filled(rect, CornerRadius::same(8), bg);
     let mut x = rect.left() + indent;
     let cy = rect.center().y;

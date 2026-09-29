@@ -40,3 +40,28 @@ fn trim() {
 
 #[cfg(not(windows))]
 fn trim() {}
+
+pub fn trim_now() {
+    trim();
+}
+
+// pamäť programu ako v Správcovi úloh (Windows: súkromná pamäť; Linux: RSS)
+#[cfg(windows)]
+pub fn used_mb() -> Option<f64> {
+    use windows_sys::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS_EX};
+    unsafe {
+        let mut c: PROCESS_MEMORY_COUNTERS_EX = std::mem::zeroed();
+        c.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+        if K32GetProcessMemoryInfo(windows_sys::Win32::System::Threading::GetCurrentProcess(), &mut c as *mut _ as *mut _, c.cb) != 0 {
+            return Some(c.PrivateUsage as f64 / 1048576.0);
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+pub fn used_mb() -> Option<f64> {
+    let s = std::fs::read_to_string("/proc/self/status").ok()?;
+    let kb: f64 = s.lines().find(|l| l.starts_with("VmRSS:"))?.split_whitespace().nth(1)?.parse().ok()?;
+    Some(kb / 1024.0)
+}

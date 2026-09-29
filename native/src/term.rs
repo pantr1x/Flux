@@ -32,13 +32,14 @@ pub struct TermView {
     rows: usize,
     pub pty: Pty,
     id: egui::Id,
+    pub font_size: f32,
 }
 
 impl TermView {
     pub fn new(id: &str) -> Self {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
-        TermView { term: Term::new(config, &size, VoidListener), parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id) }
+        TermView { term: Term::new(config, &size, VoidListener), parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0 }
     }
 
     pub fn feed(&mut self, text: &str) {
@@ -152,7 +153,7 @@ impl TermView {
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui, p: &Pal) {
-        let font = FontId::monospace(13.0);
+        let font = FontId::monospace(self.font_size);
         let (cw, ch) = ui.fonts_mut(|f| (f.glyph_width(&font, 'M'), f.row_height(&font)));
         let avail = ui.available_size();
         let (rect, _) = ui.allocate_exact_size(avail, Sense::hover());
