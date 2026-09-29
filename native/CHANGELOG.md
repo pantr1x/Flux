@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.8.4 – 2026-09-29
+
+### Fixed: Flux Native did not open with Lively Wallpaper or Wallpaper Engine
+- Since 0.7.0 Flux made its window see-through when you use a live wallpaper. On Windows that window stayed **invisible**: Flux ran only in the background. The see-through window is off now; Flux shows a still frame of your live wallpaper (or plays it with *Play inside Flux*).
+- Invisible Flux processes that are still running from before are closed when you start Flux, so you can rename or replace the program again.
+- If Flux has no visible window 12 seconds after start, it restarts itself in safe mode.
+
 ## 0.8.3 – 2026-09-29
 
 ### Flux Native starts again

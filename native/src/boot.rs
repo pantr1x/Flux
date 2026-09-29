@@ -33,6 +33,9 @@ pub fn begin() {
     let stage = last["stage"].as_str().unwrap_or("closed");
     let mut fails = last["fails"].as_u64().unwrap_or(0).min(9) as u8;
     let forced = std::env::var("FLUX_SAFE").as_deref() == Ok("1");
+    if stage == "hidden" {
+        fails = fails.max(1);
+    }
     if stage == "starting" || stage == "window" {
         fails += 1;
         // minulá inštancia ešte beží bez okna → ukončiť, inak by sa hromadili neviditeľné procesy
@@ -43,7 +46,7 @@ pub fn begin() {
     FAILS.store(fails, Ordering::Relaxed);
     if fails > 0 || forced {
         SAFE.store(true, Ordering::Relaxed);
-        if !forced {
+        if !forced || stage == "hidden" {
             crate::notice(&format!(
                 "Flux Native did not start properly last time (stage: {stage}), so it is starting in safe mode now: no see-through window and no wallpaper{}.\n\nIf it works, it will start normally next time.",
                 if fails >= 2 { ", simpler graphics" } else { "" }
@@ -124,3 +127,92 @@ pub fn catch_hard_crashes() {
 
 #[cfg(not(windows))]
 pub fn catch_hard_crashes() {}
+
+// má proces viditeľné okno najvyššej úrovne?
+#[cfg(windows)]
+fn has_visible_window(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible};
+    struct Q {
+        pid: u32,
+        found: bool,
+    }
+    unsafe extern "system" fn each(h: HWND, l: LPARAM) -> i32 {
+        let q = unsafe { &mut *(l as *mut Q) };
+        let mut p = 0u32;
+        unsafe { GetWindowThreadProcessId(h, &mut p) };
+        if p == q.pid && unsafe { IsWindowVisible(h) } != 0 {
+            q.found = true;
+            return 0;
+        }
+        1
+    }
+    let mut q = Q { pid, found: false };
+    unsafe { EnumWindows(Some(each), &mut q as *mut Q as LPARAM) };
+    q.found
+}
+
+// „duchovia“: iné procesy Flux Native bez viditeľného okna (napr. z priehľadného okna vo verziách 0.7–0.8.3)
+// blokujú premenovanie aj prepísanie programu – ukončiť ich
+#[cfg(windows)]
+pub fn kill_ghosts() {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
+    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    let me = std::process::id();
+    let mut ghosts = vec![];
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return;
+        }
+        let mut e: PROCESSENTRY32W = std::mem::zeroed();
+        e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut ok = Process32FirstW(snap, &mut e) != 0;
+        while ok {
+            let n = e.szExeFile.iter().position(|c| *c == 0).unwrap_or(e.szExeFile.len());
+            let name = String::from_utf16_lossy(&e.szExeFile[..n]).to_lowercase();
+            if e.th32ProcessID != me && name.starts_with("flux-native") && name.ends_with(".exe") {
+                ghosts.push(e.th32ProcessID);
+            }
+            ok = Process32NextW(snap, &mut e) != 0;
+        }
+        CloseHandle(snap);
+    }
+    for pid in ghosts {
+        if !has_visible_window(pid) {
+            unsafe {
+                let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
+                if !h.is_null() {
+                    TerminateProcess(h, 1);
+                    CloseHandle(h);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn kill_ghosts() {}
+
+// strážca: ak po 12 s nemá Flux viditeľné okno, spustí sa znova v núdzovom režime a tento proces skončí
+#[cfg(windows)]
+pub fn watchdog() {
+    if safe() {
+        return;
+    }
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(12));
+        if has_visible_window(std::process::id()) {
+            return;
+        }
+        write("hidden", FAILS.load(Ordering::Relaxed).saturating_add(1));
+        if let Ok(e) = std::env::current_exe() {
+            let _ = std::process::Command::new(e).env("FLUX_SAFE", "1").spawn();
+        }
+        std::process::exit(2);
+    });
+}
+
+#[cfg(not(windows))]
+pub fn watchdog() {}

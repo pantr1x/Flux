@@ -63,6 +63,11 @@ jobs:
           $problems = @()
           if ($p.HasExited) { $problems += "Flux Native exited (code $($p.ExitCode))" }
           elseif ($p.MainWindowHandle -eq 0) { $problems += "Flux Native runs but has no window" }
+          else {
+            # okno musí byť naozaj viditeľné (priehľadné okno vo verziách 0.7–0.8.3 bolo neviditeľné)
+            Add-Type -Name W -Namespace U -MemberDefinition '[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);'
+            if (-not [U.W]::IsWindowVisible($p.MainWindowHandle)) { $problems += "Flux Native window is not visible" }
+          }
           if (Test-Path $crash) { $problems += "crash log: $(Get-Content $crash -Raw)" }
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           Remove-Item Env:FLUX_TEST, Env:FLUX_USER_DATA

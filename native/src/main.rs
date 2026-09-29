@@ -29,7 +29,8 @@ pub fn want_transparent() -> bool {
     s["material"].as_str() != Some("none")
         && on("optFx", !lite)
         && on("liveWallpaper", true)
-        && s["liveWallMode"].as_str().unwrap_or("see") == "see"
+        && s["liveWallMode"].as_str() == Some("see")
+        && std::env::var("FLUX_SEE_THROUGH").as_deref() == Ok("1")
         && !s["bg"]["type"].is_string()
         && s["liveCache"]["file"].is_string()
         && !boot::safe()
@@ -87,7 +88,9 @@ fn main() -> eframe::Result {
     // po aktualizácii: .new preč, .old zatiaľ ostane (návrat, ak by nová verzia hneď spadla)
     update::cleanup(true);
     boot::catch_hard_crashes();
+    boot::kill_ghosts();
     boot::begin();
+    boot::watchdog();
     let started = std::time::Instant::now();
     std::panic::set_hook(Box::new(move |info| {
         let at = info.location().map(|l| format!(" at {}:{}", l.file(), l.line())).unwrap_or_default();
