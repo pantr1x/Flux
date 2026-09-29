@@ -8,8 +8,9 @@ use std::sync::{Arc, Mutex};
 #[derive(Default)]
 pub struct Wall {
     tex: Option<TextureHandle>,
-    pending: Arc<Mutex<Option<ColorImage>>>,
+    pending: Arc<Mutex<Option<(ColorImage, f32)>>>,
     source: Option<PathBuf>,
+    pub lum: Option<f32>, // priemerný jas tapety 0–1 (na prispôsobenie panelov)
 }
 
 // tapeta Windows (SystemParametersInfo), na testy FLUX_WALLPAPER
@@ -39,26 +40,40 @@ impl Wall {
         }
         self.source = src.clone();
         self.tex = None;
+        self.lum = None;
         let Some(path) = src else { return };
         let slot = self.pending.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let Ok(img) = image::open(&path) else { return };
-            // zmenšiť na najviac 2560 px na šírku – ostrosť stačí, pamäť ušetrí
-            let img = if img.width() > 2560 { img.resize(2560, 2560 * img.height() / img.width().max(1), image::imageops::FilterType::Triangle) } else { img };
+            // zmenšiť na najviac 1920 px na šírku – ostrosť na ploche stačí a textúra zaberie ~9 MB
+            let img = if img.width() > 1920 { img.resize(1920, 1920 * img.height() / img.width().max(1), image::imageops::FilterType::Triangle) } else { img };
             let rgba = img.to_rgba8();
+            drop(img);
+            // priemerný jas (každý 16. bod stačí)
+            let (mut sum, mut n) = (0f64, 0f64);
+            for px in rgba.pixels().step_by(16) {
+                sum += (0.299 * px[0] as f64 + 0.587 * px[1] as f64 + 0.114 * px[2] as f64) / 255.0;
+                n += 1.0;
+            }
             let size = [rgba.width() as usize, rgba.height() as usize];
-            *slot.lock().unwrap() = Some(ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()));
+            let ci = ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+            drop(rgba);
+            *slot.lock().unwrap() = Some((ci, (sum / n.max(1.0)) as f32));
             ctx.request_repaint();
         });
     }
 
     // kreslí tapetu do pozadia okna, zarovnanú s plochou (výplň „cover“ cez celý monitor)
-    pub fn paint(&mut self, ctx: &egui::Context) {
-        if let Some(img) = self.pending.lock().unwrap().take() {
+    // vráti true, keď sa práve načítala nová tapeta (treba prepočítať farby panelov)
+    pub fn paint(&mut self, ctx: &egui::Context) -> bool {
+        let mut fresh = false;
+        if let Some((img, lum)) = self.pending.lock().unwrap().take() {
             self.tex = Some(ctx.load_texture("flux-wall", img, TextureOptions::LINEAR));
+            self.lum = Some(lum);
+            fresh = true;
         }
-        let Some(tex) = &self.tex else { return };
+        let Some(tex) = &self.tex else { return fresh };
         let screen = ctx.content_rect();
         let (inner, monitor) = ctx.input(|i| (i.viewport().inner_rect, i.viewport().monitor_size));
         let [iw, ih] = tex.size();
@@ -72,5 +87,6 @@ impl Wall {
         let img_rect = Rect::from_center_size(area.center(), egui::vec2(iw * k, ih * k));
         let painter = ctx.layer_painter(egui::LayerId::background());
         painter.image(tex.id(), img_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        fresh
     }
 }

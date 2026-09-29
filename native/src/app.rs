@@ -220,7 +220,10 @@ impl App {
         // tapeta za oknom: pozadie a karta sú priesvitné (--base-alpha, --card v Electron Fluxe)
         if self.wall_on() {
             let alpha = (self.get("cardAlpha").as_f64().unwrap_or(74.0) / 100.0).clamp(0.3, 1.0) as f32;
-            let base_a = if p.dark { 0.45 } else { 0.5 };
+            // adaptColors: pri svetlej tapete v tmavej téme (a naopak) sú panely menej priesvitné, aby bol text čitateľný
+            let lum = self.wall.lum.unwrap_or(0.3);
+            let clash = if p.dark { (lum - 0.25).max(0.0) } else { (0.65 - lum).max(0.0) };
+            let base_a = if p.dark { 0.45 } else { 0.5 } + (clash * 0.9).min(0.4);
             let card_a = if (alpha - 0.74).abs() > 0.001 {
                 alpha
             } else if p.dark {
@@ -1951,7 +1954,9 @@ impl eframe::App for App {
         self.events();
         self.run_tests(ctx);
         // tapeta pod všetkým (panely sú nad ňou priesvitné)
-        self.wall.paint(ctx);
+        if self.wall.paint(ctx) {
+            self.apply_look(ctx);
+        }
         // pamäť na pozadí (trimMemory, predvolene zapnuté)
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
         if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {
