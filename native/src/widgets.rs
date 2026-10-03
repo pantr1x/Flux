@@ -148,6 +148,12 @@ pub enum Lead<'a> {
 
 // Riadok v bočnom paneli: .row (28 px) alebo dvojriadkový s podnadpisom (projekty, voľné súbory).
 pub fn row(ui: &mut egui::Ui, selected: bool, indent: f32, lead: Lead, name: &str, sub: Option<&str>, bold: bool, p: &Pal) -> Response {
+    row_ex(ui, selected, true, indent, lead, name, sub, bold, p)
+}
+
+// fill = false: vybraný riadok bez vlastnej výplne (kreslí ju kĺzavé zvýraznenie, napr. strom súborov)
+#[allow(clippy::too_many_arguments)]
+pub fn row_ex(ui: &mut egui::Ui, selected: bool, fill: bool, indent: f32, lead: Lead, name: &str, sub: Option<&str>, bold: bool, p: &Pal) -> Response {
     let dense = DENSE.load(std::sync::atomic::Ordering::Relaxed);
     let h = match (sub.is_some(), dense) {
         (true, false) => 38.0,
@@ -159,7 +165,13 @@ pub fn row(ui: &mut egui::Ui, selected: bool, indent: f32, lead: Lead, name: &st
     let hovered = resp.hovered();
     // plynulé zvýraznenie pri prejdení myšou
     let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), hovered, ui.style().animation_time);
-    let bg = if selected { p.active } else { p.hover.gamma_multiply(hk) };
+    let bg = if selected && fill {
+        p.active
+    } else if selected {
+        Color32::TRANSPARENT
+    } else {
+        p.hover.gamma_multiply(hk)
+    };
     ui.painter().rect_filled(rect, CornerRadius::same(8), bg);
     let mut x = rect.left() + indent;
     let cy = rect.center().y;

@@ -107,6 +107,7 @@ pub struct App {
     settings: Option<prefs::SettingsUi>,
     switched: f64, // čas poslednej zmeny obsahu karty (animácia prechodu)
     nav_dir: f32,
+    tree_sel: Option<Rect>,     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>, // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
     panel_w: f32,
@@ -212,6 +213,7 @@ impl App {
             settings: None,
             switched: 0.0,
             nav_dir: 0.0,
+            tree_sel: None,
             live_push: None,
             shown: String::new(),
             panel_w: 420.0,
@@ -523,6 +525,10 @@ impl App {
     }
 
     fn activate(&mut self, i: usize) {
+        // prepnutie karty: obsah príde zo strany, kde karta leží (späť/dopredu má svoj smer z go())
+        if self.nav_dir == 0.0 && (i != self.active || self.home) {
+            self.nav_dir = if self.home || i > self.active { 0.6 } else { -0.6 };
+        }
         self.active = i;
         self.home = false;
     }
@@ -1160,7 +1166,17 @@ impl App {
                         sa = sa.vertical_scroll_offset(o);
                     }
                     let sout = sa.show(ui, |ui| {
+                        // zvýraznenie otvoreného súboru kĺže k novému riadku (slideIndicator v Electron Fluxe)
+                        let bg = ui.painter().add(egui::Shape::Noop);
+                        let origin = ui.min_rect().top();
+                        self.tree_sel = None;
                         self.tree_ui(ui, &w, 0);
+                        if let Some(r) = self.tree_sel {
+                            let t = if self.anim_on() { 0.2 } else { 0.0 };
+                            let y = ui.ctx().animate_value_with_time(egui::Id::new("tree-glide"), r.top() - origin, t);
+                            let gr = Rect::from_min_size(pos2(r.left(), origin + y), r.size());
+                            ui.painter().set(bg, egui::Shape::rect_filled(gr, CornerRadius::same(8), self.pal.active));
+                        }
                     });
                     self.smooth.end(sk, &sout);
                 } else {
@@ -1264,7 +1280,11 @@ impl App {
             let dirty = self.tabs.iter().any(|t| t.path == path && t.dirty());
             let lead = if is_dir { Lead::Folder { open } } else { Lead::File(&name) };
             let ind = if is_dir { indent } else { indent + 20.0 };
-            let r = widgets::row(ui, active, ind, lead, &name, None, false, &p);
+            // aktívny riadok bez vlastnej výplne – kreslí ju kĺzavé zvýraznenie v strome
+            let r = widgets::row_ex(ui, active, false, ind, lead, &name, None, false, &p);
+            if active {
+                self.tree_sel = Some(r.rect);
+            }
             self.tree_menu(&r, &path, is_dir);
             if dirty {
                 ui.painter().circle_filled(pos2(r.rect.right() - 12.0, r.rect.center().y), 3.0, p.accent);

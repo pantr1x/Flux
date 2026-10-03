@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.1 – 2026-10-03
+
+### Smoother switching between files
+- The highlight in the file tree **glides** to the file you click.
+- Switching tabs or files slides the code in from the side where the tab is (left or right) while it fades in.
+
 ## 0.9.0 – 2026-10-03
 
 ### Projects and files
