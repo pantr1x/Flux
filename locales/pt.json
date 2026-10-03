@@ -861,6 +861,7 @@
  "The selected file is not a working Python.": "O arquivo selecionado não é um Python que funcione.",
  "The terminal could not start on this computer.": "Não foi possível iniciar o terminal neste computador.",
  "The terminal has ended. Press Enter to start a new one.": "O terminal terminou. Pressione Enter para abrir um novo.",
+ "The update file was missing, so Flux is downloading it again.": "O arquivo da atualização estava faltando, então o Flux está baixando de novo.",
  "The video plays muted in the background, blurred like the wallpaper.": "O vídeo toca sem som no fundo, desfocado como o papel de parede.",
  "Theme studio": "Estúdio de temas",
  "Theme {file} has an error: {msg}": "O tema {file} tem um erro: {msg}",

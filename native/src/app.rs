@@ -294,6 +294,8 @@ impl App {
         if let Ok(t) = std::env::var("FLUX_TEST") {
             app.test = t.split(';').filter_map(|p| p.split_once(':').map(|(a, b)| (a.parse().unwrap_or(0.0), b.to_string()))).collect();
         }
+        // obrázky (ikony SVG): po nahratí do grafickej karty zahodiť kópiu v RAM
+        cc.egui_ctx.options_mut(|o| o.reduce_texture_memory = true);
         app.apply_look(&cc.egui_ctx);
         // tichá aktualizácia zbaleného okna: nový Flux tiež zbalený
         if std::env::args().any(|a| a == "--minimized") {
@@ -2705,6 +2707,8 @@ impl eframe::App for App {
             self.wall.want(ctx, src);
         }
         self.wall.set_playing(focused && !minimized && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true)));
+        // farbenie kódu (syntect) sa uvoľní po 2 min bez kódu na obrazovke
+        self.code.release_if_idle(Duration::from_secs(120));
         if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {
             ctx.request_repaint_after(d);
         }

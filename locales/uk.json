@@ -861,6 +861,7 @@
  "The selected file is not a working Python.": "Вибраний файл не є робочим Python.",
  "The terminal could not start on this computer.": "Не вдалося запустити термінал на цьому комп’ютері.",
  "The terminal has ended. Press Enter to start a new one.": "Термінал завершив роботу. Натисніть Enter, щоб відкрити новий.",
+ "The update file was missing, so Flux is downloading it again.": "Файл оновлення зник, тож Flux завантажує його знову.",
  "The video plays muted in the background, blurred like the wallpaper.": "Відео грає без звуку на фоні, розмите як шпалери.",
  "Theme studio": "Студія тем",
  "Theme {file} has an error: {msg}": "Тема {file} має помилку: {msg}",

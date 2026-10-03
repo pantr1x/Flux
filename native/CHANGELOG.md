@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.4 – 2026-10-03
+
+### Restart to update
+- **Fixed:** *Restart to update* showed "The system cannot find the file specified" when the downloaded update was gone (removed by an antivirus or by the bug fixed in 0.9.2). Flux now downloads it again by itself and offers the restart once it is ready.
+
+### Less memory
+- Code coloring (the definitions of all languages, about 11 MB) is loaded only when code is on screen and freed after 2 minutes without code.
+- Icons are no longer kept twice (in RAM and on the graphics card).
+
 ## 0.9.3 – 2026-10-03
 
 ### New file, like New project

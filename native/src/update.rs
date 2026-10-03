@@ -35,6 +35,7 @@ pub struct Updater {
     pub state: Arc<Mutex<State>>,
     info: Arc<Mutex<Option<Info>>>,
     pub last_check: f64,
+    ctx: Option<egui::Context>, // pre opätovné stiahnutie z install()
 }
 
 fn base() -> String {
@@ -106,7 +107,7 @@ pub fn enabled() -> bool {
 
 impl Default for Updater {
     fn default() -> Self {
-        Self { state: Arc::new(Mutex::new(State::Idle)), info: Default::default(), last_check: -1e9 }
+        Self { state: Arc::new(Mutex::new(State::Idle)), info: Default::default(), last_check: -1e9, ctx: None }
     }
 }
 
@@ -138,6 +139,7 @@ impl Updater {
             return;
         }
         self.last_check = now;
+        self.ctx = Some(ctx.clone());
         self.set(State::Checking, ctx);
         let (state, info, ctx) = (self.state.clone(), self.info.clone(), ctx.clone());
         std::thread::spawn(move || {
@@ -185,9 +187,16 @@ impl Updater {
         }
         let e = exe().ok_or("no exe")?;
         let new = e.with_extension("new");
+        // stiahnutý súbor zmizol (antivírus, upratovanie starej verzie) → stiahnuť znova, potom znova „Restart to update“
         if !new.exists() {
-            *self.state.lock().unwrap() = State::Idle;
-            return Err(crate::i18n::t("Download failed"));
+            let (state, info) = (self.state.clone(), self.info.clone());
+            let has = info.lock().unwrap().is_some();
+            if let (Some(ctx), true) = (self.ctx.clone(), has) {
+                std::thread::spawn(move || download_now(&state, &info, &ctx));
+            } else {
+                *self.state.lock().unwrap() = State::Idle;
+            }
+            return Err(crate::i18n::t("The update file was missing, so Flux is downloading it again."));
         }
         let old = e.with_extension("old");
         // .old môže ešte bežať (starý Flux, most MCP pre Claude) → vtedy sa nedá zmazať; program ide inam

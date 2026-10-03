@@ -851,6 +851,7 @@
  "The selected file is not a working Python.",
  "The terminal could not start on this computer.",
  "The terminal has ended. Press Enter to start a new one.",
+ "The update file was missing, so Flux is downloading it again.",
  "The video plays muted in the background, blurred like the wallpaper.",
  "Theme studio",
  "Theme {file} has an error: {msg}",

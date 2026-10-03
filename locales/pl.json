@@ -875,6 +875,7 @@
  "The terminal could not start on this computer.": "Nie udało się uruchomić terminala na tym komputerze.",
  "The terminal has ended. Press Enter to start a new one.": "Terminal zakończył działanie. Naciśnij Enter, aby otworzyć nowy.",
  "The token is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.": "Token jest zapisany zaszyfrowany na tym komputerze. Możesz się rozłączyć w Ustawienia → GitHub.",
+ "The update file was missing, so Flux is downloading it again.": "Brakowało pliku aktualizacji, więc Flux pobiera go ponownie.",
  "The video plays muted in the background, blurred like the wallpaper.": "Wideo odtwarza się bez dźwięku w tle, rozmyte jak tapeta.",
  "Theme studio": "Studio motywu",
  "Theme {file} has an error: {msg}": "Motyw {file} zawiera błąd: {msg}",

@@ -8,8 +8,11 @@ use syntect::highlighting::{Color, ScopeSelectors, StyleModifier, Theme, ThemeIt
 
 pub struct Code {
     pub dark: bool,
-    settings: SyntectSettings,
+    // syntect sa načíta až pri prvom kóde a uvoľní sa, keď sa dlho nepoužíva (definície jazykov ~11 MB)
+    settings: std::cell::RefCell<Option<SyntectSettings>>,
+    flux_theme: Theme,
     theme: CodeTheme,
+    used: std::cell::Cell<Option<std::time::Instant>>,
 }
 
 fn col(c: u32) -> Color {
@@ -49,15 +52,30 @@ impl Code {
             .filter_map(|(sel, key)| Some(ThemeItem { scope: ScopeSelectors::from_str(sel).ok()?, style: StyleModifier { foreground: Some(col(k(key))), background: None, font_style: None } }))
             .collect();
         let theme = Theme { name: Some(id.into()), author: None, settings: ThemeSettings { foreground: Some(col(k("fg"))), ..Default::default() }, scopes };
-        // egui_extras vyberá tému podľa mena – obe mená (tmavá/svetlá) ukazujú na tú istú tému Fluxu
-        let mut ts = ThemeSet::new();
-        ts.themes.insert("base16-mocha.dark".into(), theme.clone());
-        ts.themes.insert("Solarized (light)".into(), theme);
-        Code { dark, settings: SyntectSettings { ps: syntect::parsing::SyntaxSet::load_defaults_newlines(), ts }, theme: if dark { CodeTheme::dark(14.0) } else { CodeTheme::light(14.0) } }
+        Code { dark, settings: Default::default(), flux_theme: theme, theme: if dark { CodeTheme::dark(14.0) } else { CodeTheme::light(14.0) }, used: Default::default() }
     }
 
     // zapamätané (egui cache podľa textu a adresy nastavení), dá sa volať každý snímok
     pub fn highlight(&self, ctx: &egui::Context, style: &egui::Style, code: &str, lang: &str) -> egui::text::LayoutJob {
-        egui_extras::syntax_highlighting::highlight_with(ctx, style, &self.theme, code, lang, &self.settings)
+        self.used.set(Some(std::time::Instant::now()));
+        let mut s = self.settings.borrow_mut();
+        let set = s.get_or_insert_with(|| SyntectSettings { ps: syntect::parsing::SyntaxSet::load_defaults_newlines(), ts: self.theme_set() });
+        egui_extras::syntax_highlighting::highlight_with(ctx, style, &self.theme, code, lang, set)
+    }
+
+    // egui_extras vyberá tému podľa mena – obe mená (tmavá/svetlá) ukazujú na tú istú tému Fluxu
+    fn theme_set(&self) -> ThemeSet {
+        let mut ts = ThemeSet::new();
+        ts.themes.insert("base16-mocha.dark".into(), self.flux_theme.clone());
+        ts.themes.insert("Solarized (light)".into(), self.flux_theme.clone());
+        ts
+    }
+
+    // kód nebol na obrazovke dlhšie ako `idle` → uvoľniť syntect (pri ďalšom kóde sa načíta znova)
+    pub fn release_if_idle(&self, idle: std::time::Duration) {
+        if self.used.get().is_some_and(|t| t.elapsed() > idle) {
+            self.used.set(None);
+            *self.settings.borrow_mut() = None;
+        }
     }
 }

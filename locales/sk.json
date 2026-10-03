@@ -919,6 +919,7 @@
  "The terminal could not start on this computer.": "Terminál sa na tomto počítači nepodarilo spustiť.",
  "The terminal has ended. Press Enter to start a new one.": "Terminál skončil. Stlač Enter pre nový.",
  "The token is stored encrypted on this computer. You can disconnect any time in Settings → GitHub.": "Token je v počítači uložený zašifrovane. Odpojiť sa môžeš kedykoľvek v Nastavenia → GitHub.",
+ "The update file was missing, so Flux is downloading it again.": "Súbor aktualizácie chýbal, Flux ho preto sťahuje znova.",
  "The video plays muted in the background, blurred like the wallpaper.": "Video hrá na pozadí bez zvuku, rozmazané ako tapeta.",
  "Theme studio": "Štúdio témy",
  "Theme {file} has an error: {msg}": "Téma {file} má chybu: {msg}",
