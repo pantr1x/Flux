@@ -175,6 +175,15 @@ pub fn report(msg: &str) {
 
 fn main() -> eframe::Result {
     // most pre Claude Desktop: stdin/stdout ↔ MCP server bežiaceho Fluxu, bez okna
+    // CI: rozdiel oproti predošlej zostave (update.rs)
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() == 5 && args[1] == "--make-patch" {
+        if let Err(e) = update::make_patch(args[2].as_ref(), args[3].as_ref(), args[4].as_ref()) {
+            eprintln!("make-patch: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--mcp-bridge") {
         mcp::bridge();
         return Ok(());

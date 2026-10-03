@@ -502,7 +502,8 @@ impl App {
         theme::apply(ctx, &self.pal);
         ctx.set_zoom_factor((self.get("uiZoom").as_f64().unwrap_or(100.0) / 100.0).clamp(0.8, 1.4) as f32);
         widgets::set_dense(self.get("density").as_str() == Some("compact"));
-        let inertia = self.get("inertia").as_bool() != Some(false) && self.anim_on();
+        // plynulé skrolovanie závisí len od svojho prepínača (a šetrenia pamäte), nie od animácií prechodov
+        let inertia = self.get("inertia").as_bool() != Some(false) && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true));
         self.smooth.on = inertia;
         ctx.all_styles_mut(|s| {
             s.scroll_animation = if inertia { egui::style::ScrollAnimation::new(1600.0, egui::Rangef::new(0.12, 0.3)) } else { egui::style::ScrollAnimation::none() };

@@ -214,7 +214,21 @@ jobs:
           # native.json: podľa neho sa Flux Native aktualizuje z Nastavení (update.rs porovná sha so svojím FLUX_SHA)
           $ver = (Select-String -Path native\Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           $hash = (Get-FileHash out\Flux-Native.exe -Algorithm SHA256).Hash.ToLower()
-          @{ version = $ver; sha = $env:GITHUB_SHA; sha256 = $hash; size = (Get-Item out\Flux-Native.exe).Length } | ConvertTo-Json | Set-Content out\native.json -Encoding utf8NoBOM
+          $info = @{ version = $ver; sha = $env:GITHUB_SHA; sha256 = $hash; size = (Get-Item out\Flux-Native.exe).Length }
+          # rozdiel oproti predošlej zostave v ci-native (zstd patch-from): aktualizácia stiahne len zmenu
+          try {
+            $raw = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/ci-native"
+            $prev = Invoke-RestMethod -TimeoutSec 60 "$raw/native.json"
+            Invoke-WebRequest -UseBasicParsing -TimeoutSec 120 "$raw/Flux-Native.exe" -OutFile "$env:RUNNER_TEMP\prev.exe"
+            if ($prev.sha -and $prev.sha -ne $env:GITHUB_SHA -and (Get-FileHash "$env:RUNNER_TEMP\prev.exe" -Algorithm SHA256).Hash.ToLower() -eq $prev.sha256) {
+              $p = Start-Process out\Flux-Native.exe -ArgumentList '--make-patch', "$env:RUNNER_TEMP\prev.exe", 'out\Flux-Native.exe', 'out\Flux-Native.patch' -Wait -PassThru -NoNewWindow
+              if ($p.ExitCode -eq 0 -and (Test-Path out\Flux-Native.patch)) {
+                $info.patch = @{ from = $prev.sha; sha256 = (Get-FileHash out\Flux-Native.patch -Algorithm SHA256).Hash.ToLower(); size = (Get-Item out\Flux-Native.patch).Length }
+                Write-Host "patch from $($prev.version): $([math]::Round($info.patch.size / 1KB)) kB"
+              }
+            }
+          } catch { Write-Host "no patch: $_" }
+          $info | ConvertTo-Json | Set-Content out\native.json -Encoding utf8NoBOM
           $report | ForEach-Object { Write-Host $_ }
           "## Memory`n``````n$($report -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
       # native.json v ci-native = kanál aktualizácií: len zostava, ktorá prešla smoke testom

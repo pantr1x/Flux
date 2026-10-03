@@ -29,6 +29,10 @@ struct Info {
     sha: String,
     sha256: String,
     size: u64,
+    // rozdiel oproti predošlej zostave (Flux-Native.patch): stiahne sa len zmena, nie celý program
+    patch_from: String,
+    patch_sha256: String,
+    patch_size: u64,
 }
 
 pub struct Updater {
@@ -168,6 +172,9 @@ impl Updater {
                 sha: j["sha"].as_str().unwrap_or("").into(),
                 sha256: j["sha256"].as_str().unwrap_or("").to_lowercase(),
                 size: j["size"].as_u64().unwrap_or(0),
+                patch_from: j["patch"]["from"].as_str().unwrap_or("").into(),
+                patch_sha256: j["patch"]["sha256"].as_str().unwrap_or("").to_lowercase(),
+                patch_size: j["patch"]["size"].as_u64().unwrap_or(0),
             };
             if let Some(rs) = &ready_sha {
                 // stiahnutá je stále najnovšia → nič; inak stiahnuť novšiu namiesto nej
@@ -242,6 +249,68 @@ impl Updater {
     }
 }
 
+// ---------- rozdielové aktualizácie (zstd „patch-from“: nová zostava skomprimovaná voči predošlej) ----------
+
+const PATCH_WINDOW: u32 = 26; // 64 MB okno – pokryje starý aj nový program
+
+// CI: Flux-Native.exe --make-patch <stará> <nová> <výstup>
+pub fn make_patch(old: &std::path::Path, new: &std::path::Path, out: &std::path::Path) -> std::io::Result<()> {
+    use std::io::Write;
+    let (old_b, new_b) = (std::fs::read(old)?, std::fs::read(new)?);
+    let mut enc = zstd::stream::write::Encoder::with_ref_prefix(std::fs::File::create(out)?, 19, &old_b)?;
+    enc.window_log(PATCH_WINDOW)?;
+    enc.long_distance_matching(true)?;
+    enc.include_checksum(true)?;
+    enc.write_all(&new_b)?;
+    enc.finish()?;
+    Ok(())
+}
+
+pub fn apply_patch(old: &[u8], patch: &[u8]) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    let mut dec = zstd::stream::read::Decoder::with_ref_prefix(patch, old)?;
+    dec.window_log_max(PATCH_WINDOW)?;
+    let mut out = Vec::new();
+    dec.read_to_end(&mut out)?;
+    Ok(out)
+}
+
+// stiahne súbor do `to` cez curl s priebehom (veľkosť na disku)
+fn fetch(url: &str, to: &std::path::Path, total: u64, set: &dyn Fn(State)) -> bool {
+    let child = curl().args(["-fsSL", "--max-time", "600", "-o"]).arg(to).arg(url).spawn();
+    let Ok(mut child) = child else { return false };
+    loop {
+        match child.try_wait() {
+            Ok(Some(st)) => return st.success(),
+            Ok(None) => {
+                let got = std::fs::metadata(to).map(|m| m.len()).unwrap_or(0);
+                set(State::Downloading { got, total });
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(_) => return false,
+        }
+    }
+}
+
+// rozdiel pre túto zostavu → hotový nový program v `new`; false = treba stiahnuť celý
+fn try_patch(i: &Info, e: &std::path::Path, new: &std::path::Path, set: &dyn Fn(State)) -> bool {
+    if i.patch_from.is_empty() || i.patch_from != SHA || i.patch_sha256.is_empty() {
+        return false;
+    }
+    let pf = e.with_extension("patch");
+    let _ = std::fs::remove_file(&pf);
+    let ok = fetch(&format!("{}Flux-Native.patch", base()), &pf, i.patch_size, set);
+    let patch = if ok { std::fs::read(&pf).ok() } else { None };
+    let _ = std::fs::remove_file(&pf);
+    let Some(patch) = patch.filter(|p| format!("{:x}", Sha256::digest(p)) == i.patch_sha256) else { return false };
+    let Ok(old) = std::fs::read(e) else { return false };
+    let Ok(out) = apply_patch(&old, &patch) else { return false };
+    if format!("{:x}", Sha256::digest(&out)) != i.sha256 {
+        return false;
+    }
+    std::fs::write(new, out).is_ok()
+}
+
 fn download_now(state: &Arc<Mutex<State>>, info: &Arc<Mutex<Option<Info>>>, ctx: &egui::Context) {
     let Some(i) = info.lock().unwrap().clone() else { return };
     let Some(e) = exe() else { return };
@@ -251,6 +320,17 @@ fn download_now(state: &Arc<Mutex<State>>, info: &Arc<Mutex<Option<Info>>>, ctx:
         *state.lock().unwrap() = s;
         ctx.request_repaint();
     };
+    // najprv len rozdiel (desiatky až stovky kB), inak celý program
+    if try_patch(&i, &e, &new, &set) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755));
+        }
+        set(State::Ready { version: i.version });
+        return;
+    }
+    let _ = std::fs::remove_file(&new);
     set(State::Downloading { got: 0, total: i.size });
     let child = curl().args(["-fsSL", "--max-time", "600", "-o"]).arg(&new).arg(format!("{}Flux-Native.exe", base())).spawn();
     let Ok(mut child) = child else {
@@ -280,4 +360,27 @@ fn download_now(state: &Arc<Mutex<State>>, info: &Arc<Mutex<Option<Info>>>, ctx:
         let _ = std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755));
     }
     set(State::Ready { version: i.version });
+}
+
+#[cfg(test)]
+mod tests {
+    // rozdiel tam a späť: z „starého“ programu a rozdielu vznikne presne nový
+    #[test]
+    fn patch_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("flux-patch-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let old: Vec<u8> = (0..3_000_000u32).map(|i| (i.wrapping_mul(2654435761) >> 24) as u8).collect();
+        let mut new = old.clone();
+        for i in (1_000_000..1_050_000).step_by(37) {
+            new[i] ^= 0x5a;
+        }
+        new.splice(2_000_000..2_000_000, b"inserted ".repeat(500));
+        std::fs::write(dir.join("old"), &old).unwrap();
+        std::fs::write(dir.join("new"), &new).unwrap();
+        super::make_patch(&dir.join("old"), &dir.join("new"), &dir.join("p")).unwrap();
+        let patch = std::fs::read(dir.join("p")).unwrap();
+        assert!(patch.len() < 100_000, "patch {} B", patch.len());
+        assert_eq!(super::apply_patch(&old, &patch).unwrap(), new);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

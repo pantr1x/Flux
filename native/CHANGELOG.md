@@ -2,6 +2,16 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.9 – 2026-10-03
+
+### Scrolling like on a tablet
+- **Mouse wheel:** every notch gives the page a push and it glides and slows down smoothly, like on an iPad. Turning the wheel faster throws the page further.
+- Smooth scrolling now works even when *Transition animations* are off – it has its own switch (*Smooth scrolling with inertia*).
+- **Touchpad:** the page no longer stops and then jumps one more line at the end of a swipe.
+
+### Faster updates
+- An update now downloads **only what changed** since your version (often a few hundred kB instead of 13 MB). If that is not possible, the whole program is downloaded as before.
+
 ## 0.9.8 – 2026-10-03
 
 ### Moving live wallpaper with much less memory
