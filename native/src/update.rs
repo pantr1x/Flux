@@ -135,17 +135,30 @@ impl Updater {
     }
 
     fn run_check(&mut self, ctx: &egui::Context, now: f64, auto_download: bool, force: bool) {
-        if (!enabled() && !force) || matches!(self.state(), State::Checking | State::Downloading { .. } | State::Ready { .. }) {
+        if (!enabled() && !force) || matches!(self.state(), State::Checking | State::Downloading { .. }) {
+            return;
+        }
+        // pripravená aktualizácia: bez súboru (.new zmizol) → normálna kontrola; so súborom sa hľadá ešte novšia
+        // zostava (predtým sa v tomto stave už nikdy nekontrolovalo a novšie verzie zostali neviditeľné)
+        let ready = matches!(self.state(), State::Ready { .. });
+        let have_new = exe().is_some_and(|e| e.with_extension("new").exists());
+        let ready_sha = if ready && have_new { self.info.lock().unwrap().as_ref().map(|i| i.sha.clone()) } else { None };
+        if ready && ready_sha.is_none() && have_new {
             return;
         }
         self.last_check = now;
         self.ctx = Some(ctx.clone());
-        self.set(State::Checking, ctx);
+        if ready_sha.is_none() {
+            self.set(State::Checking, ctx);
+        }
         let (state, info, ctx) = (self.state.clone(), self.info.clone(), ctx.clone());
         std::thread::spawn(move || {
             let out = curl().args(["-fsSL", "--max-time", "20", &format!("{}native.json", base())]).output();
             let parsed = out.ok().filter(|o| o.status.success()).and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok());
             let Some(j) = parsed else {
+                if ready_sha.is_some() {
+                    return; // pripravená verzia ostáva
+                }
                 *state.lock().unwrap() = State::Error(crate::i18n::t("Could not check for updates"));
                 ctx.request_repaint();
                 return;
@@ -156,6 +169,15 @@ impl Updater {
                 sha256: j["sha256"].as_str().unwrap_or("").to_lowercase(),
                 size: j["size"].as_u64().unwrap_or(0),
             };
+            if let Some(rs) = &ready_sha {
+                // stiahnutá je stále najnovšia → nič; inak stiahnuť novšiu namiesto nej
+                if i.sha.is_empty() || &i.sha == rs {
+                    return;
+                }
+                *info.lock().unwrap() = Some(i);
+                download_now(&state, &info, &ctx);
+                return;
+            }
             let newer = !i.sha.is_empty() && (i.sha != SHA || force);
             *state.lock().unwrap() = if newer { State::Available { version: i.version.clone(), sha: i.sha.clone() } } else { State::Latest };
             *info.lock().unwrap() = Some(i);

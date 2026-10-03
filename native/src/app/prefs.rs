@@ -919,6 +919,10 @@ impl App {
                             if widgets::button(&mut b, Some("refresh"), &t("Restart to update"), p.accent, p.accent_fg, 30.0, &p).clicked() {
                                 self.restart_to_update(ctx);
                             }
+                            // aj pri pripravenej verzii: je už novšia? (stiahne ju namiesto tejto)
+                            if widgets::icon_button(&mut b, "refresh", &p, true).on_hover_text(t("Check for updates")).clicked() {
+                                self.upd.check(ctx, ctx.input(|i| i.time), true);
+                            }
                         }
                         U::Idle | U::Latest => {
                             if widgets::button(&mut b, Some("refresh"), &t("Check for updates"), p.card2, p.text, 30.0, &p).clicked() {

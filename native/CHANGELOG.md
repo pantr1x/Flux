@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.6 – 2026-10-03
+
+### Updates never get stuck again
+- **Fixed:** once an update was downloaded (*Restart to update*), Flux stopped looking for newer ones. If that download was lost, Flux never found any update again. Now it keeps checking every hour: a lost download is fetched again, and a newer build replaces the one waiting.
+- *About & updates* has a check button next to *Restart to update*.
+
 ## 0.9.5 – 2026-10-03
 
 ### Smoother scrolling, also on a touchpad
