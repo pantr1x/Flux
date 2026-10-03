@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.5 – 2026-10-03
+
+### Smoother scrolling, also on a touchpad
+- **Touchpad:** the page now follows your fingers exactly. Before, Flux added its own glide on top of the one Windows already does, so the page kept moving after you stopped.
+- **Mouse wheel:** each notch is smoothed only once (before, egui smoothed it and then Flux again, which felt mushy). The glide is the same spring as in Flux.
+
 ## 0.9.4 – 2026-10-03
 
 ### Restart to update

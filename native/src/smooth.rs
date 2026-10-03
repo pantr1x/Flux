@@ -23,6 +23,36 @@ impl Default for S {
 pub struct Smooth {
     map: HashMap<Id, S>,
     pub on: bool,
+    // zúbky kolieska myši z tejto snímky (surové, v bodoch) – vyhladí ich len pružina, nie aj egui
+    pub notches: f32,
+    // kedy prišiel naposledy presný posun (touchpad, kolieska bez zúbkov): ten ide 1:1, zotrvačnosť má systém
+    pub precise_at: Option<std::time::Instant>,
+}
+
+impl Smooth {
+    // z raw_input_hook: koliesko so zúbkami (celé riadky) → notches; touchpad → body (egui ho nevyhladzuje)
+    pub fn feed(&mut self, raw: &mut egui::RawInput, line: f32, k: f32) {
+        self.notches = 0.0; // nová snímka; nespotrebované zúbky (mimo oblastí) sa nehromadia
+        for e in raw.events.iter_mut() {
+            if let egui::Event::MouseWheel { unit, delta, modifiers, .. } = e {
+                if modifiers.ctrl || modifiers.command {
+                    continue;
+                }
+                let notch = *unit == egui::MouseWheelUnit::Line && delta.x == 0.0 && delta.y.abs() >= 0.99 && (delta.y - delta.y.round()).abs() < 0.02;
+                if notch {
+                    self.notches += delta.y * line * k;
+                    *delta *= k;
+                } else {
+                    if *unit == egui::MouseWheelUnit::Line {
+                        *unit = egui::MouseWheelUnit::Point;
+                        *delta *= line;
+                    }
+                    *delta *= k;
+                    self.precise_at = Some(std::time::Instant::now());
+                }
+            }
+        }
+    }
 }
 
 const W: f32 = 16.0; // 0.016 / ms
@@ -48,20 +78,31 @@ impl Smooth {
             let pos = ctx.input(|i| i.pointer.hover_pos());
             let hovered = pos.map(|p| s.rect.contains(p) && ctx.layer_id_at(p).map(|l| l == layer).unwrap_or(true)).unwrap_or(false);
             if hovered && s.max > 0.0 {
+                // egui-ho vyhladený posun si berieme celý (inak by ho ScrollArea pridala ešte raz)
                 let dy = ctx.input_mut(|i| {
-                    let d = i.smooth_scroll_delta.y;
                     if i.modifiers.ctrl || i.modifiers.command {
                         return 0.0;
                     }
-                    i.smooth_scroll_delta.y = 0.0;
-                    d
+                    std::mem::take(&mut i.smooth_scroll_delta.y)
                 });
-                if dy.abs() > 0.1 {
+                let precise = self.precise_at.is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(400));
+                let notches = std::mem::take(&mut self.notches);
+                if precise && notches == 0.0 {
+                    // touchpad: presne pod prstom, bez vlastnej zotrvačnosti (tú posiela Windows)
+                    if dy.abs() > 0.0 {
+                        s.target = (s.target - dy).clamp(0.0, s.max);
+                        s.pos = s.target;
+                        s.vel = 0.0;
+                        s.active = false;
+                        return Some(s.pos);
+                    }
+                } else if notches.abs() > 0.1 {
+                    // koliesko: surový zúbok (egui-ho rozmazaná verzia sa zahodí) → jedna pružina
                     if !s.active {
                         s.vel = 0.0;
+                        s.target = s.pos;
                     }
-                    // koliesko: väčší krok ako egui, plynulo dobehne (Dĺžka posunu v nastaveniach ho ešte násobí)
-                    s.target = (s.target - dy * 1.5).clamp(0.0, s.max);
+                    s.target = (s.target - notches * 1.5).clamp(0.0, s.max);
                     s.active = true;
                 }
             }

@@ -2609,18 +2609,10 @@ fn ago(ms: u64) -> String {
 
 impl eframe::App for App {
     // ako ďaleko zájde jedno otočenie kolieska (Vzhľad → Okno → Rýchlosť posúvania); Ctrl+koliesko = zoom ostáva
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         let k = (self.core.setting("scrollSpeed").as_f64().unwrap_or(100.0) / 100.0).clamp(0.5, 3.0) as f32;
-        if (k - 1.0).abs() < 0.01 {
-            return;
-        }
-        for e in raw.events.iter_mut() {
-            if let egui::Event::MouseWheel { delta, modifiers, .. } = e {
-                if !modifiers.ctrl && !modifiers.command {
-                    *delta *= k;
-                }
-            }
-        }
+        let line = ctx.options(|o| o.input_options.line_scroll_speed);
+        self.smooth.feed(raw, line, k);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
