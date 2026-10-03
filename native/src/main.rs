@@ -30,11 +30,54 @@ pub fn want_transparent() -> bool {
     s["material"].as_str() != Some("none")
         && on("optFx", !lite)
         && on("liveWallpaper", true)
-        && s["liveWallMode"].as_str() == Some("see")
-        && std::env::var("FLUX_SEE_THROUGH").as_deref() == Ok("1")
+        && (s["liveWallMode"].as_str() == Some("glass") || (s["liveWallMode"].as_str() == Some("see") && std::env::var("FLUX_SEE_THROUGH").as_deref() == Ok("1")))
         && !s["bg"]["type"].is_string()
         && s["liveCache"]["file"].is_string()
         && !boot::safe()
+}
+
+// „sklo“ (liveWallMode: glass) je pokus: po prepnutí sa Flux spýta, či ho vidno. Bez potvrdenia do 25 s
+// (okno neviditeľné, zaseknuté, spadnuté) sa vráti na pohyblivú tapetu a spustí znova.
+pub static GLASS_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn glass_revert() {
+    let mut s = flux_core::settings::load();
+    if let Some(o) = s.as_object_mut() {
+        o.insert("liveWallMode".into(), serde_json::json!("play"));
+        o.remove("glassTrial");
+    }
+    flux_core::settings::save(&s);
+}
+
+fn glass_trial() {
+    let mut s = flux_core::settings::load();
+    match s["glassTrial"].as_str() {
+        // minulý pokus sa nepotvrdil (okno nebolo vidno) → späť
+        Some("running") => {
+            glass_revert();
+            notice("The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.");
+        }
+        Some("pending") if want_transparent() => {
+            s["glassTrial"] = serde_json::json!("running");
+            flux_core::settings::save(&s);
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_secs(25));
+                if !GLASS_OK.load(std::sync::atomic::Ordering::Relaxed) {
+                    glass_revert();
+                    // nový štart nie je „zlyhaný“ (bez núdzového režimu), len ukáže správu
+                    let mut s = flux_core::settings::load();
+                    s["glassFailed"] = serde_json::json!(true);
+                    flux_core::settings::save(&s);
+                    boot::closed();
+                    if let Ok(e) = std::env::current_exe() {
+                        let _ = std::process::Command::new(e).spawn();
+                    }
+                    std::process::exit(3);
+                }
+            });
+        }
+        _ => {}
+    }
 }
 
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
@@ -126,6 +169,7 @@ fn main() -> eframe::Result {
         }
         report(&format!("{what}{at}"));
     }));
+    glass_trial();
     let r = run();
     if let Err(e) = &r {
         if !update::rollback() {

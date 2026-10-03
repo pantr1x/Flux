@@ -2,6 +2,18 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.2 – 2026-10-03
+
+### Updates install by themselves again
+- **Fixed:** when an update finished downloading in the first 10 seconds after start (a fast connection), Flux deleted it again, so updates never installed. Now they do.
+- With *Install updates automatically* on, a downloaded update installs **by itself** once Flux has been in the background for a minute and nothing is running or unsaved. Flux comes back without stealing focus.
+- Flux checks for updates every hour instead of every 6 hours.
+- An update no longer fails when an older Flux (or the MCP bridge for Claude) is still running.
+
+### See-through glass (try it)
+- New choice in Settings → Appearance → Window → Live wallpaper: **See-through glass**. Flux doesn't play its own copy of the live wallpaper – the real desktop (Lively, Wallpaper Engine) shows through, almost without extra memory. Windows behind Flux show through too.
+- It is a test: after the restart Flux asks whether you can see it. Without an answer in 25 seconds (for example when the window stays invisible) it goes back to the moving wallpaper by itself.
+
 ## 0.9.1 – 2026-10-03
 
 ### Smoother switching between files

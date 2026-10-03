@@ -220,8 +220,8 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Select(
                         "liveWallMode",
                         "Live wallpaper",
-                        "Flux plays your live wallpaper behind its panels. Still image uses less memory.",
-                        o(&[("play", "Moving (like the desktop)"), ("still", "Still image (less memory)")]),
+                        "Moving plays a copy of your live wallpaper. Glass lets the real desktop show through Flux – almost no extra memory, but windows behind Flux show too.",
+                        o(&[("play", "Moving (like the desktop)"), ("still", "Still image (less memory)"), ("glass", "See-through glass (try it)")]),
                     ),
                     Row::Range("scrollSpeed", "Scroll distance", "how far one turn of the mouse wheel scrolls", 50.0, 300.0, 10.0),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
@@ -343,8 +343,15 @@ impl App {
     }
 
     pub(super) fn set(&mut self, key: &str, v: Value, ctx: &egui::Context) {
+        // sklo: pokus, ktorý treba po novom štarte potvrdiť (main.rs → glass_trial)
+        let glass = key == "liveWallMode" && v.as_str() == Some("glass");
         self.update_settings(|o| {
             o.insert(key.into(), v);
+            if glass {
+                o.insert("glassTrial".into(), json!("pending"));
+            } else if key == "liveWallMode" {
+                o.remove("glassTrial");
+            }
         });
         match key {
             "language" => crate::i18n::set_language(self.get("language").as_str().unwrap_or("en")),

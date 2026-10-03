@@ -62,8 +62,21 @@ pub fn cleanup(keep_old: bool) {
     if let Some(e) = exe() {
         if !keep_old {
             let _ = std::fs::remove_file(e.with_extension("old"));
+            // staršie kópie, ktoré pri aktualizácii ešte bežali (Flux-Native.old-<čas>)
+            let stem = e.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            if let Some(Ok(rd)) = e.parent().map(std::fs::read_dir) {
+                for f in rd.flatten() {
+                    let n = f.file_name().to_string_lossy().to_string();
+                    if n.starts_with(&format!("{stem}.old-")) {
+                        let _ = std::fs::remove_file(f.path());
+                    }
+                }
+            }
+        } else {
+            // len pri štarte: nedokončené stiahnutie z minula. Neskôr (keep_old = false) už .new môže byť
+            // čerstvo stiahnutá aktualizácia – zmazať ju bola chyba, pre ktorú sa aktualizácie nedali nainštalovať.
+            let _ = std::fs::remove_file(e.with_extension("new"));
         }
-        let _ = std::fs::remove_file(e.with_extension("new"));
     }
 }
 
@@ -162,13 +175,28 @@ impl Updater {
     // vymení program a spustí nový (s rovnakými argumentmi); volajúci potom zavrie okno.
     // relaunch = false: pri bežnom zavretí Fluxu sa len vymení (autoInstallOnAppQuit v Electron Fluxe)
     pub fn install(&self, relaunch: bool) -> Result<(), String> {
+        self.install_with(relaunch, &[])
+    }
+
+    // extra: argumenty navyše pre nový štart (--background pri tichej aktualizácii)
+    pub fn install_with(&self, relaunch: bool, extra: &[&str]) -> Result<(), String> {
         if !matches!(self.state(), State::Ready { .. }) {
             return Err("not ready".into());
         }
         let e = exe().ok_or("no exe")?;
         let new = e.with_extension("new");
+        if !new.exists() {
+            *self.state.lock().unwrap() = State::Idle;
+            return Err(crate::i18n::t("Download failed"));
+        }
         let old = e.with_extension("old");
-        let _ = std::fs::remove_file(&old);
+        // .old môže ešte bežať (starý Flux, most MCP pre Claude) → vtedy sa nedá zmazať; program ide inam
+        let old = if std::fs::remove_file(&old).is_ok() || !old.exists() {
+            old
+        } else {
+            let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            e.with_extension(format!("old-{t}"))
+        };
         std::fs::rename(&e, &old).map_err(|x| x.to_string())?;
         if let Err(x) = std::fs::rename(&new, &e) {
             let _ = std::fs::rename(&old, &e);
@@ -176,7 +204,8 @@ impl Updater {
         }
         *self.state.lock().unwrap() = State::Idle;
         if relaunch {
-            std::process::Command::new(&e).args(std::env::args_os().skip(1)).spawn().map_err(|x| x.to_string())?;
+            let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).filter(|a| a != "--background" && a != "--minimized").chain(extra.iter().map(|a| a.into())).collect();
+            std::process::Command::new(&e).args(args).spawn().map_err(|x| x.to_string())?;
         }
         Ok(())
     }

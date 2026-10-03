@@ -107,8 +107,9 @@ pub struct App {
     settings: Option<prefs::SettingsUi>,
     switched: f64, // čas poslednej zmeny obsahu karty (animácia prechodu)
     nav_dir: f32,
-    tree_sel: Option<Rect>,     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
-    live_push: Option<Instant>, // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
+    tree_sel: Option<Rect>,
+    unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
+    live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
     panel_w: f32,
     trim: crate::mem::Trim,
@@ -214,6 +215,7 @@ impl App {
             switched: 0.0,
             nav_dir: 0.0,
             tree_sel: None,
+            unfocused_at: None,
             live_push: None,
             shown: String::new(),
             panel_w: 420.0,
@@ -252,6 +254,12 @@ impl App {
         }
         app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         app.gh_plugin_migrate();
+        if app.core.setting("glassFailed").as_bool() == Some(true) {
+            app.update_settings(|o| {
+                o.remove("glassFailed");
+            });
+            app.status = t("The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.");
+        }
         if crate::mcp::enabled(&app.core) {
             app.mcp_toggle(true);
         }
@@ -274,6 +282,10 @@ impl App {
             app.test = t.split(';').filter_map(|p| p.split_once(':').map(|(a, b)| (a.parse().unwrap_or(0.0), b.to_string()))).collect();
         }
         app.apply_look(&cc.egui_ctx);
+        // tichá aktualizácia zbaleného okna: nový Flux tiež zbalený
+        if std::env::args().any(|a| a == "--minimized") {
+            cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        }
         app
     }
 
@@ -349,8 +361,8 @@ impl App {
                 }
                 let mode = self.get("liveWallMode").as_str().unwrap_or("see").to_string();
                 return Some(match (f.video, mode.as_str()) {
-                    (true, "play" | "see") => Src::Video(f.file, f.preview), // „see“ z 0.7–0.8.3 = pohyblivá
-                    (true, _) => Src::Still(f.file, f.preview),              // jedna snímka, potom sa dekodér uvoľní
+                    (true, "play" | "see" | "glass") => Src::Video(f.file, f.preview), // „see“ z 0.7–0.8.3 = pohyblivá
+                    (true, _) => Src::Still(f.file, f.preview),                        // jedna snímka, potom sa dekodér uvoľní
                     _ => Src::Image(f.file),
                 });
             }
@@ -362,11 +374,50 @@ impl App {
         crate::wall::desktop_wallpaper().map(Src::Image)
     }
 
+    fn glass_ui(&mut self, ui: &mut egui::Ui, full: Rect) {
+        let p = self.pal;
+        let left = (25.0 - self.started.elapsed().as_secs_f32()).max(0.0).ceil();
+        let w = 440.0;
+        let card = Rect::from_center_size(full.center(), vec2(w, 150.0));
+        ui.painter().add(egui::Shadow { offset: [0, 14], blur: 40, spread: 0, color: Color32::from_black_alpha(110) }.as_shape(card, CornerRadius::same(14)));
+        ui.painter().rect_filled(card, CornerRadius::same(14), p.solid);
+        ui.painter().rect_stroke(card, CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        ui.painter().text(card.min + vec2(24.0, 30.0), Align2::LEFT_CENTER, t("Do you see your live wallpaper through Flux?"), theme::bold(14.0), p.text);
+        let g = ui.painter().layout(crate::i18n::tf("If you don't answer, Flux goes back to the moving wallpaper in {n} s.", &[("n", &format!("{left:.0}"))]), theme::ui(12.5), p.text3, w - 48.0);
+        ui.painter().galley(card.min + vec2(24.0, 48.0), g, p.text3);
+        let mut b = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(Rect::from_min_max(pos2(card.left() + 20.0, card.bottom() - 52.0), pos2(card.right() - 20.0, card.bottom() - 18.0)))
+                .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        );
+        b.spacing_mut().item_spacing.x = 8.0;
+        let keep = widgets::button(&mut b, Some("check"), &t("Yes, keep it"), p.accent, p.accent_fg, 32.0, &p).clicked();
+        let back = widgets::button(&mut b, None, &t("Go back"), p.card2, p.text, 32.0, &p).clicked();
+        if keep {
+            crate::GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
+            self.update_settings(|o| {
+                o.remove("glassTrial");
+            });
+        } else if back {
+            crate::GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
+            self.update_settings(|o| {
+                o.insert("liveWallMode".into(), json!("play"));
+                o.remove("glassTrial");
+            });
+            if let Ok(e) = std::env::current_exe() {
+                if std::process::Command::new(e).spawn().is_ok() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
+        ui.ctx().request_repaint_after(Duration::from_millis(500));
+    }
+
     // priehľadné okno práve ukazuje živú tapetu (okno vytvorené ako priehľadné + tapeta beží + režim „see“)
     fn see_through(&self) -> bool {
         crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed)
             && self.wall_on()
-            && self.get("liveWallMode").as_str().unwrap_or("see") == "see"
+            && matches!(self.get("liveWallMode").as_str().unwrap_or("see"), "see" | "glass")
             && self.get("liveWallpaper").as_bool() != Some(false)
             && self.live.lock().unwrap().is_some()
     }
@@ -2530,9 +2581,35 @@ impl eframe::App for App {
         let minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
         // aktualizácie: pri štarte a potom každých 6 h; autoUpdate = hneď stiahnuť (inak len ponúknuť)
         let now_t = ctx.input(|i| i.time);
-        if self.intro.is_none() && now_t - self.upd.last_check > 6.0 * 3600.0 {
+        if self.intro.is_none() && now_t - self.upd.last_check > 3600.0 {
             let auto = self.get("autoUpdate").as_bool() != Some(false);
             self.upd.check(ctx, now_t, auto);
+        }
+        // tichá aktualizácia (autoUpdate): stiahnutá verzia sa nasadí, keď je Flux 1 min v pozadí a nič nerobí
+        // (žiadne neuložené súbory, bežiaci program, Live Server ani odpoveď AI); nový Flux nezoberie fokus
+        if focused {
+            self.unfocused_at = None;
+        } else if self.unfocused_at.is_none() {
+            self.unfocused_at = Some(Instant::now());
+        }
+        if matches!(self.upd.state(), crate::update::State::Ready { .. })
+            && self.get("autoUpdate").as_bool() != Some(false)
+            && self.unfocused_at.is_some_and(|t| t.elapsed() > Duration::from_secs(60))
+            && !self.running
+            && self.server.is_none()
+            && !self.tabs.iter().any(|t| t.dirty())
+            && !self.ai.shared.lock().unwrap().running
+            && self.settings.is_none()
+            && self.new_project.is_none()
+            && self.new_file.is_none()
+        {
+            let extra: &[&str] = if minimized { &["--background", "--minimized"] } else { &["--background"] };
+            if self.upd.install_with(true, extra).is_ok() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+        if !focused {
+            ctx.request_repaint_after(Duration::from_secs(20));
         }
         // pri zavretí s pripravenou aktualizáciou sa program len vymení (bez nového štartu)
         if ctx.input(|i| i.viewport().close_requested()) {
@@ -2796,6 +2873,14 @@ impl eframe::App for App {
             egui::Area::new(egui::Id::new("palette-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
                 ui.set_min_size(full.size());
                 self.palette_ui(ui, full);
+            });
+        }
+        // pokus so sklom: potvrdiť, že Flux vidno (inak sa main.rs po 25 s vráti sám)
+        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && !crate::GLASS_OK.load(std::sync::atomic::Ordering::Relaxed) && self.core.setting("glassTrial").as_str() == Some("running") {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("glass-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.glass_ui(ui, full);
             });
         }
         if self.ask.is_some() {
