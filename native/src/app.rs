@@ -2613,6 +2613,8 @@ impl eframe::App for App {
         let k = (self.core.setting("scrollSpeed").as_f64().unwrap_or(100.0) / 100.0).clamp(0.5, 3.0) as f32;
         let line = ctx.options(|o| o.input_options.line_scroll_speed);
         self.smooth.feed(raw, line, k);
+        // atlas písma egui má šírku najväčšej textúry grafickej karty (až 16384 px) – stačí 2048
+        raw.max_texture_side = Some(raw.max_texture_side.unwrap_or(2048).min(2048));
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -2698,7 +2700,7 @@ impl eframe::App for App {
             let src = self.wall_source();
             self.wall.want(ctx, src);
         }
-        self.wall.set_playing(focused && !minimized && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true)));
+        self.wall.set_playing(ctx, focused && !minimized && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true)));
         // farbenie kódu (syntect) sa uvoľní po 2 min bez kódu na obrazovke
         self.code.release_if_idle(Duration::from_secs(120));
         if let Some(d) = self.trim.tick(focused, self.core.setting("trimMemory").as_bool() != Some(false)) {

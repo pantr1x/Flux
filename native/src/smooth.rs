@@ -1,5 +1,6 @@
-// Plynulé posúvanie kolieskom – ako springStep() v Electron Fluxe: koliesko posúva cieľ a pohľad k nemu
-// ide ako kriticky tlmená pružina (w = 0.016 / ms). Rýchlosť sa pri ďalšom zúbku kolieska neláme.
+// Plynulé posúvanie kolieskom: koliesko posúva cieľ a pohľad k nemu dôjde za pevný čas (DUR) po krivke,
+// ktorá nadväzuje na aktuálnu rýchlosť (Hermite) – rýchlosť sa pri ďalšom zúbku neláme a v cieli presne
+// skončí. Pružina predtým pri dlhom skrolovaní dobiehala pomalým chvostom („zastaví a ešte posunie“).
 use eframe::egui::{self, Id, Rect};
 use std::collections::HashMap;
 
@@ -8,6 +9,9 @@ struct S {
     pos: f32,
     vel: f32,
     target: f32,
+    from: f32,   // začiatok aktuálneho úseku
+    from_v: f32, // rýchlosť na jeho začiatku
+    t: f32,      // čas od začiatku úseku (s)
     active: bool,
     rect: Rect,
     max: f32,
@@ -15,7 +19,7 @@ struct S {
 
 impl Default for S {
     fn default() -> Self {
-        S { pos: 0.0, vel: 0.0, target: 0.0, active: false, rect: Rect::NOTHING, max: 0.0 }
+        S { pos: 0.0, vel: 0.0, target: 0.0, from: 0.0, from_v: 0.0, t: 0.0, active: false, rect: Rect::NOTHING, max: 0.0 }
     }
 }
 
@@ -55,7 +59,19 @@ impl Smooth {
     }
 }
 
-const W: f32 = 16.0; // 0.016 / ms
+const DUR: f32 = 0.22; // s – dĺžka dobehnutia po zúbku
+
+// nový cieľ: úsek začína z aktuálnej polohy a rýchlosti
+fn retarget(s: &mut S, target: f32) {
+    if !s.active {
+        s.vel = 0.0;
+    }
+    s.from = s.pos;
+    s.from_v = s.vel;
+    s.t = 0.0;
+    s.target = target.clamp(0.0, s.max.max(0.0));
+    s.active = true;
+}
 
 impl Smooth {
     // Pred ScrollArea::show: prevezme koliesko nad oblasťou a vráti posun, ktorý treba nastaviť.
@@ -63,15 +79,13 @@ impl Smooth {
         let s = self.map.entry(id).or_default();
         if let Some(j) = jump {
             // skok (minimapa, hľadanie) – plynulo, ak sú animácie zapnuté
-            if !s.active {
-                s.vel = 0.0;
-            }
-            s.target = j.clamp(0.0, s.max.max(0.0));
-            s.active = self.on;
             if !self.on {
+                s.target = j.clamp(0.0, s.max.max(0.0));
                 s.pos = s.target;
+                s.active = false;
                 return Some(s.pos);
             }
+            retarget(s, j);
         }
         if self.on {
             // koliesko len nad touto oblasťou a len keď nad ňou nie je iné okno (nastavenia, ponuka)
@@ -98,12 +112,8 @@ impl Smooth {
                     }
                 } else if notches.abs() > 0.1 {
                     // koliesko: surový zúbok (egui-ho rozmazaná verzia sa zahodí) → jedna pružina
-                    if !s.active {
-                        s.vel = 0.0;
-                        s.target = s.pos;
-                    }
-                    s.target = (s.target - notches * 1.5).clamp(0.0, s.max);
-                    s.active = true;
+                    let base = if s.active { s.target } else { s.pos };
+                    retarget(s, base - notches * 1.5);
                 }
             }
         }
@@ -111,15 +121,17 @@ impl Smooth {
             return None;
         }
         let dt = ctx.input(|i| i.stable_dt).clamp(0.001, 0.05);
-        // presné riešenie kriticky tlmenej pružiny pre krok dt
-        let d = s.pos - s.target;
-        let e = (-W * dt).exp();
-        let nd = (d + (s.vel + W * d) * dt) * e;
-        let nv = (s.vel - W * (s.vel + W * d) * dt) * e;
-        s.pos = s.target + nd;
-        s.vel = nv;
-        if nd.abs() < 0.4 && nv.abs() < 4.0 {
+        s.t += dt;
+        let u = (s.t / DUR).min(1.0);
+        // kubická Hermitova krivka: z (from, from_v) do (target, 0) za DUR
+        let (u2, u3) = (u * u, u * u * u);
+        let (h00, h10, h01) = (2.0 * u3 - 3.0 * u2 + 1.0, u3 - 2.0 * u2 + u, -2.0 * u3 + 3.0 * u2);
+        let (d00, d10, d01) = (6.0 * u2 - 6.0 * u, 3.0 * u2 - 4.0 * u + 1.0, -6.0 * u2 + 6.0 * u);
+        s.pos = (h00 * s.from + h10 * DUR * s.from_v + h01 * s.target).clamp(0.0, s.max.max(0.0));
+        s.vel = (d00 * s.from + d10 * DUR * s.from_v + d01 * s.target) / DUR;
+        if u >= 1.0 {
             s.pos = s.target;
+            s.vel = 0.0;
             s.active = false;
         } else {
             ctx.request_repaint();

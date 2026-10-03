@@ -31,6 +31,10 @@ pub struct Wall {
     play: Arc<AtomicBool>, // video hrá len pri zameranom okne a zapnutých animáciách
     stop: Arc<AtomicBool>,
     pub lum: Option<f32>, // priemerný jas tapety 0–1 (na prispôsobenie panelov)
+    // video v pozadí: po 3 s pauzy sa dekodér aj grafické zariadenie uvoľnia (released), posledná snímka
+    // ostane; pri návrate sa video spustí znova od uloženého miesta (resume, 100 ns)
+    resume: Arc<std::sync::atomic::AtomicI64>,
+    released: Arc<AtomicBool>,
 }
 
 // tapeta Windows (SystemParametersInfo), na testy FLUX_WALLPAPER
@@ -86,8 +90,17 @@ impl Wall {
     }
 
     // video hrá len keď je okno zamerané a animácie zapnuté (syncVideo v Electron Fluxe)
-    pub fn set_playing(&self, on: bool) {
+    pub fn set_playing(&mut self, ctx: &egui::Context, on: bool) {
         self.play.store(on, Ordering::Relaxed);
+        if on && self.released.swap(false, Ordering::Relaxed) {
+            if let Some(Src::Video(path, _)) = self.source.clone() {
+                let (slot, play, stop, ctx) = (self.pending.clone(), self.play.clone(), self.stop.clone(), ctx.clone());
+                let (resume, released) = (self.resume.clone(), self.released.clone());
+                std::thread::spawn(move || {
+                    video::play(&path, &slot, &play, &stop, &ctx, false, &resume, &released, true);
+                });
+            }
+        }
     }
 
     // nastaví zdroj; ak sa zmenil, načíta ho na pozadí
@@ -104,7 +117,10 @@ impl Wall {
         let Some(src) = src else { return };
         // nový slot – oneskorená snímka starého zdroja sa už nezobrazí
         self.pending = Arc::new(Mutex::new(None));
+        self.resume = Default::default();
+        self.released = Default::default();
         let slot = self.pending.clone();
+        let (resume, released) = (self.resume.clone(), self.released.clone());
         let ctx = ctx.clone();
         let (play, stop) = (self.play.clone(), self.stop.clone());
         // jedna snímka alebo celé video
@@ -122,7 +138,7 @@ impl Wall {
             }
             Src::Video(path, preview) | Src::Still(path, preview) => {
                 let once = matches!(src_kind, Kind::Still);
-                if !video::play(&path, &slot, &play, &stop, &ctx, once) {
+                if !video::play(&path, &slot, &play, &stop, &ctx, once, &resume, &released, false) {
                     // video sa nedá prehrať (iný systém, chýba kodek) → náhľad
                     if let Some(l) = preview.as_deref().and_then(load_image) {
                         *slot.lock().unwrap() = Some(l);
@@ -232,19 +248,32 @@ mod video {
     use super::Loaded;
     use eframe::egui;
     use std::path::Path;
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::{AtomicBool, AtomicI64};
     use std::sync::{Arc, Mutex};
 
     // vráti false, keď sa video nedá otvoriť ani raz (vtedy sa ukáže náhľad)
     #[cfg(not(windows))]
-    pub fn play(_: &Path, _: &Arc<Mutex<Option<Loaded>>>, _: &AtomicBool, _: &AtomicBool, _: &egui::Context, _: bool) -> bool {
+    #[allow(clippy::too_many_arguments)]
+    pub fn play(_: &Path, _: &Arc<Mutex<Option<Loaded>>>, _: &AtomicBool, _: &AtomicBool, _: &egui::Context, _: bool, _: &AtomicI64, _: &AtomicBool, _: bool) -> bool {
         false
     }
 
     #[cfg(windows)]
-    pub fn play(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context, once: bool) -> bool {
-        let mut shown = false;
-        let r = unsafe { run(path, slot, play, stop, ctx, &mut shown, once) };
+    #[allow(clippy::too_many_arguments)]
+    pub fn play(
+        path: &Path,
+        slot: &Arc<Mutex<Option<Loaded>>>,
+        play: &AtomicBool,
+        stop: &AtomicBool,
+        ctx: &egui::Context,
+        once: bool,
+        resume: &AtomicI64,
+        released: &AtomicBool,
+        resumed: bool,
+    ) -> bool {
+        // resumed: snímka už je na obrazovke (pokračovanie po uvoľnení v pozadí)
+        let mut shown = resumed;
+        let r = unsafe { run(path, slot, play, stop, ctx, &mut shown, once, resume, released) };
         if let Err(e) = r {
             eprintln!("video tapeta: {e}");
         }
@@ -287,7 +316,18 @@ mod video {
     }
 
     #[cfg(windows)]
-    unsafe fn run(path: &Path, slot: &Arc<Mutex<Option<Loaded>>>, play: &AtomicBool, stop: &AtomicBool, ctx: &egui::Context, shown: &mut bool, once: bool) -> windows::core::Result<()> {
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn run(
+        path: &Path,
+        slot: &Arc<Mutex<Option<Loaded>>>,
+        play: &AtomicBool,
+        stop: &AtomicBool,
+        ctx: &egui::Context,
+        shown: &mut bool,
+        once: bool,
+        resume: &AtomicI64,
+        released: &AtomicBool,
+    ) -> windows::core::Result<()> {
         use super::{blurred, luminance};
         use egui::ColorImage;
         use std::sync::atomic::Ordering;
@@ -299,6 +339,16 @@ mod video {
         use windows::Win32::System::Variant::VT_I8;
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         MFStartup(MF_VERSION, MFSTARTUP_LITE)?;
+        // MFShutdown pri každom konci (aj pri chybe) – inak by Media Foundation ostala v pamäti
+        struct Mf;
+        impl Drop for Mf {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = MFShutdown();
+                }
+            }
+        }
+        let _mf = Mf;
         let mut attrs = None;
         MFCreateAttributes(&mut attrs, 2)?;
         let attrs = attrs.ok_or_else(windows::core::Error::empty)?;
@@ -334,13 +384,30 @@ mod video {
         let mut last_shown = Instant::now() - Duration::from_secs(1);
         let mut last_blur = Instant::now() - Duration::from_secs(10);
         let mut loops = 0;
+        // pokračovanie po uvoľnení: od uloženého miesta
+        let start = resume.load(Ordering::Relaxed);
+        if start > 0 {
+            let mut pv = PROPVARIANT::default();
+            (*pv.Anonymous.Anonymous).vt = VT_I8;
+            (*pv.Anonymous.Anonymous).Anonymous.hVal = start;
+            let _ = reader.SetCurrentPosition(&GUID::zeroed(), &pv);
+        }
+        let mut last_ts = start;
+        let mut paused: Option<Instant> = None;
         while !stop.load(Ordering::Relaxed) {
             // pauza: prvá snímka už je na obrazovke, ďalšie až keď okno zas hrá
             if *shown && !play.load(Ordering::Relaxed) {
+                // dlhšie v pozadí → uvoľniť dekodér a D3D (Flux v pozadí zaberá oveľa menej); posledná snímka ostáva
+                if paused.get_or_insert_with(Instant::now).elapsed() > Duration::from_secs(3) {
+                    resume.store(last_ts, Ordering::Relaxed);
+                    released.store(true, Ordering::Relaxed);
+                    return Ok(());
+                }
                 std::thread::sleep(Duration::from_millis(150));
                 first_ts = None;
                 continue;
             }
+            paused = None;
             let (mut flags, mut ts, mut sample) = (0u32, 0i64, None);
             reader.ReadSample(vs, 0, None, Some(&mut flags), Some(&mut ts), Some(&mut sample))?;
             if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
@@ -357,6 +424,7 @@ mod video {
                 continue;
             }
             let Some(sample) = sample else { continue };
+            last_ts = ts;
             // tempo podľa časových značiek videa (100 ns)
             match first_ts {
                 None => {

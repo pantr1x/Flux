@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.7 – 2026-10-03
+
+### Less memory with a moving live wallpaper
+- When Flux has been in the background for 3 seconds, the video decoder of your live wallpaper is **freed completely** (the last frame stays). When you come back, the video continues from the same spot. Flux in the background now uses much less memory.
+- The text atlas (all letters Flux has drawn) is smaller.
+
+### Scrolling without the slow tail
+- After a turn of the mouse wheel the page glides to its place in a fixed short time and stops exactly there. Before, after scrolling a lot it slowed down almost to a stop and then still moved a little.
+
 ## 0.9.6 – 2026-10-03
 
 ### Updates never get stuck again
