@@ -1,0 +1,5 @@
+[flux] renderer Wgpu, transparent true
+[WARN] wgpu_hal::gles::adapter: Returned GL context is 1.1, when 3.3+ is needed
+[WARN] wgpu_hal::gles::adapter: Returned GL context is 1.1, when 3.3+ is needed
+[WARN] egui_wgpu: Software rasterizer detected - loss of performance expected. backend: Dx12, device_type: Cpu, name: "Microsoft Basic Render Driver", driver: "10.0.26100.33438", vendor: Unknown (0x1414), device: 0x8C, subgroup_size: 4..=4, transient_saves_memory: Some(false), limit_bucket: None
+[WARN] egui_wgpu::winit: Transparent window was requested, but the active wgpu surface does not support a `CompositeAlphaMode` with transparency.
