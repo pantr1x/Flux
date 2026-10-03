@@ -30,10 +30,18 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+// userData/native-summaries.json: posledný súhrn každého projektu (ako project-stats.json v Electron Fluxe)
+fn summaries_file() -> std::path::PathBuf {
+    settings::user_data().join("native-summaries.json")
+}
+
 struct Tab {
     path: String,
     text: String,
     saved: String,
+    seen: Instant,  // naposledy na obrazovke
+    unloaded: bool, // dlho nevidený neupravený súbor: text je preč z pamäte, načíta sa pri otvorení
+    stale: bool,    // súbor sa zmenil na disku, kým karta nebola aktívna → načítať pri otvorení
 }
 
 impl Tab {
@@ -267,8 +275,13 @@ impl App {
         if let Some(last) = app.core.setting("lastFolder").as_str().map(String::from) {
             app.open_folder(&last);
         }
-        // súhrny všetkých projektov (jazyky, počet súborov) a Python – na pozadí, okno sa ukáže hneď
-        let dirs: Vec<String> = app.projects.iter().filter_map(|p| p["dir"].as_str().map(String::from)).collect();
+        // súhrny projektov (jazyky, počet súborov): uložené z minula; nanovo sa prečíta len otvorený projekt
+        // a projekty bez záznamu (inak by štart čítal všetky súbory všetkých projektov)
+        if let Some(m) = std::fs::read_to_string(summaries_file()).ok().and_then(|t| serde_json::from_str::<serde_json::Map<String, Value>>(&t).ok()) {
+            app.summaries = m.into_iter().collect();
+        }
+        let ws_now = app.workspace();
+        let dirs: Vec<String> = app.projects.iter().filter_map(|p| p["dir"].as_str().map(String::from)).filter(|d| !app.summaries.contains_key(d) && Some(d) != ws_now.as_ref()).collect();
         let emit = app.emit.clone();
         let ws = app.workspace();
         std::thread::spawn(move || {
@@ -582,6 +595,43 @@ impl App {
         }
         self.active = i;
         self.home = false;
+        self.reload_tab(i);
+    }
+
+    // uvoľnený alebo na disku zmenený (neupravený) súbor znova z disku
+    fn reload_tab(&mut self, i: usize) {
+        let Some(t) = self.tabs.get_mut(i) else { return };
+        t.seen = Instant::now();
+        if !(t.unloaded || t.stale) || t.dirty() {
+            return;
+        }
+        t.stale = false;
+        match fsops::read(&t.path, true) {
+            Ok(v) => {
+                let text = v.as_str().unwrap_or("").replace("\r\n", "\n");
+                t.saved = text.clone();
+                t.text = text;
+                t.unloaded = false;
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    // šetrenie pamäte: neupravené súbory, ktoré neboli 10 min na obrazovke, sa uvoľnia (karta ostáva)
+    fn unload_idle_tabs(&mut self) {
+        let active = if self.home { usize::MAX } else { self.active };
+        // FLUX_UNLOAD_SECS: kratší čas na testy
+        let idle = Duration::from_secs(std::env::var("FLUX_UNLOAD_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(600));
+        for (i, t) in self.tabs.iter_mut().enumerate() {
+            if i == active {
+                t.seen = Instant::now();
+            } else if !t.unloaded && !t.dirty() && t.seen.elapsed() > idle {
+                t.text = String::new();
+                t.saved = String::new();
+                t.unloaded = true;
+                eprintln!("[flux] uvoľnený z pamäte: {}", t.path);
+            }
+        }
     }
 
     // aktuálne miesto pre históriu späť/dopredu: domov, stránka projektu alebo súbor
@@ -618,7 +668,7 @@ impl App {
         match fsops::read(path, true) {
             Ok(v) => {
                 let text = v.as_str().unwrap_or("").replace("\r\n", "\n");
-                self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text });
+                self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text, seen: Instant::now(), unloaded: false, stale: false });
                 self.activate(self.tabs.len() - 1);
             }
             Err(e) => self.status = e,
@@ -813,6 +863,8 @@ impl App {
                 "proj:summary" => {
                     if let Some(d) = v["dir"].as_str() {
                         self.summaries.insert(d.to_string(), v["s"].clone());
+                        let m: serde_json::Map<String, Value> = self.summaries.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                        let _ = std::fs::write(summaries_file(), Value::Object(m).to_string());
                     }
                 }
                 "fs:changed" => {
@@ -823,8 +875,14 @@ impl App {
                     if let Some(w) = self.workspace() {
                         self.summarize(&w);
                     }
-                    // otvorené neupravené súbory sa načítajú znova, ak ich zmenil iný program
-                    for t in self.tabs.iter_mut() {
+                    // otvorené neupravené súbory sa načítajú znova, ak ich zmenil iný program;
+                    // neaktívne až pri otvorení (nečítať pri každej zmene všetky)
+                    let active = if self.home { usize::MAX } else { self.active };
+                    for (i, t) in self.tabs.iter_mut().enumerate() {
+                        if i != active {
+                            t.stale = true;
+                            continue;
+                        }
                         if !t.dirty() {
                             if let Ok(v) = fsops::read(&t.path, true) {
                                 let text = v.as_str().unwrap_or("").replace("\r\n", "\n");
@@ -1160,7 +1218,8 @@ impl App {
                     self.show_hidden = !self.show_hidden;
                 }
                 // ---- FILES (súbory otvorené mimo projektu) ----
-                if !self.recent_files.is_empty() {
+                // vždy viditeľné, s riadkom „+ New file“ (ako „+ New project“ pri projektoch)
+                {
                     widgets::separator(ui, &p);
                     if widgets::section(ui, &t("Files").to_uppercase(), Some("filePlus"), &p).map(|r| r.on_hover_text(t("New file")).clicked()) == Some(true) {
                         let d = self.recent_files.first().and_then(|f| Path::new(f).parent().map(|d| d.to_string_lossy().to_string()));
@@ -1184,6 +1243,9 @@ impl App {
                     self.smooth.end(sk, &sout);
                     if let Some(f) = open_f {
                         self.open_file(&f);
+                    }
+                    if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New file"), None, false, &p).clicked() {
+                        self.open_new_file(None);
                     }
                 }
                 // ---- strom súborov projektu ----
@@ -1700,22 +1762,27 @@ impl App {
                 }
                 if let Some(r) = te.cursor_range {
                     let idx = r.primary.index;
-                    let before: String = tab.text.chars().take(idx.into()).collect();
-                    let ln = before.matches('\n').count() + 1;
-                    let col = before.rsplit('\n').next().map(|s| s.chars().count()).unwrap_or(0) + 1;
+                    // riadok a stĺpec bez kopírovania textu
+                    let (mut ln, mut col) = (1usize, 1usize);
+                    for ch in tab.text.chars().take(idx.into()) {
+                        if ch == '\n' {
+                            ln += 1;
+                            col = 1;
+                        } else {
+                            col += 1;
+                        }
+                    }
                     cursor = Some((ln, col));
                 }
                 // čísla riadkov, zvýraznený aktuálny riadok, vodiace čiary odsadenia
                 let g = &te.galley;
                 let clip = ui.clip_rect();
                 let cw = ui.fonts_mut(|f| f.glyph_width(&font, ' '));
-                let src_lines: Vec<&str> = tab.text.split('\n').collect();
                 let num_x = te.galley_pos.x - gutter + 45.0;
                 // riadok → číslo riadku (pri zalamovaní má jeden riadok viac radov)
                 let mut line_no = 1usize;
                 let mut starts = true;
                 for row in g.rows.iter() {
-                    let i = line_no - 1;
                     let n = line_no;
                     let first = starts;
                     starts = row.ends_with_newline;
@@ -1740,8 +1807,9 @@ impl App {
                     if first && !label.is_empty() {
                         ui.painter().text(pos2(num_x, rr.top() + lh / 2.0), Align2::RIGHT_CENTER, label, theme::mono((fsz - 1.0).max(9.0)), c);
                     }
-                    if let (true, Some(l)) = (first, src_lines.get(i)) {
-                        let spaces = l.chars().take_while(|c| *c == ' ').count();
+                    // vodiace čiary len pre viditeľné riadky (medzery na začiatku riadku galley)
+                    if first {
+                        let spaces = row.glyphs.iter().take_while(|g| g.chr == ' ').count();
                         for k in 1..=(spaces / 4) {
                             let gx = te.galley_pos.x + ((k - 1) * 4) as f32 * cw + 0.5;
                             if k * 4 <= spaces && k > 0 {
@@ -2585,6 +2653,11 @@ impl eframe::App for App {
             let auto = self.get("autoUpdate").as_bool() != Some(false);
             self.upd.check(ctx, now_t, auto);
         }
+        // aktívna karta je vždy načítaná; dlho nevidené súbory sa uvoľnia z pamäte
+        if !self.home && self.active < self.tabs.len() {
+            self.reload_tab(self.active);
+        }
+        self.unload_idle_tabs();
         // tichá aktualizácia (autoUpdate): stiahnutá verzia sa nasadí, keď je Flux 1 min v pozadí a nič nerobí
         // (žiadne neuložené súbory, bežiaci program, Live Server ani odpoveď AI); nový Flux nezoberie fokus
         if focused {

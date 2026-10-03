@@ -2,6 +2,20 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.3 – 2026-10-03
+
+### New file, like New project
+- **+ New file** is now always in the sidebar under FILES, the same way as *+ New project* under PROJECTS. It opens the New file window (language, name, location).
+
+### Less memory and work
+- Files you haven't looked at for **10 minutes** are freed from memory (the tab stays). Clicking the tab loads the file again – unsaved files are never freed.
+- When a file changes on disk, Flux reloads only the one you are looking at; other tabs reload when you open them.
+- The editor draws line numbers and indent guides **only for the lines you see**, and no longer copies the text on every frame.
+- Flux remembers each project's stats (files, lines, languages) and at start reads only the open project, not every file of every project.
+
+### Smooth scrolling
+- One turn of the mouse wheel scrolls a bit further and still glides smoothly. *Scroll distance* in Appearance → Window changes it further.
+
 ## 0.9.2 – 2026-10-03
 
 ### Updates install by themselves again

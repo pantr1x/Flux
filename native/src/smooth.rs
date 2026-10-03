@@ -60,8 +60,8 @@ impl Smooth {
                     if !s.active {
                         s.vel = 0.0;
                     }
-                    // koliesko: o trochu väčší krok, nech je to podobné prehliadaču
-                    s.target = (s.target - dy * 1.15).clamp(0.0, s.max);
+                    // koliesko: väčší krok ako egui, plynulo dobehne (Dĺžka posunu v nastaveniach ho ešte násobí)
+                    s.target = (s.target - dy * 1.5).clamp(0.0, s.max);
                     s.active = true;
                 }
             }
