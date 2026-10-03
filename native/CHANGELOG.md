@@ -2,6 +2,16 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.8 – 2026-10-03
+
+### Moving live wallpaper with much less memory
+- Flux now makes a **small copy** of your live wallpaper video once (at most 640 px wide, saved in Flux's data folder) and plays that copy. Before, it decoded the original video – often 4K – and on laptops with built-in graphics that alone could take a few hundred MB.
+- While the copy is being made (usually a few seconds, only the first time), Flux shows a still frame of the wallpaper.
+
+### Also
+- A very big file keeps fewer undo steps (20 instead of 100), because every step is a full copy of the text.
+- Developer: the memory row also shows how much Flux's own code uses.
+
 ## 0.9.7 – 2026-10-03
 
 ### Less memory with a moving live wallpaper

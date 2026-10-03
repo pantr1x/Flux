@@ -116,6 +116,7 @@ pub struct App {
     switched: f64, // čas poslednej zmeny obsahu karty (animácia prechodu)
     nav_dir: f32,
     tree_sel: Option<Rect>,
+    undo_capped: HashSet<String>,  // veľké súbory s menšou históriou krokov späť
     unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
@@ -223,6 +224,7 @@ impl App {
             switched: 0.0,
             nav_dir: 0.0,
             tree_sel: None,
+            undo_capped: HashSet::new(),
             unfocused_at: None,
             live_push: None,
             shown: String::new(),
@@ -1686,6 +1688,12 @@ impl App {
             st.store(&ctx, ed_id);
         }
         let find_goto = std::mem::take(&mut self.find_goto);
+        // veľký súbor (> 300 KB): krok späť drží celú kópiu textu – najviac 20 namiesto 100
+        if self.tabs[self.active].text.len() > 300_000 && self.undo_capped.insert(self.tabs[self.active].path.clone()) {
+            let mut st = egui::TextEdit::load_state(&ctx, ed_id).unwrap_or_default();
+            st.set_undoer(egui::util::undoer::Undoer::with_settings(egui::util::undoer::Settings { max_undos: 20, ..Default::default() }));
+            st.store(&ctx, ed_id);
+        }
         let code = &self.code;
         let tab = &mut self.tabs[self.active];
         let ext = tab.ext();

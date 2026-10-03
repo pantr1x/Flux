@@ -37,6 +37,56 @@ pub struct Wall {
     released: Arc<AtomicBool>,
 }
 
+// ---------- zmenšená kópia živej tapety (userData/wallcache) ----------
+
+fn cache_dir() -> PathBuf {
+    flux_core::settings::user_data().join("wallcache")
+}
+
+// meno kópie podľa cesty, veľkosti a času zmeny videa (zmenené video = nová kópia)
+fn cache_path(src: &std::path::Path) -> PathBuf {
+    use sha2::{Digest, Sha256};
+    let m = std::fs::metadata(src).ok();
+    let key = format!(
+        "v1|{}|{}|{:?}",
+        src.display(),
+        m.as_ref().map(|m| m.len()).unwrap_or(0),
+        m.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0)
+    );
+    let h = format!("{:x}", Sha256::digest(key.as_bytes()));
+    cache_dir().join(format!("{}.mp4", &h[..16]))
+}
+
+fn baked_copy(src: &std::path::Path) -> Option<PathBuf> {
+    let p = cache_path(src);
+    p.exists().then_some(p)
+}
+
+// upečie kópiu (raz, na pozadí); ponechá najnovšie 3
+fn bake_now(src: &std::path::Path, stop: &AtomicBool) -> Option<PathBuf> {
+    let out = cache_path(src);
+    let _ = std::fs::create_dir_all(cache_dir());
+    let tmp = out.with_extension("part.mp4");
+    let _ = std::fs::remove_file(&tmp);
+    let t = std::time::Instant::now();
+    if !video::bake(src, &tmp, stop) {
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!("[flux] wallpaper copy failed: {}", src.display());
+        return None;
+    }
+    std::fs::rename(&tmp, &out).ok()?;
+    eprintln!("[flux] wallpaper copy ready in {:.1} s: {}", t.elapsed().as_secs_f32(), out.display());
+    if let Ok(rd) = std::fs::read_dir(cache_dir()) {
+        let mut old: Vec<_> = rd.flatten().filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path()))).filter(|(_, p)| p != &out).collect();
+        old.sort();
+        let n = old.len().saturating_sub(2);
+        for (_, p) in old.into_iter().take(n) {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    Some(out)
+}
+
 // tapeta Windows (SystemParametersInfo), na testy FLUX_WALLPAPER
 pub fn desktop_wallpaper() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("FLUX_WALLPAPER") {
@@ -93,7 +143,10 @@ impl Wall {
     pub fn set_playing(&mut self, ctx: &egui::Context, on: bool) {
         self.play.store(on, Ordering::Relaxed);
         if on && self.released.swap(false, Ordering::Relaxed) {
-            if let Some(Src::Video(path, _)) = self.source.clone() {
+            if let Some(path) = match self.source.clone() {
+                Some(Src::Video(path, _)) => baked_copy(&path),
+                _ => None,
+            } {
                 let (slot, play, stop, ctx) = (self.pending.clone(), self.play.clone(), self.stop.clone(), ctx.clone());
                 let (resume, released) = (self.resume.clone(), self.released.clone());
                 std::thread::spawn(move || {
@@ -138,6 +191,22 @@ impl Wall {
             }
             Src::Video(path, preview) | Src::Still(path, preview) => {
                 let once = matches!(src_kind, Kind::Still);
+                // hýbajúca sa tapeta: prehráva sa zmenšená kópia (≤ 640 px) – dekodér pôvodného (často 4K) videa
+                // si na notebookoch s integrovanou grafikou bral stovky MB RAM. Kým kópia nie je, je tam jedna snímka.
+                let path = if once {
+                    path
+                } else {
+                    match baked_copy(&path) {
+                        Some(small) => small,
+                        None => {
+                            video::play(&path, &slot, &play, &stop, &ctx, true, &resume, &released, false);
+                            match bake_now(&path, &stop) {
+                                Some(small) if !stop.load(Ordering::Relaxed) => small,
+                                _ => return, // bez kópie ostáva snímka (nikdy nie video v plnej veľkosti)
+                            }
+                        }
+                    }
+                };
                 if !video::play(&path, &slot, &play, &stop, &ctx, once, &resume, &released, false) {
                     // video sa nedá prehrať (iný systém, chýba kodek) → náhľad
                     if let Some(l) = preview.as_deref().and_then(load_image) {
@@ -280,6 +349,113 @@ mod video {
         shown
     }
 
+    #[cfg(not(windows))]
+    pub fn bake(_: &Path, _: &Path, _: &AtomicBool) -> bool {
+        false
+    }
+
+    // zmenšená kópia videa: dekódovanie (≤ 640 px, RGB32) → H.264 (~1,5 Mbit/s), najviac prvých 60 s, bez zvuku
+    #[cfg(windows)]
+    pub fn bake(src: &Path, out: &Path, stop: &AtomicBool) -> bool {
+        unsafe {
+            use windows_sys::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL};
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+        }
+        match unsafe { bake_run(src, out, stop) } {
+            Ok(ok) => ok,
+            Err(e) => {
+                eprintln!("wallpaper copy: {e}");
+                false
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    unsafe fn bake_run(src: &Path, out: &Path, stop: &AtomicBool) -> windows::core::Result<bool> {
+        use std::sync::atomic::Ordering;
+        use windows::core::HSTRING;
+        use windows::Win32::Media::MediaFoundation::*;
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        MFStartup(MF_VERSION, MFSTARTUP_LITE)?;
+        struct Mf;
+        impl Drop for Mf {
+            fn drop(&mut self) {
+                unsafe {
+                    let _ = MFShutdown();
+                }
+            }
+        }
+        let _mf = Mf;
+        let mut attrs = None;
+        MFCreateAttributes(&mut attrs, 3)?;
+        let attrs = attrs.ok_or_else(windows::core::Error::empty)?;
+        attrs.SetUINT32(&MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1)?;
+        let reader = MFCreateSourceReaderFromURL(&HSTRING::from(src.as_os_str()), &attrs)?;
+        let vs = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
+        let _ = reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false);
+        reader.SetStreamSelection(vs, true)?;
+        let native = reader.GetNativeMediaType(vs, 0)?;
+        let fs = native.GetUINT64(&MF_MT_FRAME_SIZE)?;
+        let (nw, nh) = ((fs >> 32) as u32, (fs & 0xffff_ffff) as u32);
+        let w = nw.min(640) & !1;
+        let h = ((nh as u64 * w as u64 / nw.max(1) as u64) as u32) & !1;
+        let (fn_, fd) = native.GetUINT64(&MF_MT_FRAME_RATE).map(|r| ((r >> 32) as u32, (r & 0xffff_ffff) as u32)).unwrap_or((24, 1));
+        let fps = if fd > 0 && fn_ > 0 { (fn_ as f64 / fd as f64).min(30.0) } else { 24.0 };
+        let mt = MFCreateMediaType()?;
+        mt.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+        mt.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)?;
+        mt.SetUINT64(&MF_MT_FRAME_SIZE, ((w as u64) << 32) | h as u64)?;
+        reader.SetCurrentMediaType(vs, None, &mt)?;
+        let input = reader.GetCurrentMediaType(vs)?;
+        let fs = input.GetUINT64(&MF_MT_FRAME_SIZE)?;
+        let (w, h) = ((fs >> 32) as u32, (fs & 0xffff_ffff) as u32);
+        let rate = (((fps * 1000.0).round() as u64) << 32) | 1000;
+        let _ = input.SetUINT64(&MF_MT_FRAME_RATE, rate);
+        let _ = input.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32);
+        let _ = input.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1);
+        // zapisovač: H.264 do MP4
+        let mut wattrs = None;
+        MFCreateAttributes(&mut wattrs, 1)?;
+        let wattrs = wattrs.ok_or_else(windows::core::Error::empty)?;
+        wattrs.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)?;
+        let writer = MFCreateSinkWriterFromURL(&HSTRING::from(out.as_os_str()), None, &wattrs)?;
+        let ot = MFCreateMediaType()?;
+        ot.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+        ot.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
+        ot.SetUINT32(&MF_MT_AVG_BITRATE, 1_500_000)?;
+        ot.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
+        ot.SetUINT64(&MF_MT_FRAME_SIZE, ((w as u64) << 32) | h as u64)?;
+        ot.SetUINT64(&MF_MT_FRAME_RATE, rate)?;
+        ot.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)?;
+        let stream = writer.AddStream(&ot)?;
+        writer.SetInputMediaType(stream, &input, None)?;
+        writer.BeginWriting()?;
+        let mut first: Option<i64> = None;
+        let mut frames = 0u32;
+        loop {
+            if stop.load(Ordering::Relaxed) {
+                return Ok(false);
+            }
+            let (mut flags, mut ts, mut sample) = (0u32, 0i64, None);
+            reader.ReadSample(vs, 0, None, Some(&mut flags), Some(&mut ts), Some(&mut sample))?;
+            if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
+                break;
+            }
+            let Some(sample) = sample else { continue };
+            let t0 = *first.get_or_insert(ts);
+            let rel = ts - t0;
+            if rel > 600_000_000 {
+                break; // najviac 60 s
+            }
+            sample.SetSampleTime(rel)?;
+            writer.WriteSample(stream, &sample)?;
+            frames += 1;
+        }
+        writer.Finalize()?;
+        Ok(frames > 0)
+    }
+
     // D3D11 zariadenie + správca pre Media Foundation; None = zostane dekódovanie v procesore
     #[cfg(windows)]
     unsafe fn hw_decoder(
@@ -356,7 +532,8 @@ mod video {
         attrs.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)?;
         // dekódovanie na grafickej karte (D3D11): bez neho sa 4K video dekóduje v procesore – pomaly
         // (tapeta sa oneskoruje) a so stovkami MB snímok v RAM
-        let _d3d = hw_decoder(&attrs);
+        // zmenšená kópia (wallcache) sa dekóduje v procesore – bez D3D11 zariadenia a jeho pamäte v ovládači
+        let _d3d = if path.starts_with(super::cache_dir()) { None } else { hw_decoder(&attrs) };
         let reader = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), &attrs)?;
         let vs = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
         let _ = reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false);

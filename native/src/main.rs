@@ -2,6 +2,34 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+
+// počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
+struct Count;
+pub static HEAP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+unsafe impl std::alloc::GlobalAlloc for Count {
+    unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+        HEAP.fetch_add(l.size(), std::sync::atomic::Ordering::Relaxed);
+        unsafe { std::alloc::System.alloc(l) }
+    }
+    unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+        HEAP.fetch_sub(l.size(), std::sync::atomic::Ordering::Relaxed);
+        unsafe { std::alloc::System.dealloc(p, l) }
+    }
+    unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, n: usize) -> *mut u8 {
+        let r = unsafe { std::alloc::System.realloc(p, l, n) };
+        if !r.is_null() {
+            HEAP.fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+            HEAP.fetch_sub(l.size(), std::sync::atomic::Ordering::Relaxed);
+        }
+        r
+    }
+}
+#[global_allocator]
+static ALLOC: Count = Count;
+
+pub fn heap_mb() -> f64 {
+    HEAP.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1048576.0
+}
 mod boot;
 mod code;
 mod gen;

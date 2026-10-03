@@ -155,7 +155,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 (
                     "Memory",
                     vec![
-                        Row::Info("Memory", format!("{} MB", crate::mem::used_mb().map(|m| format!("{m:.0}")).unwrap_or("–".into()))),
+                        Row::Info("Memory", format!("{} MB · Flux code {:.1} MB", crate::mem::used_mb().map(|m| format!("{m:.0}")).unwrap_or("–".into()), crate::heap_mb())),
                         // rozpis: textúry egui (písmo, tapeta, ikony) a čo ešte beží
                         Row::Info("Textures", app.tex_info.clone()),
                         Row::Info(
