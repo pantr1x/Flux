@@ -942,7 +942,22 @@ function createEditor() {
   const needEmmet = (model) => {
     if (emmet || !['html', 'css', 'scss', 'less'].includes(model.getLanguageId())) return;
     emmet = import('emmet-monaco-es').then(({ emmetHTML, emmetCSS }) => {
-      emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
+      // Vnútri otvorenej značky („<font title“) Emmet mlčí – inak by z atribútu urobil <title></title>
+      // a prebil by Monaco návrh title="".
+      const insideTag = (model, pos) => {
+        const text = model.getValueInRange({ startLineNumber: Math.max(1, pos.lineNumber - 30), startColumn: 1, endLineNumber: pos.lineNumber, endColumn: pos.column });
+        const lt = text.lastIndexOf('<');
+        return lt > text.lastIndexOf('>') && /^<[a-zA-Z][\w:-]*\s/.test(text.slice(lt));
+      };
+      const guarded = {
+        ...monaco,
+        languages: {
+          ...monaco.languages,
+          registerCompletionItemProvider: (lang, p) =>
+            monaco.languages.registerCompletionItemProvider(lang, { ...p, provideCompletionItems: (m, pos, ...rest) => (insideTag(m, pos) ? undefined : p.provideCompletionItems(m, pos, ...rest)) }),
+        },
+      };
+      emmetHTML(guarded, ['html'], { tokenizer: 'standard' });
       emmetCSS(monaco, ['css', 'scss', 'less'], { tokenizer: 'standard' });
     });
   };

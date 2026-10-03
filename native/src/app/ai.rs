@@ -10,6 +10,15 @@ use serde_json::{json, Value};
 use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
+// hotové MCP konektory (meno, adresa, popis)
+// (Notion, Linear a pod. potrebujú prihlásenie OAuth, ktoré API konektor nevie – preto tu nie sú)
+const PRESETS: [(&str, &str, &str); 4] = [
+    ("Context7", "https://mcp.context7.com/mcp", "Up-to-date docs for libraries and frameworks"),
+    ("DeepWiki", "https://mcp.deepwiki.com/mcp", "Ask about any public GitHub repository"),
+    ("GitHub", "https://api.githubcopilot.com/mcp/", "Issues, pull requests and code on GitHub (needs a token)"),
+    ("Hugging Face", "https://huggingface.co/mcp", "Models, datasets and Spaces"),
+];
+
 pub const MODELS: [(&str, &str); 3] = [("claude-opus-5", "Claude Opus 5"), ("claude-sonnet-5", "Claude Sonnet 5"), ("claude-haiku-4-5", "Claude Haiku 4.5")];
 const DEFAULT_MODEL: &str = "claude-opus-5";
 
@@ -50,6 +59,7 @@ pub struct AiUi {
     mcp_name: String,
     mcp_url: String,
     mcp_token: String,
+    mcp_add_now: bool,                // hotový konektor bez tokenu – pridať hneď
     key_hint: Option<Option<String>>, // „…abcd“ (zistené raz)
     share_file: Option<bool>,
 }
@@ -210,6 +220,31 @@ impl App {
                     });
                 }
                 group_end(ui, g, w, &p);
+                // hotové konektory: jeden klik vyplní meno a adresu
+                ui.add_space(10.0);
+                ui.label(egui::RichText::new(t("Ready-made connectors")).font(theme::bold(12.0)).color(p.text2));
+                ui.add_space(4.0);
+                let mut preset = None;
+                ui.horizontal_wrapped(|ui| {
+                    for (i, (name, _, _)) in PRESETS.iter().enumerate() {
+                        let have = list.iter().any(|m| m["name"].as_str() == Some(name));
+                        if widgets::button(ui, Some(if have { "check" } else { "plus" }), name, p.card2, if have { p.text3 } else { p.text }, 28.0, &p).on_hover_text(t(PRESETS[i].2)).clicked() {
+                            preset = Some(i);
+                        }
+                    }
+                });
+                if let Some(i) = preset {
+                    let (name, url, _) = PRESETS[i];
+                    self.ai.mcp_name = name.to_lowercase().replace(' ', "-");
+                    self.ai.mcp_url = url.to_string();
+                    if name == "GitHub" {
+                        self.note(t("GitHub needs a token: paste a personal access token and press Add."));
+                        flux_core::settings::open_external("https://github.com/settings/personal-access-tokens/new");
+                    } else {
+                        self.ai.mcp_token.clear();
+                        self.ai.mcp_add_now = true;
+                    }
+                }
                 // přidanie (form.s-mcp-add)
                 ui.add_space(10.0);
                 let mut add = false;
@@ -222,6 +257,7 @@ impl App {
                         add = true;
                     }
                 });
+                let add = add || std::mem::take(&mut self.ai.mcp_add_now);
                 let (name, url) = (self.ai.mcp_name.trim().to_string(), self.ai.mcp_url.trim().to_string());
                 if add && !name.is_empty() && url.starts_with("http") {
                     if !self.ai.mcp_token.trim().is_empty() {
@@ -257,6 +293,7 @@ impl App {
                     });
                 }
             }
+            "ai-flux" => self.mcp_ui(ui, w),
             _ => {}
         }
     }
@@ -672,5 +709,90 @@ impl App {
         tab.text.insert_str(bi, code);
         self.last_edit = Some(std::time::Instant::now());
         self.note(t("Inserted."));
+    }
+}
+
+// ---------- Flux pre iné AI aplikácie (MCP server, mcp.rs) ----------
+impl App {
+    pub(super) fn mcp_toggle(&mut self, on: bool) {
+        crate::mcp::set_enabled(&self.core, on);
+        self.mcp = None;
+        self.mcp_err = None;
+        if on {
+            match crate::mcp::start(self.core.clone(), self.emit.clone()) {
+                Ok(s) => self.mcp = Some(s),
+                Err(e) => self.mcp_err = Some(e),
+            }
+        }
+    }
+
+    fn mcp_ui(&mut self, ui: &mut egui::Ui, w: f32) {
+        let p = self.pal;
+        let g = group_begin(ui);
+        let mut on = self.mcp.is_some();
+        let status = match (&self.mcp, &self.mcp_err) {
+            (Some(s), _) => tf("Running at {url}", &[("url", &crate::mcp::url(s.port))]),
+            (None, Some(e)) => e.clone(),
+            _ => t("Off"),
+        };
+        let mut toggled = None;
+        line_row(self, ui, w, &t("Flux for other AI apps"), &status, |ui| {
+            if super::prefs::switch(ui, &mut on, &p, true) {
+                toggled = Some(on);
+            }
+        });
+        if let Some(v) = toggled {
+            self.mcp_toggle(v);
+        }
+        if let Some(port) = self.mcp.as_ref().map(|s| s.port) {
+            let url = crate::mcp::url(port);
+            let key = crate::mcp::token(&self.core);
+            let mut copy: Option<(String, String)> = None;
+            let mut desktop = false;
+            divider(ui, w, &p);
+            line_row(self, ui, w, "Claude Desktop", &t("Adds Flux to Claude Desktop's settings. Restart Claude Desktop afterwards."), |ui| {
+                if widgets::button(ui, Some("plus"), &t("Add to Claude Desktop"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                    desktop = true;
+                }
+            });
+            let code_cmd = format!("claude mcp add --transport http flux {url} --header \"Authorization: Bearer {key}\"");
+            let cursor = serde_json::to_string_pretty(&json!({ "mcpServers": { "flux": { "url": url, "headers": { "Authorization": format!("Bearer {key}") } } } })).unwrap_or_default();
+            let rows = [
+                ("Claude Code", t("Run this command in a terminal."), code_cmd),
+                ("Cursor / VS Code", t("Paste into mcp.json."), cursor),
+                ("Link", t("For any other app that supports MCP over HTTP."), url.clone()),
+                ("Key", t("Sent as Authorization: Bearer <key>. Keep it secret."), key.clone()),
+            ];
+            for (title, hint, value) in rows {
+                divider(ui, w, &p);
+                line_row(self, ui, w, &t(title), &hint, |ui| {
+                    if widgets::button(ui, None, &t("Copy"), p.card2, p.text, 30.0, &p).clicked() {
+                        copy = Some((value.clone(), title.to_string()));
+                    }
+                });
+            }
+            divider(ui, w, &p);
+            let mut renew = false;
+            line_row(self, ui, w, &t("New key"), &t("Apps that use the old key stop working until you paste the new one."), |ui| {
+                if widgets::button(ui, Some("refresh"), &t("New key"), p.card2, p.text, 30.0, &p).clicked() {
+                    renew = true;
+                }
+            });
+            if let Some((v, title)) = copy {
+                ui.ctx().copy_text(v);
+                self.note(tf("{what} copied.", &[("what", &t(&title))]));
+            }
+            if desktop {
+                match crate::mcp::add_to_claude_desktop() {
+                    Ok(f) => self.note(tf("Added to Claude Desktop ({file}). Restart Claude Desktop.", &[("file", &f)])),
+                    Err(e) => self.status = e,
+                }
+            }
+            if renew {
+                crate::mcp::new_key(&self.core);
+                self.note(t("New key created."));
+            }
+        }
+        group_end(ui, g, w, &p);
     }
 }

@@ -120,14 +120,7 @@ impl App {
     pub(super) fn act(&mut self, id: &str, ctx: &egui::Context) {
         match id {
             "ai" => self.toggle_ai(),
-            "new-file" => {
-                if self.workspace().is_some() {
-                    self.new_item = Some((false, String::new()));
-                    self.side_open = true;
-                } else {
-                    self.act("open-file", ctx);
-                }
-            }
+            "new-file" => self.open_new_file(None),
             "new-folder" => {
                 self.new_item = Some((true, String::new()));
                 self.side_open = true;
@@ -215,14 +208,32 @@ impl App {
                     }
                 } else if let Some(d) = id.strip_prefix("trash-project:") {
                     let d = d.to_string();
-                    if fsops::move_to_trash(&d).is_ok() {
-                        fsops::forget(&self.core, &d);
-                        if self.workspace().as_deref() == Some(d.as_str()) {
-                            *self.core.workspace.lock().unwrap() = None;
-                            self.tabs.clear();
+                    if self.workspace().as_deref() == Some(d.as_str()) {
+                        // Windows nezmaže priečinok, ktorý drží sledovanie zmien alebo terminál
+                        self.watcher = None;
+                        self.out.pty.kill();
+                        self.sh.pty.kill();
+                        self.shell_started = false;
+                        self.server = None;
+                        self.close_preview();
+                    }
+                    match fsops::move_to_trash(&d) {
+                        Ok(_) => {
+                            fsops::forget(&self.core, &d);
+                            if self.workspace().as_deref() == Some(d.as_str()) {
+                                *self.core.workspace.lock().unwrap() = None;
+                            }
+                            let pre = format!("{d}{}", std::path::MAIN_SEPARATOR);
+                            self.tabs.retain(|t| !t.path.starts_with(&pre));
+                            self.active = self.active.min(self.tabs.len().saturating_sub(1));
                             self.home = true;
+                            self.reload_projects();
+                            // späť na domovskú obrazovku
+                            let now = ctx.input(|i| i.time);
+                            self.open_start(now);
+                            self.note(tf("{name} was moved to the Recycle Bin.", &[("name", &widgets::file_name(&d))]));
                         }
-                        self.reload_projects();
+                        Err(e) => self.status = e.to_string(),
                     }
                 }
             }
@@ -392,10 +403,11 @@ impl App {
                 self.open_file(path);
                 self.run();
             }
-            Some("new-file") | Some("new-folder") => {
+            Some("new-file") => self.open_new_file(Some(base.clone())),
+            Some("new-folder") => {
                 self.new_in = Some(base.clone());
                 self.open_dirs.insert(base);
-                self.new_item = Some((picked == Some("new-folder"), String::new()));
+                self.new_item = Some((true, String::new()));
             }
             Some("rename") => self.renaming = Some((path.to_string(), widgets::file_name(path))),
             Some("delete") => {
@@ -467,9 +479,48 @@ impl App {
         }
         let is_project = self.projects.iter().any(|x| x["dir"].as_str() == Some(from));
         if is_project {
+            // otvorený projekt: Windows nepremenuje priečinok, kým ho drží sledovanie zmien, terminál alebo program
+            let open = self.workspace().as_deref() == Some(from);
+            if open {
+                self.watcher = None;
+                self.out.pty.kill();
+                self.sh.pty.kill();
+                self.shell_started = false;
+                self.server = None;
+                self.close_preview();
+                std::thread::sleep(std::time::Duration::from_millis(150));
+            }
             match fsops::rename_project(&self.core, from, name) {
-                Ok(_) => self.reload_projects(),
-                Err(e) => self.status = t(&e),
+                Ok(v) => {
+                    let to = v["dir"].as_str().map(String::from).unwrap_or_else(|| Path::new(from).parent().unwrap_or(Path::new("")).join(name).to_string_lossy().to_string());
+                    // popis, úlohy a ikona idú s projektom
+                    self.update_settings(|o| {
+                        if let Some(all) = o.get_mut("projectMeta").and_then(|m| m.as_object_mut()) {
+                            if let Some(m) = all.remove(from) {
+                                all.insert(to.clone(), m);
+                            }
+                        }
+                        if o.get("lastFolder").and_then(|v| v.as_str()) == Some(from) {
+                            o.insert("lastFolder".into(), serde_json::json!(to));
+                        }
+                    });
+                    for tab in self.tabs.iter_mut() {
+                        if tab.path.starts_with(&format!("{from}{}", std::path::MAIN_SEPARATOR)) {
+                            tab.path = format!("{to}{}", &tab.path[from.len()..]);
+                        }
+                    }
+                    self.reload_projects();
+                    if open {
+                        self.open_folder(&to);
+                    }
+                    self.note(tf("Renamed to {name}.", &[("name", name)]));
+                }
+                Err(e) => {
+                    self.status = t(&e);
+                    if open {
+                        self.open_folder(from);
+                    }
+                }
             }
             return;
         }

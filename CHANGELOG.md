@@ -2,6 +2,11 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.4.36 – 2026-10-03
+
+### HTML: attributes are suggested again inside a tag
+- **Typing an attribute inside a tag no longer turns it into a new tag.** Before, `<font title` + Enter gave `<font <title></title>` because the Emmet shortcut for `<title>` won over the attribute. Now Flux suggests `title=""` inside a tag, and Emmet shortcuts still work everywhere else.
+
 ## 1.4.35 – 2026-09-30
 
 ### Video backgrounds: less memory and the right size

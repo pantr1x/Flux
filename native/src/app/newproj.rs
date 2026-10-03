@@ -190,9 +190,15 @@ impl App {
         });
         cu.add_space(14.0);
         // kde: tento počítač / nový na GitHube / import z GitHubu
-        let tabs = [(Where::Local, "laptop", "On this computer"), (Where::GitHub, "github", "New on GitHub"), (Where::Import, "download", "Import from GitHub")];
+        // bez pluginu GitHub len tento počítač
+        let gh = self.gh_plugin();
+        if !gh {
+            self.new_project.as_mut().unwrap().place = Where::Local;
+        }
+        let tabs: Vec<(Where, &str, &str)> =
+            if gh { vec![(Where::Local, "laptop", "On this computer"), (Where::GitHub, "github", "New on GitHub"), (Where::Import, "download", "Import from GitHub")] } else { vec![] };
         let tw = (iw - 2.0 * 6.0) / 3.0;
-        let (area, _) = cu.allocate_exact_size(vec2(iw, 40.0), Sense::hover());
+        let (area, _) = cu.allocate_exact_size(vec2(iw, if gh { 40.0 } else { 0.0 }), Sense::hover());
         let cur = self.new_project.as_ref().unwrap().place;
         let mut pick = None;
         for (i, (wh, ic, label)) in tabs.iter().enumerate() {
@@ -287,13 +293,6 @@ impl App {
             }
         } else {
             let np = self.new_project.as_mut().unwrap();
-            // ikona
-            cu.add_space(14.0);
-            cu.label(egui::RichText::new(t("Icon")).font(theme::bold(12.5)).color(p.text2));
-            cu.add_space(6.0);
-            if let Some(ic) = icon_picker(&mut cu, &np.icon, "", iw, &p) {
-                np.icon = ic;
-            }
             field(&mut cu, &t("Name"), false);
             let te = cu.add(egui::TextEdit::singleline(&mut np.name).desired_width(iw).margin(egui::Margin::symmetric(12, 8)).font(theme::ui(14.0)));
             if np.focus {
@@ -303,8 +302,22 @@ impl App {
             if te.lost_focus() && cu.input(|i| i.key_pressed(egui::Key::Enter)) {
                 create = true;
             }
-            field(&mut cu, &t("Short description"), true);
-            cu.add(egui::TextEdit::singleline(&mut np.desc).hint_text(t("e.g. A game where you catch falling stars")).desired_width(iw).char_limit(160).margin(egui::Margin::symmetric(12, 8)));
+            field(&mut cu, &t("What is it about?"), true);
+            cu.add(
+                egui::TextEdit::multiline(&mut np.desc)
+                    .hint_text(t("e.g. A game where you catch falling stars"))
+                    .desired_width(iw)
+                    .desired_rows(2)
+                    .char_limit(160)
+                    .margin(egui::Margin::symmetric(12, 8)),
+            );
+            // ikona
+            cu.add_space(12.0);
+            cu.label(egui::RichText::new(t("Icon")).font(theme::bold(12.5)).color(p.text2));
+            cu.add_space(6.0);
+            if let Some(ic) = icon_picker(&mut cu, &np.icon, "", iw, &p) {
+                np.icon = ic;
+            }
             field(&mut cu, &t("Location"), false);
             let mut change = false;
             cu.horizontal(|ui| {

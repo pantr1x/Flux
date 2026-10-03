@@ -8,6 +8,7 @@ mod github;
 mod home;
 mod intro;
 mod menus;
+mod newfile;
 mod newproj;
 mod prefs;
 mod preview;
@@ -76,7 +77,8 @@ pub struct App {
     recent_files: Vec<String>,
     show_hidden: bool,
     new_project: Option<newproj::NewProj>,
-    new_item: Option<(bool, String)>, // (priečinok?, meno) pre nový súbor/priečinok v strome
+    new_file: Option<newfile::NewFile>, // okno Nový súbor
+    new_item: Option<(bool, String)>,   // (priečinok?, meno) pre nový súbor/priečinok v strome
     new_todo: String,
     side_open: bool,
     out: TermView,
@@ -100,9 +102,12 @@ pub struct App {
     palette: Option<menus::Palette>,
     ask: Option<menus::Ask>,
     renaming: Option<(String, String)>,
+    desc_edit: Option<(String, String, bool)>, // (projekt, text, fokus) – úprava popisu na stránke projektu
     new_in: Option<String>,
     settings: Option<prefs::SettingsUi>,
     switched: f64, // čas poslednej zmeny obsahu karty (animácia prechodu)
+    nav_dir: f32,
+    live_push: Option<Instant>, // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
     panel_w: f32,
     trim: crate::mem::Trim,
@@ -119,11 +124,14 @@ pub struct App {
     pub(crate) upd: crate::update::Updater,
     server: Option<crate::server::Server>, // Live Server (HTML)
     ok_status: String,                     // hlásenie o úspechu (zelené); ostatné v status sú chyby
+    ok_at: Option<Instant>,                // kedy sa hlásenie o úspechu ukázalo (po 4 s zmizne)
     ai: ai::AiUi,                          // Claude: nastavenia a panel
     gh: github::GhUi,                      // GitHub účet a repozitáre
-    tools: tools::Shared,                  // programovacie jazyky na stiahnutie
-    start: bool,                           // domov Fluxu (logo)
-    start_q: String,                       // hľadanie projektu na domove
+    mcp: Option<crate::mcp::Server>,       // Flux pre iné AI aplikácie (Nastavenia → AI)
+    mcp_err: Option<String>,
+    tools: tools::Shared, // programovacie jazyky na stiahnutie
+    start: bool,          // domov Fluxu (logo)
+    start_q: String,      // hľadanie projektu na domove
     start_opened: f64,
     preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
@@ -175,6 +183,7 @@ impl App {
             show_hidden: false,
             new_project: None,
             new_item: None,
+            new_file: None,
             new_todo: String::new(),
             side_open: true,
             out: TermView::new("flux-output"),
@@ -198,9 +207,12 @@ impl App {
             palette: None,
             ask: None,
             renaming: None,
+            desc_edit: None,
             new_in: None,
             settings: None,
             switched: 0.0,
+            nav_dir: 0.0,
+            live_push: None,
             shown: String::new(),
             panel_w: 420.0,
             trim: Default::default(),
@@ -217,8 +229,11 @@ impl App {
             upd: Default::default(),
             server: None,
             ok_status: String::new(),
+            ok_at: None,
             ai: Default::default(),
             gh: Default::default(),
+            mcp: None,
+            mcp_err: None,
             tools: Default::default(),
             start: false,
             start_q: String::new(),
@@ -234,6 +249,10 @@ impl App {
             app.intro = Some(intro::Intro::new(app.core.setting("userName").as_str().unwrap_or("")));
         }
         app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
+        app.gh_plugin_migrate();
+        if crate::mcp::enabled(&app.core) {
+            app.mcp_toggle(true);
+        }
         app.reload_projects();
         if let Some(last) = app.core.setting("lastFolder").as_str().map(String::from) {
             app.open_folder(&last);
@@ -434,6 +453,7 @@ impl App {
 
     // hlásenie o úspechu v stavovom riadku (zelené)
     fn note(&mut self, s: String) {
+        self.ok_at = Some(Instant::now());
         self.ok_status = s.clone();
         self.status = s;
     }
@@ -554,6 +574,7 @@ impl App {
             return;
         }
         self.last_go = Some(Instant::now());
+        self.nav_dir = if back { -1.0 } else { 1.0 };
         let mut i = self.hist_i;
         loop {
             i = match if back { i.checked_sub(1) } else { Some(i + 1).filter(|i| *i < self.hist.len()) } {
@@ -619,8 +640,11 @@ impl App {
                 Err(e) => self.status = e,
             }
         }
-        // Live Server: otvorené stránky sa znova načítajú
+        // Live Server: otvorené stránky sa znova načítajú (už z disku)
         if let Some(s) = &self.server {
+            if let Some(t) = self.tabs.get(i) {
+                s.clear_live(&t.path);
+            }
             s.bump();
         }
     }
@@ -803,6 +827,14 @@ impl App {
                     },
                     ctx,
                 ),
+                "sfind" => self.settings_find(arg),
+                // edit=<text>: pripíše text do otvoreného súboru bez uloženia (testy Live Servera)
+                "edit" => {
+                    if let Some(tab) = self.tabs.get_mut(self.active) {
+                        tab.text.push_str(&arg.replace("\\n", "\n"));
+                        self.last_edit = Some(Instant::now());
+                    }
+                }
                 "pq" => {
                     if let Some(pl) = self.palette.as_mut() {
                         pl.set_query(arg);
@@ -811,6 +843,7 @@ impl App {
                 "settings" => self.open_settings(if arg.is_empty() { "general" } else { arg }, ctx),
                 "ai" => self.toggle_ai(),
                 "newproj" => self.open_new_project(),
+                "newfile" => self.open_new_file(None),
                 "panic" => panic!("test crash"),
                 "gh-signin" => self.gh_sign_in(ctx),
                 "gh-pick" => self.gh_pick(ctx),
@@ -940,7 +973,8 @@ impl App {
             if te.lost_focus() {
                 let (f, n) = (from.clone(), new.clone());
                 self.renaming = None;
-                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                // Enter aj klik inam uloží, Esc zruší
+                if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     *rename = Some((f, n));
                 }
             }
@@ -1072,14 +1106,8 @@ impl App {
                 if !self.recent_files.is_empty() {
                     widgets::separator(ui, &p);
                     if widgets::section(ui, &t("Files").to_uppercase(), Some("filePlus"), &p).map(|r| r.on_hover_text(t("New file")).clicked()) == Some(true) {
-                        if let Some(f) = rfd::FileDialog::new().set_title(t("New file")).save_file() {
-                            let f = f.to_string_lossy().to_string();
-                            if fsops::create(&f, false).is_ok() {
-                                fsops::allow_file(&self.core, &f);
-                                self.reload_projects();
-                                self.open_file(&f);
-                            }
-                        }
+                        let d = self.recent_files.first().and_then(|f| Path::new(f).parent().map(|d| d.to_string_lossy().to_string()));
+                        self.open_new_file(d);
                     }
                     let mut open_f = None;
                     let sk = egui::Id::new("sa-loose");
@@ -1109,7 +1137,7 @@ impl App {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         ui.add_space(4.0);
                         if widgets::icon_button(ui, "filePlus", &p, true).on_hover_text(t("New file")).clicked() {
-                            self.new_item = Some((false, String::new()));
+                            self.open_new_file(None);
                         }
                         if widgets::icon_button(ui, "folderPlus", &p, true).on_hover_text(t("New folder")).clicked() {
                             self.new_item = Some((true, String::new()));
@@ -1225,7 +1253,7 @@ impl App {
                 if te.lost_focus() {
                     let (f, n) = (from.clone(), new.clone());
                     self.renaming = None;
-                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                         self.finish_rename(&f, &n);
                     }
                 }
@@ -1854,9 +1882,35 @@ impl App {
                 }
             });
             let tx = icon_box.right() + 19.0;
-            ui.painter().text(pos2(tx, head.top() + 20.0), Align2::LEFT_CENTER, widgets::file_name(&ws), theme::bold(30.0), p.text);
-            let desc = meta["description"].as_str().filter(|d| !d.is_empty()).map(String::from).unwrap_or_else(|| ws.clone());
-            widgets::text(ui, pos2(tx, head.top() + 57.0), Align2::LEFT_CENTER, &desc, theme::ui(14.0), p.text2, inner_w - 420.0);
+            let tr = ui.painter().text(pos2(tx, head.top() + 20.0), Align2::LEFT_CENTER, widgets::file_name(&ws), theme::bold(30.0), p.text);
+            ui.interact(tr, ui.id().with("proj-title"), Sense::hover()).on_hover_text(&ws);
+            // popis: klik = upraviť; prázdny → „Pridať krátky popis…“
+            let dr = Rect::from_min_size(pos2(tx - 4.0, head.top() + 45.0), vec2((inner_w - 420.0).max(160.0), 24.0));
+            let desc = meta["description"].as_str().unwrap_or("").replace('\n', " ");
+            if let Some((_, text, focus)) = self.desc_edit.as_mut().filter(|e| e.0 == ws) {
+                let mut du = ui.new_child(egui::UiBuilder::new().max_rect(dr));
+                let te =
+                    du.add(egui::TextEdit::singleline(text).hint_text(t("Add a short description…")).desired_width(dr.width()).char_limit(160).font(theme::ui(14.0)).margin(Margin::symmetric(4, 3)));
+                if std::mem::take(focus) {
+                    te.request_focus();
+                }
+                if te.lost_focus() {
+                    let v = text.trim().to_string();
+                    self.desc_edit = None;
+                    self.set_project_meta(&ws, json!({ "description": v }));
+                }
+            } else {
+                let empty = desc.trim().is_empty();
+                let shown = if empty { t("Add a short description…") } else { desc.clone() };
+                let r = widgets::text(ui, pos2(tx, head.top() + 57.0), Align2::LEFT_CENTER, &shown, theme::ui(14.0), if empty { p.text3 } else { p.text2 }, inner_w - 420.0);
+                let resp = ui.interact(r.expand(4.0), ui.id().with("proj-desc"), Sense::click()).on_hover_cursor(egui::CursorIcon::Text).on_hover_text(t("Click to edit"));
+                if resp.hovered() {
+                    ui.painter().rect_stroke(r.expand(4.0), CornerRadius::same(6), Stroke::new(1.0, p.line), StrokeKind::Inside);
+                }
+                if resp.clicked() {
+                    self.desc_edit = Some((ws.clone(), desc, true));
+                }
+            }
             let mut cx = tx;
             for k in &langs {
                 let name = kind_name(k);
@@ -1883,7 +1937,7 @@ impl App {
             let has_main = main_file.is_some();
             let (nf_bg, nf_fg) = if has_main { (p.card2, p.text) } else { (p.accent, p.accent_fg) };
             if widgets::button(&mut acts, Some("filePlus"), &t("New file"), nf_bg, nf_fg, 32.0, &p).clicked() {
-                self.new_item = Some((false, String::new()));
+                self.open_new_file(None);
             }
             if let Some((name, path)) = &main_file {
                 let web = name.ends_with(".html");
@@ -1918,7 +1972,7 @@ impl App {
                 ("play", runs.to_string(), "runs"),
                 ("code", summary["lines"].as_u64().map(|n| n.to_string()).unwrap_or("\u{2013}".into()), "lines of code"),
                 ("file", summary["files"].as_u64().map(|n| n.to_string()).unwrap_or("\u{2013}".into()), "files"),
-                ("refresh", summary["last"].as_u64().map(ago).unwrap_or("\u{2013}".into()), "last change"),
+                ("refresh", summary["last"].as_u64().filter(|l| *l > 0).map(ago).unwrap_or("\u{2013}".into()), "last change"),
             ];
             let (row, _) = ui.allocate_exact_size(vec2(full, 84.0), Sense::hover());
             let tw = (inner_w - 4.0 * 11.0) / 5.0;
@@ -2128,6 +2182,17 @@ impl App {
         if self.developer() && self.get("devFps").as_bool() == Some(true) {
             let r = widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &format!("{} fps", self.frames.len()), theme::mono(11.0), p.text3, 80.0);
             x = r.right() + 18.0;
+        }
+        // hlásenie o úspechu po 4 s zmizne
+        if !self.status.is_empty() && self.status == self.ok_status {
+            match self.ok_at.map(|t| t.elapsed()) {
+                Some(e) if e >= Duration::from_secs(4) => {
+                    self.status.clear();
+                    self.ok_status.clear();
+                }
+                Some(e) => ui.ctx().request_repaint_after(Duration::from_secs(4) - e),
+                None => {}
+            }
         }
         if !self.status.is_empty() {
             widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &self.status, small.clone(), if self.status == self.ok_status { p.green } else { p.red }, (rect.right() - x - 320.0).max(40.0));
@@ -2402,6 +2467,21 @@ fn ago(ms: u64) -> String {
 }
 
 impl eframe::App for App {
+    // ako ďaleko zájde jedno otočenie kolieska (Vzhľad → Okno → Rýchlosť posúvania); Ctrl+koliesko = zoom ostáva
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        let k = (self.core.setting("scrollSpeed").as_f64().unwrap_or(100.0) / 100.0).clamp(0.5, 3.0) as f32;
+        if (k - 1.0).abs() < 0.01 {
+            return;
+        }
+        for e in raw.events.iter_mut() {
+            if let egui::Event::MouseWheel { delta, modifiers, .. } = e {
+                if !modifiers.ctrl && !modifiers.command {
+                    *delta *= k;
+                }
+            }
+        }
+    }
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         crate::boot::closed();
     }
@@ -2481,6 +2561,19 @@ impl eframe::App for App {
         }
         self.tour_rects.clear();
         // po štarte (načítanie písma, tapety, zvýraznenia) raz uvoľniť nepotrebnú pamäť
+        // Live Server počas písania: neuložený text najviac každých 120 ms
+        if let (Some(s), Some(tab), Some(edit)) = (&self.server, self.tabs.get(self.active), self.last_edit) {
+            let web = matches!(tab.ext().as_str(), "html" | "htm" | "css" | "js");
+            let due = self.live_push.is_none_or(|p| p < edit);
+            if web && due && tab.dirty() {
+                if self.live_push.is_none_or(|p| p.elapsed() >= Duration::from_millis(120)) {
+                    s.set_live(&tab.path, &tab.text);
+                    self.live_push = Some(Instant::now());
+                } else {
+                    ctx.request_repaint_after(Duration::from_millis(120));
+                }
+            }
+        }
         // výsledky GitHubu (prihlásenie, import, nový repozitár) aj keď okná nie sú otvorené
         self.gh_poll(&ctx);
         // Flux beží a kreslí → ďalší štart normálny (boot.rs)
@@ -2653,10 +2746,20 @@ impl eframe::App for App {
                     self.shown = key;
                     self.switched = now;
                 }
+                // späť/dopredu: obsah prichádza zo strany (24 px, doznie s prelínaním)
+                let mut area = main;
+                if self.anim_on() && self.nav_dir != 0.0 {
+                    let k = ((now - self.switched) / 0.24).clamp(0.0, 1.0) as f32;
+                    if k < 1.0 {
+                        area = main.translate(vec2(self.nav_dir * 28.0 * (1.0 - k) * (1.0 - k), 0.0));
+                    } else {
+                        self.nav_dir = 0.0;
+                    }
+                }
                 if show_editor {
-                    self.editor(&mut card_ui, main);
+                    self.editor(&mut card_ui, area);
                 } else {
-                    self.project_page(&mut card_ui, main);
+                    self.project_page(&mut card_ui, area);
                 }
                 if self.anim_on() {
                     let k = ((now - self.switched) / 0.24).clamp(0.0, 1.0) as f32;
@@ -2680,6 +2783,14 @@ impl eframe::App for App {
             egui::Area::new(egui::Id::new("ask-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
                 ui.set_min_size(full.size());
                 self.ask_ui(ui, full);
+            });
+        }
+        // okno Nový súbor
+        if self.new_file.is_some() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("newfile-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.new_file_ui(ui, full);
             });
         }
         // okno Nový projekt

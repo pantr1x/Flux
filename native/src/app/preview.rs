@@ -19,6 +19,8 @@ pub struct Preview {
     shown_url: String,
     reload: bool,
     pub body: Option<Rect>, // kde má byť stránka (v bodoch egui) – nastaví preview_ui
+    #[allow(dead_code)]
+    covered: bool, // minulý snímok bola stránka zakrytá
 }
 
 // (názov, šírka stránky v px; 0 = celý panel)
@@ -37,6 +39,7 @@ impl Preview {
             shown_url: String::new(),
             reload: false,
             body: None,
+            covered: false,
         }
     }
 
@@ -161,8 +164,10 @@ impl App {
                 size: wry::dpi::LogicalSize::new((b.width() * zoom).max(1.0) as f64, (b.height() * zoom).max(1.0) as f64).into(),
             };
             if pv.view.is_none() && !pv.failed {
-                match wry::WebViewBuilder::new().with_url(&pv.url).with_bounds(bounds).build_as_child(frame) {
+                // bez zobratia klávesnice – inak by nešlo písať v editore ani hľadať
+                match wry::WebViewBuilder::new().with_url(&pv.url).with_bounds(bounds).with_focused(false).build_as_child(frame) {
                     Ok(v) => {
+                        let _ = v.focus_parent();
                         pv.shown_url = pv.url.clone();
                         pv.view = Some(v);
                     }
@@ -176,6 +181,13 @@ impl App {
             if let Some(v) = &pv.view {
                 let _ = v.set_bounds(bounds);
                 let _ = v.set_visible(!covered);
+                // klik kamkoľvek do Fluxu (mimo stránky) alebo zakrytá stránka → klávesnica späť Fluxu;
+                // WebView2 je samostatné okno a inak by si písanie nechal
+                let press_outside = ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !b.contains(p)));
+                if press_outside || (covered && !pv.covered) {
+                    let _ = v.focus_parent();
+                }
+                pv.covered = covered;
                 if pv.shown_url != pv.url {
                     pv.shown_url = pv.url.clone();
                     let _ = v.load_url(&pv.url);

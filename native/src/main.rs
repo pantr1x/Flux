@@ -7,6 +7,7 @@ mod code;
 mod gen;
 mod i18n;
 mod live;
+mod mcp;
 mod mem;
 mod net;
 mod secret;
@@ -47,6 +48,8 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
             .with_title("Flux")
             // vlastná titulná lišta ako v Electron Fluxe (− □ × kreslí app/chrome.rs)
             .with_decorations(false)
+            // spustený mostom MCP (--background): nekradnúť fokus
+            .with_active(!std::env::args().any(|a| a == "--background"))
             .with_transparent(transparent)
             .with_inner_size(size)
             .with_min_inner_size([760.0, 480.0])
@@ -100,6 +103,11 @@ pub fn report(msg: &str) {
 }
 
 fn main() -> eframe::Result {
+    // most pre Claude Desktop: stdin/stdout ↔ MCP server bežiaceho Fluxu, bez okna
+    if std::env::args().any(|a| a == "--mcp-bridge") {
+        mcp::bridge();
+        return Ok(());
+    }
     // po aktualizácii: .new preč, .old zatiaľ ostane (návrat, ak by nová verzia hneď spadla)
     update::cleanup(true);
     let _ = log::set_logger(&Log).map(|_| log::set_max_level(log::LevelFilter::Warn));

@@ -186,7 +186,8 @@ pub fn kill_ghosts() {
         CloseHandle(snap);
     }
     for pid in ghosts {
-        if !has_visible_window(pid) {
+        // most MCP (--mcp-bridge) okno nemá a byť ho má
+        if !has_visible_window(pid) && !crate::mcp::bridge_mark(pid).exists() {
             unsafe {
                 let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
                 if !h.is_null() {

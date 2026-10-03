@@ -375,6 +375,21 @@ impl App {
     }
 
     // pre okno Nový projekt
+    // GitHub je plugin (settings.githubPlugin, rovnaký kľúč ako Electron)
+    pub(super) fn gh_plugin(&self) -> bool {
+        self.core.setting("githubPlugin") == Value::Bool(true)
+    }
+
+    // raz pri štarte: kto už bol prihlásený, má plugin rovno zapnutý
+    pub(super) fn gh_plugin_migrate(&mut self) {
+        if !self.core.setting("githubPlugin").is_boolean() {
+            let on = self.gh_connected() || self.core.setting("github")["user"]["login"].is_string();
+            self.update_settings(|o| {
+                o.insert("githubPlugin".into(), json!(on));
+            });
+        }
+    }
+
     pub(super) fn gh_connected(&mut self) -> bool {
         *self.gh.connected.get_or_insert_with(|| secret::get("github").is_some())
     }

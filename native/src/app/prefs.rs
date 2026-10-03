@@ -19,7 +19,7 @@ pub fn default_of(key: &str) -> Value {
         "minimap" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "liveWallMode" => json!("play"),
-        "uiZoom" => json!(100),
+        "uiZoom" | "scrollSpeed" => json!(100),
         "lineNumbers" => json!("on"),
         "cornerRadius" => json!(14),
         "darkLift" => json!(0),
@@ -59,7 +59,7 @@ enum Row {
     Toggle(&'static str, &'static str, &'static str),
     Select(&'static str, &'static str, &'static str, Vec<(Value, String)>),
     Range(&'static str, &'static str, &'static str, f64, f64, f64),
-    Number(&'static str, &'static str, f64, f64),
+    Number(&'static str, &'static str, &'static str, f64, f64),
     Text(&'static str, &'static str, &'static str, &'static str),
     Color(&'static str, &'static str, &'static str),
     Button(&'static str, &'static str, &'static str, &'static str), // (akcia, názov, popis, tlačidlo)
@@ -74,13 +74,14 @@ pub struct SettingsUi {
     jump: Option<String>,
     pub opened: f64,
     notes_open: std::collections::HashSet<String>, // rozbalené verzie v poznámkach k vydaniam
+    notes_all: bool,                               // ukázať aj staršie verzie
     spy: Option<String>,                           // časť, ktorá je práve navrchu (zvýraznená v ponuke)
     spy_hold: f64,                                 // po kliknutí na podpoložku chvíľu nemeniť zvýraznenie
 }
 
 impl SettingsUi {
     pub fn new(tab: &str, now: f64) -> Self {
-        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), spy: None, spy_hold: 0.0 }
+        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), notes_all: false, spy: None, spy_hold: 0.0 }
     }
 }
 
@@ -201,7 +202,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             (
                 "Text & fonts",
                 vec![
-                    Row::Select("lineNumbers", "Line numbers", "", o(&[("on", "on"), ("relative", "relative"), ("off", "off")])),
+                    Row::Select("lineNumbers", "Line numbers", "numbers at the left edge of the code", o(&[("on", "on"), ("relative", "relative"), ("off", "off")])),
                     Row::Toggle("bracketColors", "Colored brackets", "matching brackets get the same color"),
                 ],
             ),
@@ -222,15 +223,16 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                         "Flux plays your live wallpaper behind its panels. Still image uses less memory.",
                         o(&[("play", "Moving (like the desktop)"), ("still", "Still image (less memory)")]),
                     ),
+                    Row::Range("scrollSpeed", "Scroll distance", "how far one turn of the mouse wheel scrolls", 50.0, 300.0, 10.0),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
                     Row::Toggle("showSearch", "Search button", "a magnifier at the top that finds files, commands and settings"),
                     Row::Toggle("searchWide", "Wide search field", "a search box at the top instead of just the magnifier"),
                     Row::Select("panelPos", "Panel position", "where output and the terminal are", o(&[("bottom", "Bottom"), ("right", "Right"), ("left", "Left")])),
                     Row::Select("sidePos", "Sidebar position", "projects and files", o(&[("left", "Left"), ("right", "Right")])),
-                    Row::Range("uiZoom", "Size of everything", "", 80.0, 140.0, 5.0),
+                    Row::Range("uiZoom", "Size of everything", "makes text, buttons and panels bigger or smaller", 80.0, 140.0, 5.0),
                     Row::Select("density", "Density", "Compact fits more files, tabs and lines on the screen.", o(&[("comfortable", "comfortable"), ("compact", "compact")])),
-                    Row::Range("cornerRadius", "Rounded corners", "", 0.0, 26.0, 1.0),
+                    Row::Range("cornerRadius", "Rounded corners", "how round the corners of panels and buttons are", 0.0, 26.0, 1.0),
                     Row::Range("darkLift", "Brightness of dark areas", "Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.", 0.0, 100.0, 1.0),
                 ],
             ),
@@ -251,10 +253,10 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             (
                 "Text",
                 vec![
-                    Row::Select("fontFamily", "Font", "", FONTS.iter().map(|(id, l)| (json!(id), t(l))).collect()),
-                    Row::Number("fontSize", "Font size", 9.0, 32.0),
-                    Row::Select("lineHeight", "Line height", "", vec![(json!(1.3), t("compact")), (json!(1.45), t("normal")), (json!(1.6), t("relaxed")), (json!(1.8), t("large"))]),
-                    Row::Toggle("wordWrap", "Wrap long lines", ""),
+                    Row::Select("fontFamily", "Font", "the typeface of your code", FONTS.iter().map(|(id, l)| (json!(id), t(l))).collect()),
+                    Row::Number("fontSize", "Font size", "size of the code text in points", 9.0, 32.0),
+                    Row::Select("lineHeight", "Line height", "space between lines of code", vec![(json!(1.3), t("compact")), (json!(1.45), t("normal")), (json!(1.6), t("relaxed")), (json!(1.8), t("large"))]),
+                    Row::Toggle("wordWrap", "Wrap long lines", "long lines continue on the next line instead of scrolling sideways"),
                 ],
             ),
             (
@@ -269,32 +271,50 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         "running" => {
             let py = app.python.as_ref().map(|p| format!("{} · {}", p["version"].as_str().unwrap_or(""), p["path"].as_str().unwrap_or(""))).unwrap_or_else(|| t("not found"));
             vec![
-                ("Python", vec![Row::Info("Interpreter", py), Row::Button("python", "Choose another Python", "", "Change…")]),
-                ("Output", vec![Row::Toggle("clearOnRun", "Clear output before running", ""), Row::Number("terminalFontSize", "Output font size", 9.0, 28.0)]),
+                ("Python", vec![Row::Info("Interpreter", py), Row::Button("python", "Choose another Python", "pick python.exe yourself if Flux found the wrong one", "Change…")]),
+                ("Output", vec![Row::Toggle("clearOnRun", "Clear output before running", "each run starts with an empty Output panel"), Row::Number("terminalFontSize", "Output font size", "size of the text in Output and Terminal", 9.0, 28.0)]),
             ]
         }
         "tools" => vec![("", vec![Row::Custom("tools")])],
         "plugins" => {
-            vec![("", vec![Row::Lead("Plugins add features to Flux. In Flux Native these parts are built in – community plugins come later.")]), ("Built into Flux", vec![Row::Custom("plugins")])]
+            vec![("", vec![Row::Lead("Plugins add features to Flux. Install GitHub when you want it – the other parts are built in, community plugins come later.")]), ("Built into Flux", vec![Row::Custom("plugins")])]
         }
-        "github" => vec![
+        "github" if app.gh_plugin() => vec![
             ("", vec![Row::Lead("Connect your GitHub account to open your repositories as projects and to save (push) your work online.")]),
             ("Account", vec![Row::Custom("gh-account")]),
             ("Git", vec![Row::Custom("gh-git")]),
         ],
-        "developer" => vec![], // nie vývojár – karta je skrytá
+        "developer" | "github" => vec![], // nie vývojár / bez pluginu GitHub – karta je skrytá
         _ => vec![
             ("", vec![Row::Lead("Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.")]),
             ("API key", vec![Row::Custom("ai-key")]),
             ("MCP connectors", vec![Row::Lead("Connect remote MCP servers (for example GitHub, Linear or your own) – Claude can then use their tools while answering."), Row::Custom("ai-mcp")]),
+            (
+                "Use Flux from other AI apps",
+                vec![
+                    Row::Lead("Claude Desktop, Claude Code, Cursor and other AI apps can see and change the project open in Flux – its files, description and to-do list. It runs only on this computer and needs a secret key."),
+                    Row::Custom("ai-flux"),
+                ],
+            ),
         ],
     }
 }
 
+// slová riadku na hľadanie: preložené aj anglické (nájde sa „font“ aj „písmo“)
 fn row_words(r: &Row) -> String {
+    let en = match r {
+        Row::Toggle(_, a, b) | Row::Range(_, a, b, ..) | Row::Text(_, a, b, _) | Row::Color(_, a, b) | Row::Select(_, a, b, _) | Row::Number(_, a, b, ..) | Row::Button(_, a, b, _) => {
+            format!("{a} {b}")
+        }
+        Row::Info(a, _) | Row::Lead(a) | Row::Custom(a) => a.to_string(),
+    };
+    format!("{} {}", row_words_t(r), en.to_lowercase())
+}
+
+fn row_words_t(r: &Row) -> String {
     match r {
         Row::Toggle(_, a, b) | Row::Range(_, a, b, ..) | Row::Text(_, a, b, _) | Row::Color(_, a, b) | Row::Select(_, a, b, _) => format!("{} {}", t(a), t(b)),
-        Row::Number(_, a, ..) => t(a),
+        Row::Number(_, a, b, ..) => format!("{} {}", t(a), t(b)),
         Row::Button(_, a, b, _) => format!("{} {}", t(a), t(b)),
         Row::Info(a, b) => format!("{} {}", t(a), b),
         Row::Lead(a) => t(a),
@@ -378,8 +398,9 @@ impl App {
         let mut go_tab = None;
         let mut go_sub = None;
         let dev = self.developer();
+        let gh = self.gh_plugin();
         for (id, ic, label) in TABS {
-            if id == "developer" && !dev {
+            if (id == "developer" && !dev) || (id == "github" && !gh) {
                 continue;
             }
             // vývojárska karta oddelená čiarou
@@ -548,7 +569,7 @@ impl App {
     fn group(&mut self, ui: &mut egui::Ui, rows: Vec<Row>, w: f32, ctx: &egui::Context) {
         let p = self.pal;
         let custom_only = rows.len() == 1
-            && matches!(rows[0], Row::Custom(id) if matches!(id, "themes" | "accents" | "language" | "keys" | "tools" | "plugins" | "about" | "gh-account" | "gh-git" | "ai-key" | "ai-mcp"));
+            && matches!(rows[0], Row::Custom(id) if matches!(id, "themes" | "accents" | "language" | "keys" | "tools" | "plugins" | "about" | "gh-account" | "gh-git" | "ai-key" | "ai-mcp" | "ai-flux"));
         if custom_only {
             if let Row::Custom(id) = rows[0] {
                 self.custom(ui, id, w, ctx);
@@ -622,7 +643,7 @@ impl App {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let mut v = self.get(key).as_f64().unwrap_or(min);
                     // hodnota vedľa posuvníka (ako #s-zoom-v v Electron Fluxe)
-                    let val = if key == "uiZoom" { format!("{v:.0} %") } else { format!("{v:.0}") };
+                    let val = if key == "uiZoom" || key == "scrollSpeed" { format!("{v:.0} %") } else { format!("{v:.0}") };
                     let (changed, released) = widgets::slider(ui, egui::Id::new(("rng", key)), &mut v, min, max, step, 180.0, &p);
                     ui.label(egui::RichText::new(val).font(theme::ui(12.0)).color(p.text3));
                     // náhľad počas ťahania; uiZoom až po pustení (inak by sa okno menilo pod myšou)
@@ -635,8 +656,8 @@ impl App {
                     }
                 });
             }
-            Row::Number(key, title, min, max) => {
-                self.label(ui, title, "", lw);
+            Row::Number(key, title, hint, min, max) => {
+                self.label(ui, title, hint, lw);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // − hodnota + (ako input[type=number])
                     let v = self.get(key).as_f64().unwrap_or(min);
@@ -912,10 +933,12 @@ impl App {
                 let bg = ui.painter().add(egui::Shape::Noop);
                 ui.add_space(4.0);
                 // každá verzia je sklopený riadok (verzia, dátum, súhrn); klik ju rozbalí
+                // najnovšia verzia rozbalená, staršie len po kliknutí na „Staršie verzie“
                 let notes = release_notes();
-                let n = notes.len();
-                for (vi, note) in notes.iter().enumerate() {
-                    let open = self.settings.as_ref().map(|s| s.notes_open.contains(&note.ver)).unwrap_or(false);
+                let all = self.settings.as_ref().is_some_and(|s| s.notes_all);
+                let n = if all { notes.len() } else { notes.len().min(1) };
+                for (vi, note) in notes.iter().enumerate().take(n) {
+                    let open = self.settings.as_ref().map(|s| s.notes_open.contains(&note.ver) != (vi == 0)).unwrap_or(vi == 0);
                     let (hr, resp) = ui.allocate_exact_size(vec2(w, 46.0), Sense::click());
                     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
                     let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
@@ -984,8 +1007,18 @@ impl App {
                 }
                 ui.add_space(4.0);
                 let rr = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
+                let older = notes.len().saturating_sub(1);
                 ui.painter().set(bg, egui::Shape::rect_filled(rr, CornerRadius::same(14), p.hover));
                 ui.painter().rect_stroke(rr, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
+                if older > 0 {
+                    ui.add_space(8.0);
+                    let label = if all { t("Hide older versions") } else { tf("Show older versions ({n})", &[("n", &older.to_string())]) };
+                    if widgets::button(ui, Some(if all { "collapse" } else { "chevron" }), &label, p.card2, p.text, 30.0, &p).clicked() {
+                        if let Some(st) = self.settings.as_mut() {
+                            st.notes_all = !st.notes_all;
+                        }
+                    }
+                }
             }
             "memory" => {
                 let mb = crate::mem::used_mb();
@@ -1120,7 +1153,7 @@ impl App {
             }
             "tools" => self.tools_ui(ui, w, ctx, None),
             "gh-account" | "gh-git" => self.github_ui(ui, id, w, ctx),
-            "ai-key" | "ai-mcp" => self.ai_settings_ui(ui, id, w, ctx),
+            "ai-key" | "ai-mcp" | "ai-flux" => self.ai_settings_ui(ui, id, w, ctx),
             // zabudované časti ako karty (createPluginsUI({ builtins }))
             "plugins" => {
                 let cards = [
@@ -1132,7 +1165,11 @@ impl App {
                 let cw = (w - 12.0) / 2.0;
                 let (area, _) = ui.allocate_exact_size(vec2(w, 2.0 * 96.0 + 12.0), Sense::hover());
                 let mut go = None;
+                // GitHub sa inštaluje ako plugin (settings.githubPlugin), ostatné sú zabudované
+                let gh = self.gh_plugin();
+                let mut toggle_gh = None;
                 for (i, (ic, name, desc, tab)) in cards.iter().enumerate() {
+                    let tab = if i == 0 && !gh { &None } else { tab };
                     let r = Rect::from_min_size(area.min + vec2((i % 2) as f32 * (cw + 12.0), (i / 2) as f32 * 108.0), vec2(cw, 96.0));
                     let resp = ui.interact(r, ui.id().with(("plug", i)), Sense::click());
                     let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered() && tab.is_some(), 0.12);
@@ -1142,7 +1179,23 @@ impl App {
                     ui.painter().rect_filled(ir, CornerRadius::same(10), p.card2);
                     widgets::icon_at(ui, ir.center(), 17.0, ic, p.text);
                     ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 9.0), Align2::LEFT_CENTER, *name, theme::bold(13.5), p.text);
-                    ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, t("Built into Flux"), theme::ui(11.0), p.green);
+                    let status = if i > 0 {
+                        t("Built into Flux")
+                    } else if gh {
+                        t("Installed")
+                    } else {
+                        t("Not installed")
+                    };
+                    ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, status, theme::ui(11.0), if i > 0 || gh { p.green } else { p.text3 });
+                    if i == 0 {
+                        let label = if gh { t("Remove") } else { t("Install") };
+                        let bw = widgets::text_w(ui, &label, theme::bold(13.0)) + 26.0;
+                        let br = Rect::from_min_size(pos2(r.right() - 14.0 - bw, r.top() + 14.0), vec2(bw, 28.0));
+                        let mut bu = ui.new_child(egui::UiBuilder::new().max_rect(br));
+                        if widgets::button(&mut bu, None, &label, if gh { p.card2 } else { p.accent }, if gh { p.text } else { p.accent_fg }, 28.0, &p).clicked() {
+                            toggle_gh = Some(!gh);
+                        }
+                    }
                     let mut job = egui::text::LayoutJob::single_section(desc.clone(), egui::TextFormat { font_id: theme::ui(12.0), color: p.text3, ..Default::default() });
                     job.wrap.max_width = cw - 28.0;
                     job.wrap.max_rows = 2;
@@ -1151,6 +1204,11 @@ impl App {
                     if let (true, Some(tb)) = (resp.on_hover_cursor(if tab.is_some() { egui::CursorIcon::PointingHand } else { egui::CursorIcon::Default }).clicked(), tab) {
                         go = Some(*tb);
                     }
+                }
+                if let Some(on) = toggle_gh {
+                    self.set("githubPlugin", json!(on), ctx);
+                    self.note(if on { t("GitHub plugin installed. Find it in Settings → GitHub.") } else { t("GitHub plugin removed.") });
+                    go = None;
                 }
                 if let Some(tb) = go {
                     if let Some(st) = self.settings.as_mut() {

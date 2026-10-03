@@ -1,11 +1,12 @@
 // Live Server pre Flux Native: malý HTTP server nad priečinkom projektu (127.0.0.1:5500+).
 // Do každej HTML stránky vloží skript, ktorý sa pýta na /__flux/ver a pri zmene (uloženie súboru)
 // stránku znova načíta – ako Live Server v Electron Fluxe, bez závislostí.
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub struct Server {
@@ -13,10 +14,24 @@ pub struct Server {
     pub root: PathBuf,
     stop: Arc<AtomicBool>,
     ver: Arc<AtomicU64>,
+    css: Arc<AtomicBool>, // posledná zmena bola len CSS → stránka vymení štýly bez načítania
+    live: Live,
 }
 
-const RELOAD: &str =
-    "<script>(()=>{let v=null;setInterval(async()=>{try{const t=await (await fetch('/__flux/ver',{cache:'no-store'})).text();if(v!==null&&t!==v)location.reload();v=t}catch(e){}},500)})()</script>";
+// neuložený text otvorených súborov – stránka sa mení už počas písania
+type Live = Arc<Mutex<HashMap<String, String>>>;
+
+fn key(p: &Path) -> String {
+    let s = p.to_string_lossy().replace('\\', "/");
+    if cfg!(windows) {
+        s.to_lowercase()
+    } else {
+        s
+    }
+}
+
+// odpoveď /__flux/ver = „číslo:css“ alebo „číslo:page“; pri CSS sa len vymenia štýly (stránka nebliká)
+const RELOAD: &str = "<script>(()=>{let v=null;setInterval(async()=>{try{const t=await (await fetch('/__flux/ver',{cache:'no-store'})).text();const[n,k]=t.split(':');if(v!==null&&n!==v){if(k==='css'){document.querySelectorAll('link[rel=stylesheet]').forEach(l=>{const u=new URL(l.href);u.searchParams.set('v',n);l.href=u.href})}else location.reload()}v=n}catch(e){}},200)})()</script>";
 
 fn mime(p: &Path) -> &'static str {
     match p.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
@@ -67,7 +82,7 @@ fn respond(mut s: TcpStream, code: &str, ctype: &str, body: &[u8]) {
     let _ = s.write_all(body);
 }
 
-fn handle(s: TcpStream, root: &Path, ver: &AtomicU64) {
+fn handle(s: TcpStream, root: &Path, ver: &AtomicU64, css: &AtomicBool, live: &Live) {
     let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
     let mut line = String::new();
     if BufReader::new(&s).read_line(&mut line).is_err() {
@@ -76,7 +91,8 @@ fn handle(s: TcpStream, root: &Path, ver: &AtomicU64) {
     let path = line.split_whitespace().nth(1).unwrap_or("/");
     let path = decode(path.split(['?', '#']).next().unwrap_or("/"));
     if path == "/__flux/ver" {
-        return respond(s, "200 OK", "text/plain", ver.load(Ordering::Relaxed).to_string().as_bytes());
+        let kind = if css.load(Ordering::Relaxed) { "css" } else { "page" };
+        return respond(s, "200 OK", "text/plain", format!("{}:{kind}", ver.load(Ordering::Relaxed)).as_bytes());
     }
     // len súbory v projekte (žiadne „..“)
     let rel: PathBuf = path.split('/').filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
@@ -84,7 +100,8 @@ fn handle(s: TcpStream, root: &Path, ver: &AtomicU64) {
     if file.is_dir() {
         file = file.join("index.html");
     }
-    match std::fs::read(&file) {
+    let unsaved = live.lock().unwrap().get(&key(&file)).cloned();
+    match unsaved.map(|t| Ok(t.into_bytes())).unwrap_or_else(|| std::fs::read(&file)) {
         Ok(mut body) => {
             let ct = mime(&file);
             if ct.starts_with("text/html") {
@@ -110,20 +127,22 @@ impl Server {
         listener.set_nonblocking(true)?;
         let stop = Arc::new(AtomicBool::new(false));
         let ver = Arc::new(AtomicU64::new(1));
-        let (st, v, r) = (stop.clone(), ver.clone(), root.to_path_buf());
+        let css = Arc::new(AtomicBool::new(false));
+        let live: Live = Default::default();
+        let (st, v, r, c, l) = (stop.clone(), ver.clone(), root.to_path_buf(), css.clone(), live.clone());
         std::thread::spawn(move || {
             while !st.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((s, _)) => {
                         let _ = s.set_nonblocking(false);
-                        let (v, r) = (v.clone(), r.clone());
-                        std::thread::spawn(move || handle(s, &r, &v));
+                        let (v, r, c, l) = (v.clone(), r.clone(), c.clone(), l.clone());
+                        std::thread::spawn(move || handle(s, &r, &v, &c, &l));
                     }
                     Err(_) => std::thread::sleep(Duration::from_millis(40)),
                 }
             }
         });
-        Ok(Server { port, root: root.to_path_buf(), stop, ver })
+        Ok(Server { port, root: root.to_path_buf(), stop, ver, css, live })
     }
 
     // adresa stránky (súbor relatívne ku koreňu)
@@ -134,7 +153,25 @@ impl Server {
 
     // súbor sa zmenil → otvorené stránky sa znova načítajú
     pub fn bump(&self) {
+        self.css.store(false, Ordering::Relaxed);
         self.ver.fetch_add(1, Ordering::Relaxed);
+    }
+
+    // neuložený text súboru → stránka ho ukáže hneď (CSS bez načítania stránky)
+    pub fn set_live(&self, file: &str, text: &str) {
+        let p = Path::new(file);
+        if !p.starts_with(&self.root) {
+            return;
+        }
+        self.live.lock().unwrap().insert(key(p), text.to_string());
+        let is_css = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("css"));
+        self.css.store(is_css, Ordering::Relaxed);
+        self.ver.fetch_add(1, Ordering::Relaxed);
+    }
+
+    // uložené – znova z disku
+    pub fn clear_live(&self, file: &str) {
+        self.live.lock().unwrap().remove(&key(Path::new(file)));
     }
 }
 

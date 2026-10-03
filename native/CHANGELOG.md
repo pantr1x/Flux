@@ -2,6 +2,34 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.0 – 2026-10-03
+
+### Projects and files
+- **Renaming a project works**, also the one that is open. Flux closes the program and terminal that held the folder, renames it and opens it again with its description, to-dos and tabs. The name is also saved when you click away.
+- **Deleting a project takes you to the home screen**, and the status bar no longer keeps saying "… is ready". Short messages like that now disappear after a few seconds.
+- **New file** has its own window, like New project: pick the **language**, type a name and Flux adds the right extension and a small starter code. It works from the file tree, the project page, the menu, Ctrl+N and the right-click menu.
+- When you create a project you can write **what it is about**; on the project page click the description to change it.
+
+### Live Server
+- **The page changes while you type**, without saving. CSS changes swap only the styles, so the page does not flash.
+- **You can type in the editor again** while the page is open next to it (the page no longer keeps the keyboard). The same fixes search in Settings and the search box.
+
+### Back and forward
+- The arrows (and the mouse side buttons) now **slide the view** in from the side you go to.
+
+### Settings
+- **Every setting has a short explanation** under its name.
+- **Search in Settings** also finds words in your language.
+- **Scroll distance** (Appearance → Window): how far one turn of the mouse wheel scrolls, 50–300 %.
+- **Release notes** show only the newest version; *Show older versions* opens the rest.
+
+### GitHub is a plugin
+- GitHub is now in **Settings → Plugins** with *Install* / *Remove*. Without it there is no GitHub tab and no GitHub choices in New project. If you were already signed in, it stays installed.
+
+### Claude and MCP
+- **Ready-made connectors** in Settings → AI: Context7, DeepWiki, GitHub and Hugging Face in one click.
+- **Use Flux from other AI apps**: turn it on and Claude Desktop, Claude Code, Cursor and others can see and change your open project (files, description, to-dos). *Add to Claude Desktop* sets it up for you; for the others copy the command or the settings. Flux starts in the background by itself when Claude needs it.
+
 ## 0.8.5 – 2026-09-29
 
 ### Live wallpaper moves again

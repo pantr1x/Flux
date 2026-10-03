@@ -108,17 +108,7 @@ impl App {
     fn start_template(&mut self, id: &str, ctx: &egui::Context) {
         if id == "empty" {
             self.close_start();
-            if self.workspace().is_some() {
-                self.side_open = true;
-                self.new_item = Some((false, String::new()));
-            } else if let Some(f) = rfd::FileDialog::new().set_title(t("New file")).save_file() {
-                let f = f.to_string_lossy().to_string();
-                if fsops::create(&f, false).is_ok() {
-                    fsops::allow_file(&self.core, &f);
-                    self.reload_projects();
-                    self.open_file(&f);
-                }
-            }
+            self.open_new_file(None);
             return;
         }
         let files = template_files(id);
