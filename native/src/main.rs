@@ -191,7 +191,9 @@ fn main() -> eframe::Result {
             return Ok(());
         }
     }
-    // Flux beží len raz: súbor z Prieskumníka (alebo ďalšie spustenie) prevezme bežiace okno
+    // Flux beží len raz: súbor z Prieskumníka (alebo ďalšie spustenie) prevezme bežiace okno.
+    // Najprv preč „duchovia“ bez okna – inak by prevzali spustenie a Flux by sa vôbec neotvoril (0.9.18).
+    boot::kill_ghosts();
     if !args.iter().any(|a| a == "--background") && single::forward(single::path_arg(&args).as_deref()) {
         return Ok(());
     }

@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.19 – 2026-10-04
+
+### Flux always opens
+- In 0.9.18, clicking Flux could do nothing when a stuck Flux without a window was still running in the background: the new start handed over to it and closed. Flux now closes such stuck copies first, and a Flux that is minimized comes back to the front when you start it again.
+
 ## 0.9.18 – 2026-10-04
 
 ### One Flux

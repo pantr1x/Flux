@@ -131,7 +131,7 @@ pub fn catch_hard_crashes() {}
 
 // má proces viditeľné okno najvyššej úrovne?
 #[cfg(windows)]
-fn has_visible_window(pid: u32) -> bool {
+pub(crate) fn has_visible_window(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible};
     struct Q {
@@ -201,6 +201,33 @@ pub fn kill_ghosts() {
 
 #[cfg(not(windows))]
 pub fn kill_ghosts() {}
+
+// ďalšie spustenie: okno bežiaceho Fluxu obnoviť zo zbalenia a dať dopredu (zbalené okno samo nekreslí,
+// takže by požiadavku spracovalo až po kliknutí); spúšťajúci proces má od Windows právo meniť popredie
+#[cfg(windows)]
+pub fn bring_to_front(pid: u32) {
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsIconic, IsWindowVisible, SetForegroundWindow, ShowWindow, SW_RESTORE};
+    unsafe extern "system" fn each(h: HWND, l: LPARAM) -> i32 {
+        let pid = l as u32;
+        let mut p = 0u32;
+        unsafe { GetWindowThreadProcessId(h, &mut p) };
+        if p == pid && unsafe { IsWindowVisible(h) } != 0 {
+            unsafe {
+                if IsIconic(h) != 0 {
+                    ShowWindow(h, SW_RESTORE);
+                }
+                SetForegroundWindow(h);
+            }
+            return 0;
+        }
+        1
+    }
+    unsafe { EnumWindows(Some(each), pid as LPARAM) };
+}
+
+#[cfg(not(windows))]
+pub fn bring_to_front(_pid: u32) {}
 
 // strážca: ak po 12 s nemá Flux viditeľné okno, spustí sa znova v núdzovom režime a tento proces skončí
 #[cfg(windows)]

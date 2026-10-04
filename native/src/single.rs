@@ -28,7 +28,13 @@ pub fn forward(path: Option<&str>) -> bool {
         return false;
     }
     let mut line = String::new();
-    BufReader::new(s).read_line(&mut line).is_ok() && line.trim() == "flux-ok"
+    if !(BufReader::new(s).read_line(&mut line).is_ok() && line.trim() == "flux-ok") {
+        return false;
+    }
+    if let Some(pid) = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v["pid"].as_u64()) {
+        crate::boot::bring_to_front(pid as u32);
+    }
+    true
 }
 
 // počúva a každú požiadavku pošle do aplikácie ako udalosť „ipc:open“ (cesta alebo null = len do popredia)
