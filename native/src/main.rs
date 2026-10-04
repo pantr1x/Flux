@@ -184,12 +184,20 @@ fn main() -> eframe::Result {
         }
         return Ok(());
     }
+    // aktualizácia: tento program (.new) prepíše Flux-Native.exe po jeho skončení (update.rs)
+    if args.len() >= 4 && args[1] == "--apply-update" {
+        update::apply_update(&args);
+        return Ok(());
+    }
     if std::env::args().any(|a| a == "--mcp-bridge") {
         mcp::bridge();
         return Ok(());
     }
     // po aktualizácii: .new preč, .old zatiaľ ostane (návrat, ak by nová verzia hneď spadla)
     update::cleanup(true);
+    if args.iter().any(|a| a == "--updated") {
+        update::remove_helper();
+    }
     let _ = log::set_logger(&Log).map(|_| log::set_max_level(log::LevelFilter::Warn));
     boot::catch_hard_crashes();
     boot::kill_ghosts();

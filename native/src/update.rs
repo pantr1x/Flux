@@ -1,6 +1,7 @@
 // Aktualizácie Flux Native z vetvy ci-native (native.yml tam dáva Flux-Native.exe a native.json):
 // kontrola → stiahnutie vedľa programu (Flux-Native.new) → kontrola sha256 → výmena a nový štart.
-// Spustený .exe sa na Windows nedá prepísať, ale dá sa premenovať – starý ostane ako .old a zmaže sa pri ďalšom štarte.
+// Spustený .exe sa na Windows nedá prepísať: stiahnutý program (.new) počká, kým Flux skončí, a zapíše sa na jeho miesto
+// (apply_update); predošlá verzia ostane ako kópia .old a zmaže sa 10 s po štarte novej.
 // Sťahuje systémový curl (súčasť Windows 10/11), takže Flux nepotrebuje vlastného HTTP klienta.
 use eframe::egui;
 use serde_json::Value;
@@ -85,26 +86,123 @@ pub fn cleanup(keep_old: bool) {
     }
 }
 
-// nová verzia spadla hneď po štarte a vedľa je predošlá (.old): vymeniť späť a spustiť ju
+// nová verzia spadla hneď po štarte a vedľa je predošlá (.old): tá sa po skončení tohto procesu zapíše späť a spustí
 pub fn rollback() -> bool {
     let Some(e) = exe() else { return false };
     let old = e.with_extension("old");
     if !old.exists() {
         return false;
     }
-    let bad = e.with_extension("bad");
-    let _ = std::fs::remove_file(&bad);
-    if std::fs::rename(&e, &bad).is_err() {
-        return false;
-    }
-    if std::fs::rename(&old, &e).is_err() {
-        let _ = std::fs::rename(&bad, &e);
-        return false;
-    }
-    std::process::Command::new(&e).spawn().is_ok()
+    let mut c = std::process::Command::new(&old);
+    c.arg("--apply-update").arg(std::process::id().to_string()).arg(&e).arg("--relaunch");
+    spawn_detached(&mut c).is_ok()
 }
 
-// vlastná zostava bez adresy na testy sa neaktualizuje (prepísala by sa verziou z CI)
+// pomocník mimo úlohy (job) volajúceho, aby ho zavretie Fluxu neukončilo
+fn spawn_detached(c: &mut std::process::Command) -> std::io::Result<std::process::Child> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_BREAKAWAY_FROM_JOB; úloha, ktorá to nedovolí, vráti chybu → bez neho
+        c.creation_flags(0x0100_0000);
+        if let Ok(ch) = c.spawn() {
+            return Ok(ch);
+        }
+        c.creation_flags(0);
+    }
+    c.spawn()
+}
+
+#[cfg(windows)]
+fn wait_exit(pid: u32, max: Duration) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+    unsafe {
+        let h = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+        if !h.is_null() {
+            WaitForSingleObject(h, max.as_millis() as u32);
+            CloseHandle(h);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn wait_exit(pid: u32, max: Duration) {
+    let t = std::time::Instant::now();
+    while std::path::Path::new(&format!("/proc/{pid}")).exists() && t.elapsed() < max {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn write_in_place(target: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new().write(true).truncate(true).open(target)?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    if f.metadata()?.len() != bytes.len() as u64 {
+        return Err(std::io::Error::other("short write"));
+    }
+    Ok(())
+}
+
+// Flux-Native.new --apply-update <pid> <Flux-Native.exe> [--relaunch <argumenty…>]
+// (aj Flux-Native.old pri návrate): počká na koniec Fluxu, zálohuje ho do .old, zapíše sa na jeho miesto a spustí ho
+pub fn apply_update(args: &[String]) {
+    let (Some(pid), Some(target)) = (args.get(2).and_then(|p| p.parse::<u32>().ok()), args.get(3)) else { return };
+    let target = PathBuf::from(target);
+    let relaunch = args.get(4).is_some_and(|a| a == "--relaunch");
+    wait_exit(pid, Duration::from_secs(60));
+    let Some(me) = exe() else { return };
+    let Ok(bytes) = std::fs::read(&me) else { return };
+    let old = target.with_extension("old");
+    // záloha pre rollback – kópia, nie premenovanie (pri návrate je zálohou tento program sám)
+    if me.file_name() != old.file_name() {
+        let _ = std::fs::copy(&target, &old);
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let mut ok = false;
+    while !ok {
+        ok = write_in_place(&target, &bytes).is_ok();
+        if !ok {
+            if std::time::Instant::now() > deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(200)); // antivírus, Flux ešte končí
+        }
+    }
+    // stále použitý (starý most MCP z tohto súboru) → ako predtým: premenovať nabok a skopírovať sa
+    if !ok {
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let aside = target.with_extension(format!("old-{t}"));
+        if std::fs::rename(&target, &aside).is_ok() && std::fs::copy(&me, &target).is_err() {
+            let _ = std::fs::rename(&aside, &target);
+        }
+    }
+    if relaunch {
+        let mut c = std::process::Command::new(&target);
+        c.args(&args[5..]).arg("--updated");
+        for _ in 0..10 {
+            if spawn_detached(&mut c).is_ok() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(300));
+        }
+    }
+}
+
+// nový štart po aktualizácii: pomocník (.new) možno ešte končí, takže ho zmazať o chvíľu
+pub fn remove_helper() {
+    let Some(new) = exe().map(|e| e.with_extension("new")) else { return };
+    std::thread::spawn(move || {
+        for _ in 0..25 {
+            if std::fs::remove_file(&new).is_ok() || !new.exists() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    });
+}
+
 pub fn enabled() -> bool {
     SHA != "dev" || std::env::var("FLUX_UPDATE_URL").is_ok()
 }
@@ -227,24 +325,16 @@ impl Updater {
             }
             return Err(crate::i18n::t("The update file was missing, so Flux is downloading it again."));
         }
-        let old = e.with_extension("old");
-        // .old môže ešte bežať (starý Flux, most MCP pre Claude) → vtedy sa nedá zmazať; program ide inam
-        let old = if std::fs::remove_file(&old).is_ok() || !old.exists() {
-            old
-        } else {
-            let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-            e.with_extension(format!("old-{t}"))
-        };
-        std::fs::rename(&e, &old).map_err(|x| x.to_string())?;
-        if let Err(x) = std::fs::rename(&new, &e) {
-            let _ = std::fs::rename(&old, &e);
-            return Err(x.to_string());
-        }
-        *self.state.lock().unwrap() = State::Idle;
+        // stiahnutý program po zavretí Fluxu prepíše Flux-Native.exe na mieste (apply_update) – súbor ostane ten istý,
+        // takže pripnutie na paneli úloh platí ďalej (premenovanie na .old ho presunulo na .old, ktorý sa potom zmazal)
+        let mut c = std::process::Command::new(&new);
+        c.arg("--apply-update").arg(std::process::id().to_string()).arg(&e);
         if relaunch {
-            let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).filter(|a| a != "--background" && a != "--minimized").chain(extra.iter().map(|a| a.into())).collect();
-            std::process::Command::new(&e).args(args).spawn().map_err(|x| x.to_string())?;
+            let skip = ["--background", "--minimized", "--updated"];
+            c.arg("--relaunch").args(std::env::args_os().skip(1).filter(|a| !skip.iter().any(|s| a == s))).args(extra);
         }
+        spawn_detached(&mut c).map_err(|x| x.to_string())?;
+        *self.state.lock().unwrap() = State::Idle;
         Ok(())
     }
 }
