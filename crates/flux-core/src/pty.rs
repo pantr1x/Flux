@@ -4,7 +4,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use serde_json::json;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use crate::Emit;
 
 struct Live {
@@ -56,8 +56,8 @@ impl Pty {
         };
         *self.live.lock().unwrap() = Some(Live { child, master: pair.master, writer, id });
         let started = Instant::now();
-        let emit = emit.clone();
-        let live = self.live.clone();
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let emit_r = emit.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 16384];
             let mut pending: Vec<u8> = vec![];
@@ -74,23 +74,54 @@ impl Pty {
                         };
                         let text = String::from_utf8_lossy(&pending[..cut]).to_string();
                         pending.drain(..cut);
-                        emit(data_ev, serde_json::Value::String(text));
+                        emit_r(data_ev, serde_json::Value::String(text));
                     }
                 }
             }
-            // koniec: kód programu (ak ho medzitým niekto nezastavil)
-            let code = {
+            let _ = done_tx.send(());
+        });
+        // koniec programu sleduje samostatné vlákno: ConPTY (Windows) nedá čítačke EOF, kým je pseudokonzola otvorená,
+        // takže po skončení procesu ju zavrieme sami (drop master) – inak by Flux ukazoval „Running“ navždy
+        let emit = emit.clone();
+        let live = self.live.clone();
+        std::thread::spawn(move || {
+            let code = loop {
+                std::thread::sleep(Duration::from_millis(50));
                 let mut g = live.lock().unwrap();
                 match g.as_mut() {
                     Some(l) if l.id == id => {
-                        let code = l.child.wait().ok().map(|s| s.exit_code() as i64).unwrap_or(-1);
-                        *g = None;
-                        code
+                        if let Ok(Some(st)) = l.child.try_wait() {
+                            break Some(st.exit_code() as i64);
+                        }
                     }
-                    _ => -1,
+                    // zastavené (Stop) alebo nahradené novým spustením
+                    _ => break None,
                 }
             };
-            emit(exit_ev, json!({ "code": code, "ms": started.elapsed().as_millis() as u64 }));
+            if let Some(code) = code {
+                // zvyšok výstupu ešte dobehne; potom zavrieť pseudoterminál
+                if done_rx.recv_timeout(Duration::from_millis(300)).is_err() {
+                    let old = {
+                        let mut g = live.lock().unwrap();
+                        if g.as_ref().is_some_and(|l| l.id == id) { g.take() } else { None }
+                    };
+                    drop(old);
+                    let _ = done_rx.recv_timeout(Duration::from_secs(1));
+                } else {
+                    let mut g = live.lock().unwrap();
+                    if g.as_ref().is_some_and(|l| l.id == id) {
+                        *g = None;
+                    }
+                }
+                emit(exit_ev, json!({ "code": code, "ms": started.elapsed().as_millis() as u64 }));
+            } else {
+                let _ = done_rx.recv_timeout(Duration::from_secs(1));
+                // medzitým beží nové spustenie – jeho koniec príde samostatne, toto by ho omylom „ukončilo“
+                if live.lock().unwrap().is_some() {
+                    return;
+                }
+                emit(exit_ev, json!({ "code": -1, "ms": started.elapsed().as_millis() as u64 }));
+            }
         });
         Ok(pid)
     }
@@ -115,5 +146,29 @@ impl Pty {
         if let Some(mut l) = self.live.lock().unwrap().take() {
             let _ = l.child.kill();
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pty_exit_after_output() {
+        let got: Arc<Mutex<Vec<(String, serde_json::Value)>>> = Arc::default();
+        let g = got.clone();
+        let emit: Emit = Arc::new(move |ch: &str, v: serde_json::Value| g.lock().unwrap().push((ch.to_string(), v)));
+        let pty = Pty::default();
+        pty.spawn(&emit, "sh", &["-c".into(), "echo hi; exit 3".into()], "", &[], "d", "x").unwrap();
+        let t = Instant::now();
+        while t.elapsed() < Duration::from_secs(3) && !got.lock().unwrap().iter().any(|(c, _)| c == "x") {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let ev = got.lock().unwrap().clone();
+        let last = ev.last().expect("events");
+        assert_eq!(last.0, "x", "{ev:?}");
+        assert_eq!(last.1["code"], 3);
+        assert!(ev.iter().any(|(c, v)| c == "d" && v.as_str().unwrap_or("").contains("hi")), "{ev:?}");
+        assert!(!pty.running());
     }
 }

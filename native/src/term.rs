@@ -213,10 +213,32 @@ impl TermView {
         let cursor = content.cursor.point;
         let offset = content.display_offset as i32;
         let mut jobs: Vec<LayoutJob> = (0..rows).map(|_| LayoutJob::default()).collect();
+        // susedné bunky s rovnakými farbami idú do jedného úseku a medzery na konci riadku sa vynechajú
+        // (predtým jeden append + String na každú bunku ≈ 2 400 za snímku)
+        let fmt = |fg: Color32, bg: Color32| TextFormat { font_id: font.clone(), color: fg, background: bg, ..Default::default() };
+        let mut cur: Option<usize> = None;
+        let mut run = String::new();
+        let mut run_f = (p.text, Color32::TRANSPARENT);
+        let mut spaces = 0usize;
+        let flush = |jobs: &mut Vec<LayoutJob>, row: Option<usize>, run: &mut String, f: (Color32, Color32)| {
+            if let Some(r) = row {
+                if !run.is_empty() {
+                    jobs[r].append(run, 0.0, fmt(f.0, f.1));
+                }
+            }
+            run.clear();
+        };
         for cell in content.display_iter {
             let line = cell.point.line.0 + offset;
             if line < 0 || line as usize >= rows || cell.cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
                 continue;
+            }
+            let line = line as usize;
+            if cur != Some(line) {
+                // nový riadok: medzery na konci predošlého zahodiť
+                flush(&mut jobs, cur, &mut run, run_f);
+                spaces = 0;
+                cur = Some(line);
             }
             let mut fg = Self::color(cell.cell.fg, p, true).unwrap_or(p.text);
             let mut bg = Self::color(cell.cell.bg, p, false).unwrap_or(Color32::TRANSPARENT);
@@ -226,11 +248,30 @@ impl TermView {
                     fg = p.card;
                 }
             }
-            let job = &mut jobs[line as usize];
             let c = if cell.cell.c == '\0' { ' ' } else { cell.cell.c };
-            job.append(&c.to_string(), 0.0, TextFormat { font_id: font.clone(), color: fg, background: bg, ..Default::default() });
+            if c == ' ' && bg == Color32::TRANSPARENT {
+                spaces += 1;
+                continue;
+            }
+            if spaces > 0 {
+                if run.is_empty() || run_f.1 != Color32::TRANSPARENT {
+                    flush(&mut jobs, cur, &mut run, run_f);
+                    run_f = (fg, Color32::TRANSPARENT);
+                }
+                run.extend(std::iter::repeat_n(' ', spaces));
+                spaces = 0;
+            }
+            if (fg, bg) != run_f {
+                flush(&mut jobs, cur, &mut run, run_f);
+                run_f = (fg, bg);
+            }
+            run.push(c);
         }
+        flush(&mut jobs, cur, &mut run, run_f);
         for (i, job) in jobs.into_iter().enumerate() {
+            if job.sections.is_empty() {
+                continue;
+            }
             let galley = ui.fonts_mut(|f| f.layout_job(job));
             painter.galley(rect.min + egui::vec2(4.0, 2.0 + i as f32 * ch), galley, p.text);
         }

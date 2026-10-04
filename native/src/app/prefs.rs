@@ -116,30 +116,89 @@ pub struct Note {
     pub lines: Vec<&'static str>,
 }
 
-// riadky poznámok k jednej verzii (### nadpisy, - odrážky, **tučné**) – Nastavenia aj karta „Čo je nové“
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Span {
+    Plain,
+    Bold,
+    Italic,
+    Code,
+}
+
+// riadok markdownu → úseky: **tučné**, *kurzíva*, `kód` (v kóde zostávajú hviezdičky); nespárované znaky ostanú ako text
+pub fn spans(text: &str) -> Vec<(String, Span)> {
+    let mut out: Vec<(String, Span)> = vec![];
+    let mut push = |s: &str, k: Span| {
+        if s.is_empty() {
+            return;
+        }
+        match out.last_mut() {
+            Some((t, k2)) if *k2 == k => t.push_str(s),
+            _ => out.push((s.to_string(), k)),
+        }
+    };
+    let mut rest = text;
+    while !rest.is_empty() {
+        let next = rest.find(['`', '*']);
+        let Some(i) = next else {
+            push(rest, Span::Plain);
+            break;
+        };
+        push(&rest[..i], Span::Plain);
+        let tail = &rest[i..];
+        let (mark, kind) = if tail.starts_with('`') {
+            ("`", Span::Code)
+        } else if tail.starts_with("**") {
+            ("**", Span::Bold)
+        } else {
+            ("*", Span::Italic)
+        };
+        let body = &tail[mark.len()..];
+        // koniec úseku; kurzíva nesmie začínať medzerou (napr. „5 * 3“)
+        match body.find(mark).filter(|&j| j > 0 && !(kind == Span::Italic && body.starts_with(' '))) {
+            Some(j) => {
+                push(&body[..j], kind);
+                rest = &body[j + mark.len()..];
+            }
+            None => {
+                push(mark, Span::Plain);
+                rest = body;
+            }
+        }
+    }
+    out
+}
+
+// riadky poznámok k jednej verzii (### nadpisy, - odrážky, **tučné**, *kurzíva*, `kód`) – Nastavenia aj karta „Čo je nové“
 pub fn note_lines(ui: &mut egui::Ui, note: &Note, w: f32, p: &theme::Pal) {
     for line in &note.lines {
-        let (font, color, indent, text) = if let Some(h) = line.strip_prefix("### ") {
-            ui.add_space(4.0);
-            (theme::bold(13.0), p.text2, 36.0, h.to_string())
+        let (size, head, indent, text) = if let Some(h) = line.strip_prefix("### ") {
+            ui.add_space(10.0);
+            (13.5, true, 36.0, h)
         } else if let Some(b) = line.strip_prefix("- ") {
-            (theme::ui(12.5), p.text2, 52.0, b.to_string())
+            (12.5, false, 54.0, b)
         } else {
-            (theme::ui(12.5), p.text2, 36.0, line.to_string())
+            (12.5, false, 36.0, *line)
         };
-        // **tučné** časti, *kurzíva* bez hviezdičiek
+        let lh = (size * 1.5f32).round();
         let mut job = egui::text::LayoutJob::default();
-        job.wrap.max_width = w - indent - 16.0;
-        for (i, part) in text.split("**").enumerate() {
-            let f = if i % 2 == 1 { theme::bold(font.size) } else { font.clone() };
-            job.append(&part.replace('*', ""), 0.0, egui::TextFormat { font_id: f, color: if i % 2 == 1 { p.text } else { color }, ..Default::default() });
+        job.wrap.max_width = (w - indent - 28.0).max(60.0);
+        for (part, k) in spans(text) {
+            let base = egui::TextFormat { font_id: if head { theme::bold(size) } else { theme::ui(size) }, color: if head { p.text } else { p.text2 }, line_height: Some(lh), ..Default::default() };
+            let f = match k {
+                Span::Plain => base,
+                Span::Bold => egui::TextFormat { font_id: theme::bold(size), color: p.text, ..base },
+                Span::Italic => egui::TextFormat { italics: true, ..base },
+                Span::Code => egui::TextFormat { font_id: theme::mono(size - 1.0), color: p.text, background: p.hover, ..base },
+            };
+            job.append(&part, 0.0, f);
         }
         let g = ui.fonts_mut(|f| f.layout_job(job));
-        let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
+        let first = g.rows.first().map(|r| r.rect().height()).unwrap_or(lh);
+        let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + if head { 4.0 } else { 5.0 }), Sense::hover());
         if indent > 40.0 {
-            ui.painter().circle_filled(pos2(r.left() + 42.0, r.top() + 9.0), 2.0, p.text3);
+            ui.painter().circle_filled(pos2(r.left() + 42.0, r.top() + first / 2.0), 2.2, p.accent.gamma_multiply(0.7));
         }
-        ui.painter().galley(pos2(r.left() + indent, r.top() + 2.0), g, color);
+        ui.painter().galley(pos2(r.left() + indent, r.top()), g, p.text2);
     }
 }
 
@@ -1301,4 +1360,27 @@ pub(super) fn switch(ui: &mut egui::Ui, on: &mut bool, p: &crate::theme::Pal, an
         *on = !*on;
     }
     clicked
+}
+
+#[cfg(test)]
+mod notes_tests {
+    use super::*;
+
+    #[test]
+    fn notes_inline() {
+        let s = spans("Run **fast** with `*.wh.cpp` and *Ask me* – 5 * 3");
+        assert_eq!(
+            s,
+            vec![
+                ("Run ".into(), Span::Plain),
+                ("fast".into(), Span::Bold),
+                (" with ".into(), Span::Plain),
+                ("*.wh.cpp".into(), Span::Code),
+                (" and ".into(), Span::Plain),
+                ("Ask me".into(), Span::Italic),
+                (" – 5 * 3".into(), Span::Plain),
+            ]
+        );
+        assert_eq!(spans("a `b"), vec![("a `b".into(), Span::Plain)]);
+    }
 }

@@ -540,15 +540,15 @@ impl App {
         let Some(list) = self.whats_new.clone() else { return };
         let notes = prefs::release_notes();
         ui.painter().rect_filled(full, CornerRadius::ZERO, Color32::from_black_alpha(110));
-        let w = 560.0f32.min(full.width() - 40.0);
+        let w = 600.0f32.min(full.width() - 40.0);
         let h = (full.height() * 0.78).min(620.0);
         let card = Rect::from_center_size(full.center(), vec2(w, h));
         ui.painter().add(egui::Shadow { offset: [0, 18], blur: 48, spread: 0, color: Color32::from_black_alpha(120) }.as_shape(card, CornerRadius::same(18)));
         ui.painter().rect_filled(card, CornerRadius::same(18), p.solid);
         ui.painter().rect_stroke(card, CornerRadius::same(18), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-        ui.painter().text(card.min + vec2(28.0, 34.0), Align2::LEFT_CENTER, t("What's new"), theme::bold(20.0), p.text);
+        ui.painter().text(card.min + vec2(36.0, 34.0), Align2::LEFT_CENTER, t("What's new"), theme::bold(20.0), p.text);
         ui.painter().text(
-            card.min + vec2(28.0, 58.0),
+            card.min + vec2(36.0, 58.0),
             Align2::LEFT_CENTER,
             crate::i18n::tf("Flux Native was updated to {v}.", &[("v", env!("CARGO_PKG_VERSION"))]),
             theme::ui(12.5),
@@ -558,14 +558,24 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
         child.set_clip_rect(body);
         egui::ScrollArea::vertical().id_salt("whats-new").auto_shrink(false).show(&mut child, |ui| {
-            for i in list.iter().copied() {
+            for (k, i) in list.iter().copied().enumerate() {
                 let Some(n) = notes.get(i) else { continue };
+                if k > 0 {
+                    // tenká čiara medzi verziami
+                    let (r, _) = ui.allocate_exact_size(vec2(w - 24.0, 18.0), Sense::hover());
+                    ui.painter().hline(r.left() + 32.0..=r.right() - 16.0, r.center().y, Stroke::new(1.0, p.line));
+                }
                 ui.add_space(6.0);
-                let (r, _) = ui.allocate_exact_size(vec2(w - 24.0, 24.0), Sense::hover());
-                ui.painter().text(pos2(r.left() + 24.0, r.center().y), Align2::LEFT_CENTER, &n.ver, theme::bold(15.0), p.text);
-                ui.painter().text(pos2(r.right() - 8.0, r.center().y), Align2::RIGHT_CENTER, &n.date, theme::ui(12.0), p.text3);
+                // verzia ako pilulka vo farbe zvýraznenia, dátum vpravo
+                let (r, _) = ui.allocate_exact_size(vec2(w - 24.0, 26.0), Sense::hover());
+                let vw = widgets::text_w(ui, &n.ver, theme::bold(13.0)) + 20.0;
+                let pill = Rect::from_min_size(pos2(r.left() + 32.0, r.top()), vec2(vw, 26.0));
+                ui.painter().rect_filled(pill, CornerRadius::same(13), if k == 0 { p.accent } else { p.hover });
+                ui.painter().text(pill.center(), Align2::CENTER_CENTER, &n.ver, theme::bold(13.0), if k == 0 { p.accent_fg } else { p.text });
+                ui.painter().text(pos2(r.right() - 16.0, r.center().y), Align2::RIGHT_CENTER, &n.date, theme::ui(12.0), p.text3);
+                ui.add_space(2.0);
                 prefs::note_lines(ui, n, w - 24.0, &p);
-                ui.add_space(8.0);
+                ui.add_space(6.0);
             }
         });
         let mut b = ui.new_child(

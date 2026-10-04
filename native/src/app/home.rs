@@ -137,14 +137,17 @@ impl App {
         let now = ctx.input(|i| i.time);
         ui.painter().rect_filled(full, 0.0, p.base);
         // pohyblivé žiary ako v úvode (ob-aurora)
-        let tt = if anim { now as f32 } else { 0.0 };
+        // pohyb len 8 s po otvorení a len keď je okno aktívne – potom stoja a nič sa neprekresľuje (CPU)
+        let glide_end = self.start_opened + 8.0;
+        let tt = if anim { now.min(glide_end) as f32 } else { 0.0 };
+        let moving = anim && now < glide_end && ctx.input(|i| i.focused);
         let (w, h) = (full.width(), full.height());
         let glow_c =
             |a: u8| if p.accent == p.text || p.accent.r() == p.accent.g() { Color32::from_white_alpha(a) } else { Color32::from_rgba_unmultiplied(p.accent.r(), p.accent.g(), p.accent.b(), a) };
         super::intro::glow(ui, full.left_top() + vec2(w * (0.2 + 0.05 * (tt * 0.11).sin()), h * (0.25 + 0.06 * (tt * 0.09).cos())), w * 0.42, glow_c(if p.dark { 14 } else { 44 }));
         super::intro::glow(ui, full.left_top() + vec2(w * (0.78 + 0.04 * (tt * 0.08).cos()), h * (0.75 + 0.05 * (tt * 0.1).sin())), w * 0.38, glow_c(if p.dark { 10 } else { 34 }));
-        if anim {
-            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        if moving {
+            ctx.request_repaint_after(std::time::Duration::from_millis(33));
         }
         // ---- horná lišta: logo, ☰, ⚙ (okno sa ťahá za prázdne miesto) ----
         let top = Rect::from_min_size(full.min, vec2(full.width(), theme::TOP_H));

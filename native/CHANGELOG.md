@@ -2,6 +2,19 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.16 – 2026-10-04
+
+### Programs end by themselves
+- When your program finishes, Flux now shows *Finished* (or the exit code) right away and the **Stop** button turns back into ▶ Run. On Windows it used to keep saying *Running* after the last line.
+- The same goes for the Terminal tab when you type `exit`.
+
+### Nicer release notes
+- *What's new* and Settings → About & updates now show code like `input()` in a code font, *italic* text, more space between lines and a clear version badge.
+
+### A bit lighter
+- The home screen's soft background glow moves only for a few seconds after it opens and only while Flux is in front – then Flux draws nothing until you do something.
+- The Output and Terminal panels are drawn with far fewer pieces, so typing in the editor with a full Output panel costs less.
+
 ## 0.9.15 – 2026-10-04
 
 ### Programs work again on Windows
