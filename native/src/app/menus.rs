@@ -247,12 +247,14 @@ impl App {
         let has_file = !self.tabs.is_empty() && !self.home;
         egui::Popup::menu(resp).show(|ui| {
             ui.set_min_width(250.0);
+                ui.set_max_width(250.0);
             if item(ui, Some("template"), &t("Home"), "", false, true, &p).clicked() {
                 picked = Some("home".into());
             }
             sep(ui, &p);
             ui.menu_button(t("File"), |ui| {
                 ui.set_min_width(260.0);
+                ui.set_max_width(260.0);
                 for (id, label, key, icon) in
                     [("new-file", "New file…", "Ctrl+N", "filePlus"), ("new-project", "New project…", "Ctrl+Shift+N", "plus"), ("new-folder", "New folder…", "", "folderPlus")]
                 {
@@ -285,12 +287,14 @@ impl App {
             });
             ui.menu_button(t("Edit"), |ui| {
                 ui.set_min_width(260.0);
+                ui.set_max_width(260.0);
                 // úpravy textu robí editor sám (Ctrl+Z / Ctrl+Y / Ctrl+A)
                 item(ui, None, &t("Undo"), "Ctrl+Z", false, false, &p);
                 item(ui, None, &t("Redo"), "Ctrl+Y", false, false, &p);
             });
             ui.menu_button(t("View"), |ui| {
                 ui.set_min_width(270.0);
+                ui.set_max_width(270.0);
                 if item(ui, Some("search"), &t("Search everything…"), "Ctrl+Shift+A", false, true, &p).clicked() {
                     picked = Some("search".into());
                 }
@@ -326,6 +330,7 @@ impl App {
             });
             ui.menu_button(t("Run"), |ui| {
                 ui.set_min_width(250.0);
+                ui.set_max_width(250.0);
                 if item(ui, Some("play"), &t("Run current file"), "F5", false, has_file, &p).clicked() {
                     picked = Some("run".into());
                 }
@@ -339,6 +344,7 @@ impl App {
             });
             ui.menu_button(t("Help"), |ui| {
                 ui.set_min_width(250.0);
+                ui.set_max_width(250.0);
                 for (id, label, icon) in [
                     ("shortcuts", "Shortcuts", "command"),
                     ("releases", "Release notes", "file"),

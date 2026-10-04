@@ -16,7 +16,7 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
+        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
@@ -114,6 +114,38 @@ pub struct Note {
     pub date: String,
     pub summary: String,
     pub lines: Vec<&'static str>,
+}
+
+// riadky poznámok k jednej verzii (### nadpisy, - odrážky, **tučné**) – Nastavenia aj karta „Čo je nové“
+pub fn note_lines(ui: &mut egui::Ui, note: &Note, w: f32, p: &theme::Pal) {
+    for line in &note.lines {
+        let (font, color, indent, text) = if let Some(h) = line.strip_prefix("### ") {
+            ui.add_space(4.0);
+            (theme::bold(13.0), p.text2, 36.0, h.to_string())
+        } else if let Some(b) = line.strip_prefix("- ") {
+            (theme::ui(12.5), p.text2, 52.0, b.to_string())
+        } else {
+            (theme::ui(12.5), p.text2, 36.0, line.to_string())
+        };
+        // **tučné** časti, *kurzíva* bez hviezdičiek
+        let mut job = egui::text::LayoutJob::default();
+        job.wrap.max_width = w - indent - 16.0;
+        for (i, part) in text.split("**").enumerate() {
+            let f = if i % 2 == 1 { theme::bold(font.size) } else { font.clone() };
+            job.append(&part.replace('*', ""), 0.0, egui::TextFormat { font_id: f, color: if i % 2 == 1 { p.text } else { color }, ..Default::default() });
+        }
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
+        if indent > 40.0 {
+            ui.painter().circle_filled(pos2(r.left() + 42.0, r.top() + 9.0), 2.0, p.text3);
+        }
+        ui.painter().galley(pos2(r.left() + indent, r.top() + 2.0), g, color);
+    }
+}
+
+// verzia ako čísla na porovnanie (0.9.14 > 0.9.9)
+pub fn ver_key(v: &str) -> Vec<u32> {
+    v.split('.').map(|x| x.trim().parse().unwrap_or(0)).collect()
 }
 
 pub fn release_notes() -> &'static [Note] {
@@ -290,6 +322,8 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Number("fontSize", "Font size", "size of the code text in points", 9.0, 32.0),
                     Row::Select("lineHeight", "Line height", "space between lines of code", vec![(json!(1.3), t("compact")), (json!(1.45), t("normal")), (json!(1.6), t("relaxed")), (json!(1.8), t("large"))]),
                     Row::Toggle("wordWrap", "Wrap long lines", "long lines continue on the next line instead of scrolling sideways"),
+                    Row::Toggle("lintHints", "Error hints", "a short explanation right next to a mistake, like a missing colon, quote or bracket"),
+                    Row::Toggle("suggest", "Suggestions while typing", "words, keywords and functions to finish what you type – Enter or Tab inserts one"),
                 ],
             ),
             (
@@ -1017,29 +1051,7 @@ impl App {
                     if open {
                         ui.scope(|ui| {
                             ui.set_opacity(ok);
-                            for line in &note.lines {
-                                let (font, color, indent, text) = if let Some(h) = line.strip_prefix("### ") {
-                                    ui.add_space(4.0);
-                                    (theme::bold(13.0), p.text2, 36.0, h.to_string())
-                                } else if let Some(b) = line.strip_prefix("- ") {
-                                    (theme::ui(12.5), p.text2, 52.0, b.to_string())
-                                } else {
-                                    (theme::ui(12.5), p.text2, 36.0, line.to_string())
-                                };
-                                // **tučné** časti, *kurzíva* bez hviezdičiek
-                                let mut job = egui::text::LayoutJob::default();
-                                job.wrap.max_width = w - indent - 16.0;
-                                for (i, part) in text.split("**").enumerate() {
-                                    let f = if i % 2 == 1 { theme::bold(font.size) } else { font.clone() };
-                                    job.append(&part.replace('*', ""), 0.0, egui::TextFormat { font_id: f, color: if i % 2 == 1 { p.text } else { color }, ..Default::default() });
-                                }
-                                let g = ui.fonts_mut(|f| f.layout_job(job));
-                                let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
-                                if indent > 40.0 {
-                                    ui.painter().circle_filled(pos2(r.left() + 42.0, r.top() + 9.0), 2.0, p.text3);
-                                }
-                                ui.painter().galley(pos2(r.left() + indent, r.top() + 2.0), g, color);
-                            }
+                            note_lines(ui, note, w, &p);
                             ui.add_space(10.0);
                         });
                     }

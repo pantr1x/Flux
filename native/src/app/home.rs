@@ -1,34 +1,13 @@
-// Domov Fluxu (klik na logo) – to isté ako openStart() v app.js: pozdrav s dátumom, súčty za všetky
-// projekty, Nový projekt / Otvoriť priečinok / Otvoriť súbor, pripnuté a nedávne projekty s hľadaním,
-// nedávne súbory, „Začni niečo nové“ zo šablón (templates.js) a tip dňa.
-use super::{format_time, App};
-use crate::i18n::{t, tf};
+// Domov Fluxu (klik na logo), minimalisticky: logo, pozdrav s dátumom, veľké hľadanie (projekty a nedávne
+// súbory, ↑/↓ + Enter), pripnuté a nedávne projekty a tri tiché tlačidlá Nový projekt / Otvoriť priečinok / súbor.
+use super::App;
+use crate::i18n::t;
 use crate::theme;
 use crate::widgets;
 use eframe::egui::{self, pos2, vec2, Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind};
 use flux_core::fsops;
 use serde_json::Value;
 use std::path::Path;
-
-// START_CHOICES v app.js: (id, názov, popis, ikona)
-const CHOICES: [(&str, &str, &str, &str); 7] = [
-    ("py", "Python", "script – print, input, maths", "main.py"),
-    ("py-tkinter", "Python window", "app with buttons (tkinter)", "window.py"),
-    ("py-pygame", "Python game", "move with arrow keys (pygame)", "game.py"),
-    ("html", "HTML page", "one page with a skeleton", "index.html"),
-    ("web", "Web project", "HTML + CSS + JavaScript", "style.css"),
-    ("js", "JavaScript", "script that runs with Node.js", "script.js"),
-    ("empty", "Empty file", ".txt, .md, .py… saved anywhere", "file.txt"),
-];
-
-const TIPS: [&str; 6] = [
-    "Press Ctrl+Shift+A to search everything – commands, settings, files and projects.",
-    "Drop a file or a folder onto Flux to open it.",
-    "Ctrl+I opens Claude, your coding assistant.",
-    "Plugins like Error Lens and Bookmarks are in Settings → Plugins.",
-    "Every shortcut can be changed in Settings → Shortcuts.",
-    "Open a .md file and press Ctrl+Shift+V to see the preview.",
-];
 
 // šablóny z templates.js (bez značky kurzora $0)
 const HTML_PAGE: &str = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>{{title}}</title>\n</head>\n<body>\n  \n</body>\n</html>\n";
@@ -206,15 +185,67 @@ impl App {
         }
         let mut go: Option<String> = None;
         let mut menu_for: Option<(egui::Response, String, bool, bool)> = None;
-        let mut tpl: Option<&str> = None;
+        let tpl: Option<&str> = None;
         let mut act: Option<&str> = None;
         let mut file: Option<String> = None;
+        // ---- minimalistická domovská obrazovka: logo, pozdrav, hľadanie, posledné projekty ----
+        let shown: Vec<Value> = self.projects.iter().filter(|pr| pr["hidden"].as_bool() != Some(true)).cloned().collect();
+        let q = self.start_q.trim().to_lowercase();
+        let desc = |app: &App, d: &str| app.core.setting("projectMeta")[d]["description"].as_str().unwrap_or("").to_string();
+        // zoznam: pripnuté, potom nedávne; pri hľadaní aj nedávne súbory
+        enum Entry {
+            Proj(Value),
+            File(String),
+        }
+        let mut list: Vec<Entry> = vec![];
+        {
+            let hit = |app: &App, pr: &Value| q.is_empty() || format!("{} {} {}", pr["name"].as_str().unwrap_or(""), pr["dir"].as_str().unwrap_or(""), desc(app, pr["dir"].as_str().unwrap_or(""))).to_lowercase().contains(&q);
+            let mut pinned: Vec<Value> = shown.iter().filter(|pr| pr["pinned"].as_bool() == Some(true) && hit(self, pr)).cloned().collect();
+            let mut recent: Vec<Value> = shown.iter().filter(|pr| pr["pinned"].as_bool() != Some(true) && hit(self, pr)).cloned().collect();
+            recent.sort_by_key(|pr| pr["recent"].as_i64().filter(|r| *r >= 0).unwrap_or(999));
+            pinned.truncate(4);
+            recent.truncate(if q.is_empty() { 6 } else { 8 });
+            list.extend(pinned.into_iter().chain(recent).map(Entry::Proj));
+            if !q.is_empty() {
+                for f in self.recent_files.iter().filter(|f| f.to_lowercase().contains(&q)).take(6) {
+                    list.push(Entry::File(f.clone()));
+                }
+            }
+        }
+        // výber šípkami (pamätá sa v egui, nový dopyt = od začiatku)
+        let sel_id = egui::Id::new("start-sel");
+        let (mut sel, last_q) = ctx.data(|d| d.get_temp::<(usize, String)>(sel_id)).unwrap_or((0, String::new()));
+        if last_q != q {
+            sel = 0;
+        }
+        let (up, down, enter) = ctx.input_mut(|i| {
+            (
+                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                !list.is_empty() && i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+            )
+        });
+        if !list.is_empty() {
+            if up {
+                sel = (sel + list.len() - 1) % list.len();
+            }
+            if down {
+                sel = (sel + 1) % list.len();
+            }
+            sel = sel.min(list.len() - 1);
+        }
+        ctx.data_mut(|d| d.insert_temp(sel_id, (sel, q.clone())));
+        let mut pick: Option<usize> = enter.then_some(sel);
         let sout = sa.show(&mut bui, |ui| {
-            let cw = (ui.available_width() - 64.0).min(1060.0);
+            let cw = (ui.available_width() - 48.0).min(620.0);
             let left = ui.max_rect().left() + (ui.available_width() - cw) / 2.0;
-            ui.add_space(26.0 + (1.0 - k) * 16.0);
-            // ---- hero: dátum, pozdrav, súčty ----
-            let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 96.0), Sense::hover());
+            // obsah zvisle v strede, kým sa zmestí
+            let est = 300.0 + list.len().max(1) as f32 * 54.0;
+            ui.add_space(((body.height() - est) / 2.0).max(28.0) + (1.0 - k) * 16.0);
+            // logo + pozdrav + dátum
+            let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 130.0), Sense::hover());
+            let cx = left + cw / 2.0;
+            widgets::brand_mark(ui, Rect::from_center_size(pos2(cx, hr.top() + 22.0), vec2(40.0, 40.0)), &p);
             let hour = chrono::Timelike::hour(&chrono::Local::now());
             let base = if hour < 5 {
                 t("Good night")
@@ -228,270 +259,111 @@ impl App {
             let name = self.get("userName").as_str().unwrap_or("").trim().to_string();
             let greet = if name.is_empty() { base } else { format!("{base}, {name}") };
             let lang = self.core.setting("language").as_str().unwrap_or("en").to_string();
-            ui.painter().text(pos2(left, hr.top() + 10.0), Align2::LEFT_CENTER, date_line(&lang), theme::ui(12.5), p.text3);
-            ui.painter().text(pos2(left, hr.top() + 44.0), Align2::LEFT_CENTER, &greet, theme::bold(30.0), p.text);
-            ui.painter().text(pos2(left, hr.top() + 78.0), Align2::LEFT_CENTER, t("What do you want to work on?"), theme::ui(14.0), p.text2);
-            if !self.projects.is_empty() {
-                let secs: u64 = self.core.setting("projectTime").as_object().map(|o| o.values().filter_map(|v| v.as_u64()).sum()).unwrap_or(0);
-                let runs: u64 = self.core.setting("activity").as_object().map(|o| o.values().filter_map(|v| v["runs"].as_u64()).sum()).unwrap_or(0);
-                let lines: u64 = self.summaries.values().filter_map(|s| s["lines"].as_u64()).sum();
-                let tiles = [
-                    ("clock", if secs >= 60 { format_time(secs) } else { "0 min".into() }, "coding time"),
-                    ("play", runs.to_string(), "runs"),
-                    ("code", lines.to_string(), "lines of code"),
-                    ("folder", self.projects.len().to_string(), "projects"),
-                ];
-                let tw = 118.0;
-                for (i, (ic, val, label)) in tiles.iter().enumerate() {
-                    let r = Rect::from_min_size(pos2(left + cw - (4 - i) as f32 * (tw + 8.0) + 8.0, hr.top() + 18.0), vec2(tw, 70.0));
-                    ui.painter().rect_filled(r, CornerRadius::same(14), p.card.gamma_multiply(0.8));
-                    ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
-                    widgets::icon_at(ui, pos2(r.right() - 18.0, r.top() + 18.0), 13.0, ic, p.text3);
-                    // dlhá hodnota („4 h 26 min“) sa zmenší, aby nešla pod ikonu
-                    ui.painter().text(pos2(r.left() + 14.0, r.top() + 27.0), Align2::LEFT_CENTER, val, widgets::fit_bold(ui, val, tw - 14.0 - 34.0, 20.0, 12.0), p.text);
-                    widgets::text(ui, pos2(r.left() + 14.0, r.top() + 52.0), Align2::LEFT_CENTER, &t(label), theme::ui(11.5), p.text3, tw - 20.0);
-                }
+            ui.painter().text(pos2(cx, hr.top() + 76.0), Align2::CENTER_CENTER, &greet, theme::bold(28.0), p.text);
+            ui.painter().text(pos2(cx, hr.top() + 108.0), Align2::CENTER_CENTER, date_line(&lang), theme::ui(13.0), p.text3);
+            ui.add_space(14.0);
+            // veľké hľadanie
+            let (sr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 50.0), Sense::hover());
+            let sr = Rect::from_min_size(pos2(left, sr.top()), vec2(cw, 50.0));
+            let qid = egui::Id::new("start-q");
+            let foc = ctx.memory(|m| m.has_focus(qid));
+            ui.painter().rect_filled(sr, CornerRadius::same(16), p.solid.gamma_multiply(0.85));
+            ui.painter().rect_stroke(sr, CornerRadius::same(16), Stroke::new(if foc { 1.5 } else { 1.0 }, if foc { p.accent.gamma_multiply(0.7) } else { p.line_strong }), StrokeKind::Inside);
+            widgets::icon_at(ui, pos2(sr.left() + 24.0, sr.center().y), 16.0, "search", p.text3);
+            let mut qc = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(sr.left() + 44.0, sr.top() + 14.0), pos2(sr.right() - 16.0, sr.bottom() - 12.0))));
+            let te = qc.add(egui::TextEdit::singleline(&mut self.start_q).id(qid).hint_text(t("Open a project or file…")).frame(egui::Frame::NONE).desired_width(f32::INFINITY).font(theme::ui(15.0)));
+            if now - self.start_opened < 0.3 && !te.has_focus() {
+                te.request_focus();
             }
-            ui.add_space(22.0);
-            // ---- akcie ----
-            let (ar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 58.0), Sense::hover());
-            let mut x = left;
-            for (i, (id, ic, title, sub)) in [
-                ("newproject", "plus", t("New project"), "Ctrl+Shift+N".to_string()),
-                ("open", "folderOpen", t("Open folder"), "Ctrl+O".to_string()),
-                ("openfile", "file", t("Open file"), t(".md, .txt, any file")),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let bw = widgets::text_w(ui, &title, theme::bold(13.5)).max(widgets::text_w(ui, &sub, theme::ui(11.5))) + 76.0;
-                let r = Rect::from_min_size(pos2(x, ar.top()), vec2(bw, 58.0));
-                let resp = ui.interact(r, ui.id().with(("hm-act", id)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
-                let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                let primary = i == 0;
-                let (bg, fg, fg2) = if primary {
-                    (p.accent.lerp_to_gamma(Color32::WHITE, 0.08 * hk), p.accent_fg, p.accent_fg.gamma_multiply(0.7))
+            ui.add_space(18.0);
+            // zoznam
+            if list.is_empty() {
+                let (er, _) = ui.allocate_exact_size(vec2(ui.available_width(), 70.0), Sense::hover());
+                let msg = if !q.is_empty() {
+                    t("Nothing found")
+                } else if self.gh_plugin() {
+                    t("Start a new project, open a folder or get one from GitHub.")
                 } else {
-                    (p.solid.gamma_multiply(0.6).lerp_to_gamma(p.hover, hk), p.text, p.text3)
+                    t("Start a new project or open a folder.")
                 };
-                ui.painter().rect_filled(r.translate(vec2(0.0, -2.0 * hk)), CornerRadius::same(14), bg);
-                if !primary {
-                    ui.painter().rect_stroke(r.translate(vec2(0.0, -2.0 * hk)), CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-                }
-                let ib = Rect::from_center_size(pos2(r.left() + 30.0, r.center().y - 2.0 * hk), vec2(34.0, 34.0));
-                ui.painter().rect_filled(ib, CornerRadius::same(10), if primary { p.accent_fg.gamma_multiply(0.15) } else { p.hover });
-                widgets::icon_at(ui, ib.center(), 17.0, ic, fg);
-                ui.painter().text(pos2(r.left() + 58.0, r.center().y - 9.0 - 2.0 * hk), Align2::LEFT_CENTER, &title, theme::bold(13.5), fg);
-                ui.painter().text(pos2(r.left() + 58.0, r.center().y + 10.0 - 2.0 * hk), Align2::LEFT_CENTER, &sub, theme::ui(11.5), fg2);
-                if resp.clicked() {
-                    act = Some(id);
-                }
-                x += bw + 10.0;
+                ui.painter().text(pos2(cx, er.center().y), Align2::CENTER_CENTER, msg, theme::ui(13.0), p.text3);
             }
-            ui.add_space(22.0);
-            // ---- dva stĺpce ----
-            let gap = 22.0;
-            let lw = ((cw - gap) * 1.55 / 2.55).floor();
-            let rw = cw - gap - lw;
-            let col_top = ui.cursor().top();
-            let bg_l = ui.painter().add(egui::Shape::Noop);
-            let bg_r = ui.painter().add(egui::Shape::Noop);
-            // ľavý: projekty
-            let mut lu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(left + 18.0, col_top + 18.0), vec2(lw - 36.0, 10000.0))));
-            let lwi = lw - 36.0;
-            {
-                let ui = &mut lu;
-                let (hr, _) = ui.allocate_exact_size(vec2(lwi, 30.0), Sense::hover());
-                ui.painter().text(pos2(hr.left(), hr.center().y), Align2::LEFT_CENTER, t("Projects"), theme::bold(15.0), p.text);
-                let shown: Vec<Value> = self.projects.iter().filter(|pr| pr["hidden"].as_bool() != Some(true)).cloned().collect();
-                if !shown.is_empty() {
-                    // hľadanie projektu
-                    let sr = Rect::from_min_size(pos2(hr.right() - 220.0, hr.top()), vec2(220.0, 30.0));
-                    ui.painter().rect_filled(sr, CornerRadius::same(9), p.card2);
-                    ui.painter().rect_stroke(sr, CornerRadius::same(9), Stroke::new(1.0, p.line), StrokeKind::Inside);
-                    widgets::icon_at(ui, pos2(sr.left() + 16.0, sr.center().y), 13.0, "search", p.text3);
-                    let mut qc = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(sr.left() + 30.0, sr.top() + 6.0), pos2(sr.right() - 8.0, sr.bottom() - 5.0))));
-                    qc.add(egui::TextEdit::singleline(&mut self.start_q).hint_text(t("Find a project…")).frame(egui::Frame::NONE).desired_width(f32::INFINITY).font(theme::ui(12.5)));
+            let ws = self.workspace();
+            for (i, e) in list.iter().enumerate() {
+                let (rr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::hover());
+                let r = Rect::from_min_size(pos2(left, rr.top()), vec2(cw, 48.0));
+                let key = match e {
+                    Entry::Proj(pr) => pr["dir"].as_str().unwrap_or("").to_string(),
+                    Entry::File(f) => f.clone(),
+                };
+                let resp = ui.interact(r, ui.id().with(("hm-row", &key)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(&key);
+                let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered() || i == sel && !list.is_empty() && (up || down || !q.is_empty() || sel > 0), 0.12);
+                let cur = matches!(e, Entry::Proj(_)) && ws.as_deref() == Some(key.as_str());
+                if hk > 0.0 || cur {
+                    ui.painter().rect_filled(r, CornerRadius::same(12), if cur { p.active.lerp_to_gamma(p.hover, hk) } else { p.hover.gamma_multiply(hk) });
                 }
-                ui.add_space(10.0);
-                let q = self.start_q.trim().to_lowercase();
-                let desc = |app: &App, d: &str| app.core.setting("projectMeta")[d]["description"].as_str().unwrap_or("").to_string();
-                let hit = |app: &App, pr: &Value| q.is_empty() || format!("{} {}", pr["name"].as_str().unwrap_or(""), desc(app, pr["dir"].as_str().unwrap_or(""))).to_lowercase().contains(&q);
-                let ws = self.workspace();
-                let pinned: Vec<Value> = shown.iter().filter(|pr| pr["pinned"].as_bool() == Some(true) && hit(self, pr)).cloned().collect();
-                let mut recent: Vec<Value> = shown.iter().filter(|pr| pr["pinned"].as_bool() != Some(true) && hit(self, pr)).cloned().collect();
-                recent.sort_by_key(|pr| pr["recent"].as_i64().filter(|r| *r >= 0).unwrap_or(999));
-                recent.truncate(6);
-                if shown.is_empty() {
-                    let (er, _) = ui.allocate_exact_size(vec2(lwi, 110.0), Sense::hover());
-                    widgets::icon_at(ui, pos2(er.center().x, er.top() + 26.0), 22.0, "folder", p.text3);
-                    ui.painter().text(pos2(er.center().x, er.top() + 58.0), Align2::CENTER_CENTER, t("No projects yet"), theme::bold(14.0), p.text);
-                    ui.painter().text(pos2(er.center().x, er.top() + 80.0), Align2::CENTER_CENTER, if self.gh_plugin() { t("Start a new project, open a folder or get one from GitHub.") } else { t("Start a new project or open a folder.") }, theme::ui(12.0), p.text3);
-                }
-                // karta/riadok projektu
-                let mut project = |app: &mut App, ui: &mut egui::Ui, r: Rect, pr: &Value, card: bool| {
-                    let dir = pr["dir"].as_str().unwrap_or("").to_string();
-                    let resp = ui.interact(r, ui.id().with(("hm-p", &dir, card)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(&dir);
-                    let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                    let cur = ws.as_deref() == Some(dir.as_str());
-                    if card {
-                        ui.painter().rect_filled(r, CornerRadius::same(16), p.card.gamma_multiply(0.7).lerp_to_gamma(p.hover, hk));
-                        ui.painter().rect_stroke(r, CornerRadius::same(16), Stroke::new(1.0, if cur { p.accent.gamma_multiply(0.6) } else { p.line_strong }), StrokeKind::Inside);
-                    } else if hk > 0.0 || cur {
-                        ui.painter().rect_filled(r, CornerRadius::same(10), if cur { p.active } else { p.hover.gamma_multiply(hk) });
+                let ic = Rect::from_min_size(pos2(r.left() + 14.0, r.center().y - 11.0), vec2(22.0, 22.0));
+                let (title, sub, right) = match e {
+                    Entry::Proj(pr) => {
+                        super::newproj::paint_icon(ui, ic, &self.project_icon(&key), &p);
+                        let d = desc(self, &key);
+                        (pr["name"].as_str().unwrap_or("").to_string(), if d.is_empty() { short_path(&key) } else { d }, self.project_sub(&key))
                     }
-                    let isz = if card { 24.0 } else { 18.0 };
-                    let ic = if card {
-                        Rect::from_min_size(pos2(r.left() + 16.0, r.top() + 16.0), vec2(isz, isz))
-                    } else {
-                        Rect::from_min_size(pos2(r.left() + 12.0, r.center().y - isz / 2.0), vec2(isz, isz))
-                    };
-                    super::newproj::paint_icon(ui, ic, &app.project_icon(&dir), &p);
-                    let name = pr["name"].as_str().unwrap_or("");
-                    let d = desc(app, &dir);
-                    let sub = if d.is_empty() { short_path(&dir) } else { d };
-                    let stat = app.project_sub(&dir);
-                    if card {
-                        let tx = r.left() + 16.0;
-                        widgets::text(ui, pos2(tx, r.top() + 56.0), Align2::LEFT_CENTER, name, theme::bold(14.0), p.text, r.width() - 32.0);
-                        widgets::text(ui, pos2(tx, r.top() + 76.0), Align2::LEFT_CENTER, &sub, theme::ui(12.0), p.text3, r.width() - 32.0);
-                        widgets::text(ui, pos2(tx, r.top() + 96.0), Align2::LEFT_CENTER, &stat, theme::ui(11.5), p.text3, r.width() - 32.0);
-                        widgets::icon_at(ui, pos2(r.right() - 20.0, r.top() + 22.0), 12.0, "pin", p.accent);
-                    } else {
-                        let tx = r.left() + 42.0;
-                        let nw = widgets::text_w(ui, name, theme::bold(13.0)).min(r.width() * 0.4);
-                        widgets::text(ui, pos2(tx, r.center().y), Align2::LEFT_CENTER, name, theme::bold(13.0), p.text, nw);
-                        let sw = widgets::text_w(ui, &stat, theme::ui(11.5)).min(r.width() * 0.35);
-                        widgets::text(ui, pos2(tx + nw + 10.0, r.center().y), Align2::LEFT_CENTER, &sub, theme::ui(12.0), p.text3, (r.width() - 42.0 - nw - sw - 30.0).max(10.0));
-                        widgets::text(ui, pos2(r.right() - 12.0, r.center().y), Align2::RIGHT_CENTER, &stat, theme::ui(11.5), p.text3, sw);
+                    Entry::File(f) => {
+                        let n = Path::new(f).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                        widgets::file_icon(ui, ic, &n);
+                        (n, short_path(&Path::new(f).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default()), t("file"))
+                    }
+                };
+                let tx = r.left() + 50.0;
+                let rw = widgets::text_w(ui, &right, theme::ui(12.0)).min(cw * 0.32);
+                widgets::text(ui, pos2(tx, r.center().y - 9.0), Align2::LEFT_CENTER, &title, theme::bold(14.0), p.text, cw - 80.0 - rw);
+                widgets::text(ui, pos2(tx, r.center().y + 10.0), Align2::LEFT_CENTER, &sub, theme::ui(12.0), p.text3, cw - 80.0 - rw);
+                widgets::text(ui, pos2(r.right() - 14.0, r.center().y), Align2::RIGHT_CENTER, &right, theme::ui(12.0), p.text3, rw);
+                if let Entry::Proj(pr) = e {
+                    if pr["pinned"].as_bool() == Some(true) {
+                        widgets::icon_at(ui, pos2(r.left() + 40.0, r.top() + 12.0), 9.0, "pin", p.accent);
                     }
                     if resp.secondary_clicked() {
-                        menu_for = Some((resp.clone(), dir.clone(), pr["pinned"].as_bool() == Some(true), pr["hidden"].as_bool() == Some(true)));
-                    }
-                    if resp.clicked() {
-                        go = Some(dir);
-                    }
-                };
-                if !pinned.is_empty() {
-                    ui.add_space(4.0);
-                    let (sr, _) = ui.allocate_exact_size(vec2(lwi, 22.0), Sense::hover());
-                    widgets::icon_at(ui, pos2(sr.left() + 5.0, sr.center().y), 11.0, "pin", p.text3);
-                    ui.painter().text(pos2(sr.left() + 16.0, sr.center().y), Align2::LEFT_CENTER, t("Pinned").to_uppercase(), theme::bold(11.0), p.text3);
-                    ui.add_space(4.0);
-                    let per = if lwi > 520.0 { 3 } else { 2 };
-                    let cwid = (lwi - (per - 1) as f32 * 10.0) / per as f32;
-                    for row in pinned.chunks(per) {
-                        let (rr, _) = ui.allocate_exact_size(vec2(lwi, 116.0), Sense::hover());
-                        for (i, pr) in row.iter().enumerate() {
-                            let r = Rect::from_min_size(pos2(rr.left() + i as f32 * (cwid + 10.0), rr.top()), vec2(cwid, 112.0));
-                            project(self, ui, r, pr, true);
-                        }
+                        menu_for = Some((resp.clone(), key.clone(), pr["pinned"].as_bool() == Some(true), pr["hidden"].as_bool() == Some(true)));
                     }
                 }
-                if !recent.is_empty() {
-                    ui.add_space(10.0);
-                    let (sr, _) = ui.allocate_exact_size(vec2(lwi, 22.0), Sense::hover());
-                    ui.painter().text(pos2(sr.left(), sr.center().y), Align2::LEFT_CENTER, t("Recent").to_uppercase(), theme::bold(11.0), p.text3);
-                    for pr in &recent {
-                        let (r, _) = ui.allocate_exact_size(vec2(lwi, 40.0), Sense::hover());
-                        project(self, ui, r, pr, false);
-                    }
-                }
-                if !q.is_empty() && pinned.is_empty() && recent.is_empty() && !shown.is_empty() {
-                    ui.add_space(10.0);
-                    ui.label(egui::RichText::new(t("Nothing found")).font(theme::ui(12.5)).color(p.text3));
-                }
-                // nedávne súbory
-                let files: Vec<String> = self.recent_files.iter().take(5).cloned().collect();
-                if !files.is_empty() {
-                    ui.add_space(16.0);
-                    let (sr, _) = ui.allocate_exact_size(vec2(lwi, 26.0), Sense::hover());
-                    ui.painter().text(pos2(sr.left(), sr.center().y), Align2::LEFT_CENTER, t("Recent files"), theme::bold(15.0), p.text);
-                    for f in files {
-                        let (r, resp) = ui.allocate_exact_size(vec2(lwi, 38.0), Sense::click());
-                        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-                        let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                        if hk > 0.0 {
-                            ui.painter().rect_filled(r, CornerRadius::same(10), p.hover.gamma_multiply(hk));
-                        }
-                        let name = Path::new(&f).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                        widgets::file_icon(ui, Rect::from_min_size(pos2(r.left() + 12.0, r.center().y - 9.0), vec2(18.0, 18.0)), &name);
-                        let nw = widgets::text_w(ui, &name, theme::bold(13.0)).min(r.width() * 0.45);
-                        widgets::text(ui, pos2(r.left() + 42.0, r.center().y), Align2::LEFT_CENTER, &name, theme::bold(13.0), p.text, nw);
-                        let parent = Path::new(&f).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
-                        widgets::text(ui, pos2(r.left() + 52.0 + nw, r.center().y), Align2::LEFT_CENTER, &short_path(&parent), theme::ui(12.0), p.text3, r.width() - 64.0 - nw);
-                        if resp.clicked() {
-                            file = Some(f);
-                        }
-                    }
+                if resp.clicked() {
+                    pick = Some(i);
                 }
             }
-            let left_h = lu.min_rect().height() + 36.0;
-            // pravý: začni niečo nové + tip
-            let mut ru = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(left + lw + gap + 18.0, col_top + 18.0), vec2(rw - 36.0, 10000.0))));
-            let rwi = rw - 36.0;
-            {
-                let ui = &mut ru;
-                let (hr, _) = ui.allocate_exact_size(vec2(rwi, 22.0), Sense::hover());
-                ui.painter().text(pos2(hr.left(), hr.center().y), Align2::LEFT_CENTER, t("Start something new"), theme::bold(15.0), p.text);
-                let sub = match self.workspace() {
-                    Some(w) => tf("new file in {dir}", &[("dir", &Path::new(&w).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default())]),
-                    None => t("creates a new project"),
-                };
-                ui.label(egui::RichText::new(sub).font(theme::ui(12.0)).color(p.text3));
-                ui.add_space(8.0);
-                // jazyky z úvodu idú prvé (codeLangs)
-                let prefs: Vec<String> = self.core.setting("codeLangs").as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
-                let lang_of = |id: &str| match id {
-                    "py" | "py-tkinter" | "py-pygame" => "python",
-                    "html" | "web" => "web",
-                    "js" => "js",
-                    _ => "",
-                };
-                let mut choices = CHOICES.to_vec();
-                choices.sort_by_key(|c| !prefs.iter().any(|l| l == lang_of(c.0)));
-                for (id, title, sub, icon) in choices {
-                    let (r, resp) = ui.allocate_exact_size(vec2(rwi, 46.0), Sense::click());
-                    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-                    let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                    if hk > 0.0 {
-                        ui.painter().rect_filled(r, CornerRadius::same(10), p.hover.gamma_multiply(hk));
-                    }
-                    widgets::file_icon(ui, Rect::from_min_size(pos2(r.left() + 12.0, r.center().y - 9.0), vec2(18.0, 18.0)), icon);
-                    ui.painter().text(pos2(r.left() + 42.0, r.center().y - 8.0), Align2::LEFT_CENTER, t(title), theme::bold(13.0), p.text);
-                    widgets::text(ui, pos2(r.left() + 42.0, r.center().y + 10.0), Align2::LEFT_CENTER, &t(sub), theme::ui(11.5), p.text3, r.width() - 50.0);
-                    if resp.clicked() {
-                        tpl = Some(id);
-                    }
+            ui.add_space(16.0);
+            // tiché tlačidlá
+            let btns = [("newproject", "plus", t("New project")), ("open", "folderOpen", t("Open folder")), ("openfile", "file", t("Open file"))];
+            let ws_ = btns.iter().map(|(_, _, l)| widgets::text_w(ui, l, theme::bold(13.0)) + 52.0).sum::<f32>() + 16.0;
+            let (br, _) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::hover());
+            let mut x = cx - ws_ / 2.0;
+            for (i, (id, ic, label)) in btns.iter().enumerate() {
+                let bw = widgets::text_w(ui, label, theme::bold(13.0)) + 44.0;
+                let mut bu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(x, br.top()), vec2(bw, 34.0))));
+                if widgets::button(&mut bu, Some(ic), label, if i == 0 { p.accent } else { p.card2 }, if i == 0 { p.accent_fg } else { p.text }, 34.0, &p).clicked() {
+                    act = Some(id);
                 }
-                ui.add_space(12.0);
-                // tip dňa
-                let tip = t(TIPS[chrono::Datelike::day(&chrono::Local::now()) as usize % TIPS.len()]);
-                let g = ui.painter().layout(tip, theme::ui(12.0), p.text2, rwi - 58.0);
-                let (tr, _) = ui.allocate_exact_size(vec2(rwi, g.size().y + 40.0), Sense::hover());
-                ui.painter().rect_filled(tr, CornerRadius::same(12), p.hover);
-                widgets::icon_at(ui, pos2(tr.left() + 22.0, tr.top() + 22.0), 14.0, "sparkle", p.accent);
-                ui.painter().text(pos2(tr.left() + 42.0, tr.top() + 16.0), Align2::LEFT_CENTER, t("Tip"), theme::bold(12.5), p.text);
-                ui.painter().galley(pos2(tr.left() + 42.0, tr.top() + 28.0), g, p.text2);
+                x += bw + 8.0;
             }
-            let right_h = ru.min_rect().height() + 36.0;
-            let hh = left_h.max(right_h);
-            for (slot, x, ww) in [(bg_l, left, lw), (bg_r, left + lw + gap, rw)] {
-                let r = Rect::from_min_size(pos2(x, col_top), vec2(ww, hh));
-                ui.painter().set(slot, egui::epaint::RectShape::new(r, CornerRadius::same(18), p.solid.gamma_multiply(0.45), Stroke::new(1.0, p.line), StrokeKind::Inside));
-            }
-            ui.allocate_exact_size(vec2(ui.available_width(), hh), Sense::hover());
             // späť do editora
             if self.workspace().is_some() || !self.tabs.is_empty() {
-                ui.add_space(18.0);
+                ui.add_space(14.0);
                 ui.vertical_centered(|ui| {
-                    if widgets::button(ui, None, &format!("{}  Esc", t("Back to editor")), p.card2, p.text2, 30.0, &p).clicked() {
+                    if widgets::button(ui, None, &format!("{}  Esc", t("Back to editor")), p.hover, p.text3, 28.0, &p).clicked() {
                         act = Some("back");
                     }
                 });
             }
             ui.add_space(40.0);
         });
+        if let Some(i) = pick {
+            match list.get(i) {
+                Some(Entry::Proj(pr)) => go = pr["dir"].as_str().map(String::from),
+                Some(Entry::File(f)) => file = Some(f.clone()),
+                None => {}
+            }
+        }
         self.smooth.end(sk, &sout);
         if let Some((r, d, pinned, hid)) = menu_for {
             self.project_menu(&r, &d, pinned, hid);

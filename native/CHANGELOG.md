@@ -2,6 +2,33 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.14 – 2026-10-04
+
+### Mistakes are shown where they are
+- Forgot a colon, a bracket, a quote or a `;`? Flux now underlines the spot and **explains the mistake right next to the line** – for example *Missing colon (:) at the end of this line*.
+- Python uses the real Python check, JSON is checked exactly, and C, C++, Java, C#, JavaScript, Rust, Go, CSS and HTML get checks for brackets, quotes, comments and missing `;`.
+- The status bar shows *N problems*; click it to jump to the first one. Turn it off in Settings → Editor → *Error hints*.
+
+### Suggestions while typing
+- Start typing and Flux suggests keywords, built-in functions and names from your file. ↑/↓ to choose, Enter or Tab to insert, Esc to close, Ctrl+Space to show them yourself.
+- Turn it off in Settings → Editor → *Suggestions while typing*.
+- Typing a closing bracket or quote that Flux already added now just steps over it instead of adding a second one.
+
+### Programs that ask for input
+- After ▶ Run, your keyboard goes straight to the program, so `input()` (and `cin`, `Scanner`…) gets what you type without clicking the output first.
+- If the Terminal can't start, it now says so instead of staying empty.
+
+### Run only when there is something to run
+- Files without a `main` (for example Windhawk mods `*.wh.cpp` or header files) no longer offer ▶ Run – the button is greyed out and tells you why.
+- The Python version in the status bar shows only for Python files.
+
+### A calmer home screen
+- The home screen is now simple: logo, greeting, one big search box and your recent projects. Type to find a project or a recent file, ↑/↓ and Enter to open it.
+- The ☰ menu is much narrower.
+
+### What's new
+- After an update, Flux shows what changed once at start (this card).
+
 ## 0.9.13 – 2026-10-04
 
 ### Big files stay smooth

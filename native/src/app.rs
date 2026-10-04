@@ -66,6 +66,16 @@ enum Bottom {
     Terminal,
 }
 
+// návrhy pri písaní: položky, vybraná, rozsah písaného slova (znaky) a miesto pod kurzorom
+pub struct Sug {
+    items: Vec<crate::complete::Item>,
+    sel: usize,
+    start: usize,
+    end: usize,
+    path: String,
+    pos: egui::Pos2,
+}
+
 pub struct App {
     core: Arc<Core>,
     emit: Emit,
@@ -118,7 +128,15 @@ pub struct App {
     nav_dir: f32,
     tree_sel: Option<Rect>,
     undo_capped: HashSet<String>,  // veľké súbory s menšou históriou krokov späť
-    glass_apply: bool,             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
+    glass_apply: bool,
+    focus_out: bool, // po ▶ Run: písanie ide programu (input()), nie do kódu
+    whats_new: Option<Vec<usize>>,
+    lint_res: Arc<std::sync::Mutex<HashMap<String, (u64, Vec<crate::lint::Diag>)>>>, // vysvetlivky chýb: cesta → (verzia textu, nálezy)
+    lint_seen: HashMap<String, (u64, Instant)>, // kedy sa text naposledy zmenil (kontrola až 600 ms po písaní)
+    lint_asked: HashMap<String, u64>,
+    lint_jump: Option<usize>, // klik na „N problémov“ → riadok
+    sug: Option<Sug>,         // otvorené návrhy pri písaní
+    sug_words: Option<(String, u64, HashMap<String, usize>)>, // slová súboru pre návrhy (cesta, verzia textu) // „Čo je nové“ po aktualizácii: indexy verzií v release_notes()             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
     unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
@@ -236,6 +254,14 @@ impl App {
             tree_sel: None,
             undo_capped: HashSet::new(),
             glass_apply: false,
+            focus_out: false,
+            whats_new: None,
+            lint_res: Default::default(),
+            lint_seen: HashMap::new(),
+            lint_asked: HashMap::new(),
+            lint_jump: None,
+            sug: None,
+            sug_words: None,
             hls: HashMap::new(),
             unfocused_at: None,
             live_push: None,
@@ -276,6 +302,26 @@ impl App {
         }
         app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         app.gh_plugin_migrate();
+        // „Čo je nové“: po aktualizácii (nie pri prvom štarte ani pri tichom štarte na pozadí)
+        let cur = env!("CARGO_PKG_VERSION");
+        let quiet = std::env::args().any(|a| a == "--background" || a == "--minimized");
+        match app.core.setting("nativeSeenVersion").as_str().map(String::from) {
+            None => app.update_settings(|o| {
+                o.insert("nativeSeenVersion".into(), json!(cur));
+            }),
+            Some(seen) if seen != cur && !quiet && app.intro.is_none() => {
+                let sk = prefs::ver_key(&seen);
+                let list: Vec<usize> = prefs::release_notes().iter().enumerate().filter(|(_, n)| prefs::ver_key(&n.ver) > sk).map(|(i, _)| i).take(3).collect();
+                if list.is_empty() {
+                    app.update_settings(|o| {
+                        o.insert("nativeSeenVersion".into(), json!(cur));
+                    });
+                } else {
+                    app.whats_new = Some(list);
+                }
+            }
+            _ => {}
+        }
         if crate::mcp::enabled(&app.core) {
             app.mcp_toggle(true);
         }
@@ -396,6 +442,149 @@ impl App {
             }
         }
         crate::wall::desktop_wallpaper().map(Src::Image)
+    }
+
+    // vloží vybraný návrh namiesto písaného slova; vráti novú polohu kurzora (znaky)
+    fn accept_sug(&mut self, i: usize) -> Option<usize> {
+        let sg = self.sug.take()?;
+        let item = sg.items.get(i)?;
+        let tab = self.tabs.iter_mut().find(|t| t.path == sg.path)?;
+        let b = |c: usize| tab.text.char_indices().nth(c).map(|(b, _)| b).unwrap_or(tab.text.len());
+        let (a, e) = (b(sg.start), b(sg.end));
+        tab.text.replace_range(a..e, &item.label);
+        self.last_edit = Some(Instant::now());
+        Some(sg.start + item.label.chars().count())
+    }
+
+    // okno s návrhmi pod písaným slovom
+    fn sug_ui(&mut self, ctx: &egui::Context, ed_id: egui::Id) {
+        let Some(sg) = self.sug.as_ref() else { return };
+        if self.tabs.get(self.active).map(|t| &t.path) != Some(&sg.path) || sg.pos == egui::Pos2::ZERO {
+            return;
+        }
+        let p = self.pal;
+        let (pos, items, sel) = (sg.pos, sg.items.clone(), sg.sel);
+        let mut clicked = None;
+        egui::Area::new(egui::Id::new("suggest")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
+            let w = items.iter().map(|it| widgets::text_w(ui, &it.label, theme::mono(13.0))).fold(140.0f32, f32::max) + 52.0;
+            let h = items.len() as f32 * 24.0 + 8.0;
+            let (r, _) = ui.allocate_exact_size(vec2(w.min(420.0), h), Sense::hover());
+            ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
+            ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
+            ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+            for (k, it) in items.iter().enumerate() {
+                let row = Rect::from_min_size(r.min + vec2(4.0, 4.0 + k as f32 * 24.0), vec2(r.width() - 8.0, 24.0));
+                let resp = ui.interact(row, ui.id().with(("sg", k)), Sense::click());
+                if k == sel || resp.hovered() {
+                    ui.painter().rect_filled(row, CornerRadius::same(6), if k == sel { p.active } else { p.hover });
+                }
+                let (badge, c) = match it.kind {
+                    crate::complete::Kind::Keyword => ("k", Color32::from_rgb(0xc5, 0x86, 0xc0)),
+                    crate::complete::Kind::Builtin => ("ƒ", Color32::from_rgb(0xdc, 0xdc, 0xaa)),
+                    crate::complete::Kind::Word => ("w", p.text3),
+                };
+                ui.painter().text(pos2(row.left() + 13.0, row.center().y), Align2::CENTER_CENTER, badge, theme::bold(11.0), c);
+                ui.painter().text(pos2(row.left() + 28.0, row.center().y), Align2::LEFT_CENTER, &it.label, theme::mono(13.0), p.text);
+                if resp.clicked() {
+                    clicked = Some(k);
+                }
+            }
+        });
+        if let Some(k) = clicked {
+            if let Some(c) = self.accept_sug(k) {
+                let mut st = egui::TextEdit::load_state(ctx, ed_id).unwrap_or_default();
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(c))));
+                st.store(ctx, ed_id);
+                ctx.memory_mut(|m| m.request_focus(ed_id));
+            }
+        }
+    }
+
+    // vysvetlivky chýb: 600 ms po poslednej zmene skontrolovať aktívny súbor na pozadí
+    fn lint_tick(&mut self, ctx: &egui::Context) {
+        if self.home || self.start || self.get("lintHints").as_bool() == Some(false) {
+            return;
+        }
+        let Some(tab) = self.tabs.get(self.active) else { return };
+        let Some(hl) = self.hls.get(&tab.path) else { return };
+        let gen = hl.gen;
+        let path = tab.path.clone();
+        let seen = self.lint_seen.entry(path.clone()).or_insert((gen, Instant::now()));
+        if seen.0 != gen {
+            *seen = (gen, Instant::now());
+        }
+        if self.lint_asked.get(&path) == Some(&gen) {
+            return;
+        }
+        let wait = Duration::from_millis(600).saturating_sub(seen.1.elapsed());
+        if !wait.is_zero() {
+            ctx.request_repaint_after(wait);
+            return;
+        }
+        self.lint_asked.insert(path.clone(), gen);
+        let text = tab.text.clone();
+        let lang = tab.ext();
+        let py = self.python.as_ref().and_then(|v| v["path"].as_str()).map(String::from);
+        let res = self.lint_res.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let d = crate::lint::check(&lang, &text, py.as_deref());
+            res.lock().unwrap().insert(path, (gen, d));
+            ctx.request_repaint();
+        });
+    }
+
+    // karta „Čo je nové“ po aktualizácii
+    fn whats_new_ui(&mut self, ui: &mut egui::Ui, full: Rect) {
+        let p = self.pal;
+        let Some(list) = self.whats_new.clone() else { return };
+        let notes = prefs::release_notes();
+        ui.painter().rect_filled(full, CornerRadius::ZERO, Color32::from_black_alpha(110));
+        let w = 560.0f32.min(full.width() - 40.0);
+        let h = (full.height() * 0.78).min(620.0);
+        let card = Rect::from_center_size(full.center(), vec2(w, h));
+        ui.painter().add(egui::Shadow { offset: [0, 18], blur: 48, spread: 0, color: Color32::from_black_alpha(120) }.as_shape(card, CornerRadius::same(18)));
+        ui.painter().rect_filled(card, CornerRadius::same(18), p.solid);
+        ui.painter().rect_stroke(card, CornerRadius::same(18), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        ui.painter().text(card.min + vec2(28.0, 34.0), Align2::LEFT_CENTER, t("What's new"), theme::bold(20.0), p.text);
+        ui.painter().text(
+            card.min + vec2(28.0, 58.0),
+            Align2::LEFT_CENTER,
+            crate::i18n::tf("Flux Native was updated to {v}.", &[("v", env!("CARGO_PKG_VERSION"))]),
+            theme::ui(12.5),
+            p.text3,
+        );
+        let body = Rect::from_min_max(card.min + vec2(4.0, 78.0), card.max - vec2(4.0, 64.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
+        child.set_clip_rect(body);
+        egui::ScrollArea::vertical().id_salt("whats-new").auto_shrink(false).show(&mut child, |ui| {
+            for i in list.iter().copied() {
+                let Some(n) = notes.get(i) else { continue };
+                ui.add_space(6.0);
+                let (r, _) = ui.allocate_exact_size(vec2(w - 24.0, 24.0), Sense::hover());
+                ui.painter().text(pos2(r.left() + 24.0, r.center().y), Align2::LEFT_CENTER, &n.ver, theme::bold(15.0), p.text);
+                ui.painter().text(pos2(r.right() - 8.0, r.center().y), Align2::RIGHT_CENTER, &n.date, theme::ui(12.0), p.text3);
+                prefs::note_lines(ui, n, w - 24.0, &p);
+                ui.add_space(8.0);
+            }
+        });
+        let mut b = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(Rect::from_min_max(pos2(card.left() + 24.0, card.bottom() - 52.0), pos2(card.right() - 24.0, card.bottom() - 16.0)))
+                .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        );
+        b.spacing_mut().item_spacing.x = 8.0;
+        let ok = widgets::button(&mut b, Some("check"), &t("Got it"), p.accent, p.accent_fg, 32.0, &p).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Enter));
+        let all = widgets::button(&mut b, None, &t("All release notes"), p.card2, p.text, 32.0, &p).clicked();
+        if ok || all {
+            self.whats_new = None;
+            self.update_settings(|o| {
+                o.insert("nativeSeenVersion".into(), json!(env!("CARGO_PKG_VERSION")));
+            });
+            if all {
+                self.open_settings("general", ui.ctx());
+            }
+        }
     }
 
     // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
@@ -739,6 +928,23 @@ impl App {
     }
 
     // HTML, CSS a JS webovej stránky sa „spúšťajú“ cez Live Server (JS s index.html vedľa)
+    // prečo sa súbor nedá spustiť (žiadny vstupný bod) – napr. mod pre Windhawk (.wh.cpp) alebo hlavičkový súbor
+    fn run_block(&self) -> Option<String> {
+        let tab = self.tabs.get(self.active)?;
+        let has = |re: &str| regex_lite_find(&tab.text, re);
+        let ext = tab.ext();
+        let no_main = || Some(t("Nothing to run – this file has no main()."));
+        match ext.as_str() {
+            "h" | "hpp" | "hh" | "hxx" => Some(t("Header files can't be run on their own.")),
+            "c" | "cpp" | "cc" | "cxx" if !has("main(") => no_main(),
+            "java" if !has("static void main") => no_main(),
+            "cs" if !has("Main(") => no_main(),
+            "go" if !has("func main(") => no_main(),
+            "rs" if !has("fn main(") && !Path::new(&tab.path).ancestors().any(|d| d.join("Cargo.toml").is_file()) => no_main(),
+            _ => None,
+        }
+    }
+
     fn is_web_file(&self) -> bool {
         let Some(tab) = self.tabs.get(self.active) else { return false };
         match tab.ext().as_str() {
@@ -785,6 +991,10 @@ impl App {
         if self.is_web_file() {
             return self.live_server();
         }
+        if let Some(why) = self.run_block() {
+            self.status = why;
+            return;
+        }
         let tab = &self.tabs[self.active];
         let path = tab.path.clone();
         if matches!(tab.ext().as_str(), "py" | "pyw") && self.python.as_ref().and_then(|v| v["path"].as_str()).is_none() {
@@ -805,6 +1015,7 @@ impl App {
         }
         let py = self.python.as_ref().and_then(|v| v["path"].as_str()).unwrap_or("").to_string();
         let r = runner::run_file(&self.out.pty, &self.emit, &path, &py, "");
+        self.focus_out = r["ok"] != Value::Bool(false);
         if r["ok"] == Value::Bool(false) {
             self.out.feed(&format!("\x1b[31m{}\x1b[0m\r\n", r["error"].as_str().unwrap_or("Can't run this file.")));
         } else if let Some(ws) = self.workspace() {
@@ -887,7 +1098,11 @@ impl App {
         }
         let cmd = runner::shell_command();
         let cwd = self.workspace().or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string())).unwrap_or_default();
-        self.shell_started = self.sh.pty.spawn(&self.emit, &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit").is_ok();
+        match self.sh.pty.spawn(&self.emit, &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit") {
+            Ok(_) => self.shell_started = true,
+            // terminál sa nespustil – povedať prečo, nie prázdne okno
+            Err(e) => self.sh.feed(&format!("\x1b[31m{} ({}): {e}\x1b[0m\r\n", t("The terminal could not start"), cmd.cmd)),
+        }
     }
 
     fn run_tests(&mut self, ctx: &egui::Context) {
@@ -1456,7 +1671,16 @@ impl App {
             self.tour_rects.insert("run", run);
             let rr = ui.interact(run, ui.id().with("run"), Sense::click());
             let hk = ui.ctx().animate_bool_with_time(rr.id.with("h"), rr.hovered(), 0.12);
-            let (bg, fg) = if stopping { (p.red.gamma_multiply(0.16 + 0.08 * hk), p.red) } else { (p.accent.lerp_to_gamma(Color32::WHITE, 0.08 * hk), p.accent_fg) };
+            // nič na spustenie (napr. .wh.cpp bez main) → sivé tlačidlo s vysvetlením
+            let blocked = if stopping || web { None } else { self.run_block() };
+            let tip = blocked.clone().unwrap_or(tip);
+            let (bg, fg) = if stopping {
+                (p.red.gamma_multiply(0.16 + 0.08 * hk), p.red)
+            } else if blocked.is_some() {
+                (p.hover, p.text3)
+            } else {
+                (p.accent.lerp_to_gamma(Color32::WHITE, 0.08 * hk), p.accent_fg)
+            };
             ui.painter().rect_filled(run, CornerRadius::same(10), bg);
             if stopping {
                 ui.painter().rect_stroke(run, CornerRadius::same(10), Stroke::new(1.0, p.red.gamma_multiply(0.45)), StrokeKind::Inside);
@@ -1627,7 +1851,54 @@ impl App {
         }
         let mut typed: Option<char> = None;
         let mut new_sel: Option<(usize, usize)> = None;
+        let sug_on = self.get("suggest").as_bool() != Some(false);
+        let mut force_sug = false;
+        if focused && sug_on {
+            force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space));
+            let open = self.sug.as_ref().is_some_and(|s| s.path == self.tabs[self.active].path);
+            if open {
+                let (up, down, acc, esc) = ctx.input_mut(|i| {
+                    (
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) | i.consume_key(egui::Modifiers::NONE, egui::Key::Tab),
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
+                    )
+                });
+                if let Some(sg) = self.sug.as_mut() {
+                    let n = sg.items.len().max(1);
+                    if up {
+                        sg.sel = (sg.sel + n - 1) % n;
+                    }
+                    if down {
+                        sg.sel = (sg.sel + 1) % n;
+                    }
+                }
+                if esc {
+                    self.sug = None;
+                } else if acc {
+                    let i = self.sug.as_ref().map(|s| s.sel).unwrap_or(0);
+                    if let Some(c) = self.accept_sug(i) {
+                        new_sel = Some((c, c));
+                    }
+                }
+            }
+        }
         if focused {
+            // písaná zatváracia zátvorka/úvodzovka, ktorá už za kurzorom je (doplnil ju editor) → len ju preskočiť
+            let over = ctx.input(|i| {
+                i.events.iter().find_map(|e| match e {
+                    egui::Event::Text(t) if t.chars().count() == 1 && ")]}\"'".contains(t.as_str()) => t.chars().next(),
+                    _ => None,
+                })
+            });
+            if let Some(c) = over {
+                let cur = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).filter(|r| r.primary.index == r.secondary.index).map(|r| usize::from(r.primary.index));
+                if let Some(pos) = cur.filter(|p| self.tabs[self.active].text.chars().nth(*p) == Some(c)) {
+                    ctx.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Text(t) if t.chars().count() == 1 && t.starts_with(c))));
+                    new_sel = Some((pos + 1, pos + 1));
+                }
+            }
             let (tab_k, back_k, comment_k) = ctx.input_mut(|i| {
                 (i.consume_key(egui::Modifiers::NONE, egui::Key::Tab), i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab), i.consume_key(egui::Modifiers::COMMAND, egui::Key::Slash))
             });
@@ -1672,7 +1943,13 @@ impl App {
             st.set_undoer(egui::util::undoer::Undoer::with_settings(egui::util::undoer::Settings { max_undos: 20, ..Default::default() }));
             st.store(&ctx, ed_id);
         }
+        if let Some(l) = self.lint_jump.take() {
+            self.scroll_to = Some((l as f32 * lh - ed_rect.height() / 2.0 + PAD).max(0.0));
+        }
+        let lint = if self.get("lintHints").as_bool() != Some(false) { self.lint_res.lock().unwrap().get(&self.tabs[self.active].path).cloned() } else { None };
         let code = &self.code;
+        let sug_slot = &mut self.sug;
+        let sug_words = &mut self.sug_words;
         let tab = &mut self.tabs[self.active];
         let hlc = self.hls.entry(tab.path.clone()).or_default();
         let ext = tab.ext();
@@ -1731,6 +2008,35 @@ impl App {
                     .show(ui);
                 // ---- farby len pre riadky na obrazovke (+ 300 pod nimi sa dofarbí vopred) ----
                 code.sync(hlc, &tab.text, &lang);
+                // ---- návrhy pri písaní: po napísaní 2+ písmen slova (alebo Ctrl+Medzerník) ----
+                if sug_on {
+                    if let Some(r) = te.cursor_range {
+                        let c = usize::from(r.primary.index);
+                        let changed = te.response.changed();
+                        if changed || force_sug {
+                            let before: Vec<char> = tab.text.chars().take(c).collect();
+                            let plen = before.iter().rev().take_while(|ch| crate::complete::ident_char(**ch, &lang)).count();
+                            let typed_ident = before.last().is_some_and(|ch| crate::complete::ident_char(*ch, &lang));
+                            if (typed_ident && plen >= 2) || force_sug {
+                                let prefix: String = before[c - plen..].iter().collect();
+                                if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), hlc.gen)) {
+                                    *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang)));
+                                }
+                                let words = &sug_words.as_ref().unwrap().2;
+                                let items = crate::complete::suggest(&lang, &prefix, words, 8);
+                                *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
+                            } else {
+                                *sug_slot = None;
+                            }
+                        } else if sug_slot.as_ref().is_some_and(|sg| sg.end != c || sg.path != tab.path) {
+                            *sug_slot = None; // kurzor odišiel
+                        }
+                        if let Some(sg) = sug_slot.as_mut() {
+                            let cr = te.galley.pos_from_cursor(egui::text::CCursor::new(sg.start));
+                            sg.pos = te.galley_pos + vec2(cr.left(), cr.top() + lh + 2.0);
+                        }
+                    }
+                }
                 if let Some(g) = built.take() {
                     // nový rozklad patrí k aktuálnemu textu, ak sa zhoduje s tým, čo editor práve ukazuje
                     if g.job.text == tab.text {
@@ -1765,6 +2071,7 @@ impl App {
                     }
                     let fg = p.text;
                     let mut shapes = vec![];
+                    let vis_pos = vis.clone();
                     for (i, at) in vis {
                         if i >= hlc.lines() {
                             continue;
@@ -1790,6 +2097,49 @@ impl App {
                         }
                         let g = ui.fonts_mut(|f| f.layout_job(job));
                         shapes.push(egui::Shape::galley(at, g, fg));
+                    }
+                    // vysvetlivky chýb: vlnovka pod miestom, bodka pri čísle riadku, text za koncom riadku
+                    if let Some((g, ds)) = lint.as_ref().filter(|(g, _)| *g == hlc.gen) {
+                        let _ = g;
+                        let vis_lines: HashMap<usize, egui::Pos2> = vis_pos.iter().copied().collect();
+                        for (k, d) in ds.iter().enumerate() {
+                            let Some(&at) = vis_lines.get(&d.line) else { continue };
+                            let col_c = if d.err { p.red } else { Color32::from_rgb(0xe0, 0xa4, 0x3c) };
+                            let text = if d.line < hlc.lines() { hlc.line_text(d.line).trim_end_matches('\n') } else { "" };
+                            let mut job = egui::text::LayoutJob::single_section(text.to_string(), egui::TextFormat { color: Color32::TRANSPARENT, ..fmt.clone() });
+                            job.wrap.max_width = wrap_at.get();
+                            let lg = ui.fonts_mut(|f| f.layout_job(job));
+                            let n = text.chars().count();
+                            let a = d.col.min(n);
+                            let b = if d.len == 0 { n } else { (d.col + d.len).min(n) }.max(a);
+                            let pa = lg.pos_from_cursor(egui::text::CCursor::new(a));
+                            let pb = lg.pos_from_cursor(egui::text::CCursor::new(b));
+                            let (x0, mut x1) = (at.x + pa.left(), at.x + pb.left());
+                            if x1 - x0 < 6.0 {
+                                x1 = x0 + 8.0; // aspoň kúsok (napr. chýbajúca dvojbodka na konci)
+                            }
+                            let y = at.y + pa.top() + lh - 3.0;
+                            let mut pts = vec![];
+                            let mut x = x0;
+                            let mut up = true;
+                            while x <= x1 {
+                                pts.push(pos2(x, y + if up { -1.2 } else { 1.2 }));
+                                x += 2.5;
+                                up = !up;
+                            }
+                            ui.painter().with_clip_rect(clip).add(egui::Shape::line(pts, Stroke::new(1.2, col_c)));
+                            ui.painter().with_clip_rect(clip).circle_filled(pos2(te.galley_pos.x - gutter + 9.0, at.y + lh / 2.0), 3.0, col_c);
+                            // správa za koncom riadku (Error Lens), skrátená na šírku editora
+                            let end_x = at.x + lg.rows.first().map(|r| r.rect().right()).unwrap_or(0.0) + 26.0;
+                            let mx = end_x.max(x1 + 16.0);
+                            let room = clip.right() - mx - 12.0;
+                            let mut hover = Rect::from_min_max(pos2(x0, at.y), pos2(x1, at.y + lh));
+                            if room > 60.0 {
+                                let r = widgets::text(ui, pos2(mx, at.y + lh / 2.0), Align2::LEFT_CENTER, &d.msg, theme::ui((fsz - 1.5).max(10.0)), col_c.gamma_multiply(0.85), room);
+                                hover = hover.union(r);
+                            }
+                            ui.interact(hover, ui.id().with(("lint", k)), Sense::hover()).on_hover_text(&d.msg);
+                        }
                     }
                     ui.painter().set(text_shapes, egui::Shape::Vec(shapes));
                 }
@@ -1937,6 +2287,10 @@ impl App {
                 _ => {}
             }
             ctx.request_repaint();
+        }
+        // návrhy pri písaní (len kým má editor fokus)
+        if ui.ctx().memory(|m| m.has_focus(ed_id)) {
+            self.sug_ui(&ui.ctx().clone(), ed_id);
         }
         // ---- minimapa (ako v Monacu: znak = 1 px, riadok = 2 px) ----
         if mini_w <= 0.0 {
@@ -2373,7 +2727,9 @@ impl App {
         let cy = rect.center().y;
         let mut x = rect.left() + 16.0;
         let small = theme::ui(12.0);
-        if let Some(py) = &self.python {
+        // verzia Pythonu len pri Python súbore v editore
+        let py_tab = !self.home && !self.start && self.tabs.get(self.active).is_some_and(|t| matches!(t.ext().as_str(), "py" | "pyw"));
+        if let Some(py) = self.python.as_ref().filter(|_| py_tab) {
             widgets::icon_at(ui, pos2(x + 6.0, cy), 13.0, "python", p.text3);
             x += 19.0;
             let v = format!("Python {}", py["version"].as_str().unwrap_or(""));
@@ -2440,6 +2796,25 @@ impl App {
             let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &t("Auto save"), small.clone(), p.text2, 100.0);
             widgets::icon_at(ui, pos2(r.left() - 9.0, cy), 12.0, "save", p.text2);
             rx = r.left() - 34.0;
+        }
+        // vysvetlivky chýb: „N problémov“ – klik skočí na prvý
+        if let Some(tab) = self.tabs.get(self.active).filter(|_| !self.home && !self.start) {
+            let cur = self.hls.get(&tab.path).map(|h| h.gen);
+            let found = self.lint_res.lock().unwrap().get(&tab.path).filter(|(g, _)| Some(*g) == cur).map(|(_, d)| (d.len(), d.iter().any(|x| x.err), d.first().map(|x| x.line)));
+            if let Some((n, err, Some(first))) = found.filter(|f| f.0 > 0 && self.get("lintHints").as_bool() != Some(false)) {
+                let label = if n == 1 { t("1 problem") } else { crate::i18n::tf("{n} problems", &[("n", &n.to_string())]) };
+                let c = if err { p.red } else { Color32::from_rgb(0xe0, 0xa4, 0x3c) };
+                let w = widgets::text_w(ui, &label, theme::bold(11.5)) + 26.0;
+                let cr = Rect::from_min_size(pos2(rx - w, cy - 10.0), vec2(w, 20.0));
+                let resp = ui.interact(cr, ui.id().with("lint-chip"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(t("Jump to the first problem"));
+                ui.painter().rect_filled(cr, CornerRadius::same(10), c.gamma_multiply(if resp.hovered() { 0.28 } else { 0.18 }));
+                ui.painter().circle_filled(pos2(cr.left() + 11.0, cy), 3.0, c);
+                ui.painter().text(pos2(cr.left() + 19.0, cy), Align2::LEFT_CENTER, &label, theme::bold(11.5), c);
+                if resp.clicked() {
+                    self.lint_jump = Some(first);
+                }
+                rx = cr.left() - 14.0;
+            }
         }
         if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
             let lang = t.ext();
@@ -2706,6 +3081,10 @@ impl eframe::App for App {
         let _perf = crate::perf::frame();
         let ctx = root.ctx().clone();
         let ctx = &ctx;
+        self.lint_tick(ctx);
+        if std::mem::take(&mut self.focus_out) {
+            self.out.focus(ctx);
+        }
         if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
             crate::glass::blur(&*frame, self.get("material").as_str() == Some("blur"));
         }
@@ -3021,6 +3400,13 @@ impl eframe::App for App {
                 self.palette_ui(ui, full);
             });
         }
+        if self.whats_new.is_some() && self.intro.is_none() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("whats-new-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.whats_new_ui(ui, full);
+            });
+        }
         if self.ask.is_some() {
             let full = ctx.content_rect();
             egui::Area::new(egui::Id::new("ask-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
@@ -3080,4 +3466,23 @@ impl eframe::App for App {
         // vložený WebView2 na mieste panela Live Servera
         self.sync_preview(ctx, frame);
     }
+}
+
+// „main(“ aj s medzerami („main (“), bez regexu: hľadá prvé slovo, potom voliteľné medzery a zvyšok
+fn regex_lite_find(text: &str, pat: &str) -> bool {
+    let (head, tail) = match pat.find('(') {
+        Some(i) => (pat[..i].trim_end(), &pat[i..]),
+        None => return text.contains(pat),
+    };
+    let mut from = 0;
+    while let Some(i) = text[from..].find(head) {
+        let at = from + i;
+        let before_ok = at == 0 || !text[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_');
+        let rest = text[at + head.len()..].trim_start_matches([' ', '\t']);
+        if before_ok && rest.starts_with(tail) {
+            return true;
+        }
+        from = at + head.len();
+    }
+    false
 }
