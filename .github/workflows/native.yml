@@ -90,6 +90,75 @@ jobs:
             exit 1
           }
           "## Smoke test passed" | Add-Content $env:GITHUB_STEP_SUMMARY
+      # aktualizácia ako u používateľa: program s iným menom, odkaz naň (pripnutie) a odkaz pokazený starou výmenou (.old);
+      # po aktualizácii musí ísť o ten istý súbor (ID súboru), nová verzia beží s oknom a odkazy ukazujú na program
+      - name: Update test (same file, pins kept, restart)
+        shell: pwsh
+        run: |
+          $u = "$env:RUNNER_TEMP\upd"; $srv = "$u\srv"; $app = "$u\app"; $pins = "$u\pins"; $ud = "$u\ud"
+          New-Item -ItemType Directory $srv, $app, $pins, $ud -Force | Out-Null
+          $build = (Get-Item target\release\flux-native.exe).FullName
+          $exe = "$app\Flux-Native(18).exe"
+          Copy-Item $build $exe
+          Copy-Item $build "$srv\Flux-Native.exe"
+          $hash = (Get-FileHash $build -Algorithm SHA256).Hash.ToLower()
+          @{ version = '9.9.9'; sha = 'ci-update-test'; sha256 = $hash; size = (Get-Item $build).Length } | ConvertTo-Json | Set-Content "$srv\native.json" -Encoding utf8NoBOM
+          '{"onboarded":true,"autoUpdate":false}' | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
+          $sh = New-Object -ComObject WScript.Shell
+          $l = $sh.CreateShortcut("$pins\Flux.lnk"); $l.TargetPath = $exe; $l.Save()
+          $l = $sh.CreateShortcut("$pins\Flux broken.lnk"); $l.TargetPath = "$app\Flux-Native(18).old"; $l.Save()
+          $id0 = (fsutil file queryfileid $exe) | Out-String
+          $server = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1', '--directory', $srv -PassThru -WindowStyle Hidden
+          Start-Sleep 2
+          $env:FLUX_USER_DATA = $ud; $env:FLUX_UPDATE_URL = 'http://127.0.0.1:8765/'; $env:FLUX_PINS_DIR = $pins
+          $env:FLUX_TEST = "3:update;6:update-get;15:update-install"
+          $first = Start-Process $exe -PassThru
+          Remove-Item Env:FLUX_TEST
+          $problems = @()
+          $new = $null
+          foreach ($i in 1..60) {
+            Start-Sleep 1
+            $new = Get-CimInstance Win32_Process -Filter "Name = 'Flux-Native(18).exe'" | Where-Object { $_.CommandLine -like '*--updated*' } | Select-Object -First 1
+            if ($new) { break }
+          }
+          if (-not $new) { $problems += "Flux did not start again after the update" }
+          Start-Sleep 15
+          Add-Type -Name W2 -Namespace U -MemberDefinition @'
+          public delegate bool EnumProc(IntPtr h, IntPtr l);
+          [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+          [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+          [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+          [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+          public struct RECT { public int L, T, R, B; }
+          public static bool HasBigWindow(uint pid) {
+            bool found = false;
+            EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); RECT r;
+              if (p == pid && IsWindowVisible(h) && GetWindowRect(h, out r) && r.R - r.L >= 300 && r.B - r.T >= 200) { found = true; return false; } return true; }, IntPtr.Zero);
+            return found;
+          }
+          '@
+          if ($new -and -not (Get-Process -Id $new.ProcessId -ErrorAction SilentlyContinue)) { $problems += "the updated Flux exited" }
+          elseif ($new -and -not [U.W2]::HasBigWindow([uint32]$new.ProcessId)) { $problems += "the updated Flux has no visible window" }
+          if (-not $first.HasExited) { $problems += "the old Flux is still running" }
+          $id1 = (fsutil file queryfileid $exe) | Out-String
+          if ($id0 -ne $id1) { $problems += "the program file was replaced (file id $id0 -> $id1), a taskbar pin would break" }
+          if ((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() -ne $hash) { $problems += "the program file has the wrong content after the update" }
+          if (Test-Path "$app\Flux-Native(18).new") { $problems += "the downloaded .new file was not removed" }
+          foreach ($n in 'Flux.lnk', 'Flux broken.lnk') {
+            $t = $sh.CreateShortcut("$pins\$n").TargetPath
+            if ($t -ne $exe) { $problems += "shortcut $n points to $t" }
+          }
+          if (Test-Path "$ud\flux-native-crash.log") { $problems += "crash log: $(Get-Content "$ud\flux-native-crash.log" -Raw)" }
+          Get-ChildItem $app | Format-Table Name, Length | Out-String | Write-Host
+          Get-CimInstance Win32_Process -Filter "Name like 'Flux-Native%'" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          Remove-Item Env:FLUX_USER_DATA, Env:FLUX_UPDATE_URL, Env:FLUX_PINS_DIR
+          if ($problems) {
+            $problems | ForEach-Object { Write-Host "::error::$_" }
+            "## Update test FAILED`n$($problems -join "`n")" | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          "## Update test passed (same file, pins kept, restarted)" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Experiment – see-through window variants (diagnostics only)
         continue-on-error: true
         shell: pwsh

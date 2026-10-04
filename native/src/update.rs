@@ -87,14 +87,20 @@ pub fn cleanup(keep_old: bool) {
 }
 
 // nová verzia spadla hneď po štarte a vedľa je predošlá (.old): tá sa po skončení tohto procesu zapíše späť a spustí
+// len hneď po aktualizácii (--updated) a nie po návrate (--rolledback): inak by chyba, ktorú nespôsobila nová verzia
+// (napr. grafika), menila programy dokola
 pub fn rollback() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    if !args.iter().any(|a| a == "--updated") || args.iter().any(|a| a == "--rolledback") {
+        return false;
+    }
     let Some(e) = exe() else { return false };
     let old = e.with_extension("old");
     if !old.exists() {
         return false;
     }
     let mut c = std::process::Command::new(&old);
-    c.arg("--apply-update").arg(std::process::id().to_string()).arg(&e).arg("--relaunch");
+    c.arg("--apply-update").arg(std::process::id().to_string()).arg(&e).arg("--relaunch").arg("--rolledback");
     spawn_detached(&mut c).is_ok()
 }
 
@@ -180,7 +186,8 @@ pub fn apply_update(args: &[String]) {
     }
     if relaunch {
         let mut c = std::process::Command::new(&target);
-        c.args(&args[5..]).arg("--updated");
+        // testovacie kroky (FLUX_TEST) patria len pôvodnému štartu, inak by sa nová verzia aktualizovala dokola
+        c.args(&args[5..]).arg("--updated").env_remove("FLUX_TEST");
         for _ in 0..10 {
             if spawn_detached(&mut c).is_ok() {
                 break;
@@ -330,7 +337,7 @@ impl Updater {
         let mut c = std::process::Command::new(&new);
         c.arg("--apply-update").arg(std::process::id().to_string()).arg(&e);
         if relaunch {
-            let skip = ["--background", "--minimized", "--updated"];
+            let skip = ["--background", "--minimized", "--updated", "--rolledback"];
             c.arg("--relaunch").args(std::env::args_os().skip(1).filter(|a| !skip.iter().any(|s| a == s))).args(extra);
         }
         spawn_detached(&mut c).map_err(|x| x.to_string())?;

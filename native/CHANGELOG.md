@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.11 – 2026-10-04
+
+### Taskbar pin repaired
+- If the last update broke your taskbar pin (*"The item … has changed or moved"*), Flux now fixes it by itself a few seconds after it starts. Choose **No** in that message, start Flux once from its folder, and the pin works again.
+- Every new build is now tested on Windows before it is published: it updates itself, must stay the same file, keep the pin and open again with a window.
+- If Flux ever fails right after an update, it goes back to the previous version only once, never in a loop.
+
 ## 0.9.10 – 2026-10-04
 
 ### Updates keep your taskbar pin

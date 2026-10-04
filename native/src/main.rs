@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod pins;
 
 // počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
 struct Count;
@@ -202,6 +203,7 @@ fn main() -> eframe::Result {
     boot::catch_hard_crashes();
     boot::kill_ghosts();
     boot::begin();
+    pins::repair();
     boot::watchdog();
     let started = std::time::Instant::now();
     std::panic::set_hook(Box::new(move |info| {
