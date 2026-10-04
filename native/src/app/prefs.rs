@@ -705,7 +705,7 @@ impl App {
     fn group(&mut self, ui: &mut egui::Ui, rows: Vec<Row>, w: f32, ctx: &egui::Context) {
         let p = self.pal;
         let custom_only = rows.len() == 1
-            && matches!(rows[0], Row::Custom(id) if matches!(id, "themes" | "accents" | "language" | "keys" | "tools" | "plugins" | "about" | "gh-account" | "gh-git" | "ai-key" | "ai-mcp" | "ai-flux"));
+            && matches!(rows[0], Row::Custom(id) if matches!(id, "themes" | "accents" | "language" | "keys" | "tools" | "plugins" | "plugins-js" | "about" | "gh-account" | "gh-git" | "ai-key" | "ai-mcp" | "ai-flux"));
         if custom_only {
             if let Row::Custom(id) = rows[0] {
                 self.custom(ui, id, w, ctx);

@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.26 – 2026-10-04
+
+### Suggestions
+- A suggestion is picked as soon as you **press** the mouse button on it.
+- **Ctrl+Tab** moves down the list (**Ctrl+Shift+Tab** up), **Tab** or **Enter** picks the selected one.
+
+### Plugins
+- Settings → Plugins has a new look: an *Installed / Store* switch, cards like the GitHub one with a colored letter for each plugin and the full description, a clear empty state with *Open the Store*, and *Create a plugin*, *Load from folder* and *Plugin guide* together under **Make your own**.
+
 ## 0.9.25 – 2026-10-04
 
 ### Suggestions

@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.25"
+version = "0.9.26"
 dependencies = [
  "alacritty_terminal",
  "chrono",

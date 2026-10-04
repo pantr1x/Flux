@@ -670,7 +670,8 @@ impl App {
                     let lw = widgets::text_w(ui, &it.label, theme::mono(13.0));
                     widgets::text(ui, pos2(row.left() + 40.0 + lw, row.center().y), Align2::LEFT_CENTER, d, theme::mono(12.0), p.text3, (row.width() - lw - 48.0).max(20.0));
                 }
-                if resp.clicked() {
+                // výber už pri stlačení myši (pustenie príde o snímku neskôr, keď editor môže mať fokus preč)
+                if resp.clicked() || (resp.hovered() && ui.input(|i| i.pointer.primary_pressed())) {
                     clicked = Some(k);
                 }
             }
@@ -2124,9 +2125,13 @@ impl App {
             let open = self.sug.as_ref().is_some_and(|s| s.path == self.tabs[self.active].path);
             if open {
                 let (up, down, acc, esc) = ctx.input_mut(|i| {
+                    // Ctrl+Tab = ďalší návrh, Ctrl+Shift+Tab = predchádzajúci; Tab / Enter vyberie
+                    let ctrl_shift = egui::Modifiers { ctrl: true, shift: true, ..Default::default() };
+                    let prev = i.consume_key(ctrl_shift, egui::Key::Tab);
+                    let next = i.consume_key(egui::Modifiers::CTRL, egui::Key::Tab);
                     (
-                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
-                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) | prev,
+                        i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) | next,
                         i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) | i.consume_key(egui::Modifiers::NONE, egui::Key::Tab),
                         i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
                     )

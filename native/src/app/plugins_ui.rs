@@ -337,30 +337,57 @@ impl App {
 
     fn plugins_body(&mut self, ui: &mut egui::Ui, w: f32, ctx: &egui::Context) {
         let p = self.pal;
-        // riadok 1: Nainštalované / Obchod vľavo, Vytvoriť plugin + návod vpravo
-        let (row, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
-        let mut bar = ui.new_child(egui::UiBuilder::new().max_rect(row).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        bar.spacing_mut().item_spacing.x = 6.0;
+        // prepínač Nainštalované / Obchod (segmentový, ako v Nastaveniach Windows)
+        let installed_n = plugins::Host::discover(&self.plug_dev_dirs()).len();
         let st = self.plug.tab_store;
-        if widgets::button(&mut bar, Some("puzzle"), &t("Installed"), if !st { p.accent } else { p.card2 }, if !st { p.accent_fg } else { p.text }, 30.0, &p).clicked() {
-            self.plug.tab_store = false;
+        let labels = [(false, "puzzle", tf("Installed ({n})", &[("n", &installed_n.to_string())])), (true, "star", t("Store"))];
+        let seg_w: Vec<f32> = labels.iter().map(|l| widgets::text_w(ui, &l.2, theme::bold(13.0)) + 48.0).collect();
+        let (bar, _) = ui.allocate_exact_size(vec2(seg_w.iter().sum::<f32>() + 8.0, 40.0), Sense::hover());
+        ui.painter().rect_filled(bar, CornerRadius::same(12), p.hover);
+        ui.painter().rect_stroke(bar, CornerRadius::same(12), Stroke::new(1.0, p.line), StrokeKind::Inside);
+        let mut x = bar.left() + 4.0;
+        for (i, (store, icon, label)) in labels.iter().enumerate() {
+            let r = Rect::from_min_size(pos2(x, bar.top() + 4.0), vec2(seg_w[i], 32.0));
+            x += seg_w[i];
+            let resp = ui.interact(r, ui.id().with(("plug-seg", i)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+            let on = *store == st;
+            let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered() && !on, 0.12);
+            if on {
+                ui.painter().rect_filled(r, CornerRadius::same(9), p.card2);
+                ui.painter().rect_stroke(r, CornerRadius::same(9), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+            } else if hk > 0.0 {
+                ui.painter().rect_filled(r, CornerRadius::same(9), p.active.gamma_multiply(hk));
+            }
+            let fg = if on { p.text } else { p.text3 };
+            widgets::icon_at(ui, pos2(r.left() + 20.0, r.center().y), 14.0, icon, if on { p.accent } else { fg });
+            ui.painter().text(pos2(r.left() + 34.0, r.center().y), Align2::LEFT_CENTER, label, theme::bold(13.0), fg);
+            if resp.clicked() {
+                self.plug.tab_store = *store;
+            }
         }
-        if widgets::button(&mut bar, Some("star"), &t("Store"), if st { p.accent } else { p.card2 }, if st { p.accent_fg } else { p.text }, 30.0, &p).clicked() {
-            self.plug.tab_store = true;
-        }
-        let mut right = ui.new_child(egui::UiBuilder::new().max_rect(row).layout(egui::Layout::right_to_left(egui::Align::Center)));
-        right.spacing_mut().item_spacing.x = 6.0;
-        if widgets::button(&mut right, Some("external"), &t("Plugin guide"), p.card2, p.text, 30.0, &p).clicked() {
-            flux_core::settings::open_external("https://github.com/pantr1x/Flux/blob/main/docs/PLUGINS.md");
-        }
-        if widgets::button(&mut right, Some("plus"), &t("Create a plugin"), p.card2, p.text, 30.0, &p).clicked() {
-            self.plug_create(ctx);
-        }
-        ui.add_space(10.0);
+        ui.add_space(14.0);
         if self.plug.tab_store {
             self.plug_store_ui(ui, w, ctx);
         } else {
             self.plug_installed_ui(ui, w, ctx);
+        }
+        // pre autorov pluginov: oddelene dole
+        ui.add_space(18.0);
+        self.plug_line(ui, w, &t("Make your own").to_uppercase(), theme::bold(11.0), p.text3);
+        ui.add_space(4.0);
+        let (row, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
+        let mut b = ui.new_child(egui::UiBuilder::new().max_rect(row).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        b.spacing_mut().item_spacing.x = 8.0;
+        if widgets::button(&mut b, Some("plus"), &t("Create a plugin"), p.card2, p.text, 32.0, &p).clicked() {
+            self.plug_create(ctx);
+        }
+        if widgets::button(&mut b, Some("folder"), &t("Load from folder"), p.card2, p.text, 32.0, &p).clicked() {
+            if let Some(d) = rfd::FileDialog::new().set_title(t("Load from folder")).pick_folder() {
+                self.plug_add_dev(&d.to_string_lossy());
+            }
+        }
+        if widgets::button(&mut b, Some("external"), &t("Plugin guide"), p.card2, p.text, 32.0, &p).clicked() {
+            flux_core::settings::open_external("https://github.com/pantr1x/Flux/blob/main/docs/PLUGINS.md");
         }
     }
 
@@ -369,22 +396,32 @@ impl App {
         widgets::text(ui, pos2(r.left() + 2.0, r.center().y), Align2::LEFT_CENTER, text, font, color, w - 4.0);
     }
 
+    // karta pluginu ako karta GitHub vyššie: monogram, meno, vydavateľ · verzia, popis na celú šírku (2 riadky);
+    // vráti obdĺžnik karty a miesto pre tlačidlá vpravo hore
     fn plug_card(&self, ui: &mut egui::Ui, w: f32, title: &str, sub: &str, desc: &str, err: Option<&str>) -> Rect {
         let p = self.pal;
-        let h = if err.is_some() { 96.0 } else { 78.0 };
+        let mut job = egui::text::LayoutJob::single_section(desc.to_string(), egui::TextFormat { font_id: theme::ui(12.0), color: p.text3, ..Default::default() });
+        job.wrap.max_width = w - 28.0;
+        job.wrap.max_rows = 2;
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        let h = 14.0 + 34.0 + 8.0 + g.size().y + 14.0 + if err.is_some() { 20.0 } else { 0.0 };
         let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
         ui.painter().rect_filled(r, CornerRadius::same(14), p.hover);
         ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
         let ir = Rect::from_min_size(r.min + vec2(14.0, 14.0), vec2(34.0, 34.0));
-        ui.painter().rect_filled(ir, CornerRadius::same(10), p.card2);
-        widgets::icon_at(ui, ir.center(), 17.0, "puzzle", p.text);
-        ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 8.0), Align2::LEFT_CENTER, title, theme::bold(13.5), p.text);
-        ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 25.0), Align2::LEFT_CENTER, sub, theme::ui(11.0), p.text3);
-        widgets::text(ui, pos2(ir.right() + 12.0, ir.top() + 44.0), Align2::LEFT_CENTER, desc, theme::ui(12.0), p.text2, w - 330.0);
+        // monogram vo farbe podľa mena (každý plugin iný)
+        let hue = title.bytes().fold(7u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32)) % 360;
+        let col: egui::Color32 = egui::ecolor::Hsva::new(hue as f32 / 360.0, 0.45, 0.75, 1.0).into();
+        ui.painter().rect_filled(ir, CornerRadius::same(10), col.gamma_multiply(0.22));
+        let mono: String = title.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+        ui.painter().text(ir.center(), Align2::CENTER_CENTER, mono, theme::bold(16.0), col);
+        widgets::text(ui, pos2(ir.right() + 12.0, ir.top() + 9.0), Align2::LEFT_CENTER, title, theme::bold(13.5), p.text, w - 300.0);
+        widgets::text(ui, pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, sub, theme::ui(11.0), p.text3, w - 300.0);
+        ui.painter().galley(pos2(r.left() + 14.0, ir.bottom() + 8.0), g, p.text3);
         if let Some(e) = err {
-            widgets::text(ui, pos2(ir.right() + 12.0, ir.top() + 64.0), Align2::LEFT_CENTER, e, theme::ui(12.0), p.red, w - 90.0);
+            widgets::text(ui, pos2(r.left() + 14.0, r.bottom() - 22.0), Align2::LEFT_CENTER, e, theme::ui(12.0), p.red, w - 28.0);
         }
-        ui.add_space(8.0);
+        ui.add_space(10.0);
         r
     }
 
@@ -399,11 +436,19 @@ impl App {
             })
             .collect();
         if list.is_empty() {
-            let (r, _) = ui.allocate_exact_size(vec2(w, 70.0), Sense::hover());
+            let (r, _) = ui.allocate_exact_size(vec2(w, 132.0), Sense::hover());
             ui.painter().rect_filled(r, CornerRadius::same(14), p.hover);
-            ui.painter().text(r.center() - vec2(0.0, 9.0), Align2::CENTER_CENTER, t("No plugins yet."), theme::bold(13.0), p.text2);
-            ui.painter().text(r.center() + vec2(0.0, 11.0), Align2::CENTER_CENTER, t("Open the Store, or create your own plugin."), theme::ui(12.0), p.text3);
-            ui.add_space(8.0);
+            ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
+            widgets::icon_at(ui, pos2(r.center().x, r.top() + 30.0), 22.0, "puzzle", p.text3);
+            ui.painter().text(pos2(r.center().x, r.top() + 58.0), Align2::CENTER_CENTER, t("No plugins yet."), theme::bold(13.5), p.text);
+            ui.painter().text(pos2(r.center().x, r.top() + 78.0), Align2::CENTER_CENTER, t("Open the Store, or create your own plugin."), theme::ui(12.0), p.text3);
+            let label = t("Open the Store");
+            let bw = widgets::text_w(ui, &label, theme::bold(13.0)) + 46.0;
+            let mut b = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_center_size(pos2(r.center().x, r.top() + 108.0), vec2(bw, 30.0))));
+            if widgets::button(&mut b, Some("star"), &label, p.accent, p.accent_fg, 30.0, &p).clicked() {
+                self.plug.tab_store = true;
+            }
+            ui.add_space(10.0);
         }
         let mut act: Option<(String, &str)> = None;
         for (m, err, on) in &list {
@@ -419,14 +464,6 @@ impl App {
             }
             if widgets::button(&mut b, None, &if *on { t("Turn off") } else { t("Turn on") }, if *on { p.card2 } else { p.accent }, if *on { p.text } else { p.accent_fg }, 28.0, &p).clicked() {
                 act = Some((m.id.clone(), "toggle"));
-            }
-        }
-        // pre autorov: plugin z vlastného priečinka
-        let (row, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
-        let mut b = ui.new_child(egui::UiBuilder::new().max_rect(row).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        if widgets::button(&mut b, Some("folder"), &t("Load from folder"), p.card2, p.text, 30.0, &p).clicked() {
-            if let Some(d) = rfd::FileDialog::new().set_title(t("Load from folder")).pick_folder() {
-                self.plug_add_dev(&d.to_string_lossy());
             }
         }
         // výpis z console.log pluginov
@@ -548,10 +585,12 @@ impl App {
             match install_plugin(&id, verified) {
                 Ok(dir) => {
                     self.plug_unload(&id);
+                    let mut name = id.clone();
                     if let Some(m) = plugins::read_manifest(&dir, false) {
+                        name = m.name.clone();
                         self.plug_load(m);
                     }
-                    self.note(tf("{name} installed.", &[("name", &id)]));
+                    self.note(tf("{name} installed.", &[("name", &name)]));
                 }
                 Err(e) => self.note(tf("Install failed: {e}", &[("e", &e)])),
             }

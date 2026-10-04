@@ -257,5 +257,8 @@ _V20 = {
 '{name} installed.': ('{name} je nainštalovaný.', '{name} installiert.', '{name} instalado.', '{name} installé.', '{name} installato.', 'Zainstalowano {name}.', '{name} instalado.', '{name} встановлено.'),
 '{name} loaded.': ('{name} je načítaný.', '{name} geladen.', '{name} cargado.', '{name} chargé.', '{name} caricato.', 'Wczytano {name}.', '{name} carregado.', '{name} завантажено.'),
 '{name} reloaded.': ('{name} sa znova načítal.', '{name} neu geladen.', '{name} recargado.', '{name} rechargé.', '{name} ricaricato.', 'Wczytano ponownie {name}.', '{name} recarregado.', '{name} перезавантажено.'),
+'Installed ({n})': ('Nainštalované ({n})', 'Installiert ({n})', 'Instalados ({n})', 'Installés ({n})', 'Installati ({n})', 'Zainstalowane ({n})', 'Instalados ({n})', 'Встановлені ({n})'),
+'Make your own': ('Urob si vlastný', 'Eigene erstellen', 'Crea el tuyo', 'Créez le vôtre', 'Crea il tuo', 'Zrób własną', 'Crie o seu', 'Створіть власний'),
+'Open the Store': ('Otvoriť Obchod', 'Store öffnen', 'Abrir la tienda', 'Ouvrir la boutique', 'Apri lo store', 'Otwórz sklep', 'Abrir a loja', 'Відкрити магазин'),
 }
 V20 = {code: {k: v[i] for k, v in _V20.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}
