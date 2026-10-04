@@ -25,7 +25,7 @@ Flux is a small code editor for Windows 10/11, built with Electron and Monaco. I
   - `native`.
 - **`native/src/`:**
   - `app.rs`: the window. It has a top bar with tabs and ▶ Run, a sidebar with projects and a file tree, and one rounded card holding the editor plus Output/Terminal, followed by a status bar. Editing uses `egui::TextEdit` with syntect colors (`egui_extras::syntax_highlighting`) and a line number gutter. It also covers autosave after 1 s, F5, Ctrl+S/O/W and reloading on outside changes via `notify`.
-  - `term.rs`: Alacritty's VT emulator (`alacritty_terminal`) fed by `flux_core::pty`, drawn as a colored grid, with keys → bytes.
+  - `term.rs`: Alacritty's VT emulator (`alacritty_terminal`) fed by `flux_core::pty`, drawn as a colored grid, with keys → bytes. Its event listener (`Replies`) sends the emulator's answers (`Event::PtyWrite`, e.g. to `ESC[6n`) back to the pty in `feed()`: Windows ConPTY (portable-pty uses `PSEUDOCONSOLE_INHERIT_CURSOR`) prints **nothing** until `ESC[6n` is answered – with `VoidListener` every program hung on Windows (fixed in 0.9.15; Linux never asks). Test: `cargo test -p flux-native term_`.
   - `theme.rs`: Flux colors, plus Segoe UI and Cascadia Mono from `%WINDIR%\Fonts`.
   - `widgets.rs`: painted sidebar rows, icon buttons, section captions, text with `…`, the logo.
   - `gen.rs` is **generated** by `node scripts/native-gen.mjs` from `src/renderer/icons.js` (the same file and line icons as SVG, drawn with resvg via egui_extras `svg`; `<text>` in an icon is drawn by egui on top) and `src/renderer/themes.js` (the code themes). Run it again after changing icons or themes.

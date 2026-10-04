@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.15 – 2026-10-04
+
+### Programs work again on Windows
+- ▶ Run showed only the file name and nothing else: Windows was waiting for an answer from Flux before letting the program print anything. Flux now answers, so you see the program's output, and `input()` (or `cin`, `Scanner`…) gets what you type. The Terminal tab is fixed the same way.
+- The red *Nothing to run* message no longer stays in the status bar after you switch to another file.
+
 ## 0.9.14 – 2026-10-04
 
 ### Mistakes are shown where they are

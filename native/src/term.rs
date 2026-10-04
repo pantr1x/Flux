@@ -1,7 +1,8 @@
 // Terminál pre Výstup (▶ Run) aj Terminál: emulátor VT z Alacritty + náš pseudoterminál (flux-core::pty).
 // Kreslí sa ako mriežka znakov s farbami; klávesy idú priamo programu.
 use crate::theme::Pal;
-use alacritty_terminal::event::VoidListener;
+use alacritty_terminal::event::{Event, EventListener};
+use std::sync::{Arc, Mutex};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term};
@@ -25,8 +26,21 @@ impl Dimensions for Size {
     }
 }
 
+// odpovede terminálu programu (pozícia kurzora ESC[6n, ESC[c…) – Windows ConPTY bez odpovede na ESC[6n
+// nepustí von žiadny výstup, takže program „visí“
+#[derive(Clone, Default)]
+struct Replies(Arc<Mutex<Vec<String>>>);
+impl EventListener for Replies {
+    fn send_event(&self, e: Event) {
+        if let Event::PtyWrite(s) = e {
+            self.0.lock().unwrap().push(s);
+        }
+    }
+}
+
 pub struct TermView {
-    term: Term<VoidListener>,
+    term: Term<Replies>,
+    replies: Replies,
     parser: Processor,
     cols: usize,
     rows: usize,
@@ -39,11 +53,19 @@ impl TermView {
     pub fn new(id: &str) -> Self {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
-        TermView { term: Term::new(config, &size, VoidListener), parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0 }
+        let replies = Replies::default();
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0 }
     }
 
     pub fn feed(&mut self, text: &str) {
         self.parser.advance(&mut self.term, text.as_bytes());
+        for r in self.take_replies() {
+            self.pty.write(&r);
+        }
+    }
+
+    fn take_replies(&mut self) -> Vec<String> {
+        std::mem::take(&mut *self.replies.0.lock().unwrap())
     }
 
     pub fn clear(&mut self) {
@@ -218,5 +240,17 @@ impl TermView {
             let y = rect.min.y + 2.0 + cursor.line.0 as f32 * ch;
             painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(2.0, ch)), 0.0, p.accent);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn term_answers_cursor_query() {
+        let mut v = TermView::new("t");
+        v.parser.advance(&mut v.term, b"ab\x1b[6n");
+        assert_eq!(v.take_replies(), vec!["\x1b[1;3R".to_string()]);
     }
 }

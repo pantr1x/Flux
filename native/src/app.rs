@@ -756,6 +756,10 @@ impl App {
         if self.nav_dir == 0.0 && (i != self.active || self.home) {
             self.nav_dir = if self.home || i > self.active { 0.6 } else { -0.6 };
         }
+        // hláška (napr. „Nothing to run…“) patrí k predošlému súboru
+        if i != self.active {
+            self.status.clear();
+        }
         self.active = i;
         self.home = false;
         self.reload_tab(i);
@@ -995,6 +999,7 @@ impl App {
             self.status = why;
             return;
         }
+        self.status.clear();
         let tab = &self.tabs[self.active];
         let path = tab.path.clone();
         if matches!(tab.ext().as_str(), "py" | "pyw") && self.python.as_ref().and_then(|v| v["path"].as_str()).is_none() {
