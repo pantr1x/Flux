@@ -368,3 +368,12 @@ pub fn color_field(ui: &mut egui::Ui, r: Rect, id: &str, cur: Color32, dot: bool
     });
     out
 }
+
+// tučné písmo, ktoré sa zmenší, kým sa text nezmestí do `max_w` (najmenej `min` bodov)
+pub fn fit_bold(ui: &egui::Ui, s: &str, max_w: f32, size: f32, min: f32) -> egui::FontId {
+    let mut sz = size;
+    while sz > min && text_w(ui, s, crate::theme::bold(sz)) > max_w {
+        sz -= 1.0;
+    }
+    crate::theme::bold(sz)
+}

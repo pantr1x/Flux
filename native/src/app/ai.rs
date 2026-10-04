@@ -225,8 +225,13 @@ impl App {
                 ui.label(egui::RichText::new(t("Ready-made connectors")).font(theme::bold(12.0)).color(p.text2));
                 ui.add_space(4.0);
                 let mut preset = None;
+                // bez pluginu GitHub sa GitHub nikde neponúka
+                let gh = self.gh_plugin();
                 ui.horizontal_wrapped(|ui| {
                     for (i, (name, _, _)) in PRESETS.iter().enumerate() {
+                        if *name == "GitHub" && !gh {
+                            continue;
+                        }
                         let have = list.iter().any(|m| m["name"].as_str() == Some(name));
                         if widgets::button(ui, Some(if have { "check" } else { "plus" }), name, p.card2, if have { p.text3 } else { p.text }, 28.0, &p).on_hover_text(t(PRESETS[i].2)).clicked() {
                             preset = Some(i);

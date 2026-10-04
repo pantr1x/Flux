@@ -4,6 +4,7 @@
 mod app;
 mod pins;
 mod glass;
+mod perf;
 
 // počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
 struct Count;
@@ -61,83 +62,32 @@ pub fn want_transparent() -> bool {
     let s = flux_core::settings::load();
     let on = |k: &str, def: bool| s[k].as_bool().unwrap_or(def);
     let lite = on("lite", false);
-    // tichý štart na pozadí (aktualizácia, most MCP): pokus o priehľadnosť počká na bežný štart, kde sa dá potvrdiť
-    let quiet = std::env::args().any(|a| a == "--background" || a == "--minimized");
-    let postponed = quiet && s["glassTrial"].as_str() == Some("pending");
-    see_material(&s) && on("optFx", !lite) && !boot::safe() && !postponed
+    see_material(&s) && on("optFx", !lite) && !boot::safe()
 }
 
 // 0.9.12: priehľadné okno je nové predvolené – raz prepne tapetu (bez vlastného obrázka) a staré „sklo“ živej tapety
 fn see_migrate() {
     let mut s = flux_core::settings::load();
-    if s["seeMigrated"].as_bool() == Some(true) {
+    let Some(o) = s.as_object_mut() else { return };
+    // 0.9.13: bez otázky „Vidíš, čo je za Fluxom?“ – staré kľúče pokusu preč
+    if o.remove("glassTrial").is_some() | o.remove("glassFailed").is_some() && o.get("seeMigrated").is_some() {
+        flux_core::settings::save(&s);
         return;
     }
-    let Some(o) = s.as_object_mut() else { return };
+    if o.get("seeMigrated").and_then(|v| v.as_bool()) == Some(true) {
+        return;
+    }
     let mat = o.get("material").and_then(|v| v.as_str()).unwrap_or("auto").to_string();
     let own_bg = o.get("bg").map(|b| b["type"].is_string()).unwrap_or(false);
     let glass = o.get("liveWallMode").and_then(|v| v.as_str()) == Some("glass");
     if glass || (matches!(mat.as_str(), "auto" | "wallpaper") && !own_bg) {
         o.insert("material".into(), serde_json::json!("see"));
-        o.insert("glassTrial".into(), serde_json::json!("pending"));
         if glass {
             o.insert("liveWallMode".into(), serde_json::json!("play"));
         }
     }
     o.insert("seeMigrated".into(), serde_json::json!(true));
     flux_core::settings::save(&s);
-}
-
-// priehľadné okno je pokus: po prepnutí sa Flux spýta, či je vidno, čo je za ním. Bez potvrdenia do 25 s
-// (okno neviditeľné, zaseknuté, spadnuté) sa vráti na tapetu a spustí znova. FLUX_GLASS_OK=1 potvrdí sám (CI).
-pub static GLASS_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-pub fn glass_revert() {
-    let mut s = flux_core::settings::load();
-    if let Some(o) = s.as_object_mut() {
-        o.insert("material".into(), serde_json::json!("wallpaper"));
-        o.remove("glassTrial");
-    }
-    flux_core::settings::save(&s);
-}
-
-fn glass_trial() {
-    let mut s = flux_core::settings::load();
-    match s["glassTrial"].as_str() {
-        // minulý pokus sa nepotvrdil (okno nebolo vidno) → späť
-        Some("running") => {
-            glass_revert();
-            notice("The see-through window did not work on this computer, so Flux went back to the wallpaper picture.");
-        }
-        Some("pending") if want_transparent() => {
-            if std::env::var("FLUX_GLASS_OK").as_deref() == Ok("1") {
-                GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
-                if let Some(o) = s.as_object_mut() {
-                    o.remove("glassTrial");
-                }
-                flux_core::settings::save(&s);
-                return;
-            }
-            s["glassTrial"] = serde_json::json!("running");
-            flux_core::settings::save(&s);
-            std::thread::spawn(|| {
-                std::thread::sleep(std::time::Duration::from_secs(25));
-                if !GLASS_OK.load(std::sync::atomic::Ordering::Relaxed) {
-                    glass_revert();
-                    // nový štart nie je „zlyhaný“ (bez núdzového režimu), len ukáže správu
-                    let mut s = flux_core::settings::load();
-                    s["glassFailed"] = serde_json::json!(true);
-                    flux_core::settings::save(&s);
-                    boot::closed();
-                    if let Ok(e) = std::env::current_exe() {
-                        let _ = std::process::Command::new(e).spawn();
-                    }
-                    std::process::exit(3);
-                }
-            });
-        }
-        _ => {}
-    }
 }
 
 fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
@@ -247,8 +197,8 @@ fn main() -> eframe::Result {
         }
         report(&format!("{what}{at}"));
     }));
+    perf::init();
     see_migrate();
-    glass_trial();
     let r = run();
     if let Err(e) = &r {
         if !update::rollback() {

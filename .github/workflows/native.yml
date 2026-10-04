@@ -15,9 +15,6 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    # priehľadné okno je pokus, ktorý inak čaká na potvrdenie používateľom (main.rs → glass_trial)
-    env:
-      FLUX_GLASS_OK: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

@@ -364,10 +364,33 @@ impl App {
             ui.painter().rect_stroke(kr, CornerRadius::same(4), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
             ui.painter().text(kr.center(), Align2::CENTER_CENTER, *key, theme::mono(10.5), p.text);
         }
-        // O Flux Native – čo príde ďalej
+        // GitHub je plugin: bez neho sa o GitHube nikde nič neukazuje
         let gh = Rect::from_min_size(pos2(body.left() + half + 10.0, body.top()), vec2(half, 180.0));
-        section_card(ui, gh, "puzzle", &t("Plugins"), &p);
-        widgets::text(ui, pos2(gh.left() + 12.0, gh.top() + 50.0), Align2::LEFT_CENTER, &t("You can add them later in Settings → Plugins."), theme::ui(11.5), p.text2, half - 24.0);
+        section_card(ui, gh, "github", "GitHub", &p);
+        let mut job = egui::text::LayoutJob::single_section(
+            t("Open your repositories as projects and save your work online. You can change this later in Settings → Plugins."),
+            egui::TextFormat { font_id: theme::ui(11.5), color: p.text2, ..Default::default() },
+        );
+        job.wrap.max_width = half - 24.0;
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        ui.painter().galley(pos2(gh.left() + 12.0, gh.top() + 40.0), g, p.text2);
+        let on = self.core.setting("githubPlugin").as_bool() == Some(true);
+        for (i, (val, label)) in [(true, "Install GitHub"), (false, "Not now")].iter().enumerate() {
+            let r = Rect::from_min_size(pos2(gh.left() + 12.0, gh.top() + 100.0 + i as f32 * 36.0), vec2(half - 24.0, 30.0));
+            let resp = ui.interact(r, ui.id().with(("gh", i)), Sense::click());
+            let sel = on == *val;
+            ui.painter().rect_filled(r, CornerRadius::same(8), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
+            ui.painter().rect_stroke(r, CornerRadius::same(8), if sel { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
+            let c = pos2(r.left() + 16.0, r.center().y);
+            ui.painter().circle_stroke(c, 5.5, Stroke::new(1.2, if sel { p.text } else { p.text3 }));
+            if sel {
+                ui.painter().circle_filled(c, 2.8, p.text);
+            }
+            ui.painter().text(pos2(r.left() + 29.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::bold(12.0), p.text);
+            if resp.clicked() {
+                self.intro_set("githubPlugin", json!(*val));
+            }
+        }
         // Aktualizácie
         let up = Rect::from_min_size(pos2(body.left(), body.top() + 192.0), vec2(body.width(), 118.0));
         section_card(ui, up, "refresh", &t("Updates"), &p);

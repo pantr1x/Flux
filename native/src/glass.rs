@@ -42,3 +42,20 @@ pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
 pub fn blur<T>(_w: &T, _on: bool) -> bool {
     false
 }
+
+// Priehľadné okno: Windows pod ním kreslí vlastný rám a tlačidlá − □ ×, ktoré presvitali cez lištu Fluxu
+// (zdvojené tlačidlá). Vypnúť kreslenie rámu cez DWM.
+#[cfg(windows)]
+pub fn no_frame(w: &impl raw_window_handle::HasWindowHandle) -> bool {
+    use raw_window_handle::RawWindowHandle;
+    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMWA_NCRENDERING_POLICY};
+    let Ok(h) = w.window_handle() else { return false };
+    let RawWindowHandle::Win32(h) = h.as_raw() else { return false };
+    let policy: i32 = DWMNCRP_DISABLED;
+    unsafe { DwmSetWindowAttribute(h.hwnd.get() as _, DWMWA_NCRENDERING_POLICY as u32, &policy as *const i32 as *const _, 4) == 0 }
+}
+
+#[cfg(not(windows))]
+pub fn no_frame<T>(_w: &T) -> bool {
+    false
+}

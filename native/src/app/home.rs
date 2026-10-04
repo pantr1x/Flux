@@ -247,7 +247,8 @@ impl App {
                     ui.painter().rect_filled(r, CornerRadius::same(14), p.card.gamma_multiply(0.8));
                     ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
                     widgets::icon_at(ui, pos2(r.right() - 18.0, r.top() + 18.0), 13.0, ic, p.text3);
-                    ui.painter().text(pos2(r.left() + 14.0, r.top() + 27.0), Align2::LEFT_CENTER, val, theme::bold(20.0), p.text);
+                    // dlhá hodnota („4 h 26 min“) sa zmenší, aby nešla pod ikonu
+                    ui.painter().text(pos2(r.left() + 14.0, r.top() + 27.0), Align2::LEFT_CENTER, val, widgets::fit_bold(ui, val, tw - 14.0 - 34.0, 20.0, 12.0), p.text);
                     widgets::text(ui, pos2(r.left() + 14.0, r.top() + 52.0), Align2::LEFT_CENTER, &t(label), theme::ui(11.5), p.text3, tw - 20.0);
                 }
             }
@@ -325,7 +326,7 @@ impl App {
                     let (er, _) = ui.allocate_exact_size(vec2(lwi, 110.0), Sense::hover());
                     widgets::icon_at(ui, pos2(er.center().x, er.top() + 26.0), 22.0, "folder", p.text3);
                     ui.painter().text(pos2(er.center().x, er.top() + 58.0), Align2::CENTER_CENTER, t("No projects yet"), theme::bold(14.0), p.text);
-                    ui.painter().text(pos2(er.center().x, er.top() + 80.0), Align2::CENTER_CENTER, t("Start a new project, open a folder or get one from GitHub."), theme::ui(12.0), p.text3);
+                    ui.painter().text(pos2(er.center().x, er.top() + 80.0), Align2::CENTER_CENTER, if self.gh_plugin() { t("Start a new project, open a folder or get one from GitHub.") } else { t("Start a new project or open a folder.") }, theme::ui(12.0), p.text3);
                 }
                 // karta/riadok projektu
                 let mut project = |app: &mut App, ui: &mut egui::Ui, r: Rect, pr: &Value, card: bool| {

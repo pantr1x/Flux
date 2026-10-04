@@ -33,6 +33,12 @@ impl App {
             let top = full.top();
             let mut x = full.right() - CONTROLS_W;
             let h = if max { TOP_H - 8.0 } else { TOP_H - 10.0 };
+            // priehľadné okno: pod tlačidlami plný podklad, aby cez ne nič nepresvitalo
+            if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+                let strip = Rect::from_min_size(pos2(x, top), vec2(CONTROLS_W, h));
+                let cr = if max { egui::CornerRadius::ZERO } else { egui::CornerRadius { ne: 8, sw: 8, ..Default::default() } };
+                ui.painter().rect_filled(strip, cr, p.solid.gamma_multiply(0.9));
+            }
             for (i, what) in ["min", "max", "close"].iter().enumerate() {
                 let r = Rect::from_min_size(pos2(x, top), vec2(BTN_W, h));
                 let resp = ui.interact(r, egui::Id::new(("wbtn", i)), Sense::click());

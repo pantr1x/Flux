@@ -78,11 +78,33 @@ pub struct SettingsUi {
     notes_all: bool,                               // ukázať aj staršie verzie
     spy: Option<String>,                           // časť, ktorá je práve navrchu (zvýraznená v ponuke)
     spy_hold: f64,                                 // po kliknutí na podpoložku chvíľu nemeniť zvýraznenie
+    hist: Vec<String>,                             // navštívené karty – šípka späť/dopredu ostáva v nastaveniach
+    hist_i: usize,
 }
 
 impl SettingsUi {
     pub fn new(tab: &str, now: f64) -> Self {
-        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), notes_all: false, spy: None, spy_hold: 0.0 }
+        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), notes_all: false, spy: None, spy_hold: 0.0, hist: vec![tab.to_string()], hist_i: 0 }
+    }
+
+    // nová karta → do histórie (karty sa menia z viacerých miest, preto raz za snímku)
+    pub fn track(&mut self) {
+        if self.hist.get(self.hist_i) != Some(&self.tab) {
+            self.hist.truncate(self.hist_i + 1);
+            self.hist.push(self.tab.clone());
+            self.hist_i = self.hist.len() - 1;
+        }
+    }
+
+    // späť/dopredu medzi kartami nastavení; na začiatku/konci histórie nič (nastavenia sa tým nezatvárajú)
+    pub fn nav(&mut self, back: bool) {
+        let i = if back { self.hist_i.checked_sub(1) } else { Some(self.hist_i + 1).filter(|i| *i < self.hist.len()) };
+        if let Some(i) = i {
+            self.hist_i = i;
+            self.tab = self.hist[i].clone();
+            self.spy = None;
+            self.find.clear();
+        }
     }
 }
 
@@ -288,7 +310,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         }
         "tools" => vec![("", vec![Row::Custom("tools")])],
         "plugins" => {
-            vec![("", vec![Row::Lead("Plugins add features to Flux. Install GitHub when you want it – the other parts are built in, community plugins come later.")]), ("Built into Flux", vec![Row::Custom("plugins")])]
+            vec![("", vec![Row::Lead("Plugins add features to Flux. Install GitHub when you want it – more plugins will come later.")]), ("Available", vec![Row::Custom("plugins")])]
         }
         "github" if app.gh_plugin() => vec![
             ("", vec![Row::Lead("Connect your GitHub account to open your repositories as projects and to save (push) your work online.")]),
@@ -299,7 +321,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         _ => vec![
             ("", vec![Row::Lead("Flux can use Claude as a coding assistant (Ctrl+I). You pay Anthropic directly with your own API key – it is stored encrypted on this computer.")]),
             ("API key", vec![Row::Custom("ai-key")]),
-            ("MCP connectors", vec![Row::Lead("Connect remote MCP servers (for example GitHub, Linear or your own) – Claude can then use their tools while answering."), Row::Custom("ai-mcp")]),
+            ("MCP connectors", vec![Row::Lead("Connect remote MCP servers (for example Linear, Notion or your own) – Claude can then use their tools while answering."), Row::Custom("ai-mcp")]),
             (
                 "Use Flux from other AI apps",
                 vec![
@@ -354,20 +376,11 @@ impl App {
     }
 
     pub(super) fn set(&mut self, key: &str, v: Value, ctx: &egui::Context) {
-        // sklo: pokus, ktorý treba po novom štarte potvrdiť (main.rs → glass_trial)
-        // priehľadné okno: pokus, ktorý treba po novom štarte potvrdiť (main.rs → glass_trial); len pri zmene z nepriehľadného
-        let see = key == "material" && matches!(v.as_str(), Some("see" | "blur"));
-        let trial = see && !crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed);
-        if see {
+        if key == "material" && matches!(v.as_str(), Some("see" | "blur")) {
             self.glass_apply = true; // čisté ↔ rozmazané ide hneď, bez nového štartu
         }
         self.update_settings(|o| {
             o.insert(key.into(), v);
-            if trial {
-                o.insert("glassTrial".into(), json!("pending"));
-            } else if key == "material" {
-                o.remove("glassTrial");
-            }
         });
         match key {
             "language" => crate::i18n::set_language(self.get("language").as_str().unwrap_or("en")),
@@ -380,6 +393,9 @@ impl App {
     pub(super) fn settings_ui(&mut self, ui: &mut egui::Ui, full: Rect) {
         let p = self.pal;
         let ctx = ui.ctx().clone();
+        if let Some(st) = self.settings.as_mut() {
+            st.track();
+        }
         let Some(st) = self.settings.as_ref() else { return };
         // animácia otvorenia (fade + mierne zväčšenie), vypnutá bez „transitions“
         let anim = self.anim_on();
@@ -1183,14 +1199,10 @@ impl App {
             "ai-key" | "ai-mcp" | "ai-flux" => self.ai_settings_ui(ui, id, w, ctx),
             // zabudované časti ako karty (createPluginsUI({ builtins }))
             "plugins" => {
-                let cards = [
-                    ("github", "GitHub", t("Open your repositories as projects and sign in with your GitHub account."), Some("github")),
-                    ("sparkle", "Claude AI", t("A coding assistant next to your code (Ctrl+I), with MCP connectors."), Some("ai")),
-                    ("globe", "Live Server", t("Your web page next to the code, reloaded every time you save."), None),
-                    ("download", "Languages", t("Python, Node.js, Java, C/C++ and more, downloaded only when you need them."), Some("tools")),
-                ];
+                // jediný plugin zatiaľ: GitHub (Claude, Live Server a jazyky sú súčasť Fluxu, nie pluginy)
+                let cards = [("github", "GitHub", t("Open your repositories as projects and sign in with your GitHub account."), Some("github"))];
                 let cw = (w - 12.0) / 2.0;
-                let (area, _) = ui.allocate_exact_size(vec2(w, 2.0 * 96.0 + 12.0), Sense::hover());
+                let (area, _) = ui.allocate_exact_size(vec2(w, 96.0), Sense::hover());
                 let mut go = None;
                 // GitHub sa inštaluje ako plugin (settings.githubPlugin), ostatné sú zabudované
                 let gh = self.gh_plugin();
@@ -1206,14 +1218,12 @@ impl App {
                     ui.painter().rect_filled(ir, CornerRadius::same(10), p.card2);
                     widgets::icon_at(ui, ir.center(), 17.0, ic, p.text);
                     ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 9.0), Align2::LEFT_CENTER, *name, theme::bold(13.5), p.text);
-                    let status = if i > 0 {
-                        t("Built into Flux")
-                    } else if gh {
+                    let status = if gh {
                         t("Installed")
                     } else {
                         t("Not installed")
                     };
-                    ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, status, theme::ui(11.0), if i > 0 || gh { p.green } else { p.text3 });
+                    ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, status, theme::ui(11.0), if gh { p.green } else { p.text3 });
                     if i == 0 {
                         let label = if gh { t("Remove") } else { t("Install") };
                         let bw = widgets::text_w(ui, &label, theme::bold(13.0)) + 26.0;

@@ -2,6 +2,23 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.13 – 2026-10-04
+
+### Big files stay smooth
+- The editor now colors and draws **only the code you see** (plus a few hundred lines below it). The rest is colored when you scroll there, and typing recolors only from the changed line on.
+- Measured on a file with 30,000 lines: opening took **0.3 s instead of 5 s**, and one frame while scrolling takes **3 ms instead of 47 ms** – smooth scrolling stays smooth even in huge files.
+- The minimap and the word count in the status bar no longer go through the whole file on every frame either.
+
+### Fixes
+- The window buttons (− □ ×) no longer look doubled when Flux is see-through.
+- The question *Can you see what is behind Flux?* is gone.
+- Home screen: a long coding time (for example *4 h 26 min*) gets smaller instead of running under the clock icon.
+- **Back** (mouse button or Alt+←) inside Settings goes to the previous settings page instead of closing Settings.
+
+### GitHub only when you want it
+- Settings → Plugins now shows only real plugins – GitHub for now. Claude AI, Live Server and Languages are simply part of Flux.
+- The intro asks whether you want GitHub. Without it, Flux doesn't show GitHub anywhere – install it any time in Settings → Plugins.
+
 ## 0.9.12 – 2026-10-04
 
 ### See-through window

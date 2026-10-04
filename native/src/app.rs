@@ -73,6 +73,7 @@ pub struct App {
     pal: Pal,
     code: Code,
     tabs: Vec<Tab>,
+    hls: HashMap<String, crate::code::Hl>, // farby kódu po riadkoch pre otvorené súbory (len viditeľná časť)
     active: usize,
     home: bool, // stránka projektu namiesto editora
     hist: Vec<String>,
@@ -155,6 +156,10 @@ impl App {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let core = Arc::new(Core::load());
+        // priehľadné okno: bez rámu a tlačidiel Windows pod lištou (inak presvitajú)
+        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+            crate::glass::no_frame(cc);
+        }
         // rozmazané priehľadné okno: rozmazanie robí Windows (glass.rs)
         if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && core.setting("material").as_str() == Some("blur") && !crate::glass::blur(cc, true) {
             eprintln!("[flux] blur behind the window is not available, staying clear");
@@ -231,6 +236,7 @@ impl App {
             tree_sel: None,
             undo_capped: HashSet::new(),
             glass_apply: false,
+            hls: HashMap::new(),
             unfocused_at: None,
             live_push: None,
             shown: String::new(),
@@ -270,12 +276,6 @@ impl App {
         }
         app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         app.gh_plugin_migrate();
-        if app.core.setting("glassFailed").as_bool() == Some(true) {
-            app.update_settings(|o| {
-                o.remove("glassFailed");
-            });
-            app.status = t("The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.");
-        }
         if crate::mcp::enabled(&app.core) {
             app.mcp_toggle(true);
         }
@@ -398,45 +398,6 @@ impl App {
         crate::wall::desktop_wallpaper().map(Src::Image)
     }
 
-    fn glass_ui(&mut self, ui: &mut egui::Ui, full: Rect) {
-        let p = self.pal;
-        let left = (25.0 - self.started.elapsed().as_secs_f32()).max(0.0).ceil();
-        let w = 440.0;
-        let card = Rect::from_center_size(full.center(), vec2(w, 150.0));
-        ui.painter().add(egui::Shadow { offset: [0, 14], blur: 40, spread: 0, color: Color32::from_black_alpha(110) }.as_shape(card, CornerRadius::same(14)));
-        ui.painter().rect_filled(card, CornerRadius::same(14), p.solid);
-        ui.painter().rect_stroke(card, CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-        ui.painter().text(card.min + vec2(24.0, 30.0), Align2::LEFT_CENTER, t("Can you see what is behind Flux?"), theme::bold(14.0), p.text);
-        let g = ui.painter().layout(crate::i18n::tf("If you don't answer, Flux goes back to the wallpaper picture in {n} s.", &[("n", &format!("{left:.0}"))]), theme::ui(12.5), p.text3, w - 48.0);
-        ui.painter().galley(card.min + vec2(24.0, 48.0), g, p.text3);
-        let mut b = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(Rect::from_min_max(pos2(card.left() + 20.0, card.bottom() - 52.0), pos2(card.right() - 20.0, card.bottom() - 18.0)))
-                .layout(egui::Layout::right_to_left(egui::Align::Center)),
-        );
-        b.spacing_mut().item_spacing.x = 8.0;
-        let keep = widgets::button(&mut b, Some("check"), &t("Yes, keep it"), p.accent, p.accent_fg, 32.0, &p).clicked();
-        let back = widgets::button(&mut b, None, &t("Go back"), p.card2, p.text, 32.0, &p).clicked();
-        if keep {
-            crate::GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
-            self.update_settings(|o| {
-                o.remove("glassTrial");
-            });
-        } else if back {
-            crate::GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
-            self.update_settings(|o| {
-                o.insert("material".into(), json!("wallpaper"));
-                o.remove("glassTrial");
-            });
-            if let Ok(e) = std::env::current_exe() {
-                if std::process::Command::new(e).spawn().is_ok() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            }
-        }
-        ui.ctx().request_repaint_after(Duration::from_millis(500));
-    }
-
     // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
     pub(crate) fn see_through(&self) -> bool {
         crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && self.wall_on()
@@ -522,6 +483,11 @@ impl App {
     }
 
     fn open_settings(&mut self, tab: &str, ctx: &egui::Context) {
+        // už otvorené: len prepnúť kartu (história späť/dopredu ostane)
+        if let Some(st) = self.settings.as_mut() {
+            st.tab = tab.to_string();
+            return;
+        }
         self.settings = Some(prefs::SettingsUi::new(tab, ctx.input(|i| i.time)));
     }
 
@@ -640,6 +606,9 @@ impl App {
                 eprintln!("[flux] uvoľnený z pamäte: {}", t.path);
             }
         }
+        // farby kódu len pre súbory, ktoré sú otvorené a v pamäti; nevidený súbor ich drží najviac 2 min
+        let live: HashSet<&str> = self.tabs.iter().enumerate().filter(|(i, t)| !t.unloaded && (*i == active || t.seen.elapsed() < Duration::from_secs(120))).map(|(_, t)| t.path.as_str()).collect();
+        self.hls.retain(|k, _| live.contains(k.as_str()));
     }
 
     // aktuálne miesto pre históriu späť/dopredu: domov, stránka projektu alebo súbor
@@ -689,6 +658,11 @@ impl App {
             return;
         }
         self.last_go = Some(Instant::now());
+        // v nastaveniach späť = predošlá karta nastavení, nie editor
+        if let Some(st) = self.settings.as_mut() {
+            st.nav(back);
+            return;
+        }
         self.nav_dir = if back { -1.0 } else { 1.0 };
         let mut i = self.hist_i;
         loop {
@@ -1700,6 +1674,7 @@ impl App {
         }
         let code = &self.code;
         let tab = &mut self.tabs[self.active];
+        let hlc = self.hls.entry(tab.path.clone()).or_default();
         let ext = tab.ext();
         let lang = if ext.is_empty() { "txt".to_string() } else { ext };
         let cur_line = self.cursor.0;
@@ -1719,17 +1694,30 @@ impl App {
                 ui.add_space(gutter);
                 let hl = ui.painter().add(egui::Shape::Noop);
                 let found_shapes = ui.painter().add(egui::Shape::Noop);
+                let text_shapes = ui.painter().add(egui::Shape::Noop); // farebný text: pod kurzorom a výberom
+                // TextEdit rozloží text bez farieb (neviditeľný); farby sa kreslia nižšie len pre viditeľné riadky
+                let fmt = egui::TextFormat { font_id: font.clone(), color: Color32::TRANSPARENT, line_height: Some(lh), valign: egui::Align::Center, ..Default::default() };
+                let wrap_at = std::cell::Cell::new(f32::INFINITY);
+                let built: std::cell::RefCell<Option<std::sync::Arc<egui::Galley>>> = Default::default();
+                let cached = hlc.galley.clone();
+                let same = hlc.same_text(&tab.text);
+                let gen = hlc.gen;
                 let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_w: f32| {
-                    let mut job = code.highlight(ui.ctx(), ui.style(), buf.as_str(), &lang);
-                    job.wrap.max_width = if wrap { wrap_w } else { f32::INFINITY };
-                    for s in job.sections.iter_mut() {
-                        s.format.font_id = font.clone();
-                        s.format.line_height = Some(lh);
-                        s.format.valign = egui::Align::Center;
+                    let w = if wrap { wrap_w } else { f32::INFINITY };
+                    wrap_at.set(w);
+                    // nezmenený text: rovnaký rozklad ako minule (veľký súbor sa nerozkladá ani nehašuje každú snímku)
+                    if let Some((g, cw, cf, clh, gal)) = &cached {
+                        if same && *g == gen && *cw == w && *cf == font && *clh == lh && buf.as_str() == gal.job.text {
+                            return gal.clone();
+                        }
                     }
-                    ui.fonts_mut(|f| f.layout_job(job))
+                    let mut job = egui::text::LayoutJob::single_section(buf.as_str().to_owned(), fmt.clone());
+                    job.wrap.max_width = w;
+                    let gal = ui.fonts_mut(|f| f.layout_job(job));
+                    *built.borrow_mut() = Some(gal.clone());
+                    gal
                 };
-                let lines = tab.text.lines().count().max(1) + usize::from(tab.text.ends_with('\n'));
+                let lines = hlc.lines().max(1) + usize::from(tab.text.ends_with('\n'));
                 let te = egui::TextEdit::multiline(&mut tab.text)
                     .id(ed_id)
                     .code_editor()
@@ -1741,6 +1729,70 @@ impl App {
                     .lock_focus(true)
                     .layouter(&mut layouter)
                     .show(ui);
+                // ---- farby len pre riadky na obrazovke (+ 300 pod nimi sa dofarbí vopred) ----
+                code.sync(hlc, &tab.text, &lang);
+                if let Some(g) = built.take() {
+                    // nový rozklad patrí k aktuálnemu textu, ak sa zhoduje s tým, čo editor práve ukazuje
+                    if g.job.text == tab.text {
+                        hlc.galley = Some((hlc.gen, wrap_at.get(), font.clone(), lh, g));
+                    }
+                }
+                {
+                    let clip = ui.clip_rect();
+                    let origin = te.galley_pos;
+                    // riadky galley → logické riadky; zalomený riadok sa kreslí celý od svojho prvého riadku
+                    let mut line = 0usize;
+                    let mut start: Option<egui::Pos2> = None;
+                    let mut vis: Vec<(usize, egui::Pos2)> = vec![];
+                    for r in &te.galley.rows {
+                        let rr = r.rect().translate(origin.to_vec2());
+                        let st = *start.get_or_insert(rr.min);
+                        if st.y > clip.bottom() {
+                            break;
+                        }
+                        if rr.bottom() >= clip.top() && rr.top() <= clip.bottom() && vis.last().map(|v| v.0) != Some(line) {
+                            vis.push((line, st));
+                        }
+                        if r.ends_with_newline {
+                            line += 1;
+                            start = None;
+                        }
+                    }
+                    if let Some(last) = vis.last().map(|v| v.0) {
+                        if !code.ensure(hlc, last + 300, Duration::from_millis(6)) {
+                            ui.ctx().request_repaint();
+                        }
+                    }
+                    let fg = p.text;
+                    let mut shapes = vec![];
+                    for (i, at) in vis {
+                        if i >= hlc.lines() {
+                            continue;
+                        }
+                        let text = hlc.line_text(i).trim_end_matches('\n');
+                        if text.is_empty() {
+                            continue;
+                        }
+                        let mut job = egui::text::LayoutJob::default();
+                        job.wrap.max_width = wrap_at.get();
+                        match hlc.spans(i) {
+                            Some(sp) => {
+                                let mut at_b = 0usize;
+                                for (len, c) in sp {
+                                    let end = (at_b + *len as usize).min(text.len());
+                                    if end > at_b {
+                                        job.append(&text[at_b..end], 0.0, egui::TextFormat { color: *c, ..fmt.clone() });
+                                    }
+                                    at_b = end;
+                                }
+                            }
+                            None => job.append(text, 0.0, egui::TextFormat { color: fg, ..fmt.clone() }),
+                        }
+                        let g = ui.fonts_mut(|f| f.layout_job(job));
+                        shapes.push(egui::Shape::galley(at, g, fg));
+                    }
+                    ui.painter().set(text_shapes, egui::Shape::Vec(shapes));
+                }
                 edited = te.response.changed() || new_sel.is_some();
                 // automatické zatváranie zátvoriek a úvodzoviek
                 if te.response.changed() {
@@ -1892,12 +1944,13 @@ impl App {
         }
         ui.painter().vline(mini.left(), mini.y_range(), Stroke::new(1.0, p.line));
         let tab = &self.tabs[self.active];
-        let job = self.code.highlight(ui.ctx(), ui.style(), &tab.text, &lang);
         let painter = ui.painter().with_clip_rect(mini);
         // minimapa ako v Monacu: riadok = 2 px, znak = 1 px; pri dlhom súbore sa posúva spolu s editorom
         let ppp = ui.ctx().pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
-        let total = tab.text.lines().count().max(1);
+        let hlc = self.hls.entry(tab.path.clone()).or_default();
+        self.code.sync(hlc, &tab.text, &lang);
+        let total = hlc.lines().max(1);
         let pitch = 2.0f32;
         let view_h = out.inner_rect.height();
         let content_h = (out.content_size.y - view_h).max(1.0);
@@ -1905,44 +1958,47 @@ impl App {
         let mm_h = mini.height() - 8.0;
         let mm_off = ((total as f32 * pitch - mm_h).max(0.0) * frac).round();
         let first = (mm_off / pitch) as usize;
-        let max_lines = first + (mm_h / pitch) as usize + 1;
+        let last = (first + (mm_h / pitch) as usize + 1).min(total.saturating_sub(1));
         let (x0, y0) = (mini.left() + 10.0, mini.top() + 4.0 - mm_off);
         let max_cols = ((mini_w - 18.0).max(10.0)) as usize;
-        let (mut line, mut col) = (0usize, 0usize);
-        let draw = |line: usize, st: usize, end: usize, color: Color32| {
-            if line < first || st >= max_cols {
-                return;
-            }
-            let end = end.min(max_cols);
+        // len riadky, ktoré minimapa práve ukazuje (farby z tej istej vyrovnávacej pamäte ako editor)
+        if !self.code.ensure(hlc, last, Duration::from_millis(4)) {
+            ui.ctx().request_repaint();
+        }
+        let plain = p.text.gamma_multiply(0.7);
+        for line in first..=last.min(hlc.lines().saturating_sub(1)) {
+            let text = hlc.line_text(line);
             let y = snap(y0 + line as f32 * pitch);
-            painter.rect_filled(Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((end - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))), 0.0, color);
-        };
-        'outer: for s in &job.sections {
-            let color = s.format.color.gamma_multiply(0.7);
-            let mut run: Option<usize> = None;
-            for ch in job.text[s.byte_range.start.0..s.byte_range.end.0].chars() {
-                if ch == '\n' || ch == ' ' || ch == '\t' {
-                    if let Some(st) = run.take() {
-                        draw(line, st, col, color);
-                    }
-                    if ch == '\n' {
-                        line += 1;
-                        col = 0;
-                        if line > max_lines {
-                            break 'outer;
+            let spans: Vec<(u32, Color32)> = hlc.spans(line).map(|v| v.to_vec()).unwrap_or_else(|| vec![(text.len() as u32, plain)]);
+            let (mut col, mut b0) = (0usize, 0usize);
+            for (len, c) in spans {
+                let color = c.gamma_multiply(0.7);
+                let end = (b0 + len as usize).min(text.len());
+                let mut run: Option<usize> = None;
+                for ch in text[b0..end].chars() {
+                    if ch == '\n' || ch == ' ' || ch == '\t' {
+                        if let Some(st) = run.take() {
+                            if st < max_cols {
+                                painter.rect_filled(Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((col.min(max_cols) - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))), 0.0, color);
+                            }
                         }
-                    } else {
                         col += if ch == '\t' { 4 } else { 1 };
+                        continue;
                     }
-                    continue;
+                    if run.is_none() {
+                        run = Some(col);
+                    }
+                    col += 1;
                 }
-                if run.is_none() {
-                    run = Some(col);
+                if let Some(st) = run {
+                    if st < max_cols {
+                        painter.rect_filled(Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((col.min(max_cols) - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))), 0.0, color);
+                    }
                 }
-                col += 1;
-            }
-            if let Some(st) = run {
-                draw(line, st, col, color);
+                b0 = end;
+                if col >= max_cols {
+                    break;
+                }
             }
         }
         // posuvník minimapy: viditeľná časť; klik/ťahanie posúva editor
@@ -2142,7 +2198,7 @@ impl App {
                 let ib = Rect::from_min_size(pos2(t.right() - 40.0, t.top() + 12.0), vec2(28.0, 28.0));
                 ui.painter().rect_filled(ib, CornerRadius::same(8), p.active);
                 widgets::icon_at(ui, ib.center(), 14.0, ic, p.text);
-                widgets::text(ui, pos2(t.left() + 16.0, t.top() + 31.0), Align2::LEFT_CENTER, val, theme::bold(if val.len() > 8 { 18.0 } else { 24.0 }), p.text, tw - 64.0);
+                widgets::text(ui, pos2(t.left() + 16.0, t.top() + 31.0), Align2::LEFT_CENTER, val, widgets::fit_bold(ui, val, tw - 64.0, 24.0, 13.0), p.text, tw - 64.0);
                 ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, crate::i18n::t(label), theme::ui(12.5), p.text3);
             }
             ui.add_space(22.0);
@@ -2386,7 +2442,10 @@ impl App {
             rx = r.left() - 34.0;
         }
         if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
-            let words = t.text.split_whitespace().count();
+            let lang = t.ext();
+            let hlc = self.hls.entry(t.path.clone()).or_default();
+            self.code.sync(hlc, &t.text, if lang.is_empty() { "txt" } else { &lang });
+            let words = hlc.words();
             let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &crate::i18n::tf("{n} words", &[("n", &words.to_string())]), small.clone(), p.text3, 100.0);
             rx = r.left() - 18.0;
             widgets::text(
@@ -2644,6 +2703,7 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, root: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let _perf = crate::perf::frame();
         let ctx = root.ctx().clone();
         let ctx = &ctx;
         if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
@@ -2959,14 +3019,6 @@ impl eframe::App for App {
             egui::Area::new(egui::Id::new("palette-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
                 ui.set_min_size(full.size());
                 self.palette_ui(ui, full);
-            });
-        }
-        // pokus so sklom: potvrdiť, že Flux vidno (inak sa main.rs po 25 s vráti sám)
-        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && !crate::GLASS_OK.load(std::sync::atomic::Ordering::Relaxed) && self.core.setting("glassTrial").as_str() == Some("running") {
-            let full = ctx.content_rect();
-            egui::Area::new(egui::Id::new("glass-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
-                ui.set_min_size(full.size());
-                self.glass_ui(ui, full);
             });
         }
         if self.ask.is_some() {
