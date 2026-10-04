@@ -135,7 +135,7 @@ impl App {
         let ctx = ui.ctx().clone();
         let anim = self.anim_on();
         let now = ctx.input(|i| i.time);
-        ui.painter().rect_filled(full, 0.0, p.base);
+        ui.painter().rect_filled(full, if self.rounded { CornerRadius::same(8) } else { CornerRadius::ZERO }, p.base);
         // pohyblivé žiary ako v úvode (ob-aurora)
         // pohyb len 8 s po otvorení a len keď je okno aktívne – potom stoja a nič sa neprekresľuje (CPU)
         let glide_end = self.start_opened + 8.0;

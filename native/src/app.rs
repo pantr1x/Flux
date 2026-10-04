@@ -165,6 +165,7 @@ pub struct App {
     start_q: String,      // hľadanie projektu na domove
     start_opened: f64,
     focus_window: bool, // ďalšie spustenie Fluxu → toto okno dopredu
+    rounded: bool,      // pozadie okna je zaoblený obdĺžnik (priehľadné okno)
     preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
     tour_rects: HashMap<&'static str, Rect>, // kde sú časti okna (pre prehliadku)
@@ -179,6 +180,7 @@ impl App {
         if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
             crate::glass::no_frame(cc);
         }
+        crate::glass::round(cc);
         // rozmazané priehľadné okno: rozmazanie robí Windows (glass.rs)
         if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && core.setting("material").as_str() == Some("blur") && !crate::glass::blur(cc, true) {
             eprintln!("[flux] blur behind the window is not available, staying clear");
@@ -292,6 +294,7 @@ impl App {
             start_q: String::new(),
             start_opened: 0.0,
             focus_window: false,
+            rounded: false,
             preview: None,
             tour: None,
             tour_rects: HashMap::new(),
@@ -633,6 +636,15 @@ impl App {
                 self.open_settings("general", ui.ctx());
             }
         }
+    }
+
+    // priehľadné okno (nie maximalizované): pozadie sa kreslí raz ako zaoblený obdĺžnik (window_round), panely sú bez výplne
+    pub(crate) fn round_corners(&self, ctx: &egui::Context) -> bool {
+        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && !ctx.input(|i| i.viewport().maximized.unwrap_or(false) || i.viewport().fullscreen.unwrap_or(false))
+    }
+
+    fn base_fill(&self) -> Color32 {
+        if self.rounded { Color32::TRANSPARENT } else { self.pal.base }
     }
 
     // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
@@ -1396,7 +1408,7 @@ impl App {
             .exact_size(SIDE_W)
             .show_separator_line(false)
             // spodok ako karta: päta končí GAP nad okrajom a je v rovine so stavovým riadkom
-            .frame(Frame::new().fill(p.base).inner_margin(Margin { left: 8, right: 6, top: 0, bottom: GAP as i8 }))
+            .frame(Frame::new().fill(self.base_fill()).inner_margin(Margin { left: 8, right: 6, top: 0, bottom: GAP as i8 }))
             .show(root, |ui| {
                 self.side_top(ui, true);
                 let ws = self.workspace();
@@ -3157,6 +3169,11 @@ impl eframe::App for App {
         if self.wall.paint(ctx) {
             self.apply_look(ctx);
         }
+        // priehľadné okno: pozadie ako jeden zaoblený obdĺžnik (rohy okna oblé ako vo Windows 11), panely bez výplne
+        self.rounded = self.round_corners(ctx);
+        if self.rounded {
+            ctx.layer_painter(egui::LayerId::background()).rect_filled(ctx.content_rect(), CornerRadius::same(8), self.pal.base);
+        }
         // pamäť na pozadí (trimMemory, predvolene zapnuté)
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(true));
         let minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
@@ -3322,7 +3339,7 @@ impl eframe::App for App {
             }
         }
         if !self.start {
-            egui::CentralPanel::default().frame(Frame::new().fill(p.base)).show(root, |ui| {
+            egui::CentralPanel::default().frame(Frame::new().fill(self.base_fill())).show(root, |ui| {
                 let full = ui.max_rect();
                 let (lpad, rpad) = if !self.side_open {
                     (GAP, GAP)

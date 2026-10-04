@@ -59,3 +59,22 @@ pub fn no_frame(w: &impl raw_window_handle::HasWindowHandle) -> bool {
 pub fn no_frame<T>(_w: &T) -> bool {
     false
 }
+
+// Windows 11: oblé rohy okna a bez 1 px okraja (svetlá čiara hore cez priehľadnú lištu). Windows 10 to ignoruje.
+#[cfg(windows)]
+pub fn round(w: &impl raw_window_handle::HasWindowHandle) {
+    use raw_window_handle::RawWindowHandle;
+    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    let Ok(h) = w.window_handle() else { return };
+    let RawWindowHandle::Win32(h) = h.as_raw() else { return };
+    let hwnd = h.hwnd.get() as _;
+    let corner: i32 = 2; // DWMWA_WINDOW_CORNER_PREFERENCE (33) = DWMWCP_ROUND
+    let border: u32 = 0xFFFF_FFFE; // DWMWA_BORDER_COLOR (34) = DWMWA_COLOR_NONE
+    unsafe {
+        DwmSetWindowAttribute(hwnd, 33, &corner as *const i32 as *const _, 4);
+        DwmSetWindowAttribute(hwnd, 34, &border as *const u32 as *const _, 4);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn round<T>(_w: &T) {}

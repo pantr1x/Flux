@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.21 – 2026-10-04
+
+### Round corners
+- The see-through window now has rounded corners like other Windows 11 windows, and the thin light line along the top edge is gone.
+
 ## 0.9.20 – 2026-10-04
 
 ### Windows Security no longer blocks Flux
