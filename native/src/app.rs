@@ -15,6 +15,7 @@ mod preview;
 mod tools;
 mod tour;
 mod plugins_ui;
+mod imageview;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -43,6 +44,7 @@ struct Tab {
     seen: Instant,  // naposledy na obrazovke
     unloaded: bool, // dlho nevidený neupravený súbor: text je preč z pamäte, načíta sa pri otvorení
     stale: bool,    // súbor sa zmenil na disku, kým karta nebola aktívna → načítať pri otvorení
+    image: bool,    // obrázok: karta ukazuje náhľad (imageview.rs), text je prázdny
 }
 
 impl Tab {
@@ -76,6 +78,17 @@ pub struct Sug {
     end: usize,
     path: String,
     pos: egui::Pos2,
+}
+
+// výber farby pri štvorčeku v kóde: kde je farba (znaky) a v akom zápise
+pub struct ColorPick {
+    path: String,
+    start: usize,
+    len: usize,
+    color: Color32,
+    fmt: crate::colors::Fmt,
+    anchor: Rect,
+    opened: f64,
 }
 
 const SUG_ROWS: usize = 10; // naraz viditeľné návrhy (ďalšie sa posúvajú)
@@ -234,8 +247,11 @@ pub struct App {
     rounded: bool,      // pozadie okna je zaoblený obdĺžnik (priehľadné okno)
     snip: Option<Snip>,
     sug_again: bool, // po vložení atribútu (class="") hneď ponúknuť jeho hodnoty
-    sug_rect: Option<Rect>, // kde je okno návrhov (klik doň vezme editoru fokus skôr, než sa spracuje)
+    sug_rect: Option<Rect>,
+    link_hover: Option<(String, Instant)>, // cesta/odkaz pod myšou a odkedy (náhľad po 350 ms)
+    color_pick: Option<ColorPick>,         // otvorený výber farby pri štvorčeku v kóde // kde je okno návrhov (klik doň vezme editoru fokus skôr, než sa spracuje)
     plug: plugins_ui::PlugState,
+    imgs: imageview::Images, // obrázky (karty a náhľady ciest)
     plug_run: Vec<String>,          // flux.commands.run z pluginu (vykoná sa v ďalšej snímke)
     plug_cursor: Option<usize>,     // kurzor po vložení textu pluginom
     sel_chars: Option<(usize, usize)>, // výber v editore (znaky) pre pluginy
@@ -373,7 +389,10 @@ impl App {
             snip: None,
             sug_again: false,
             sug_rect: None,
+            link_hover: None,
+            color_pick: None,
             plug: Default::default(),
+            imgs: Default::default(),
             plug_run: vec![],
             plug_cursor: None,
             sel_chars: None,
@@ -1011,6 +1030,11 @@ impl App {
     fn reload_tab(&mut self, i: usize) {
         let Some(t) = self.tabs.get_mut(i) else { return };
         t.seen = Instant::now();
+        if t.image {
+            t.unloaded = false;
+            t.stale = false;
+            return;
+        }
         if !(t.unloaded || t.stale) || t.dirty() {
             return;
         }
@@ -1077,10 +1101,16 @@ impl App {
             self.activate(i);
             return;
         }
+        // obrázok sa otvorí ako náhľad
+        if imageview::is_image(path) {
+            self.tabs.push(Tab { path: path.to_string(), saved: String::new(), text: String::new(), seen: Instant::now(), unloaded: false, stale: false, image: true });
+            self.activate(self.tabs.len() - 1);
+            return;
+        }
         match fsops::read(path, true) {
             Ok(v) => {
                 let text = v.as_str().unwrap_or("").replace("\r\n", "\n");
-                self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text, seen: Instant::now(), unloaded: false, stale: false });
+                self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text, seen: Instant::now(), unloaded: false, stale: false, image: false });
                 self.activate(self.tabs.len() - 1);
                 self.plug_emit("open");
             }
@@ -1148,7 +1178,10 @@ impl App {
             if self.tabs[i].dirty() {
                 self.save(i);
             }
-            self.tabs.remove(i);
+            let gone = self.tabs.remove(i);
+            if gone.image {
+                self.imgs.forget(&gone.path);
+            }
             if self.active > i || self.active >= self.tabs.len() {
                 self.active = self.active.saturating_sub(1);
             }
@@ -1179,6 +1212,9 @@ impl App {
     // prečo sa súbor nedá spustiť (žiadny vstupný bod) – napr. mod pre Windhawk (.wh.cpp) alebo hlavičkový súbor
     fn run_block(&self) -> Option<String> {
         let tab = self.tabs.get(self.active)?;
+        if tab.image {
+            return Some(t("Images can't be run – open the HTML page that uses it."));
+        }
         let has = |re: &str| regex_lite_find(&tab.text, re);
         let ext = tab.ext();
         let no_main = || Some(t("Nothing to run – this file has no main()."));
@@ -2240,6 +2276,11 @@ impl App {
         let plug_snips: Vec<crate::complete::Item> = self.plug.snips.iter().filter(|s| s.1 == plang || s.1 == "*").map(|s| s.2.clone()).collect();
         let plug_marks: Vec<crate::lint::Diag> = self.plug.marks.values().filter(|m| m.0 == self.tabs[self.active].path).flat_map(|m| m.1.iter().cloned()).collect();
         let code = &self.code;
+        // náhľady ciest/odkazov a štvorčeky farieb: požiadavky z editora sa vybavia po vykreslení
+        let file_dir = Path::new(&self.tabs[self.active].path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+        let root = self.workspace();
+        let mut link_req: Option<(String, egui::Pos2, bool)> = None;
+        let mut color_req: Option<(usize, usize, Color32, crate::colors::Fmt, Rect)> = None; // znak, dĺžka, farba, zápis, štvorček
         let sug_slot = &mut self.sug;
         let sug_words = &mut self.sug_words;
         let tab = &mut self.tabs[self.active];
@@ -2454,6 +2495,56 @@ impl App {
                         }
                     }
                     ui.painter().set(text_shapes, egui::Shape::Vec(shapes));
+                    // štvorčeky pri farbách (#hex, rgb(), hsl(), pomenované v CSS) – klik otvorí výber farby
+                    let vclip = ui.clip_rect();
+                    for &(i, at) in &vis_pos {
+                        if i >= hlc.lines() {
+                            continue;
+                        }
+                        let text = hlc.line_text(i).trim_end_matches('\n');
+                        if text.len() > 3000 || !text.contains(['#', '(', ':']) {
+                            continue;
+                        }
+                        for f in crate::colors::find(text, &lang) {
+                            let x = at.x + ui.fonts_mut(|fo| fo.layout_no_wrap(text[..f.start].to_string(), font.clone(), Color32::WHITE).size().x);
+                            let sq = Rect::from_center_size(pos2(x - 7.0, at.y + lh / 2.0), vec2(10.0, 10.0));
+                            if !vclip.intersects(sq) {
+                                continue;
+                            }
+                            // priehľadná farba na šachovnici
+                            ui.painter().rect_filled(sq, CornerRadius::same(2), Color32::WHITE);
+                            ui.painter().rect_filled(Rect::from_min_size(sq.min, sq.size() / 2.0), CornerRadius::ZERO, Color32::from_gray(200));
+                            ui.painter().rect_filled(Rect::from_min_size(sq.center(), sq.size() / 2.0), CornerRadius::ZERO, Color32::from_gray(200));
+                            ui.painter().rect_filled(sq, CornerRadius::same(2), f.color);
+                            ui.painter().rect_stroke(sq, CornerRadius::same(2), Stroke::new(1.0, p.line_strong), StrokeKind::Outside);
+                            let r = ui.interact(sq.expand(2.0), ui.id().with(("swatch", i, f.start)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+                            if r.clicked() {
+                                let line_start: usize = tab.text.split('\n').take(i).map(|l| l.chars().count() + 1).sum();
+                                let st = line_start + text[..f.start].chars().count();
+                                color_req = Some((st, text[f.start..f.start + f.len].chars().count(), f.color, f.fmt, sq));
+                            }
+                        }
+                    }
+                    // cesta / odkaz pod myšou: náhľad po chvíli, Ctrl+klik otvorí
+                    if let Some(pos) = te.response.hover_pos().filter(|_| sug_slot.is_none() && tab.text.len() < 2_000_000) {
+                        let cc = usize::from(te.galley.cursor_from_pos(pos - te.galley_pos).index);
+                        if let Some((a, b, raw)) = editing::token_at(&tab.text, cc) {
+                            if let Some(target) = editing::link_target(&raw, &file_dir, root.as_deref()) {
+                                let ctrl = ui.input(|i| i.modifiers.command);
+                                if ctrl {
+                                    let ra = te.galley.pos_from_cursor(egui::text::CCursor::new(a)).translate(te.galley_pos.to_vec2());
+                                    let rb = te.galley.pos_from_cursor(egui::text::CCursor::new(b)).translate(te.galley_pos.to_vec2());
+                                    if (ra.top() - rb.top()).abs() < 1.0 {
+                                        ui.painter().hline(ra.left()..=rb.left(), ra.bottom() - 2.0, Stroke::new(1.3, p.accent));
+                                    }
+                                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                }
+                                // Ctrl podľa samotného kliknutia (kláves môže byť pustený v tej istej snímke)
+                                let ctrl_click = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::PointerButton { button: egui::PointerButton::Primary, pressed: true, modifiers, .. } if modifiers.command)));
+                                link_req = Some((target, pos, ctrl_click));
+                            }
+                        }
+                    }
                 }
                 edited = te.response.changed() || new_sel.is_some();
                 // automatické zatváranie zátvoriek a úvodzoviek
@@ -2553,6 +2644,34 @@ impl App {
             ui.add_space(PAD);
         });
         self.smooth.end(sk, &out);
+        // Ctrl+klik na cestu / odkaz, alebo náhľad po 350 ms
+        match link_req {
+            Some((target, _, true)) => {
+                self.link_hover = None;
+                if target.starts_with("http://") || target.starts_with("https://") || Path::new(&target).is_dir() {
+                    flux_core::settings::open_external(&target);
+                } else {
+                    self.open_file(&target);
+                }
+                return;
+            }
+            Some((target, pos, false)) => {
+                if self.link_hover.as_ref().map(|h| &h.0) != Some(&target) {
+                    self.link_hover = Some((target.clone(), Instant::now()));
+                }
+                let waited = self.link_hover.as_ref().map(|h| h.1.elapsed()).unwrap_or_default();
+                if waited >= Duration::from_millis(350) {
+                    self.link_tip(&ctx, pos, &target);
+                } else {
+                    ctx.request_repaint_after(Duration::from_millis(350) - waited);
+                }
+            }
+            None => self.link_hover = None,
+        }
+        if let Some((start, len, color, fmt, sq)) = color_req {
+            self.color_pick = Some(ColorPick { path: self.tabs[self.active].path.clone(), start, len, color, fmt, anchor: sq, opened: ctx.input(|i| i.time) });
+        }
+        self.color_pick_ui(&ctx);
         if edited {
             self.last_edit = Some(Instant::now());
         }
@@ -3110,7 +3229,8 @@ impl App {
             rx = cr.left() - 16.0;
         }
         if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
-            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &crate::i18n::t(lang_name(&t.ext())), small.clone(), p.text2, 120.0);
+            let name = if t.image { crate::i18n::t("Image") } else { crate::i18n::t(lang_name(&t.ext())) };
+            let r = widgets::text(ui, pos2(rx, cy), Align2::RIGHT_CENTER, &name, small.clone(), p.text2, 120.0);
             rx = r.left() - 18.0;
         }
         if self.core.setting("autosave").as_bool() != Some(false) {
@@ -3144,7 +3264,7 @@ impl App {
                 rx = cr.left() - 14.0;
             }
         }
-        if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home) {
+        if let Some(t) = self.tabs.get(self.active).filter(|_| !self.home && !self.tabs[self.active].image) {
             let lang = t.ext();
             let hlc = self.hls.entry(t.path.clone()).or_default();
             self.code.sync(hlc, &t.text, if lang.is_empty() { "txt" } else { &lang });
@@ -3719,7 +3839,9 @@ impl eframe::App for App {
                         self.nav_dir = 0.0;
                     }
                 }
-                if show_editor {
+                if show_editor && self.tabs[self.active].image {
+                    self.image_view(&mut card_ui, area);
+                } else if show_editor {
                     self.editor(&mut card_ui, area);
                 } else {
                     self.project_page(&mut card_ui, area);

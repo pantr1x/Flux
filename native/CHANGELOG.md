@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.28 – 2026-10-04
+
+### Images, links and colors
+- **Images open like files:** click a picture in the file tree and it opens in its own tab – zoom with the mouse wheel, drag to move, double-click (or *Fit* / *100 %*) to switch, and the size is shown at the bottom.
+- **Hover a path or link in your code** (`src="logo.png"`, `href="style.css"`, `url(img/bg.png)`, `https://…`) and a preview pops up: the picture, the first lines of the file, the folder contents or the address. **Ctrl+click** opens it.
+- **Colors in code get a little square** (`#3b82f6`, `rgb(…)`, `hsl(…)`, `tomato` in CSS). Click it to pick another color – the code changes right away, in the same notation.
+
 ## 0.9.27 – 2026-10-04
 
 ### A new Plugins page

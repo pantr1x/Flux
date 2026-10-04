@@ -279,6 +279,158 @@ impl App {
     }
 }
 
+impl App {
+    // okno výberu farby pri štvorčeku v kóde; každá zmena sa hneď zapíše do textu v rovnakom zápise
+    pub(super) fn color_pick_ui(&mut self, ctx: &egui::Context) {
+        let p = self.pal;
+        let Some(cp) = self.color_pick.as_ref() else { return };
+        if self.tabs.get(self.active).map(|t| t.path.as_str()) != Some(cp.path.as_str()) {
+            self.color_pick = None;
+            return;
+        }
+        let (anchor, opened, mut color, fmt) = (cp.anchor, cp.opened, cp.color, cp.fmt);
+        let h = 330.0;
+        let screen = ctx.content_rect();
+        let pos = if anchor.top() - h - 8.0 > screen.top() { pos2(anchor.left() - 8.0, anchor.top() - h - 8.0) } else { pos2(anchor.left() - 8.0, anchor.bottom() + 8.0) };
+        let mut changed = false;
+        let mut close = false;
+        let hex_id = egui::Id::new("color-pick-hex");
+        let area = egui::Area::new(egui::Id::new("color-pick")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
+            egui::Frame::NONE.fill(p.solid).stroke(Stroke::new(1.0, p.line_strong)).corner_radius(CornerRadius::same(12)).inner_margin(egui::Margin::same(12)).show(ui, |ui| {
+                ui.set_width(232.0);
+                // väčšie pole s farbami ako v prehliadači
+                ui.spacing_mut().slider_width = 232.0;
+                ui.label(egui::RichText::new(t("Pick a color")).font(theme::bold(13.0)).color(p.text));
+                ui.add_space(6.0);
+                changed |= egui::widgets::color_picker::color_picker_color32(ui, &mut color, egui::widgets::color_picker::Alpha::OnlyBlend);
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    // hex / pôvodný zápis na úpravu rukou
+                    let mut s = ui.data_mut(|d| d.get_temp::<String>(hex_id)).unwrap_or_else(|| crate::colors::format(color, fmt));
+                    let r = ui.add(egui::TextEdit::singleline(&mut s).font(theme::mono(12.5)).desired_width(150.0));
+                    if r.changed() {
+                        if let Some(c) = crate::colors::parse(&s) {
+                            color = c;
+                            changed = true;
+                        }
+                        ui.data_mut(|d| d.insert_temp(hex_id, s));
+                    } else if !r.has_focus() {
+                        ui.data_mut(|d| d.remove::<String>(hex_id));
+                    }
+                    if widgets::button(ui, None, &t("Done"), p.accent, p.accent_fg, 28.0, &p).clicked() {
+                        close = true;
+                    }
+                });
+            });
+        });
+        let now = ctx.input(|i| i.time);
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) || (now - opened > 0.25 && area.response.clicked_elsewhere()) {
+            close = true;
+        }
+        if changed {
+            let new = crate::colors::format(color, fmt);
+            if let Some(cp) = self.color_pick.as_mut() {
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.path == cp.path) {
+                    let b = |c: usize| tab.text.char_indices().nth(c).map(|(b, _)| b).unwrap_or(tab.text.len());
+                    let (a, e) = (b(cp.start), b(cp.start + cp.len));
+                    tab.text.replace_range(a..e, &new);
+                    cp.len = new.chars().count();
+                    cp.color = color;
+                    self.last_edit = Some(std::time::Instant::now());
+                }
+            }
+        }
+        if close {
+            self.color_pick = None;
+            ctx.data_mut(|d| d.remove::<String>(hex_id));
+        }
+    }
+}
+
+// reťazec pod kurzorom myši: obsah úvodzoviek, url(…) alebo holá adresa http(s)://; (začiatok, koniec v znakoch, text)
+pub fn token_at(text: &str, idx: usize) -> Option<(usize, usize, String)> {
+    let cs: Vec<char> = text.chars().collect();
+    if idx > cs.len() {
+        return None;
+    }
+    let ls = cs[..idx].iter().rposition(|c| *c == '\n').map(|p| p + 1).unwrap_or(0);
+    let le = cs[idx..].iter().position(|c| *c == '\n').map(|p| p + idx).unwrap_or(cs.len());
+    // v úvodzovkách
+    let mut open: Option<(char, usize)> = None;
+    for (k, &c) in cs.iter().enumerate().take(le).skip(ls) {
+        match open {
+            Some((q, s)) if c == q => {
+                if idx > s && idx <= k {
+                    let t: String = cs[s + 1..k].iter().collect();
+                    return (!t.trim().is_empty()).then_some((s + 1, k, t));
+                }
+                open = None;
+            }
+            None if c == '"' || c == '\'' || c == '`' => open = Some((c, k)),
+            _ => {}
+        }
+    }
+    // url(…) bez úvodzoviek
+    let line: String = cs[ls..le].iter().collect();
+    let col = idx - ls;
+    let mut from = 0;
+    while let Some(p) = line[from..].find("url(") {
+        let s = from + p + 4;
+        let sc = line[..s].chars().count();
+        if let Some(e) = line[s..].find(')') {
+            let ec = line[..s + e].chars().count();
+            if col >= sc && col <= ec {
+                return Some((ls + sc, ls + ec, line[s..s + e].trim().to_string()));
+            }
+            from = s + e;
+        } else {
+            break;
+        }
+    }
+    // holá adresa
+    let is_url_char = |c: char| !c.is_whitespace() && !matches!(c, '"' | '\'' | '<' | '>' | '(' | ')' | '`');
+    let mut a = idx;
+    while a > ls && is_url_char(cs[a - 1]) {
+        a -= 1;
+    }
+    let mut b = idx;
+    while b < le && is_url_char(cs[b]) {
+        b += 1;
+    }
+    let w: String = cs[a..b].iter().collect();
+    // „href=https://…“: adresa začína až pri http
+    let off = w.find("https://").or_else(|| w.find("http://"))?;
+    let a = a + w[..off].chars().count();
+    (idx >= a).then(|| (a, b, w[off..].trim_end_matches(['.', ',', ';']).to_string()))
+}
+
+// kam vedie text z kódu: adresa, alebo existujúci súbor/priečinok (k súboru, k projektu, „/…“ od koreňa projektu)
+pub fn link_target(raw: &str, file_dir: &str, root: Option<&str>) -> Option<String> {
+    let raw = raw.trim();
+    if raw.starts_with("http://") || raw.starts_with("https://") {
+        return (!raw.contains(char::is_whitespace)).then(|| raw.to_string());
+    }
+    if raw.is_empty() || raw.len() > 300 || raw.contains('\n') || !raw.chars().any(|c| c.is_alphanumeric()) || raw.contains("://") || raw.starts_with('#') {
+        return None;
+    }
+    let clean = raw.split(['?', '#']).next().unwrap_or(raw);
+    let mut cands: Vec<std::path::PathBuf> = vec![];
+    let p = std::path::Path::new(clean);
+    if p.is_absolute() && !clean.starts_with('/') || cfg!(not(windows)) && p.is_absolute() {
+        cands.push(p.to_path_buf());
+    }
+    if let Some(r) = root {
+        if let Some(rest) = clean.strip_prefix('/') {
+            cands.push(std::path::Path::new(r).join(rest));
+        }
+    }
+    cands.push(std::path::Path::new(file_dir).join(clean));
+    if let Some(r) = root {
+        cands.push(std::path::Path::new(r).join(clean.trim_start_matches('/')));
+    }
+    cands.into_iter().find(|c| c.exists()).map(|c| c.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tag_tests {
     #[test]
@@ -290,5 +442,25 @@ mod tag_tests {
         assert!(!super::close_tag(&mut br, 4));
         let mut end = String::from("</p>");
         assert!(!super::close_tag(&mut end, 4));
+    }
+
+    #[test]
+    fn link_token_and_target() {
+        let t = "<img src=\"logo.png\" alt=\"x\">\n<a href=https://flux.dev/a>go</a> a { background: url(img/b.png) }";
+        let i = t.find("logo").unwrap() + 2;
+        assert_eq!(super::token_at(t, i).map(|x| x.2), Some("logo.png".into()));
+        let j = t.chars().count() - 6;
+        assert_eq!(super::token_at(t, j).map(|x| x.2), Some("img/b.png".into()));
+        let k = t.find("flux.dev").unwrap();
+        assert_eq!(super::token_at(t, k).map(|x| x.2), Some("https://flux.dev/a".into()));
+        let d = std::env::temp_dir().join("flux-link-test");
+        let _ = std::fs::create_dir_all(d.join("img"));
+        std::fs::write(d.join("img/b.png"), b"x").unwrap();
+        let ds = d.to_string_lossy().to_string();
+        assert!(super::link_target("img/b.png", &ds, None).is_some());
+        assert!(super::link_target("/img/b.png?v=2", "/nowhere", Some(&ds)).is_some());
+        assert!(super::link_target("missing.png", &ds, None).is_none());
+        assert!(super::link_target("#top", &ds, None).is_none());
+        assert_eq!(super::link_target("https://a.b/c", &ds, None).as_deref(), Some("https://a.b/c"));
     }
 }

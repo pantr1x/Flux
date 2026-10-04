@@ -9,6 +9,7 @@ mod plugins;
 mod glass;
 mod lint;
 mod complete;
+mod colors;
 mod perf;
 
 // počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
