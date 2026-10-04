@@ -167,6 +167,30 @@ pub fn auto_close(text: &mut String, cursor: usize, typed: char) -> bool {
     true
 }
 
+// HTML: po napísaní „>“ za <div …> doplní </div> za kurzor (nie pri </x>, <x/>, <!…> a prázdnych značkách ako <br>)
+pub fn close_tag(text: &mut String, cursor: usize) -> bool {
+    let bi = byte_at(text, cursor);
+    let head = &text[..bi];
+    if !head.ends_with('>') {
+        return false;
+    }
+    let Some(lt) = head.rfind('<') else { return false };
+    let inner = &head[lt + 1..head.len() - 1];
+    if inner.starts_with('/') || inner.starts_with('!') || inner.starts_with('?') || inner.ends_with('/') || inner.contains('>') {
+        return false;
+    }
+    let name: String = inner.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+    if name.is_empty() || crate::complete::VOID.contains(&name.to_lowercase().as_str()) {
+        return false;
+    }
+    let close = format!("</{name}>");
+    if text[bi..].starts_with(&close) {
+        return false;
+    }
+    text.insert_str(bi, &close);
+    true
+}
+
 // nálezy (bez ohľadu na veľkosť písmen) ako rozsahy znakov
 pub fn matches(text: &str, q: &str) -> Vec<(usize, usize)> {
     if q.is_empty() {
@@ -252,5 +276,19 @@ impl App {
             }
         }
         act
+    }
+}
+
+#[cfg(test)]
+mod tag_tests {
+    #[test]
+    fn complete_close_tag() {
+        let mut t = String::from("<div class=\"a\">");
+        assert!(super::close_tag(&mut t, 15));
+        assert_eq!(t, "<div class=\"a\"></div>");
+        let mut br = String::from("<br>");
+        assert!(!super::close_tag(&mut br, 4));
+        let mut end = String::from("</p>");
+        assert!(!super::close_tag(&mut end, 4));
     }
 }

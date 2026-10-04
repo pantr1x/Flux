@@ -2,6 +2,16 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.22 – 2026-10-04
+
+### Suggestions like in VS Code
+- Suggestions now insert whole pieces of code, not just a word: `<ti` → `<title></title>` with the cursor inside, `for` → `for item in items:` and a new indented line, `def`, `if`, `while`, `class`, `try`… in Python, `log` → `console.log()`, `fn`, `for`, `qs` in JavaScript, `main`, `cout`, `sout`, `cw`, `println` and more in C, C++, Java, C#, Rust and Go.
+- **Tab** jumps to the next spot to fill in (for example from `item` to `items` and then into the block).
+- Functions get their brackets: `print` → `print()`, and your own functions from the file too.
+- HTML: tags right after `<`, attributes inside a tag (`class=""`), `!` for a whole HTML page, and typing `>` closes the tag for you (`<div>` → `<div></div>`).
+- CSS: properties come with `: ;` and values are suggested after the colon (`display: flex`).
+- Every suggestion has an icon like in VS Code (function, keyword, snippet, tag, property, word) and a preview of what it inserts.
+
 ## 0.9.21 – 2026-10-04
 
 ### Round corners

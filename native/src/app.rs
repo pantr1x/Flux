@@ -76,6 +76,68 @@ pub struct Sug {
     pos: egui::Pos2,
 }
 
+// ikonky návrhov (kreslené, 14 px) vo farbách VS Code
+fn kind_icon(pt: &egui::Painter, c: egui::Pos2, kind: crate::complete::Kind, func: bool) {
+    use crate::complete::Kind;
+    let st = |col: Color32| Stroke::new(1.3, col);
+    let purple = Color32::from_rgb(0xb1, 0x80, 0xd7);
+    let blue = Color32::from_rgb(0x75, 0xbe, 0xff);
+    let grey = Color32::from_rgb(0xc5, 0xc5, 0xc5);
+    let orange = Color32::from_rgb(0xee, 0x9d, 0x28);
+    if func || kind == Kind::Builtin {
+        // kocka (metóda / funkcia)
+        let (t, l, r, b, m) = (c + vec2(0.0, -6.0), c + vec2(-5.5, -3.0), c + vec2(5.5, -3.0), c + vec2(0.0, 6.0), c + vec2(0.0, 0.0));
+        let (lb, rb) = (c + vec2(-5.5, 3.0), c + vec2(5.5, 3.0));
+        pt.add(egui::Shape::convex_polygon(vec![t, r, m, l], purple.gamma_multiply(0.35), st(purple)));
+        pt.line_segment([l, lb], st(purple));
+        pt.line_segment([lb, b], st(purple));
+        pt.line_segment([b, rb], st(purple));
+        pt.line_segment([rb, r], st(purple));
+        pt.line_segment([m, b], st(purple));
+        return;
+    }
+    match kind {
+        Kind::Keyword => {
+            // riadky textu
+            for (i, w) in [9.0, 6.0, 9.0].iter().enumerate() {
+                let y = c.y - 4.0 + i as f32 * 4.0;
+                pt.line_segment([pos2(c.x - 5.0, y), pos2(c.x - 5.0 + w, y)], st(grey));
+            }
+        }
+        Kind::Snippet => {
+            // {}
+            pt.text(c, Align2::CENTER_CENTER, "{}", theme::bold(11.0), orange);
+        }
+        Kind::Tag => {
+            // </>
+            pt.line_segment([c + vec2(-2.5, -4.0), c + vec2(-6.0, 0.0)], st(blue));
+            pt.line_segment([c + vec2(-6.0, 0.0), c + vec2(-2.5, 4.0)], st(blue));
+            pt.line_segment([c + vec2(2.5, -4.0), c + vec2(6.0, 0.0)], st(blue));
+            pt.line_segment([c + vec2(6.0, 0.0), c + vec2(2.5, 4.0)], st(blue));
+            pt.line_segment([c + vec2(1.2, -5.0), c + vec2(-1.2, 5.0)], st(blue));
+        }
+        Kind::Property => {
+            // kľúč (vlastnosť)
+            pt.circle_stroke(c + vec2(-2.5, -2.5), 3.0, st(blue));
+            pt.line_segment([c + vec2(-0.3, -0.3), c + vec2(5.5, 5.5)], st(blue));
+            pt.line_segment([c + vec2(3.0, 3.0), c + vec2(1.5, 4.5)], st(blue));
+        }
+        _ => {
+            // premenná / slovo: [x]
+            pt.rect_stroke(Rect::from_center_size(c, vec2(11.0, 9.0)), CornerRadius::same(2), st(blue), StrokeKind::Inside);
+            pt.line_segment([c + vec2(-2.0, 0.0), c + vec2(2.0, 0.0)], st(blue));
+        }
+    }
+}
+
+// vložený úryvok: miesta, kam skáče Tab ($1, $2, … $0), v znakoch textu
+pub struct Snip {
+    path: String,
+    stops: Vec<(usize, usize)>,
+    at: usize,
+    len: usize, // počet znakov textu pri poslednom skoku (posun ďalších miest o to, čo sa medzitým napísalo)
+}
+
 pub struct App {
     core: Arc<Core>,
     emit: Emit,
@@ -136,7 +198,7 @@ pub struct App {
     lint_asked: HashMap<String, u64>,
     lint_jump: Option<usize>, // klik na „N problémov“ → riadok
     sug: Option<Sug>,         // otvorené návrhy pri písaní
-    sug_words: Option<(String, u64, HashMap<String, usize>)>, // slová súboru pre návrhy (cesta, verzia textu) // „Čo je nové“ po aktualizácii: indexy verzií v release_notes()             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
+    sug_words: Option<(String, u64, HashMap<String, usize>, std::collections::HashSet<String>)>, // slová súboru pre návrhy (cesta, verzia textu) // „Čo je nové“ po aktualizácii: indexy verzií v release_notes()             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
     unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
@@ -166,6 +228,8 @@ pub struct App {
     start_opened: f64,
     focus_window: bool, // ďalšie spustenie Fluxu → toto okno dopredu
     rounded: bool,      // pozadie okna je zaoblený obdĺžnik (priehľadné okno)
+    snip: Option<Snip>,
+    snip_sel: Option<(usize, usize)>, // výber po vložení úryvku (predvolený text miesta)
     preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
     tour_rects: HashMap<&'static str, Rect>, // kde sú časti okna (pre prehliadku)
@@ -295,6 +359,8 @@ impl App {
             start_opened: 0.0,
             focus_window: false,
             rounded: false,
+            snip: None,
+            snip_sel: None,
             preview: None,
             tour: None,
             tour_rects: HashMap::new(),
@@ -484,9 +550,45 @@ impl App {
         let tab = self.tabs.iter_mut().find(|t| t.path == sg.path)?;
         let b = |c: usize| tab.text.char_indices().nth(c).map(|(b, _)| b).unwrap_or(tab.text.len());
         let (a, e) = (b(sg.start), b(sg.end));
-        tab.text.replace_range(a..e, &item.label);
+        let Some(body) = item.insert.clone() else {
+            tab.text.replace_range(a..e, &item.label);
+            self.last_edit = Some(Instant::now());
+            self.snip = None;
+            return Some(sg.start + item.label.chars().count());
+        };
+        // úryvok: odsadenie riadku pre ďalšie riadky, kurzor na prvé miesto ($1), Tab skáče ďalej
+        let line_start = tab.text[..a].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let indent: String = tab.text[line_start..a].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        let (text, stops) = crate::complete::expand(&body, &indent, "    ");
+        tab.text.replace_range(a..e, &text);
         self.last_edit = Some(Instant::now());
-        Some(sg.start + item.label.chars().count())
+        let abs: Vec<(usize, usize)> = stops.iter().map(|(x, y)| (sg.start + x, sg.start + y)).collect();
+        let first = abs[0];
+        self.snip = (abs.len() > 1).then(|| Snip { path: sg.path.clone(), stops: abs, at: 0, len: tab.text.chars().count() });
+        self.snip_sel = Some(first);
+        Some(first.1)
+    }
+
+    // Tab v úryvku: ďalšie miesto ($2 … $0); posun o to, čo sa medzitým napísalo
+    fn snip_next(&mut self) -> Option<(usize, usize)> {
+        let sn = self.snip.as_mut()?;
+        let tab = self.tabs.iter().find(|t| t.path == sn.path)?;
+        let now = tab.text.chars().count();
+        let delta = now as i64 - sn.len as i64;
+        let cur_end = sn.stops[sn.at].1;
+        for st in sn.stops.iter_mut().skip(sn.at + 1) {
+            if st.0 >= cur_end {
+                st.0 = (st.0 as i64 + delta).max(0) as usize;
+                st.1 = (st.1 as i64 + delta).max(0) as usize;
+            }
+        }
+        sn.at += 1;
+        sn.len = now;
+        let r = sn.stops[sn.at];
+        if sn.at + 1 >= sn.stops.len() {
+            self.snip = None;
+        }
+        Some(r)
     }
 
     // okno s návrhmi pod písaným slovom
@@ -499,9 +601,13 @@ impl App {
         let (pos, items, sel) = (sg.pos, sg.items.clone(), sg.sel);
         let mut clicked = None;
         egui::Area::new(egui::Id::new("suggest")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
-            let w = items.iter().map(|it| widgets::text_w(ui, &it.label, theme::mono(13.0))).fold(140.0f32, f32::max) + 52.0;
+            let w = items
+                .iter()
+                .map(|it| widgets::text_w(ui, &it.label, theme::mono(13.0)) + it.detail.as_ref().map(|d| widgets::text_w(ui, d, theme::mono(12.0)) + 14.0).unwrap_or(0.0))
+                .fold(160.0f32, f32::max)
+                + 52.0;
             let h = items.len() as f32 * 24.0 + 8.0;
-            let (r, _) = ui.allocate_exact_size(vec2(w.min(420.0), h), Sense::hover());
+            let (r, _) = ui.allocate_exact_size(vec2(w.min(520.0), h), Sense::hover());
             ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
             ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
             ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
@@ -511,13 +617,15 @@ impl App {
                 if k == sel || resp.hovered() {
                     ui.painter().rect_filled(row, CornerRadius::same(6), if k == sel { p.active } else { p.hover });
                 }
-                let (badge, c) = match it.kind {
-                    crate::complete::Kind::Keyword => ("k", Color32::from_rgb(0xc5, 0x86, 0xc0)),
-                    crate::complete::Kind::Builtin => ("ƒ", Color32::from_rgb(0xdc, 0xdc, 0xaa)),
-                    crate::complete::Kind::Word => ("w", p.text3),
-                };
-                ui.painter().text(pos2(row.left() + 13.0, row.center().y), Align2::CENTER_CENTER, badge, theme::bold(11.0), c);
+                // ikonka druhu ako vo VS Code (funkcia = kocka, značka = </>, úryvok = {}, …)
+                let func = it.insert.as_deref().is_some_and(|b| b.ends_with("($0)"));
+                kind_icon(ui.painter(), pos2(row.left() + 13.0, row.center().y), it.kind, func);
                 ui.painter().text(pos2(row.left() + 28.0, row.center().y), Align2::LEFT_CENTER, &it.label, theme::mono(13.0), p.text);
+                // náhľad toho, čo sa vloží (ako VS Code)
+                if let Some(d) = &it.detail {
+                    let lw = widgets::text_w(ui, &it.label, theme::mono(13.0));
+                    widgets::text(ui, pos2(row.left() + 40.0 + lw, row.center().y), Align2::LEFT_CENTER, d, theme::mono(12.0), p.text3, (row.width() - lw - 48.0).max(20.0));
+                }
                 if resp.clicked() {
                     clicked = Some(k);
                 }
@@ -525,8 +633,9 @@ impl App {
         });
         if let Some(k) = clicked {
             if let Some(c) = self.accept_sug(k) {
+                let (a, b) = self.snip_sel.take().unwrap_or((c, c));
                 let mut st = egui::TextEdit::load_state(ctx, ed_id).unwrap_or_default();
-                st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(c))));
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(a), egui::text::CCursor::new(b))));
                 st.store(ctx, ed_id);
                 ctx.memory_mut(|m| m.request_focus(ed_id));
             }
@@ -1950,7 +2059,7 @@ impl App {
                 } else if acc {
                     let i = self.sug.as_ref().map(|s| s.sel).unwrap_or(0);
                     if let Some(c) = self.accept_sug(i) {
-                        new_sel = Some((c, c));
+                        new_sel = Some(self.snip_sel.take().unwrap_or((c, c)));
                     }
                 }
             }
@@ -1970,6 +2079,17 @@ impl App {
                     new_sel = Some((pos + 1, pos + 1));
                 }
             }
+            // úryvok: Tab skočí na ďalšie miesto ($2 … $0); Esc ho ukončí
+            if self.snip.as_ref().is_some_and(|sn| sn.path == self.tabs[self.active].path) && self.sug.is_none() {
+                let (tab_n, esc) = ctx.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, egui::Key::Tab), i.key_pressed(egui::Key::Escape)));
+                if esc {
+                    self.snip = None;
+                } else if tab_n {
+                    if let Some(r) = self.snip_next() {
+                        new_sel = Some(r);
+                    }
+                }
+            }
             let (tab_k, back_k, comment_k) = ctx.input_mut(|i| {
                 (i.consume_key(egui::Modifiers::NONE, egui::Key::Tab), i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab), i.consume_key(egui::Modifiers::COMMAND, egui::Key::Slash))
             });
@@ -1978,7 +2098,7 @@ impl App {
                     if let egui::Event::Text(t) = e {
                         let mut c = t.chars();
                         match (c.next(), c.next()) {
-                            (Some(ch), None) if "([{\"'".contains(ch) => Some(ch),
+                            (Some(ch), None) if "([{\"'>".contains(ch) => Some(ch),
                             _ => None,
                         }
                     } else {
@@ -2086,15 +2206,22 @@ impl App {
                         let changed = te.response.changed();
                         if changed || force_sug {
                             let before: Vec<char> = tab.text.chars().take(c).collect();
-                            let plen = before.iter().rev().take_while(|ch| crate::complete::ident_char(**ch, &lang)).count();
+                            let mut plen = before.iter().rev().take_while(|ch| crate::complete::ident_char(**ch, &lang)).count();
                             let typed_ident = before.last().is_some_and(|ch| crate::complete::ident_char(*ch, &lang));
-                            if (typed_ident && plen >= 2) || force_sug {
+                            let cx = crate::complete::context(&lang, &before);
+                            // HTML: „!“ na začiatku riadka = celá stránka (ako Emmet)
+                            let bang = matches!(lang.as_str(), "html" | "htm") && before.last() == Some(&'!') && before.len() >= 1 && before[..before.len() - 1].iter().rev().take_while(|ch| **ch != '\n').all(|ch| ch.is_whitespace());
+                            if bang {
+                                plen = 1;
+                            }
+                            // značka HTML hneď od prvého písmena za „<“, inak od dvoch písmen
+                            if (typed_ident && (plen >= 2 || (cx.after_lt && plen >= 1))) || bang || force_sug {
                                 let prefix: String = before[c - plen..].iter().collect();
                                 if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), hlc.gen)) {
-                                    *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang)));
+                                    *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang)));
                                 }
-                                let words = &sug_words.as_ref().unwrap().2;
-                                let items = crate::complete::suggest(&lang, &prefix, words, 8);
+                                let w = sug_words.as_ref().unwrap();
+                                let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &[], 8);
                                 *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
                             } else {
                                 *sug_slot = None;
@@ -2219,7 +2346,8 @@ impl App {
                 if te.response.changed() {
                     if let (Some(ch), Some(r)) = (typed, te.cursor_range) {
                         let c = usize::from(r.primary.index);
-                        if editing::auto_close(&mut tab.text, c, ch) {
+                        let html = matches!(lang.as_str(), "html" | "htm" | "xml" | "vue" | "svelte" | "php");
+                        if editing::auto_close(&mut tab.text, c, ch) || (ch == '>' && html && editing::close_tag(&mut tab.text, c)) {
                             let mut st = egui::TextEdit::load_state(ui.ctx(), ed_id).unwrap_or_default();
                             st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(c))));
                             st.store(ui.ctx(), ed_id);
