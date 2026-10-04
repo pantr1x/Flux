@@ -405,8 +405,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         "plugins" => {
             vec![
                 ("", vec![Row::Lead("Plugins add features to Flux. They are written in JavaScript – install them from the Store or make your own.")]),
-                ("Built in", vec![Row::Custom("plugins")]),
-                ("Plugins", vec![Row::Custom("plugins-js")]),
+                ("", vec![Row::Custom("plugins-js")]),
             ]
         }
         "github" if app.gh_plugin() => vec![

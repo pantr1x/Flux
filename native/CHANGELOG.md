@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.27 – 2026-10-04
+
+### A new Plugins page
+- **Settings → Plugins** is redone like extensions in VS Code: *Installed* / *Store* at the top with a search box, and plugins as cards in two columns – with their **real icon**, a ✓ for plugins from the Flux team, the description, tags and a button (**Install**, **Update**, or an on/off switch).
+- **Click a plugin** to open its page: a big icon, all buttons (*Turn on/off*, *Reload*, *Uninstall*) and its whole description with headings, lists and tables.
+- GitHub is now one of the cards under *Installed* (marked *Built in*).
+
 ## 0.9.26 – 2026-10-04
 
 ### Suggestions
