@@ -131,7 +131,8 @@ function createPlugins({ getSettings, saveSettings, githubApi }) {
   async function registry(force = false) {
     if (!force && cache.data && Date.now() - cache.at < 10 * 60 * 1000) return withState(cache.data);
     const data = JSON.parse(await fetchText('index.json'));
-    const list = (data.plugins || []).filter((p) => ID.test(p.id));
+    // pluginy len pre Flux Native ("electron": false) sa tu neukazujú
+    const list = (data.plugins || []).filter((p) => ID.test(p.id) && p.electron !== false);
     for (const p of list) {
       p.iconUrl = p.icon ? assetUrl(p.id, p.icon) : '';
       p.screenshotUrls = (p.screenshots || []).map((s) => assetUrl(p.id, s));

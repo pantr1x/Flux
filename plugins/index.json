@@ -160,7 +160,8 @@
         "writing",
         "statistics"
       ],
-      "issue": 5
+      "issue": 5,
+      "native": true
     },
     {
       "id": "flux.snippet-pack",
@@ -182,7 +183,8 @@
         "typescript",
         "perl"
       ],
-      "issue": 10
+      "issue": 10,
+      "native": true
     },
     {
       "id": "flux.theme-pack",
@@ -200,7 +202,8 @@
         "colors",
         "appearance"
       ],
-      "issue": 11
+      "issue": 11,
+      "native": true
     },
     {
       "id": "flux.glass-ui",
@@ -219,6 +222,23 @@
         "glass"
       ],
       "issue": 12
+    },
+    {
+      "id": "flux.todo-highlight",
+      "name": "TODO Highlight",
+      "publisher": "Flux",
+      "verified": true,
+      "version": "1.0.0",
+      "description": "TODO, FIXME and NOTE in color, with their text right next to the line.",
+      "icon": "icon.svg",
+      "screenshots": [],
+      "tags": [
+        "productivity",
+        "comments"
+      ],
+      "issue": null,
+      "native": true,
+      "electron": false
     }
   ]
 }

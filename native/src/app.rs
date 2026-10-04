@@ -14,6 +14,7 @@ mod prefs;
 mod preview;
 mod tools;
 mod tour;
+mod plugins_ui;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -229,6 +230,10 @@ pub struct App {
     focus_window: bool, // ďalšie spustenie Fluxu → toto okno dopredu
     rounded: bool,      // pozadie okna je zaoblený obdĺžnik (priehľadné okno)
     snip: Option<Snip>,
+    plug: plugins_ui::PlugState,
+    plug_run: Vec<String>,          // flux.commands.run z pluginu (vykoná sa v ďalšej snímke)
+    plug_cursor: Option<usize>,     // kurzor po vložení textu pluginom
+    sel_chars: Option<(usize, usize)>, // výber v editore (znaky) pre pluginy
     snip_sel: Option<(usize, usize)>, // výber po vložení úryvku (predvolený text miesta)
     preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
@@ -360,6 +365,10 @@ impl App {
             focus_window: false,
             rounded: false,
             snip: None,
+            plug: Default::default(),
+            plug_run: vec![],
+            plug_cursor: None,
+            sel_chars: None,
             snip_sel: None,
             preview: None,
             tour: None,
@@ -1009,6 +1018,7 @@ impl App {
                 let text = v.as_str().unwrap_or("").replace("\r\n", "\n");
                 self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text, seen: Instant::now(), unloaded: false, stale: false });
                 self.activate(self.tabs.len() - 1);
+                self.plug_emit("open");
             }
             Err(e) => self.status = e,
         }
@@ -1091,6 +1101,7 @@ impl App {
                 Err(e) => self.status = e,
             }
         }
+        self.plug_emit("save");
         // Live Server: otvorené stránky sa znova načítajú (už z disku)
         if let Some(s) = &self.server {
             if let Some(t) = self.tabs.get(i) {
@@ -1358,6 +1369,17 @@ impl App {
                 "update-install" => self.restart_to_update(ctx),
                 "light" | "dark" => self.set_theme(a == "dark", ctx),
                 "theme" => self.set_code_theme(arg, ctx),
+                // pluginy v testoch: inštalácia z FLUX_PLUGIN_REGISTRY, obchod, príkaz pluginu
+                "plugin-install" => self.plug_test_install(arg),
+                "plugin-store" => {
+                    self.open_settings("plugins", ctx);
+                    self.plug.tab_store = true;
+                }
+                "plugin-cmd" => {
+                    if let Some((pl, id)) = arg.split_once('|') {
+                        self.plug_command(pl, id);
+                    }
+                }
                 "next" => {
                     if let Some(i) = self.intro.as_mut() {
                         i.step = (i.step + 1).min(intro::STEPS.len() - 1);
@@ -1371,7 +1393,7 @@ impl App {
     // prepne na naposledy použitú tmavú/svetlú tému kódu (toggleTheme v app.js)
     fn set_theme(&mut self, dark: bool, ctx: &egui::Context) {
         let want = if dark { "lastDark" } else { "lastLight" };
-        let last = self.core.setting(want).as_str().map(String::from).filter(|id| crate::gen::code_theme(id).map(|t| t.0 == dark).unwrap_or(false));
+        let last = self.core.setting(want).as_str().map(String::from).filter(|id| crate::gen::code_theme(id).or_else(|| crate::plugins::theme(id)).map(|t| t.0 == dark).unwrap_or(false));
         let next = last.unwrap_or_else(|| if dark { crate::gen::DEFAULT_THEME.into() } else { "vscode-light".into() });
         self.set_code_theme(&next, ctx);
     }
@@ -2030,7 +2052,8 @@ impl App {
             self.find = Some(editing::Find { q, repl: prev.map(|f| f.repl).unwrap_or_default(), replace: repl_k, idx: 0, focus: true });
         }
         let mut typed: Option<char> = None;
-        let mut new_sel: Option<(usize, usize)> = None;
+        let mut new_sel: Option<(usize, usize)> = self.plug_cursor.take().map(|c| (c, c));
+        let mut sel_out: Option<(usize, usize)> = None;
         let sug_on = self.get("suggest").as_bool() != Some(false);
         let mut force_sug = false;
         if focused && sug_on {
@@ -2138,6 +2161,10 @@ impl App {
             self.scroll_to = Some((l as f32 * lh - ed_rect.height() / 2.0 + PAD).max(0.0));
         }
         let lint = if self.get("lintHints").as_bool() != Some(false) { self.lint_res.lock().unwrap().get(&self.tabs[self.active].path).cloned() } else { None };
+        // pluginy: úryvky pre tento jazyk a značky (flux.marks) pre tento súbor
+        let plang = crate::plugins::lang_id(&self.tabs[self.active].ext());
+        let plug_snips: Vec<crate::complete::Item> = self.plug.snips.iter().filter(|s| s.1 == plang || s.1 == "*").map(|s| s.2.clone()).collect();
+        let plug_marks: Vec<crate::lint::Diag> = self.plug.marks.values().filter(|m| m.0 == self.tabs[self.active].path).flat_map(|m| m.1.iter().cloned()).collect();
         let code = &self.code;
         let sug_slot = &mut self.sug;
         let sug_words = &mut self.sug_words;
@@ -2221,7 +2248,7 @@ impl App {
                                     *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang)));
                                 }
                                 let w = sug_words.as_ref().unwrap();
-                                let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &[], 8);
+                                let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &plug_snips, 8);
                                 *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
                             } else {
                                 *sug_slot = None;
@@ -2297,12 +2324,14 @@ impl App {
                         shapes.push(egui::Shape::galley(at, g, fg));
                     }
                     // vysvetlivky chýb: vlnovka pod miestom, bodka pri čísle riadku, text za koncom riadku
-                    if let Some((g, ds)) = lint.as_ref().filter(|(g, _)| *g == hlc.gen) {
-                        let _ = g;
+                    let lint_ds: Vec<crate::lint::Diag> = lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.clone()).unwrap_or_default();
+                    let all_ds: Vec<crate::lint::Diag> = lint_ds.into_iter().chain(plug_marks.iter().cloned()).collect();
+                    if !all_ds.is_empty() {
+                        let ds = &all_ds;
                         let vis_lines: HashMap<usize, egui::Pos2> = vis_pos.iter().copied().collect();
                         for (k, d) in ds.iter().enumerate() {
                             let Some(&at) = vis_lines.get(&d.line) else { continue };
-                            let col_c = if d.err { p.red } else { Color32::from_rgb(0xe0, 0xa4, 0x3c) };
+                            let col_c = d.color.unwrap_or(if d.err { p.red } else { Color32::from_rgb(0xe0, 0xa4, 0x3c) });
                             let text = if d.line < hlc.lines() { hlc.line_text(d.line).trim_end_matches('\n') } else { "" };
                             let mut job = egui::text::LayoutJob::single_section(text.to_string(), egui::TextFormat { color: Color32::TRANSPARENT, ..fmt.clone() });
                             job.wrap.max_width = wrap_at.get();
@@ -2377,6 +2406,7 @@ impl App {
                 }
                 if let Some(r) = te.cursor_range {
                     let idx = r.primary.index;
+                    sel_out = Some((usize::from(r.secondary.index), usize::from(r.primary.index)));
                     // riadok a stĺpec bez kopírovania textu
                     let (mut ln, mut col) = (1usize, 1usize);
                     for ch in tab.text.chars().take(idx.into()) {
@@ -2443,6 +2473,9 @@ impl App {
         }
         if let Some(c) = cursor {
             self.cursor = c;
+        }
+        if sel_out.is_some() {
+            self.sel_chars = sel_out;
         }
         // ---- lišta hľadania ----
         if self.find.is_some() {
@@ -2996,6 +3029,13 @@ impl App {
             widgets::icon_at(ui, pos2(r.left() - 9.0, cy), 12.0, "save", p.text2);
             rx = r.left() - 34.0;
         }
+        // tlačidlá z pluginov (flux.statusBar.add)
+        if !self.plug.status.is_empty() {
+            let used = self.plug_status_ui(ui, rx, cy);
+            if used > 0.0 {
+                rx -= used + 10.0;
+            }
+        }
         // vysvetlivky chýb: „N problémov“ – klik skočí na prvý
         if let Some(tab) = self.tabs.get(self.active).filter(|_| !self.home && !self.start) {
             let cur = self.hls.get(&tab.path).map(|h| h.gen);
@@ -3288,6 +3328,10 @@ impl eframe::App for App {
             crate::glass::blur(&*frame, self.get("material").as_str() == Some("blur"));
         }
         self.events();
+        if self.intro.is_none() {
+            self.plug_start();
+            self.plug_frame(ctx);
+        }
         if std::mem::take(&mut self.focus_window) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);

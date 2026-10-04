@@ -204,6 +204,29 @@ jobs:
             exit 1
           }
           "## Migration test passed (shortcut moved, old Flux kept as launcher, one Flux)" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Plugin test (QuickJS plugins load, run and draw)
+        shell: pwsh
+        run: |
+          $u = "$env:RUNNER_TEMP\plug"; $ud = "$u\ud"; $proj = "$u\proj"
+          New-Item -ItemType Directory $ud, $proj -Force | Out-Null
+          Set-Content "$proj\t.py" "# TODO: test`nprint(1)"
+          @{ onboarded = $true; autoUpdate = $false; nativeSeenVersion = '9.9.9'; lastFolder = $proj; projects = @(@{ dir = $proj }) } | ConvertTo-Json -Depth 4 | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
+          $env:FLUX_USER_DATA = $ud; $env:FLUX_PLUGIN_REGISTRY = (Resolve-Path plugins).Path
+          $env:FLUX_TEST = "1:plugin-install=flux.todo-highlight;2:plugin-install=flux.word-count;3:plugin-install=flux.theme-pack;4:plugin-install=flux.snippet-pack;5:open=t.py;7:plugin-cmd=flux.word-count|show;8:theme=gruvbox;10:plugin-store"
+          $p = Start-Process target\release\flux-native.exe -PassThru
+          Start-Sleep 16
+          $problems = @()
+          if ($p.HasExited) { $problems += "Flux exited (code $($p.ExitCode))" }
+          if (Test-Path "$ud\flux-native-crash.log") { $problems += "crash log: $(Get-Content "$ud\flux-native-crash.log" -Raw)" }
+          foreach ($id in 'flux.todo-highlight', 'flux.word-count', 'flux.theme-pack', 'flux.snippet-pack') { if (-not (Test-Path "$ud\native-plugins\$id\plugin.json")) { $problems += "$id was not installed" } }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          Remove-Item Env:FLUX_TEST, Env:FLUX_USER_DATA, Env:FLUX_PLUGIN_REGISTRY
+          if ($problems) {
+            $problems | ForEach-Object { Write-Host "::error::$_" }
+            "## Plugin test FAILED`n$($problems -join "`n")" | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          "## Plugin test passed (4 plugins installed and running)" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Experiment – see-through window variants (diagnostics only)
         continue-on-error: true
         shell: pwsh

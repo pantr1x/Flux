@@ -1,6 +1,7 @@
 **[[Home]]**
 
 **Plugins**
+- [[Plugins for the new Flux]]
 - [[Making plugins]]
 - [[Plugin API]]
 - [[Publishing plugins]]

@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.23 – 2026-10-04
+
+### Plugins
+- Flux now runs **plugins written in JavaScript**. Open **Settings → Plugins → Store** to install them – for a start: *Word Count*, *TODO Highlight*, *Theme Pack* (8 more code themes) and *Snippet Pack*.
+- Plugins can add commands to Ctrl+Shift+A (with shortcuts), buttons in the status bar, snippets in the suggestions, code themes and colored notes right in the code, and react when you open, change or save a file.
+- **Make your own:** Settings → Plugins → **Create a plugin** makes a working example and opens it. Change it and press Ctrl+Shift+A → *Reload plugins*. The full guide is linked under **Plugin guide**.
+- Plugins are safe by design: they only see what Flux gives them, can't use the internet or your files outside the project, and a stuck plugin is stopped after 0.2 s.
+
 ## 0.9.22 – 2026-10-04
 
 ### Suggestions like in VS Code

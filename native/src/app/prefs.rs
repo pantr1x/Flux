@@ -403,7 +403,11 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         }
         "tools" => vec![("", vec![Row::Custom("tools")])],
         "plugins" => {
-            vec![("", vec![Row::Lead("Plugins add features to Flux. Install GitHub when you want it – more plugins will come later.")]), ("Available", vec![Row::Custom("plugins")])]
+            vec![
+                ("", vec![Row::Lead("Plugins add features to Flux. They are written in JavaScript – install them from the Store or make your own.")]),
+                ("Built in", vec![Row::Custom("plugins")]),
+                ("Plugins", vec![Row::Custom("plugins-js")]),
+            ]
         }
         "github" if app.gh_plugin() => vec![
             ("", vec![Row::Lead("Connect your GitHub account to open your repositories as projects and to save (push) your work online.")]),
@@ -1199,15 +1203,20 @@ impl App {
             }
             "themes" => {
                 let cur = self.get("codeTheme").as_str().unwrap_or("").to_string();
-                let ids = ["vscode-dark", "flux", "one-dark", "dracula", "tokyo-night", "catppuccin", "nord", "github-dark", "monokai", "vscode-light", "github-light", "catppuccin-latte"];
-                let names =
-                    ["VS Code Dark", "Flux", "One Dark Pro", "Dracula", "Tokyo Night", "Catppuccin Mocha", "Nord", "GitHub Dark", "Monokai", "VS Code Light", "GitHub Light", "Catppuccin Latte"];
+                let mut ids: Vec<String> = ["vscode-dark", "flux", "one-dark", "dracula", "tokyo-night", "catppuccin", "nord", "github-dark", "monokai", "vscode-light", "github-light", "catppuccin-latte"].iter().map(|s| s.to_string()).collect();
+                let mut names: Vec<String> =
+                    ["VS Code Dark", "Flux", "One Dark Pro", "Dracula", "Tokyo Night", "Catppuccin Mocha", "Nord", "GitHub Dark", "Monokai", "VS Code Light", "GitHub Light", "Catppuccin Latte"].iter().map(|s| s.to_string()).collect();
+                // témy z pluginov (flux.themes.add)
+                for th in crate::plugins::THEMES.lock().unwrap().iter() {
+                    ids.push(th.1.clone());
+                    names.push(th.2.clone());
+                }
                 let cw = (w - 16.0) / 3.0;
-                let (area, _) = ui.allocate_exact_size(vec2(w, 4.0 * 59.0), Sense::hover());
+                let (area, _) = ui.allocate_exact_size(vec2(w, ids.len().div_ceil(3) as f32 * 59.0), Sense::hover());
                 let mut pick = None;
                 for (i, id) in ids.iter().enumerate() {
                     let r = Rect::from_min_size(area.min + vec2((i % 3) as f32 * (cw + 8.0), (i / 3) as f32 * 59.0), vec2(cw, 52.0));
-                    let resp = ui.interact(r, ui.id().with(("sth", *id)), Sense::click());
+                    let resp = ui.interact(r, ui.id().with(("sth", id.as_str())), Sense::click());
                     let on = *id == cur;
                     ui.painter().rect_filled(r, CornerRadius::same(12), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
                     ui.painter().rect_stroke(r, CornerRadius::same(12), if on { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line_strong) }, StrokeKind::Inside);
@@ -1215,7 +1224,7 @@ impl App {
                     for (k, idx) in [2usize, 7, 4, 5, 6].iter().enumerate() {
                         ui.painter().rect_filled(Rect::from_min_size(pos2(r.left() + 10.0 + k as f32 * 8.0, r.center().y - 7.0), vec2(6.0, 14.0)), CornerRadius::same(2), theme::hex(c[*idx]));
                     }
-                    ui.painter().text(pos2(r.left() + 62.0, r.top() + 18.0), Align2::LEFT_CENTER, names[i], theme::bold(13.0), p.text);
+                    ui.painter().text(pos2(r.left() + 62.0, r.top() + 18.0), Align2::LEFT_CENTER, &names[i], theme::bold(13.0), p.text);
                     ui.painter().text(pos2(r.left() + 62.0, r.top() + 36.0), Align2::LEFT_CENTER, if dark { t("dark") } else { t("light") }, theme::ui(11.5), p.text3);
                     if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                         pick = Some(id.to_string());
@@ -1269,6 +1278,7 @@ impl App {
             "gh-account" | "gh-git" => self.github_ui(ui, id, w, ctx),
             "ai-key" | "ai-mcp" | "ai-flux" => self.ai_settings_ui(ui, id, w, ctx),
             // zabudované časti ako karty (createPluginsUI({ builtins }))
+            "plugins-js" => self.plugins_ui(ui, w, ctx),
             "plugins" => {
                 // jediný plugin zatiaľ: GitHub (Claude, Live Server a jazyky sú súčasť Fluxu, nie pluginy)
                 let cards = [("github", "GitHub", t("Open your repositories as projects and sign in with your GitHub account."), Some("github"))];

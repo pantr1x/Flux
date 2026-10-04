@@ -10,10 +10,11 @@ pub struct Diag {
     pub len: usize,  // znakov (0 = do konca riadku)
     pub err: bool,   // chyba (červená) / tip (oranžová)
     pub msg: String,
+    pub color: Option<eframe::egui::Color32>, // farba od pluginu (flux.marks); None = podľa err
 }
 
 fn diag(line: usize, col: usize, len: usize, err: bool, msg: String) -> Diag {
-    Diag { line, col, len, err, msg }
+    Diag { line, col, len, err, msg, color: None }
 }
 
 pub fn check(lang: &str, text: &str, python: Option<&str>) -> Vec<Diag> {

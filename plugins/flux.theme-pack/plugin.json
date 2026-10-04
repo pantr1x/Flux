@@ -22,5 +22,6 @@
     "appearance"
   ],
   "license": "MIT",
-  "issue": 11
+  "issue": 11,
+  "native": true
 }

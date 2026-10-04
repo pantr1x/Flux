@@ -14,7 +14,8 @@
   "files": [
     "plugin.js",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "native.js"
   ],
   "tags": [
     "text",
@@ -22,5 +23,6 @@
     "statistics"
   ],
   "license": "MIT",
-  "issue": 5
+  "issue": 5,
+  "native": "native.js"
 }

@@ -119,6 +119,7 @@ impl App {
     // vykoná príkaz (z ponuky, palety alebo skratky)
     pub(super) fn act(&mut self, id: &str, ctx: &egui::Context) {
         match id {
+            "reload-plugins" => self.plug_reload_all(),
             "ai" => self.toggle_ai(),
             "new-file" => self.open_new_file(None),
             "new-folder" => {
@@ -582,6 +583,18 @@ impl App {
                 }
             }
         }
+        if pal.mode != PaletteMode::Files {
+            // príkazy z pluginov + znova načítať pluginy
+            for c in &self.plug.cmds {
+                if let Some(s) = fuzzy(&c.label, &q) {
+                    res.push((s + 15, "icon:puzzle".into(), c.label.clone(), c.plugin.clone(), format!("plug:{}|{}", c.plugin, c.id)));
+                }
+            }
+            let l = t("Reload plugins");
+            if let Some(s) = fuzzy(&l, &q) {
+                res.push((s, "icon:puzzle".into(), l, String::new(), "cmd:reload-plugins".into()));
+            }
+        }
         if pal.mode == PaletteMode::Everything {
             for pr in &self.projects {
                 let name = pr["name"].as_str().unwrap_or("").to_string();
@@ -686,6 +699,9 @@ impl App {
                 self.open_file(f);
             } else if let Some(c) = a.strip_prefix("cmd:") {
                 self.act(c, &ctx);
+            } else if let Some((pl, id)) = a.strip_prefix("plug:").and_then(|x| x.split_once('|')) {
+                let (pl, id) = (pl.to_string(), id.to_string());
+                self.plug_command(&pl, &id);
             } else if let Some(d) = a.strip_prefix("project:") {
                 self.open_folder(d);
             } else if let Some(q) = a.strip_prefix("settings:") {

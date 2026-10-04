@@ -1,0 +1,23 @@
+{
+  "id": "flux.todo-highlight",
+  "name": "TODO Highlight",
+  "publisher": "Flux",
+  "verified": true,
+  "version": "1.0.0",
+  "description": "TODO, FIXME and NOTE in color, with their text right next to the line.",
+  "main": "native.js",
+  "native": "native.js",
+  "icon": "icon.svg",
+  "readme": "README.md",
+  "files": [
+    "native.js",
+    "icon.svg",
+    "README.md"
+  ],
+  "tags": [
+    "productivity",
+    "comments"
+  ],
+  "license": "MIT",
+  "issue": null
+}

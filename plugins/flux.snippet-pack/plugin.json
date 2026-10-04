@@ -14,7 +14,8 @@
   "files": [
     "plugin.js",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "native.js"
   ],
   "tags": [
     "snippets",
@@ -24,5 +25,6 @@
     "go"
   ],
   "license": "MIT",
-  "issue": 10
+  "issue": 10,
+  "native": "native.js"
 }

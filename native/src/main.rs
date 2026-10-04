@@ -5,6 +5,7 @@ mod app;
 mod pins;
 mod migrate;
 mod single;
+mod plugins;
 mod glass;
 mod lint;
 mod complete;

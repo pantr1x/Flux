@@ -68,7 +68,7 @@ fn col(c: u32) -> Color {
 
 // téma podľa settings.codeTheme (rovnaký kľúč ako v Electron Fluxe)
 pub fn theme_of(id: &str) -> (bool, [u32; 16], bool) {
-    gen::code_theme(id).or_else(|| gen::code_theme(gen::DEFAULT_THEME)).expect("default theme")
+    gen::code_theme(id).or_else(|| crate::plugins::theme(id)).or_else(|| gen::code_theme(gen::DEFAULT_THEME)).expect("default theme")
 }
 
 impl Code {
