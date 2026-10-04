@@ -32,13 +32,8 @@ impl App {
         egui::Area::new(egui::Id::new("window-chrome")).order(egui::Order::Tooltip).fixed_pos(full.min).interactable(true).show(ctx, |ui| {
             let top = full.top();
             let mut x = full.right() - CONTROLS_W;
-            let h = if max { TOP_H - 8.0 } else { TOP_H - 10.0 };
-            // priehľadné okno: pod tlačidlami plný podklad, aby cez ne nič nepresvitalo
-            if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
-                let strip = Rect::from_min_size(pos2(x, top), vec2(CONTROLS_W, h));
-                let cr = if max { egui::CornerRadius::ZERO } else { egui::CornerRadius { ne: 8, sw: 8, ..Default::default() } };
-                ui.painter().rect_filled(strip, cr, p.solid.gamma_multiply(0.9));
-            }
+            // na stred hornej lišty, ako ▶ Run (30 px pilulka)
+            let h = TOP_H;
             for (i, what) in ["min", "max", "close"].iter().enumerate() {
                 let r = Rect::from_min_size(pos2(x, top), vec2(BTN_W, h));
                 let resp = ui.interact(r, egui::Id::new(("wbtn", i)), Sense::click());
@@ -46,9 +41,9 @@ impl App {
                 let close = *what == "close";
                 let hover_bg = if close { Color32::from_rgb(0xc4, 0x2b, 0x1c) } else { p.hover.gamma_multiply(1.6) };
                 if hk > 0.0 {
-                    // pravý horný roh okna je zaoblený (Windows 11) – × ho kopíruje
-                    let cr = if close && !max { egui::CornerRadius { ne: 8, ..Default::default() } } else { egui::CornerRadius::ZERO };
-                    ui.painter().rect_filled(r, cr, hover_bg.gamma_multiply(hk));
+                    // zaoblená „pilulka“ ako ostatné tlačidlá Fluxu (bez hranatého podkladu)
+                    let pill = Rect::from_center_size(r.center(), vec2(BTN_W - 8.0, 30.0));
+                    ui.painter().rect_filled(pill, egui::CornerRadius::same(8), hover_bg.gamma_multiply(hk));
                 }
                 let col = if close { p.text2.lerp_to_gamma(Color32::WHITE, hk) } else { p.text2.lerp_to_gamma(p.text, hk) };
                 let s = Stroke::new(1.0, col);

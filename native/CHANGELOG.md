@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.17 – 2026-10-04
+
+### Window buttons fit in
+- − □ × no longer sit on a square dark block. They now look like the other buttons in Flux: rounded, with a soft highlight when you point at them (red for ×), and they line up with ▶ Run.
+
 ## 0.9.16 – 2026-10-04
 
 ### Programs end by themselves

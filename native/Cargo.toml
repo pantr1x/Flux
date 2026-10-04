@@ -1,6 +1,6 @@
 [package]
 name = "flux-native"
-version = "0.9.16"
+version = "0.9.17"
 edition = "2021"
 description = "Flux – natívna verzia v Ruste (egui), bez Chromia"
 
