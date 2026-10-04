@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.20 – 2026-10-04
+
+### Windows Security no longer blocks Flux
+- Windows Defender removed Flux 0.9.18 and 0.9.19 as a false "trojan" because Flux changed which program opens code files and deleted the old Flux. Flux no longer does either: it only moves your shortcuts and taskbar pin to itself. The old Flux stays and simply hands everything over to this one, so "Open with Flux" keeps working.
+
 ## 0.9.19 – 2026-10-04
 
 ### Flux always opens
@@ -10,7 +15,7 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 ## 0.9.18 – 2026-10-04
 
 ### One Flux
-- The old Flux now moves itself to this new Flux with its next update. Your projects and settings come along, your taskbar pin, Start menu and desktop shortcuts open the new Flux, and "Open with Flux" for code files does too. The old program is removed, so there is only one Flux.
+- The old Flux now moves itself to this new Flux with its next update. Your projects and settings come along, and your taskbar pin, Start menu and desktop shortcuts open the new Flux.
 - Double-clicking a code file while Flux is open opens it in the window you already have instead of starting Flux a second time.
 
 ## 0.9.17 – 2026-10-04

@@ -1,6 +1,8 @@
 // Jeden Flux: tento (Electron) Flux sa presunie na Flux Native – rýchlejší, s menšou pamäťou.
 // Nastavenia sú spoločné (%APPDATA%\Flux\settings.json), takže projekty aj všetko ostatné ostane.
-// Flux Native (`--migrate`) presmeruje odkazy a pripnutie na paneli úloh, typy súborov a tento program zmaže.
+// Flux Native (`--migrate`) presmeruje odkazy a pripnutie na paneli úloh. Tento program ostáva ako spúšťač:
+// typy súborov („Otvoriť vo Fluxe“) ďalej ukazujú sem a súbor sa hneď odovzdá Native. Native nič nepíše do registrov
+// ani nemaže iné programy – s tým ho Windows Defender v 0.9.18 zmazal ako trójsky kôň.
 // Postup: ak už Native je (settings.nativePath alebo stiahnutý predtým) → odovzdať pri štarte; inak stiahnuť
 // na pozadí a odovzdať pri zavretí (bez okna). Chyba (offline, zlý súčet) = Flux beží ďalej ako doteraz.
 const { app } = require('electron');
@@ -72,8 +74,14 @@ async function download(settings, saveSettings) {
   return out;
 }
 
-function handOver(exe, quiet) {
-  const args = ['--migrate', String(process.pid), process.execPath];
+// súbory z príkazového riadka (dvojklik na súbor v Prieskumníkovi)
+function files() {
+  return process.argv.slice(1).filter((a) => !a.startsWith('-') && a !== '.' && fs.existsSync(a) && path.resolve(a) !== path.resolve(app.getAppPath()));
+}
+
+function handOver(exe, quiet, settings) {
+  // už prevedené: len spustiť Native so súborom; inak prvé prevedenie (odkazy, pripnutie)
+  const args = settings && settings.migratedFromElectron ? files().slice(0, 1) : ['--migrate', String(process.pid), process.execPath];
   if (quiet) args.push('--no-window');
   if (process.env.FLUX_NATIVE_URL && process.platform !== 'win32') {
     console.log('[toNative] would run', exe, args.join(' '));
@@ -92,7 +100,7 @@ function handOver(exe, quiet) {
 function start({ settings, saveSettings }) {
   if (!enabled() || process.argv.includes('--background')) return false;
   const exe = ready(settings);
-  if (exe && handOver(exe, false)) {
+  if (exe && handOver(exe, false, settings)) {
     app.quit();
     return true;
   }
@@ -109,7 +117,7 @@ function start({ settings, saveSettings }) {
     }, process.env.FLUX_NATIVE_URL ? 500 : 20000);
   }
   app.on('will-quit', () => {
-    if (got) handOver(got, true);
+    if (got && !settings.migratedFromElectron) handOver(got, true, null);
   });
   return false;
 }

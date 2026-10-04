@@ -168,16 +168,13 @@ jobs:
           New-Item -ItemType Directory $pins, $ud, $nat, "$old\resources" -Force | Out-Null
           $exe = "$nat\Flux-Native.exe"
           Copy-Item target\release\flux-native.exe $exe
-          # falošný starý Flux: Flux.exe + resources\app.asar, odkaz, záznam v Aplikáciách
+          # falošný starý Flux + odkaz naň
           Copy-Item "$env:WINDIR\System32\notepad.exe" "$old\Flux.exe"
           Set-Content "$old\resources\app.asar" "x"
           '{"onboarded":true,"autoUpdate":false}' | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
           $sh = New-Object -ComObject WScript.Shell
           $l = $sh.CreateShortcut("$pins\Flux.lnk"); $l.TargetPath = "$old\Flux.exe"; $l.Save()
           $l = $sh.CreateShortcut("$pins\Other.lnk"); $l.TargetPath = "$env:WINDIR\System32\notepad.exe"; $l.Save()
-          $un = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\flux-ci-test"
-          New-Item $un -Force | Out-Null
-          New-ItemProperty $un -Name InstallLocation -Value $old -Force | Out-Null
           $env:FLUX_USER_DATA = $ud; $env:FLUX_PINS_DIR = $pins
           $p = Start-Process $exe -ArgumentList '--migrate', '0', "`"$old\Flux.exe`"", '--no-window' -PassThru
           if (-not $p.WaitForExit(60000)) { Stop-Process -Id $p.Id -Force }
@@ -185,10 +182,8 @@ jobs:
           $t = $sh.CreateShortcut("$pins\Flux.lnk").TargetPath
           if ($t -ne $exe) { $problems += "Flux.lnk points to $t, not to Flux Native" }
           if ($sh.CreateShortcut("$pins\Other.lnk").TargetPath -notlike '*notepad.exe') { $problems += "an unrelated shortcut was changed" }
-          $cmd = (Get-ItemProperty 'HKCU:\Software\Classes\Flux.py\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
-          if ($cmd -notlike "*$exe*") { $problems += "Flux.py opens with '$cmd'" }
-          if (Test-Path $old) { $problems += "the old Flux folder was not removed" }
-          if (Test-Path $un) { $problems += "the old Flux is still listed in Apps" }
+          # Native nesmie mazať iné programy (Defender ho za to v 0.9.18 zmazal)
+          if (-not (Test-Path "$old\Flux.exe")) { $problems += "the old Flux was deleted" }
           $s = Get-Content "$ud\settings.json" -Raw | ConvertFrom-Json
           if (-not $s.migratedFromElectron) { $problems += "settings have no migratedFromElectron" }
           if ($s.nativePath -ne $exe) { $problems += "settings nativePath is '$($s.nativePath)'" }
@@ -201,13 +196,14 @@ jobs:
           if ($first.HasExited) { $problems += "the first Flux exited" }
           if (Test-Path "$ud\flux-native-crash.log") { $problems += "crash log: $(Get-Content "$ud\flux-native-crash.log" -Raw)" }
           Get-CimInstance Win32_Process -Filter "Name = 'Flux-Native.exe'" | Where-Object { $_.ExecutablePath -eq $exe } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Remove-Item $old -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item Env:FLUX_USER_DATA, Env:FLUX_PINS_DIR
           if ($problems) {
             $problems | ForEach-Object { Write-Host "::error::$_" }
             "## Migration test FAILED`n$($problems -join "`n")" | Add-Content $env:GITHUB_STEP_SUMMARY
             exit 1
           }
-          "## Migration test passed (shortcut, file types, old Flux removed, one Flux)" | Add-Content $env:GITHUB_STEP_SUMMARY
+          "## Migration test passed (shortcut moved, old Flux kept as launcher, one Flux)" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Experiment – see-through window variants (diagnostics only)
         continue-on-error: true
         shell: pwsh
