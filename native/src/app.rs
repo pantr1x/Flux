@@ -234,6 +234,7 @@ pub struct App {
     rounded: bool,      // pozadie okna je zaoblený obdĺžnik (priehľadné okno)
     snip: Option<Snip>,
     sug_again: bool, // po vložení atribútu (class="") hneď ponúknuť jeho hodnoty
+    sug_rect: Option<Rect>, // kde je okno návrhov (klik doň vezme editoru fokus skôr, než sa spracuje)
     plug: plugins_ui::PlugState,
     plug_run: Vec<String>,          // flux.commands.run z pluginu (vykoná sa v ďalšej snímke)
     plug_cursor: Option<usize>,     // kurzor po vložení textu pluginom
@@ -371,6 +372,7 @@ impl App {
             rounded: false,
             snip: None,
             sug_again: false,
+            sug_rect: None,
             plug: Default::default(),
             plug_run: vec![],
             plug_cursor: None,
@@ -609,10 +611,12 @@ impl App {
 
     // okno s návrhmi pod písaným slovom (10 riadkov, posúva sa) a vedľa popis vybranej položky
     fn sug_ui(&mut self, ctx: &egui::Context, ed_id: egui::Id) {
+        self.sug_rect = None;
         let Some(sg) = self.sug.as_ref() else { return };
         if self.tabs.get(self.active).map(|t| &t.path) != Some(&sg.path) || sg.pos == egui::Pos2::ZERO {
             return;
         }
+        let mut list_rect = None;
         let p = self.pal;
         let (pos, items, sel, top) = (sg.pos, sg.items.clone(), sg.sel, sg.top);
         let mut clicked = None;
@@ -627,6 +631,7 @@ impl App {
                 + 52.0;
             let h = shown as f32 * 24.0 + 8.0;
             let (r, resp_all) = ui.allocate_exact_size(vec2(w.min(460.0), h), Sense::hover());
+            list_rect = Some(r);
             ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
             ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
             ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
@@ -697,6 +702,7 @@ impl App {
                 sg.top = (sg.top as i32 + scroll).clamp(0, max as i32) as usize;
             }
         }
+        self.sug_rect = list_rect;
         if let Some(k) = clicked {
             if let Some(c) = self.accept_sug(k) {
                 let (a, b) = self.snip_sel.take().unwrap_or((c, c));
@@ -2292,6 +2298,7 @@ impl App {
                 // ---- farby len pre riadky na obrazovke (+ 300 pod nimi sa dofarbí vopred) ----
                 code.sync(hlc, &tab.text, &lang);
                 // ---- návrhy pri písaní: po napísaní 2+ písmen slova (alebo Ctrl+Medzerník) ----
+                let mut sug_line: Option<usize> = None; // riadok s otvorenými návrhmi (chyby sa tam neukazujú)
                 if sug_on {
                     if let Some(r) = te.cursor_range {
                         let c = usize::from(r.primary.index);
@@ -2301,6 +2308,10 @@ impl App {
                             let mut plen = before.iter().rev().take_while(|ch| crate::complete::ident_char(**ch, &lang)).count();
                             let typed_ident = before.last().is_some_and(|ch| crate::complete::ident_char(*ch, &lang));
                             let cx = crate::complete::context(&lang, &before);
+                            // Emmet („div.box“): nahrádza sa celá skratka, nie len posledné slovo
+                            if let Some(e) = &cx.emmet {
+                                plen = e.chars().count();
+                            }
                             // HTML: „!“ na začiatku riadka = celá stránka (ako Emmet)
                             let bang = matches!(lang.as_str(), "html" | "htm") && before.last() == Some(&'!') && before.len() >= 1 && before[..before.len() - 1].iter().rev().take_while(|ch| **ch != '\n').all(|ch| ch.is_whitespace());
                             if bang {
@@ -2326,6 +2337,7 @@ impl App {
                         if let Some(sg) = sug_slot.as_mut() {
                             let cr = te.galley.pos_from_cursor(egui::text::CCursor::new(sg.start));
                             sg.pos = te.galley_pos + vec2(cr.left(), cr.top() + lh + 2.0);
+                            sug_line = Some(tab.text.chars().take(sg.start).filter(|ch| *ch == '\n').count());
                         }
                     }
                 }
@@ -2391,7 +2403,8 @@ impl App {
                         shapes.push(egui::Shape::galley(at, g, fg));
                     }
                     // vysvetlivky chýb: vlnovka pod miestom, bodka pri čísle riadku, text za koncom riadku
-                    let lint_ds: Vec<crate::lint::Diag> = lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.clone()).unwrap_or_default();
+                    // na riadku, kde sa práve píše s návrhmi, chyby nie (napr. „<fo> is never closed“ pri písaní značky)
+                    let lint_ds: Vec<crate::lint::Diag> = lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.iter().filter(|d| Some(d.line) != sug_line).cloned().collect()).unwrap_or_default();
                     let all_ds: Vec<crate::lint::Diag> = lint_ds.into_iter().chain(plug_marks.iter().cloned()).collect();
                     if !all_ds.is_empty() {
                         let ds = &all_ds;
@@ -2587,9 +2600,13 @@ impl App {
             }
             ctx.request_repaint();
         }
-        // návrhy pri písaní (len kým má editor fokus)
-        if ui.ctx().memory(|m| m.has_focus(ed_id)) {
+        // návrhy pri písaní: kým má editor fokus, alebo kým je myš nad oknom návrhov – klik naň editoru
+        // fokus vezme (clicked_elsewhere) ešte pred spracovaním kliku, inak by sa výber stratil
+        let over_sug = self.sug_rect.is_some_and(|r| ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()).is_some_and(|p| r.expand(2.0).contains(p))));
+        if ui.ctx().memory(|m| m.has_focus(ed_id)) || over_sug {
             self.sug_ui(&ui.ctx().clone(), ed_id);
+        } else {
+            self.sug_rect = None;
         }
         // ---- minimapa (ako v Monacu: znak = 1 px, riadok = 2 px) ----
         if mini_w <= 0.0 {

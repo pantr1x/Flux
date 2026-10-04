@@ -193,12 +193,14 @@ pub struct Ctx {
     pub css_at: bool,                        // „@me“ → @media, @keyframes…
     pub member: Option<String>,              // „objekt.“ / „std::“ → členy objektu
     pub import: Option<String>,              // „import “ = Some(""), „from os import “ = Some("os")
+    pub emmet: Option<String>,               // HTML text: skratka Emmet pred kurzorom („div.box“, „ul>li*3“, „fo“)
+    pub doc_tags: Vec<String>,               // vlastné značky použité v súbore (<my-card>) pre „<“
 }
 
 impl Ctx {
     // miesto s vlastnými návrhmi: stačí jedno písmeno (inak dve)
     pub fn rich(&self) -> bool {
-        self.after_lt || self.close || self.in_tag.is_some() || self.attr_value.is_some() || self.css_value.is_some() || self.css_pseudo || self.css_at || self.member.is_some() || self.import.is_some()
+        self.after_lt || self.close || self.emmet.as_ref().is_some_and(|e| e.contains(['.', '#', '>', '*', '+', '{'])) || self.in_tag.is_some() || self.attr_value.is_some() || self.css_value.is_some() || self.css_pseudo || self.css_at || self.member.is_some() || self.import.is_some()
     }
 }
 
@@ -324,11 +326,15 @@ pub fn context(lang: &str, before: &[char]) -> Ctx {
             c.after_lt = head.last() == Some(&'<');
             if c.after_lt {
                 c.open_tags = open_tags(&head[..head.len() - 1]);
+                c.doc_tags = doc_tags(&head[..head.len() - 1]);
                 return c;
             }
             let lt = head.iter().rposition(|ch| *ch == '<');
             let gt = head.iter().rposition(|ch| *ch == '>');
-            let Some(l) = lt.filter(|l| gt.is_none_or(|g| g < *l)) else { return c };
+            let Some(l) = lt.filter(|l| gt.is_none_or(|g| g < *l)) else {
+                c.emmet = emmet_abbr(before);
+                return c;
+            };
             if matches!(head.get(l + 1), Some('/') | Some('!') | Some('?')) {
                 return c;
             }
@@ -444,11 +450,186 @@ pub fn context(lang: &str, before: &[char]) -> Ctx {
     c
 }
 
+// vlastné značky v texte (nie štandardné HTML), napr. <my-card>
+fn doc_tags(before: &[char]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for (i, ch) in before.iter().enumerate() {
+        if *ch == '<' && before.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic()) {
+            let name: String = before[i + 1..].iter().take_while(|c| c.is_ascii_alphanumeric() || **c == '-').map(|c| c.to_ascii_lowercase()).collect();
+            if !db().tags.iter().any(|t| t.0 == name) && !out.contains(&name) && name.len() < 40 {
+                out.push(name);
+            }
+        }
+    }
+    out
+}
+
+// skratka Emmet pred kurzorom v texte HTML (nie v značke): „div.box“, „ul>li*3“, „p{Ahoj}“, alebo len slovo
+fn emmet_abbr(before: &[char]) -> Option<String> {
+    let ok = |c: char| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '#' | '>' | '*' | '+' | '{' | '}' | '$' | '_');
+    let mut s = before.len();
+    while s > 0 && ok(before[s - 1]) {
+        s -= 1;
+    }
+    // „<p>div.x“: časť po značke
+    if s > 0 && before[s - 1] == '<' {
+        let gt = before[s..].iter().position(|c| *c == '>')?;
+        s += gt + 1;
+    }
+    if s > 0 && !before[s - 1].is_whitespace() && before[s - 1] != '>' {
+        return None;
+    }
+    let abbr: String = before[s..].iter().collect();
+    let first = abbr.chars().next()?;
+    if !(first.is_ascii_alphabetic() || first == '.' || first == '#') {
+        return None;
+    }
+    if abbr.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Some(abbr);
+    }
+    emmet(&abbr).map(|_| abbr)
+}
+
+#[derive(Default)]
+struct ENode {
+    tag: String,
+    id: String,
+    classes: Vec<String>,
+    text: Option<String>,
+    count: usize,
+    kids: Vec<ENode>,
+}
+
+// Emmet: element (+ element)* ; element > deti ; tag.trieda#id{text}*N
+fn e_list(cs: &[char], i: &mut usize) -> Option<Vec<ENode>> {
+    let mut v = vec![e_node(cs, i)?];
+    while *i < cs.len() && cs[*i] == '+' {
+        *i += 1;
+        v.push(e_node(cs, i)?);
+    }
+    Some(v)
+}
+
+fn e_node(cs: &[char], i: &mut usize) -> Option<ENode> {
+    let name = |i: &mut usize| {
+        let s = *i;
+        while *i < cs.len() && (cs[*i].is_ascii_alphanumeric() || cs[*i] == '-' || cs[*i] == '_' || cs[*i] == '$') {
+            *i += 1;
+        }
+        cs[s..*i].iter().collect::<String>()
+    };
+    let mut n = ENode { count: 1, ..Default::default() };
+    n.tag = name(i);
+    if !n.tag.is_empty() && !n.tag.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    loop {
+        match cs.get(*i) {
+            Some('.') => {
+                *i += 1;
+                let c = name(i);
+                if c.is_empty() {
+                    return None;
+                }
+                n.classes.push(c);
+            }
+            Some('#') => {
+                *i += 1;
+                n.id = name(i);
+                if n.id.is_empty() {
+                    return None;
+                }
+            }
+            Some('{') => {
+                let e = cs[*i..].iter().position(|c| *c == '}')? + *i;
+                n.text = Some(cs[*i + 1..e].iter().collect());
+                *i = e + 1;
+            }
+            Some('*') => {
+                *i += 1;
+                let d = name(i);
+                n.count = d.parse::<usize>().ok().filter(|k| (1..=50).contains(k))?;
+            }
+            _ => break,
+        }
+    }
+    if n.tag.is_empty() {
+        if n.classes.is_empty() && n.id.is_empty() && n.text.is_none() {
+            return None;
+        }
+        n.tag = "div".into();
+    }
+    if *i < cs.len() && cs[*i] == '>' {
+        *i += 1;
+        n.kids = e_list(cs, i)?;
+    }
+    Some(n)
+}
+
+fn e_render(nodes: &[ENode], depth: usize, stop: &mut usize, out: &mut Vec<String>) {
+    let ind = "\t".repeat(depth);
+    for n in nodes {
+        for k in 1..=n.count {
+            let num = |s: &str| s.replace('$', &k.to_string());
+            let mut open = format!("<{}", n.tag);
+            if !n.id.is_empty() {
+                open += &format!(" id=\"{}\"", num(&n.id));
+            }
+            if !n.classes.is_empty() {
+                open += &format!(" class=\"{}\"", n.classes.iter().map(|c| num(c)).collect::<Vec<_>>().join(" "));
+            }
+            match n.tag.as_str() {
+                "a" => open += " href=\"\"",
+                "img" => open += " src=\"\" alt=\"\"",
+                "input" => open += " type=\"text\"",
+                _ => {}
+            }
+            open.push('>');
+            if VOID.contains(&n.tag.as_str()) {
+                out.push(format!("{ind}{open}"));
+            } else if !n.kids.is_empty() {
+                out.push(format!("{ind}{open}"));
+                e_render(&n.kids, depth + 1, stop, out);
+                out.push(format!("{ind}</{}>", n.tag));
+            } else {
+                let inner = match &n.text {
+                    Some(t) => num(t),
+                    None => {
+                        *stop += 1;
+                        format!("${}", stop)
+                    }
+                };
+                out.push(format!("{ind}{open}{inner}</{}>", n.tag));
+            }
+        }
+    }
+}
+
+// náhľad úryvku bez značiek kurzora ($1, ${1:x} → x)
+fn strip_stops(body: &str) -> String {
+    let (t, _) = expand(body, "", "");
+    t
+}
+
+// skratka Emmet → úryvok (s $1, $2… v prázdnych značkách); None = nie je to platná skratka
+pub fn emmet(abbr: &str) -> Option<String> {
+    let cs: Vec<char> = abbr.chars().collect();
+    let mut i = 0;
+    let nodes = e_list(&cs, &mut i)?;
+    if i != cs.len() {
+        return None;
+    }
+    let mut out = vec![];
+    let mut stop = 0;
+    e_render(&nodes, 0, &mut stop, &mut out);
+    Some(out.join("\n"))
+}
+
 // znak, ktorý sám otvorí návrhy (ako „trigger characters“ vo VS Code)
 pub fn trigger(lang: &str, before: &[char]) -> bool {
     let Some(&ch) = before.last() else { return false };
     let prev = before.len().checked_sub(2).map(|i| before[i]);
-    if !matches!(ch, '<' | '/' | ' ' | '"' | '\'' | ':' | '.' | '@') {
+    if !matches!(ch, '<' | '/' | ' ' | '"' | '\'' | ':' | '.' | '@' | '}') {
         return false;
     }
     let cx = context(lang, before);
@@ -460,6 +641,7 @@ pub fn trigger(lang: &str, before: &[char]) -> bool {
         ':' => cx.css_pseudo || cx.css_value.is_some() || cx.member.is_some(),
         '.' => cx.member.is_some(),
         '@' => cx.css_at,
+        '}' => cx.emmet.is_some(),
         _ => false,
     }
 }
@@ -752,6 +934,7 @@ pub fn suggest_at(
             }
         };
         let mut v: Vec<(u8, Item)> = d.tags.iter().map(|(t, doc)| (group(t, doc), Item::snip(t, Kind::Tag, &tag_body(t), &tag_preview(t)).doc(doc))).collect();
+        v.extend(cx.doc_tags.iter().map(|t| (1, Item::snip(t, Kind::Tag, &format!("{t}>$0</{t}>"), &tag_preview(t)))));
         if "!".starts_with(prefix) || prefix.is_empty() {
             v.push((1, Item::snip("!--", Kind::Snippet, "!-- $0 -->", "<!-- -->")));
         }
@@ -847,6 +1030,28 @@ pub fn suggest_at(
             }
         }
         return ranked(prefix, v, limit);
+    }
+    // Emmet v texte HTML: „div.box“ → celý úryvok; slovo → všetky značky s ním (ako VS Code)
+    if let Some(abbr) = &cx.emmet {
+        let mut v: Vec<(u8, Item)> = vec![];
+        if abbr.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            for (t, doc) in &d.tags {
+                if t.starts_with(&abbr.to_ascii_lowercase()) {
+                    let body = format!("<{}", tag_body(t));
+                    v.push((u8::from(doc.contains("deprecated")), Item::snip(t, Kind::Tag, &body, &tag_preview(t)).doc(doc)));
+                }
+            }
+            v.extend(snippets(lang).iter().filter(|s| s.0.starts_with(abbr.as_str())).map(|(t, b, p)| (2, Item::snip(t, Kind::Snippet, b, p))));
+            let mut ws: Vec<(&String, &usize)> = words.iter().filter(|(w, n)| w.starts_with(abbr.as_str()) && (w.as_str() != abbr || **n > 1)).collect();
+            ws.sort_by(|a, b| b.1.cmp(a.1));
+            v.extend(ws.into_iter().map(|(w, _)| (3, Item::plain(w.clone(), Kind::Word))));
+        } else if let Some(body) = emmet(abbr) {
+            let prev = strip_stops(&body).replace('\t', "").replace('\n', "");
+            v.push((0, Item::snip(abbr, Kind::Snippet, &body, &prev).doc("Emmet abbreviation")));
+        }
+        if !v.is_empty() {
+            return ranked(abbr, v, limit);
+        }
     }
     let mut out: Vec<(u8, u8, Item)> = vec![];
     if fam == "html" && "!".starts_with(prefix) {
@@ -1087,5 +1292,26 @@ mod tests {
         assert!(at("css", "a { background-color: ").iter().any(|i| i.label == "transparent"));
         assert!(trigger("css", &"a { color: ".chars().collect::<Vec<_>>()));
         assert!(at("css", "a { gri").iter().any(|i| i.label == "grid-template-columns"));
+    }
+
+    #[test]
+    fn complete_emmet() {
+        assert_eq!(emmet("div.box").as_deref(), Some("<div class=\"box\">$1</div>"));
+        assert_eq!(emmet("ul>li*3").as_deref(), Some("<ul>\n\t<li>$1</li>\n\t<li>$2</li>\n\t<li>$3</li>\n</ul>"));
+        assert_eq!(emmet("p{Ahoj}+br").as_deref(), Some("<p>Ahoj</p>\n<br>"));
+        assert_eq!(emmet("#top.a.b").as_deref(), Some("<div id=\"top\" class=\"a b\">$1</div>"));
+        assert_eq!(emmet("li.item$*2").as_deref(), Some("<li class=\"item1\">$1</li>\n<li class=\"item2\">$2</li>"));
+        assert_eq!(emmet("div."), None);
+        // v texte HTML: slovo → značky (aj font), skratka → celý úryvok
+        let s = at("html", "<body>\n  fo");
+        assert!(s.iter().any(|i| i.label == "font" && i.insert.as_deref() == Some("<font>$0</font>")), "{s:?}");
+        let b = at("html", "<body>\n  div.box");
+        assert_eq!(b[0].insert.as_deref(), Some("<div class=\"box\">$1</div>"));
+        assert!(trigger("html", &"<p>p{Hi}".chars().collect::<Vec<_>>()));
+        // nie vnútri značky ani v próze s bodkou
+        assert_eq!(context("html", &"<div cl".chars().collect::<Vec<_>>()).emmet, None);
+        assert_eq!(context("html", &"Ahoj e.g.".chars().collect::<Vec<_>>()).emmet, None);
+        // vlastná značka zo súboru po „<“
+        assert!(at("html", "<my-card></my-card>\n<my").iter().any(|i| i.label == "my-card"));
     }
 }

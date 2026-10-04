@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.25 – 2026-10-04
+
+### Suggestions
+- **Clicking** a suggestion with the mouse now inserts it (before, the click was lost).
+- **Emmet** like in VS Code: in an HTML page type `div.box`, `ul>li*3`, `#top`, `p{Hello}` or `a+img` and press Enter – the whole HTML is written for you, with the cursor in the first empty tag.
+- In HTML text, the first letters of a tag (`fo`) already offer every matching tag (*font*, *footer*, *form*) as a full `<font></font>`.
+- Your own tags from the page (`<my-card>`) are offered after `<` too.
+- No red "never closed" hint on the line while you're still typing the tag.
+
 ## 0.9.24 – 2026-10-04
 
 ### Suggestions like in VS Code
