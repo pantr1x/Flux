@@ -3,6 +3,7 @@
 
 mod app;
 mod pins;
+mod glass;
 
 // počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
 struct Count;
@@ -48,31 +49,53 @@ mod update;
 mod wall;
 mod widgets;
 
-// priehľadné okno pre živú tapetu (Lively / Wallpaper Engine): pracovná plocha presvitá priamo,
-// Flux nič nedekóduje. Dá sa zvoliť len pri vytvorení okna, preto sa rozhodne zo settings.json vopred.
+// priehľadné okno (material „see“ = čisté, „blur“ = rozmazané): za Fluxom vidno, čo tam je (plocha, Lively, Discord…),
+// Flux nič nedekóduje ani nekreslí tapetu. Dá sa zvoliť len pri vytvorení okna, preto sa rozhodne zo settings.json vopred.
 pub static TRANSPARENT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn see_material(s: &serde_json::Value) -> bool {
+    matches!(s["material"].as_str(), Some("see" | "blur"))
+}
 
 pub fn want_transparent() -> bool {
     let s = flux_core::settings::load();
     let on = |k: &str, def: bool| s[k].as_bool().unwrap_or(def);
     let lite = on("lite", false);
-    s["material"].as_str() != Some("none")
-        && on("optFx", !lite)
-        && on("liveWallpaper", true)
-        && (s["liveWallMode"].as_str() == Some("glass") || (s["liveWallMode"].as_str() == Some("see") && std::env::var("FLUX_SEE_THROUGH").as_deref() == Ok("1")))
-        && !s["bg"]["type"].is_string()
-        && s["liveCache"]["file"].is_string()
-        && !boot::safe()
+    // tichý štart na pozadí (aktualizácia, most MCP): pokus o priehľadnosť počká na bežný štart, kde sa dá potvrdiť
+    let quiet = std::env::args().any(|a| a == "--background" || a == "--minimized");
+    let postponed = quiet && s["glassTrial"].as_str() == Some("pending");
+    see_material(&s) && on("optFx", !lite) && !boot::safe() && !postponed
 }
 
-// „sklo“ (liveWallMode: glass) je pokus: po prepnutí sa Flux spýta, či ho vidno. Bez potvrdenia do 25 s
-// (okno neviditeľné, zaseknuté, spadnuté) sa vráti na pohyblivú tapetu a spustí znova.
+// 0.9.12: priehľadné okno je nové predvolené – raz prepne tapetu (bez vlastného obrázka) a staré „sklo“ živej tapety
+fn see_migrate() {
+    let mut s = flux_core::settings::load();
+    if s["seeMigrated"].as_bool() == Some(true) {
+        return;
+    }
+    let Some(o) = s.as_object_mut() else { return };
+    let mat = o.get("material").and_then(|v| v.as_str()).unwrap_or("auto").to_string();
+    let own_bg = o.get("bg").map(|b| b["type"].is_string()).unwrap_or(false);
+    let glass = o.get("liveWallMode").and_then(|v| v.as_str()) == Some("glass");
+    if glass || (matches!(mat.as_str(), "auto" | "wallpaper") && !own_bg) {
+        o.insert("material".into(), serde_json::json!("see"));
+        o.insert("glassTrial".into(), serde_json::json!("pending"));
+        if glass {
+            o.insert("liveWallMode".into(), serde_json::json!("play"));
+        }
+    }
+    o.insert("seeMigrated".into(), serde_json::json!(true));
+    flux_core::settings::save(&s);
+}
+
+// priehľadné okno je pokus: po prepnutí sa Flux spýta, či je vidno, čo je za ním. Bez potvrdenia do 25 s
+// (okno neviditeľné, zaseknuté, spadnuté) sa vráti na tapetu a spustí znova. FLUX_GLASS_OK=1 potvrdí sám (CI).
 pub static GLASS_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn glass_revert() {
     let mut s = flux_core::settings::load();
     if let Some(o) = s.as_object_mut() {
-        o.insert("liveWallMode".into(), serde_json::json!("play"));
+        o.insert("material".into(), serde_json::json!("wallpaper"));
         o.remove("glassTrial");
     }
     flux_core::settings::save(&s);
@@ -84,9 +107,17 @@ fn glass_trial() {
         // minulý pokus sa nepotvrdil (okno nebolo vidno) → späť
         Some("running") => {
             glass_revert();
-            notice("The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.");
+            notice("The see-through window did not work on this computer, so Flux went back to the wallpaper picture.");
         }
         Some("pending") if want_transparent() => {
+            if std::env::var("FLUX_GLASS_OK").as_deref() == Ok("1") {
+                GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
+                if let Some(o) = s.as_object_mut() {
+                    o.remove("glassTrial");
+                }
+                flux_core::settings::save(&s);
+                return;
+            }
             s["glassTrial"] = serde_json::json!("running");
             flux_core::settings::save(&s);
             std::thread::spawn(|| {
@@ -216,6 +247,7 @@ fn main() -> eframe::Result {
         }
         report(&format!("{what}{at}"));
     }));
+    see_migrate();
     glass_trial();
     let r = run();
     if let Err(e) = &r {

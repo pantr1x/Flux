@@ -117,6 +117,7 @@ pub struct App {
     nav_dir: f32,
     tree_sel: Option<Rect>,
     undo_capped: HashSet<String>,  // veľké súbory s menšou históriou krokov späť
+    glass_apply: bool,             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
     unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
@@ -154,6 +155,10 @@ impl App {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let core = Arc::new(Core::load());
+        // rozmazané priehľadné okno: rozmazanie robí Windows (glass.rs)
+        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && core.setting("material").as_str() == Some("blur") && !crate::glass::blur(cc, true) {
+            eprintln!("[flux] blur behind the window is not available, staying clear");
+        }
         // naposledy zistená živá tapeta – hneď od štartu, bez prebliknutia tapety Windows
         let lc = core.setting("liveCache");
         let live_cache = lc["file"].as_str().map(std::path::PathBuf::from).filter(|p| p.is_file()).map(|file| crate::live::Found {
@@ -225,6 +230,7 @@ impl App {
             nav_dir: 0.0,
             tree_sel: None,
             undo_capped: HashSet::new(),
+            glass_apply: false,
             unfocused_at: None,
             live_push: None,
             shown: String::new(),
@@ -334,7 +340,12 @@ impl App {
             // adaptColors: pri svetlej tapete v tmavej téme (a naopak) sú panely menej priesvitné, aby bol text čitateľný
             let lum = self.wall.lum.unwrap_or(0.3);
             let clash = if p.dark { (lum - 0.25).max(0.0) } else { (0.65 - lum).max(0.0) };
-            let base_a = if p.dark { 0.62 } else { 0.66 } + (clash * 0.9).min(0.3);
+            // priehľadné okno: pozadie stmaví len toľko, koľko chce používateľ (Vzhľad → Stmavenie pozadia)
+            let base_a = if self.see_through() {
+                (self.get("glassDim").as_f64().unwrap_or(45.0) / 100.0).clamp(0.0, 0.9) as f32
+            } else {
+                (if p.dark { 0.62 } else { 0.66 }) + (clash * 0.9).min(0.3)
+            };
             // priehľadné okno (živá tapeta): pod kartou nie je rozmazaná kópia → karta plnšia
             let card_def = if self.see_through() {
                 0.94
@@ -357,7 +368,7 @@ impl App {
 
     fn wall_source(&self) -> Option<crate::wall::Src> {
         use crate::wall::Src;
-        if !self.wall_on() {
+        if !self.wall_on() || self.see_through() {
             return None;
         }
         let bg = self.core.setting("bg");
@@ -372,10 +383,6 @@ impl App {
         // živá tapeta (Lively Wallpaper / Wallpaper Engine), ak beží – bez vlastného pozadia a keď nie je vypnutá
         if self.get("liveWallpaper").as_bool() != Some(false) {
             if let Some(f) = self.live.lock().unwrap().clone() {
-                // priehľadné okno: plocha (aj živá tapeta) presvitá sama, Flux nič nekreslí ani nedekóduje
-                if self.see_through() {
-                    return None;
-                }
                 let mode = self.get("liveWallMode").as_str().unwrap_or("see").to_string();
                 return Some(match (f.video, mode.as_str()) {
                     (true, "play" | "see" | "glass") => Src::Video(f.file, f.preview), // „see“ z 0.7–0.8.3 = pohyblivá
@@ -399,8 +406,8 @@ impl App {
         ui.painter().add(egui::Shadow { offset: [0, 14], blur: 40, spread: 0, color: Color32::from_black_alpha(110) }.as_shape(card, CornerRadius::same(14)));
         ui.painter().rect_filled(card, CornerRadius::same(14), p.solid);
         ui.painter().rect_stroke(card, CornerRadius::same(14), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-        ui.painter().text(card.min + vec2(24.0, 30.0), Align2::LEFT_CENTER, t("Do you see your live wallpaper through Flux?"), theme::bold(14.0), p.text);
-        let g = ui.painter().layout(crate::i18n::tf("If you don't answer, Flux goes back to the moving wallpaper in {n} s.", &[("n", &format!("{left:.0}"))]), theme::ui(12.5), p.text3, w - 48.0);
+        ui.painter().text(card.min + vec2(24.0, 30.0), Align2::LEFT_CENTER, t("Can you see what is behind Flux?"), theme::bold(14.0), p.text);
+        let g = ui.painter().layout(crate::i18n::tf("If you don't answer, Flux goes back to the wallpaper picture in {n} s.", &[("n", &format!("{left:.0}"))]), theme::ui(12.5), p.text3, w - 48.0);
         ui.painter().galley(card.min + vec2(24.0, 48.0), g, p.text3);
         let mut b = ui.new_child(
             egui::UiBuilder::new()
@@ -418,7 +425,7 @@ impl App {
         } else if back {
             crate::GLASS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
             self.update_settings(|o| {
-                o.insert("liveWallMode".into(), json!("play"));
+                o.insert("material".into(), json!("wallpaper"));
                 o.remove("glassTrial");
             });
             if let Ok(e) = std::env::current_exe() {
@@ -430,13 +437,9 @@ impl App {
         ui.ctx().request_repaint_after(Duration::from_millis(500));
     }
 
-    // priehľadné okno práve ukazuje živú tapetu (okno vytvorené ako priehľadné + tapeta beží + režim „see“)
-    fn see_through(&self) -> bool {
-        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed)
-            && self.wall_on()
-            && matches!(self.get("liveWallMode").as_str().unwrap_or("see"), "see" | "glass")
-            && self.get("liveWallpaper").as_bool() != Some(false)
-            && self.live.lock().unwrap().is_some()
+    // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
+    pub(crate) fn see_through(&self) -> bool {
+        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && self.wall_on()
     }
 
     // „Restart to update“: uloží súbory, vymení program a spustí nový
@@ -454,7 +457,7 @@ impl App {
 
     // zistí živú tapetu na pozadí (tasklist + súbory nastavení), najviac raz za 10 s pri zameranom okne
     fn check_live(&mut self, ctx: &egui::Context, now: f64) {
-        if now - self.live_at < 10.0 || !self.wall_on() || self.get("liveWallpaper").as_bool() == Some(false) || self.core.setting("bg")["type"].is_string() {
+        if now - self.live_at < 10.0 || !self.wall_on() || self.see_through() || self.get("liveWallpaper").as_bool() == Some(false) || self.core.setting("bg")["type"].is_string() {
             return;
         }
         self.live_at = now;
@@ -2640,9 +2643,12 @@ impl eframe::App for App {
         }
     }
 
-    fn ui(&mut self, root: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, root: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = root.ctx().clone();
         let ctx = &ctx;
+        if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+            crate::glass::blur(&*frame, self.get("material").as_str() == Some("blur"));
+        }
         self.events();
         self.run_tests(ctx);
         // tapeta pod všetkým (panely sú nad ňou priesvitné)
@@ -3020,6 +3026,6 @@ impl eframe::App for App {
             self.track_place();
         }
         // vložený WebView2 na mieste panela Live Servera
-        self.sync_preview(ctx, _frame);
+        self.sync_preview(ctx, frame);
     }
 }

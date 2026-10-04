@@ -23,6 +23,7 @@ pub fn default_of(key: &str) -> Value {
         "lineNumbers" => json!("on"),
         "cornerRadius" => json!(14),
         "darkLift" => json!(0),
+        "glassDim" => json!(45),
         "density" => json!("comfortable"),
         "terminalFontSize" => json!(13),
         "panelPos" => json!("bottom"),
@@ -211,18 +212,27 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 vec![
                     Row::Select(
                         "material",
-                        "Window translucency",
-                        "“Wallpaper” stays translucent even when the window is not active. With Acrylic/Mica, Windows turns the window grey when inactive.",
-                        o(&[("wallpaper", "Wallpaper (recommended)"), ("none", "Off")]),
+                        "Window background",
+                        "See-through shows whatever is behind Flux – the desktop, a live wallpaper or other windows – and costs almost nothing. Wallpaper picture draws a copy of your wallpaper instead.",
+                        o(&[("see", "See-through – clear"), ("blur", "See-through – blurred"), ("wallpaper", "Wallpaper picture"), ("none", "Off")]),
                     ),
-                    Row::Button("bg-pick", "Background", "your own picture instead of the Windows wallpaper", "Image…"),
-                    Row::Toggle("liveWallpaper", "Use Lively Wallpaper and Wallpaper Engine", "when one of them is running, Flux shows the same wallpaper behind its panels"),
-                    Row::Select(
-                        "liveWallMode",
-                        "Live wallpaper",
-                        "Moving plays a copy of your live wallpaper. Glass lets the real desktop show through Flux – almost no extra memory, but windows behind Flux show too.",
-                        o(&[("play", "Moving (like the desktop)"), ("still", "Still image (less memory)"), ("glass", "See-through glass (try it)")]),
-                    ),
+                ]
+                .into_iter()
+                .chain(if matches!(app.get("material").as_str(), Some("see" | "blur")) {
+                    vec![Row::Range("glassDim", "Background dimming", "how dark the background behind the panels is – more makes text easier to read", 0.0, 90.0, 1.0)]
+                } else {
+                    vec![
+                        Row::Button("bg-pick", "Background", "your own picture instead of the Windows wallpaper", "Image…"),
+                        Row::Toggle("liveWallpaper", "Use Lively Wallpaper and Wallpaper Engine", "when one of them is running, Flux shows the same wallpaper behind its panels"),
+                        Row::Select(
+                            "liveWallMode",
+                            "Live wallpaper",
+                            "Moving plays a copy of your live wallpaper, Still image shows one frame and uses less memory.",
+                            o(&[("play", "Moving (like the desktop)"), ("still", "Still image (less memory)")]),
+                        ),
+                    ]
+                })
+                .chain(vec![
                     Row::Range("scrollSpeed", "Scroll distance", "how far one turn of the mouse wheel scrolls", 50.0, 300.0, 10.0),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
@@ -234,14 +244,15 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Select("density", "Density", "Compact fits more files, tabs and lines on the screen.", o(&[("comfortable", "comfortable"), ("compact", "compact")])),
                     Row::Range("cornerRadius", "Rounded corners", "how round the corners of panels and buttons are", 0.0, 26.0, 1.0),
                     Row::Range("darkLift", "Brightness of dark areas", "Only backgrounds get lighter – text and outlines stay the same. Turn it up if your wallpaper is very dark.", 0.0, 100.0, 1.0),
-                ],
+                ])
+                .collect(),
             ),
             (
                 "",
                 // priehľadnosť okna sa dá zmeniť len novým štartom – ponúknuť ho, keď sa líši od želania
                 if crate::want_transparent() != crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
                     vec![
-                        Row::Button("restart", "Restart Flux", "to switch the live wallpaper mode", "Restart"),
+                        Row::Button("restart", "Restart Flux", "to switch the window background", "Restart"),
                         Row::Button("look-reset", "Reset the look", "cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay", "Reset all"),
                     ]
                 } else {
@@ -344,12 +355,17 @@ impl App {
 
     pub(super) fn set(&mut self, key: &str, v: Value, ctx: &egui::Context) {
         // sklo: pokus, ktorý treba po novom štarte potvrdiť (main.rs → glass_trial)
-        let glass = key == "liveWallMode" && v.as_str() == Some("glass");
+        // priehľadné okno: pokus, ktorý treba po novom štarte potvrdiť (main.rs → glass_trial); len pri zmene z nepriehľadného
+        let see = key == "material" && matches!(v.as_str(), Some("see" | "blur"));
+        let trial = see && !crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed);
+        if see {
+            self.glass_apply = true; // čisté ↔ rozmazané ide hneď, bez nového štartu
+        }
         self.update_settings(|o| {
             o.insert(key.into(), v);
-            if glass {
+            if trial {
                 o.insert("glassTrial".into(), json!("pending"));
-            } else if key == "liveWallMode" {
+            } else if key == "material" {
                 o.remove("glassTrial");
             }
         });

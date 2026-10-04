@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.11"
+version = "0.9.12"
 dependencies = [
  "alacritty_terminal",
  "chrono",
@@ -1704,6 +1704,7 @@ dependencies = [
  "image",
  "log",
  "notify",
+ "raw-window-handle",
  "rfd",
  "serde_json",
  "sha2",

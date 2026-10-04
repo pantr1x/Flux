@@ -2,6 +2,18 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.12 – 2026-10-04
+
+### See-through window
+- Flux is now **see-through**: whatever is behind it – your desktop, Lively or Wallpaper Engine, Discord or any other window – shows through its panels. Flux no longer draws its own copy of the wallpaper, so the blocky look is gone and it uses less memory and power.
+- Settings → Appearance → Window → **Window background**: *See-through – clear*, *See-through – blurred* (Windows blurs what is behind Flux) or the old *Wallpaper picture*.
+- **Background dimming** sets how dark the background behind the panels is, so text stays easy to read.
+- The first time, Flux asks *Can you see what is behind Flux?*. If you don't answer within 25 seconds (for example because the window stays invisible), it goes back to the wallpaper picture by itself.
+
+### Scrolling that glides
+- **Mouse wheel:** each turn gives the page a push, it moves smoothly while you turn and glides out and slows down after you stop – like on an iPad. (The glide announced in 0.9.9 never actually made it into the program – sorry. It is in now.)
+- **Touchpad:** the page follows your fingers exactly and keeps gliding after you lift them, slowing down smoothly. The extra jump of one line at the end of a swipe is gone.
+
 ## 0.9.11 – 2026-10-04
 
 ### Taskbar pin repaired

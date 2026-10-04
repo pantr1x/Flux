@@ -15,6 +15,9 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    # priehľadné okno je pokus, ktorý inak čaká na potvrdenie používateľom (main.rs → glass_trial)
+    env:
+      FLUX_GLASS_OK: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -48,6 +51,7 @@ jobs:
             github = @{ token = 'enc:djEwAAAAAAAAAAAAAAAAAAAA'; user = @{ login = 'pantr1x'; name = 'Šimon'; id = 1; avatar = $null } }
             ai = @{ key = 'enc:djEwBBBB'; model = 'claude-opus-5'; mcp = @(@{ name = 'github'; url = 'https://example.com/mcp'; enabled = $true; token = 'enc:x' }) }
             liveCache = @{ file = $img; video = $false; preview = $img; source = 'lively' }
+            material = 'blur'
             codeLangs = @('python', 'web')
           } | ConvertTo-Json -Depth 8 | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
           $env:FLUX_USER_DATA = $ud
@@ -270,7 +274,7 @@ jobs:
             $realLocal = $env:LOCALAPPDATA; $env:LOCALAPPDATA = $lv; $env:FLUX_LIVE_TEST = "1"
             foreach ($mode in @('still', 'play')) {
               $d = "$env:RUNNER_TEMP\ud-live-$mode"; Settings $d
-              $j = Get-Content "$d\settings.json" | ConvertFrom-Json; $j | Add-Member liveWallMode $mode -Force; $j | ConvertTo-Json -Depth 5 | Set-Content "$d\settings.json"
+              $j = Get-Content "$d\settings.json" | ConvertFrom-Json; $j | Add-Member liveWallMode $mode -Force; $j | Add-Member material 'wallpaper' -Force; $j | Add-Member seeMigrated $true -Force; $j | ConvertTo-Json -Depth 5 | Set-Content "$d\settings.json"
               $env:FLUX_USER_DATA = $d
               $report += Start-FluxRun "native-live-$mode" (Get-ChildItem target\release\flux-native.exe).FullName $null
             }
