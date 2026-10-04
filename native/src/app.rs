@@ -164,6 +164,7 @@ pub struct App {
     start: bool,          // domov Fluxu (logo)
     start_q: String,      // hľadanie projektu na domove
     start_opened: f64,
+    focus_window: bool, // ďalšie spustenie Fluxu → toto okno dopredu
     preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
     tour_rects: HashMap<&'static str, Rect>, // kde sú časti okna (pre prehliadku)
@@ -290,6 +291,7 @@ impl App {
             start: false,
             start_q: String::new(),
             start_opened: 0.0,
+            focus_window: false,
             preview: None,
             tour: None,
             tour_rects: HashMap::new(),
@@ -355,7 +357,35 @@ impl App {
         if std::env::args().any(|a| a == "--minimized") {
             cc.egui_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
         }
+        // jeden Flux: ďalšie spustenia pošlú súbor sem (single.rs); súbor z príkazového riadka otvoriť hneď
+        crate::single::listen(app.emit.clone());
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(f) = crate::single::path_arg(&args) {
+            app.open_external(&f);
+        }
         app
+    }
+
+    // súbor alebo priečinok zvonku (Prieskumník „Otvoriť vo Fluxe“, ďalšie spustenie)
+    pub(crate) fn open_external(&mut self, path: &str) {
+        if Path::new(path).is_dir() {
+            self.start = false;
+            self.open_folder(path);
+            return;
+        }
+        // súbor z niektorého projektu → otvoriť ten projekt; inak ako voľný súbor (FILES)
+        let projects = self.core.setting("projects");
+        let dirs: Vec<String> = projects.as_array().map(|a| a.iter().filter_map(|p| p.as_str().or(p["dir"].as_str()).map(String::from)).collect()).unwrap_or_default();
+        match dirs.into_iter().filter(|d| Path::new(path).starts_with(d)).max_by_key(|d| d.len()) {
+            Some(d) if self.workspace().as_deref() != Some(d.as_str()) => self.open_folder(&d),
+            Some(_) => {}
+            None => {
+                fsops::allow_file(&self.core, path);
+            }
+        }
+        self.reload_projects();
+        self.start = false;
+        self.open_file(path);
     }
 
     fn palette(&self) -> Pal {
@@ -550,7 +580,12 @@ impl App {
         ui.painter().text(
             card.min + vec2(36.0, 58.0),
             Align2::LEFT_CENTER,
-            crate::i18n::tf("Flux Native was updated to {v}.", &[("v", env!("CARGO_PKG_VERSION"))]),
+            // po prechode zo starého Fluxu (migrate.rs) najprv vysvetliť, čo sa stalo
+            if self.core.setting("migratedFromElectron").is_object() && self.core.setting("migratedSeen").is_null() {
+                t("Flux is now the new, faster Flux – your projects and settings came along.")
+            } else {
+                crate::i18n::tf("Flux Native was updated to {v}.", &[("v", env!("CARGO_PKG_VERSION"))])
+            },
             theme::ui(12.5),
             p.text3,
         );
@@ -590,6 +625,9 @@ impl App {
             self.whats_new = None;
             self.update_settings(|o| {
                 o.insert("nativeSeenVersion".into(), json!(env!("CARGO_PKG_VERSION")));
+                if o.contains_key("migratedFromElectron") {
+                    o.insert("migratedSeen".into(), json!(true));
+                }
             });
             if all {
                 self.open_settings("general", ui.ctx());
@@ -1063,6 +1101,12 @@ impl App {
                 }
                 "shell:data" => self.sh.feed(v.as_str().unwrap_or("")),
                 "shell:exit" => self.shell_started = false,
+                "ipc:open" => {
+                    if let Some(f) = v.as_str() {
+                        self.open_external(f);
+                    }
+                    self.focus_window = true;
+                }
                 "py:info" => {
                     if v["path"].is_string() {
                         self.python = Some(v);
@@ -3104,6 +3148,10 @@ impl eframe::App for App {
             crate::glass::blur(&*frame, self.get("material").as_str() == Some("blur"));
         }
         self.events();
+        if std::mem::take(&mut self.focus_window) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
         self.run_tests(ctx);
         // tapeta pod všetkým (panely sú nad ňou priesvitné)
         if self.wall.paint(ctx) {

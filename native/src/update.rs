@@ -120,7 +120,7 @@ fn spawn_detached(c: &mut std::process::Command) -> std::io::Result<std::process
 }
 
 #[cfg(windows)]
-fn wait_exit(pid: u32, max: Duration) {
+pub(crate) fn wait_exit(pid: u32, max: Duration) {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
     unsafe {
@@ -133,7 +133,7 @@ fn wait_exit(pid: u32, max: Duration) {
 }
 
 #[cfg(not(windows))]
-fn wait_exit(pid: u32, max: Duration) {
+pub(crate) fn wait_exit(pid: u32, max: Duration) {
     let t = std::time::Instant::now();
     while std::path::Path::new(&format!("/proc/{pid}")).exists() && t.elapsed() < max {
         std::thread::sleep(Duration::from_millis(50));

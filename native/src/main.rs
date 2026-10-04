@@ -3,6 +3,8 @@
 
 mod app;
 mod pins;
+mod migrate;
+mod single;
 mod glass;
 mod lint;
 mod complete;
@@ -182,6 +184,18 @@ fn main() -> eframe::Result {
     if args.iter().any(|a| a == "--updated") {
         update::remove_helper();
     }
+    // prechod zo starého Fluxu (Electron): odkazy, pripnutie a typy súborov → sem (migrate.rs)
+    if args.iter().any(|a| a == "--migrate") {
+        migrate::run(&args);
+        if args.iter().any(|a| a == "--no-window") {
+            return Ok(());
+        }
+    }
+    // Flux beží len raz: súbor z Prieskumníka (alebo ďalšie spustenie) prevezme bežiace okno
+    if !args.iter().any(|a| a == "--background") && single::forward(single::path_arg(&args).as_deref()) {
+        return Ok(());
+    }
+    remember_path();
     let _ = log::set_logger(&Log).map(|_| log::set_max_level(log::LevelFilter::Warn));
     boot::catch_hard_crashes();
     boot::kill_ghosts();
@@ -208,6 +222,17 @@ fn main() -> eframe::Result {
         }
     }
     r
+}
+
+// cesta k tomuto programu v nastaveniach – starý Flux (Electron) podľa nej prejde na túto kópiu namiesto sťahovania
+fn remember_path() {
+    let Ok(exe) = std::env::current_exe() else { return };
+    let p = exe.to_string_lossy().to_string();
+    let mut s = flux_core::settings::load();
+    if s["nativePath"].as_str() != Some(p.as_str()) {
+        s["nativePath"] = serde_json::json!(p);
+        flux_core::settings::save(&s);
+    }
 }
 
 fn run() -> eframe::Result {

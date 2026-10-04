@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.18 – 2026-10-04
+
+### One Flux
+- The old Flux now moves itself to this new Flux with its next update. Your projects and settings come along, your taskbar pin, Start menu and desktop shortcuts open the new Flux, and "Open with Flux" for code files does too. The old program is removed, so there is only one Flux.
+- Double-clicking a code file while Flux is open opens it in the window you already have instead of starting Flux a second time.
+
 ## 0.9.17 – 2026-10-04
 
 ### Window buttons fit in

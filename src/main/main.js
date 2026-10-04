@@ -1712,6 +1712,8 @@ app.on('second-instance', (_e, argv, cwd) => {
 
 app.whenReady().then(() => {
   loadSettings();
+  // jeden Flux: tento Flux prejde na Flux Native (toNative.js) – keď je pripravený, odovzdá a zavrie sa
+  if (require('./toNative').start({ settings, saveSettings })) return;
   i18n.setLanguage(settings.language || 'en');
   migrateBackground();
   migrateMaterial();
