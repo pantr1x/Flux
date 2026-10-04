@@ -78,3 +78,45 @@ pub fn round(w: &impl raw_window_handle::HasWindowHandle) {
 
 #[cfg(not(windows))]
 pub fn round<T>(_w: &T) {}
+
+// winit pri okne bez rámu posunie klientsku plochu o 1 px nadol (kvôli tieňu, WM_NCCALCSIZE) – ten 1 px hore
+// kreslí Windows ako tenkú čiaru nad lištou. Vlastná obsluha okna to po winite vráti späť (okrem maximalizovaného).
+#[cfg(windows)]
+static OLD_PROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+#[cfg(windows)]
+unsafe extern "system" fn nc_proc(hwnd: windows_sys::Win32::Foundation::HWND, msg: u32, wp: usize, lp: isize) -> isize {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{CallWindowProcW, IsZoomed, NCCALCSIZE_PARAMS, WM_NCCALCSIZE, WNDPROC};
+    let old: WNDPROC = std::mem::transmute(OLD_PROC.load(std::sync::atomic::Ordering::Relaxed));
+    let r = CallWindowProcW(old, hwnd, msg, wp, lp);
+    if msg == WM_NCCALCSIZE && wp != 0 && lp != 0 && IsZoomed(hwnd) == 0 {
+        let p = &mut *(lp as *mut NCCALCSIZE_PARAMS);
+        p.rgrc[0].top -= 1;
+        p.rgrc[0].bottom -= 1;
+    }
+    r
+}
+
+#[cfg(windows)]
+pub fn no_top_line(w: &impl raw_window_handle::HasWindowHandle) {
+    use raw_window_handle::RawWindowHandle;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowLongPtrW, SetWindowPos, GWLP_WNDPROC, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE};
+    let Ok(h) = w.window_handle() else { return };
+    let RawWindowHandle::Win32(h) = h.as_raw() else { return };
+    let hwnd = h.hwnd.get() as _;
+    if OLD_PROC.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+        return;
+    }
+    unsafe {
+        let old = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, nc_proc as *const () as isize);
+        if old == 0 {
+            return;
+        }
+        OLD_PROC.store(old, std::sync::atomic::Ordering::Relaxed);
+        // prepočítať rám hneď
+        SetWindowPos(hwnd, std::ptr::null_mut(), 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+#[cfg(not(windows))]
+pub fn no_top_line<T>(_w: &T) {}

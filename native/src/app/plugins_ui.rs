@@ -204,7 +204,7 @@ impl App {
                     let prefix = s("prefix");
                     let desc = s("desc");
                     let preview = if desc.is_empty() { body.lines().next().unwrap_or("").replace("$0", "").to_string() } else { desc };
-                    let item = crate::complete::Item { label: prefix, kind: crate::complete::Kind::Snippet, insert: Some(body), detail: Some(preview) };
+                    let item = crate::complete::Item { label: prefix, kind: crate::complete::Kind::Snippet, insert: Some(body), detail: Some(preview), doc: None };
                     self.plug.snips.push((plugin, s("lang"), item));
                 }
                 "theme" => plugins::add_theme(&plugin, &s("key"), &f["def"]),

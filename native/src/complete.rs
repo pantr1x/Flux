@@ -2,6 +2,8 @@
 // Poradie: rovnaký začiatok (aj veľkosť písmen) > začiatok bez ohľadu na veľkosť > obsahuje; potom podľa početnosti.
 use std::collections::HashMap;
 
+mod data;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
     Keyword,
@@ -20,14 +22,20 @@ pub struct Item {
     pub insert: Option<String>,
     // náhľad vpravo v okne (napr. „<title></title>“)
     pub detail: Option<String>,
+    // krátky popis vybranej položky (ako dokumentácia vo VS Code)
+    pub doc: Option<&'static str>,
 }
 
 impl Item {
     fn plain(label: String, kind: Kind) -> Self {
-        Item { label, kind, insert: None, detail: None }
+        Item { label, kind, insert: None, detail: None, doc: None }
+    }
+    fn doc(mut self, d: &'static str) -> Self {
+        self.doc = Some(d);
+        self
     }
     fn snip(label: &str, kind: Kind, body: &str, detail: &str) -> Self {
-        Item { label: label.into(), kind, insert: Some(body.into()), detail: (!detail.is_empty()).then(|| detail.into()) }
+        Item { label: label.into(), kind, insert: Some(body.into()), detail: (!detail.is_empty()).then(|| detail.into()), doc: None }
     }
 }
 
@@ -168,54 +176,334 @@ pub fn suggest(lang: &str, prefix: &str, words: &HashMap<String, usize>, limit: 
     v.into_iter().take(limit).map(|(_, _, label, kind)| Item::plain(label, kind)).collect()
 }
 
-// ---- návrhy podľa miesta v kóde (ako VS Code): značky HTML, vlastnosti CSS, bloky kódu ----
+// ---- návrhy podľa miesta v kóde (ako VS Code): značky HTML, vlastnosti CSS, členy za bodkou, moduly ----
 
-// kde sa píše: hneď za „<“ (značka HTML), vnútri otvorenej značky (atribút), za „vlastnosť:“ v CSS (hodnota)
+// kde sa píše (podľa textu pred kurzorom)
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Ctx {
-    pub after_lt: bool,
-    pub in_tag: bool,
-    pub css_value: Option<String>,
+    pub lang: Option<&'static str>,          // v HTML vnútri <style> = "css", <script> = "js"
+    pub after_lt: bool,                      // hneď za „<“ → značky
+    pub close: bool,                         // za „</“ → neuzavreté značky
+    pub open_tags: Vec<String>,              // neuzavreté značky pred kurzorom (najvnútornejšia posledná)
+    pub in_tag: Option<String>,              // vnútri značky (meno) → atribúty
+    pub attr_value: Option<(String, String)>, // v úvodzovkách atribútu (značka, atribút) → hodnoty
+    pub css_value: Option<String>,           // za „vlastnosť:“ → hodnoty
+    pub css_block: bool,                     // vnútri { } → vlastnosti, inak selektor
+    pub css_pseudo: bool,                    // „a:ho“ v selektore → pseudo-triedy
+    pub css_at: bool,                        // „@me“ → @media, @keyframes…
+    pub member: Option<String>,              // „objekt.“ / „std::“ → členy objektu
+    pub import: Option<String>,              // „import “ = Some(""), „from os import “ = Some("os")
+}
+
+impl Ctx {
+    // miesto s vlastnými návrhmi: stačí jedno písmeno (inak dve)
+    pub fn rich(&self) -> bool {
+        self.after_lt || self.close || self.in_tag.is_some() || self.attr_value.is_some() || self.css_value.is_some() || self.css_pseudo || self.css_at || self.member.is_some() || self.import.is_some()
+    }
+}
+
+fn family(lang: &str) -> &'static str {
+    match lang {
+        "html" | "htm" | "xml" | "vue" | "svelte" | "php" => "html",
+        "css" | "scss" | "less" => "css",
+        "js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" => "js",
+        "py" | "pyw" => "py",
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" => "cpp",
+        "c" | "h" => "c",
+        "java" => "java",
+        "cs" => "cs",
+        "go" => "go",
+        "rs" => "rs",
+        _ => "",
+    }
+}
+
+fn lower(cs: &[char]) -> String {
+    cs.iter().map(|c| c.to_ascii_lowercase()).collect()
+}
+
+// neuzavreté značky v texte (bez prázdnych, komentárov a obsahu <script>/<style>)
+pub fn open_tags(before: &[char]) -> Vec<String> {
+    let mut st: Vec<String> = vec![];
+    let n = before.len();
+    let mut i = 0;
+    while i < n {
+        if before[i] != '<' {
+            i += 1;
+            continue;
+        }
+        if before[i + 1..].starts_with(&['!', '-', '-']) {
+            // komentár
+            let rest: String = before[i..].iter().collect();
+            i += rest.find("-->").map(|p| rest[..p].chars().count() + 3).unwrap_or(n);
+            continue;
+        }
+        let closing = before.get(i + 1) == Some(&'/');
+        let s = i + 1 + usize::from(closing);
+        let mut e = s;
+        while e < n && (before[e].is_alphanumeric() || before[e] == '-') {
+            e += 1;
+        }
+        if e == s {
+            i += 1;
+            continue;
+        }
+        let name = lower(&before[s..e]);
+        // koniec značky
+        let mut j = e;
+        let mut q: Option<char> = None;
+        while j < n {
+            let c = before[j];
+            match q {
+                Some(x) if c == x => q = None,
+                Some(_) => {}
+                None if c == '"' || c == '\'' => q = Some(c),
+                None if c == '>' => break,
+                _ => {}
+            }
+            j += 1;
+        }
+        if j >= n {
+            break; // značka sa ešte píše
+        }
+        let self_close = before[j - 1] == '/';
+        if closing {
+            if let Some(k) = st.iter().rposition(|t| *t == name) {
+                st.truncate(k);
+            }
+        } else if !self_close && !VOID.contains(&name.as_str()) {
+            if name == "script" || name == "style" {
+                // obsah preskočiť až po </script>
+                let rest: String = lower(&before[j..]);
+                match rest.find(&format!("</{name}")) {
+                    Some(p) => {
+                        i = j + rest[..p].chars().count();
+                        continue;
+                    }
+                    None => {
+                        st.push(name);
+                        break;
+                    }
+                }
+            }
+            st.push(name);
+        }
+        i = j + 1;
+    }
+    st
 }
 
 pub fn context(lang: &str, before: &[char]) -> Ctx {
-    let mut c = Ctx::default();
+    let fam = family(lang);
     let plen = before.iter().rev().take_while(|ch| ident_char(**ch, lang)).count();
     let head = &before[..before.len() - plen];
-    match lang {
-        "html" | "htm" | "xml" | "vue" | "svelte" | "php" => {
+    let mut c = Ctx::default();
+    match fam {
+        "html" => {
+            // vnútri <style> / <script> sa navrhuje CSS / JavaScript
+            let low = lower(before);
+            for (tag, l) in [("style", "css"), ("script", "js")] {
+                if let Some(o) = low.rfind(&format!("<{tag}")) {
+                    if low.rfind(&format!("</{tag}")).is_none_or(|cl| cl < o) {
+                        if let Some(gt) = low[o..].find('>') {
+                            let start = low[..o + gt + 1].chars().count();
+                            if start <= head.len() && !low[o..o + gt].contains("src=") {
+                                let mut inner = context(l, &before[start..]);
+                                inner.lang = Some(l);
+                                return inner;
+                            }
+                        }
+                    }
+                }
+            }
+            if head.ends_with(&['<', '/']) {
+                c.close = true;
+                c.open_tags = open_tags(&before[..head.len() - 2]);
+                return c;
+            }
             c.after_lt = head.last() == Some(&'<');
-            if !c.after_lt {
-                let lt = head.iter().rposition(|ch| *ch == '<');
-                let gt = head.iter().rposition(|ch| *ch == '>');
-                c.in_tag = lt.is_some_and(|l| gt.is_none_or(|g| g < l) && head.get(l + 1) != Some(&'/') && head.get(l + 1) != Some(&'!'));
-                // vnútri úvodzoviek atribútu nič
-                if c.in_tag {
-                    let q = head[lt.unwrap()..].iter().filter(|ch| **ch == '"').count();
-                    c.in_tag = q % 2 == 0;
+            if c.after_lt {
+                c.open_tags = open_tags(&head[..head.len() - 1]);
+                return c;
+            }
+            let lt = head.iter().rposition(|ch| *ch == '<');
+            let gt = head.iter().rposition(|ch| *ch == '>');
+            let Some(l) = lt.filter(|l| gt.is_none_or(|g| g < *l)) else { return c };
+            if matches!(head.get(l + 1), Some('/') | Some('!') | Some('?')) {
+                return c;
+            }
+            let mut e = l + 1;
+            while e < head.len() && (head[e].is_alphanumeric() || head[e] == '-') {
+                e += 1;
+            }
+            if e == l + 1 {
+                return c;
+            }
+            let tag = lower(&head[l + 1..e]);
+            // v úvodzovkách = hodnota atribútu
+            let mut q: Option<(char, usize)> = None;
+            for (k, ch) in head.iter().enumerate().skip(e) {
+                match q {
+                    Some((x, _)) if *ch == x => q = None,
+                    None if *ch == '"' || *ch == '\'' => q = Some((*ch, k)),
+                    _ => {}
+                }
+            }
+            if let Some((_, k)) = q {
+                if k >= 1 && head[k - 1] == '=' {
+                    let mut s = k - 1;
+                    while s > 0 && (head[s - 1].is_alphanumeric() || head[s - 1] == '-' || head[s - 1] == ':') {
+                        s -= 1;
+                    }
+                    c.attr_value = Some((tag, lower(&head[s..k - 1])));
+                }
+                return c;
+            }
+            if head.last().is_some_and(|ch| ch.is_whitespace()) {
+                c.in_tag = Some(tag);
+            }
+        }
+        "css" => {
+            let depth = head.iter().fold(0i32, |d, ch| match ch {
+                '{' => d + 1,
+                '}' => (d - 1).max(0),
+                _ => d,
+            });
+            c.css_block = depth > 0;
+            if head.last() == Some(&'@') {
+                c.css_at = true;
+                return c;
+            }
+            let semi = head.iter().rposition(|ch| matches!(*ch, ';' | '{' | '}'));
+            if c.css_block {
+                if let Some(col) = head.iter().rposition(|ch| *ch == ':').filter(|col| semi.is_none_or(|s| s < *col)) {
+                    let start = semi.map(|s| s + 1).unwrap_or(0);
+                    let prop = head[start..col].iter().collect::<String>().trim().to_string();
+                    // „a:hover {“ vo vnorenom SCSS nie je vlastnosť
+                    if !prop.is_empty() && prop.chars().all(|ch| ch.is_alphanumeric() || ch == '-') {
+                        c.css_value = Some(prop);
+                    }
+                }
+            } else if head.last() == Some(&':') {
+                c.css_pseudo = true;
+            }
+        }
+        "" => {}
+        _ => {
+            let line_start = head.iter().rposition(|ch| *ch == '\n').map(|i| i + 1).unwrap_or(0);
+            let line: String = head[line_start..].iter().collect();
+            let lt = line.trim_start();
+            if fam == "py" {
+                if lt == "import " || lt == "from " || (lt.starts_with("import ") && lt.ends_with(", ")) {
+                    c.import = Some(String::new());
+                    return c;
+                }
+                if let Some(rest) = lt.strip_prefix("from ") {
+                    if let Some((m, after)) = rest.split_once(" import ") {
+                        if after.is_empty() || after.trim_end().ends_with(',') {
+                            c.import = Some(m.trim().to_string());
+                            return c;
+                        }
+                    }
+                }
+            }
+            if fam == "js" && (lt.ends_with("from '") || lt.ends_with("from \"") || lt.ends_with("require('") || lt.ends_with("require(\"") || lt.ends_with("import '") || lt.ends_with("import \"")) {
+                c.import = Some(String::new());
+                return c;
+            }
+            // člen: „objekt.“ alebo „std::“
+            let sep = if head.last() == Some(&'.') {
+                1
+            } else if matches!(fam, "cpp" | "rs") && head.ends_with(&[':', ':']) {
+                2
+            } else {
+                0
+            };
+            if sep > 0 {
+                let end = head.len() - sep;
+                let mut s = end;
+                while s > 0 {
+                    let ch = head[s - 1];
+                    if ident_char(ch, lang) || ch == '.' || (ch == ':' && matches!(fam, "cpp" | "rs")) {
+                        s -= 1;
+                    } else {
+                        break;
+                    }
+                }
+                let chain: String = head[s..end].iter().collect::<String>().replace("::", ".");
+                let chain = chain.trim_matches('.').to_string();
+                // „3.“ je číslo, nie objekt
+                if !chain.is_empty() && !chain.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
+                    c.member = Some(chain);
+                } else if head[..end].last().is_some_and(|ch| matches!(ch, ')' | ']' | '"' | '\'' | '`')) {
+                    c.member = Some("*".into());
                 }
             }
         }
-        "css" | "scss" | "less" => {
-            let semi = head.iter().rposition(|ch| matches!(*ch, ';' | '{' | '}'));
-            if let Some(col) = head.iter().rposition(|ch| *ch == ':').filter(|col| semi.is_none_or(|s| s < *col)) {
-                let start = semi.map(|s| s + 1).unwrap_or(0);
-                c.css_value = Some(head[start..col].iter().collect::<String>().trim().to_string());
-            }
-        }
-        _ => {}
     }
     c
 }
 
-pub const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];
-const TAGS: &[&str] = &[
-    "a", "abbr", "article", "aside", "audio", "b", "blockquote", "body", "br", "button", "canvas", "code", "div", "em", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr",
-    "html", "i", "iframe", "img", "input", "label", "li", "link", "main", "meta", "nav", "ol", "option", "p", "pre", "script", "section", "select", "small", "span", "strong", "style", "table",
-    "tbody", "td", "textarea", "th", "thead", "title", "tr", "u", "ul", "video",
-];
-const ATTRS: &[&str] = &["class", "id", "href", "src", "alt", "type", "name", "value", "placeholder", "style", "title", "rel", "target", "width", "height", "for", "onclick", "disabled", "checked", "lang", "charset", "content"];
+// znak, ktorý sám otvorí návrhy (ako „trigger characters“ vo VS Code)
+pub fn trigger(lang: &str, before: &[char]) -> bool {
+    let Some(&ch) = before.last() else { return false };
+    let prev = before.len().checked_sub(2).map(|i| before[i]);
+    if !matches!(ch, '<' | '/' | ' ' | '"' | '\'' | ':' | '.' | '@') {
+        return false;
+    }
+    let cx = context(lang, before);
+    match ch {
+        '<' => cx.after_lt,
+        '/' => cx.close,
+        ' ' => (cx.in_tag.is_some() && !prev.is_some_and(|p| p.is_whitespace())) || (cx.css_value.is_some() && prev == Some(':')) || cx.import.is_some(),
+        '"' | '\'' => cx.attr_value.is_some() || cx.import.is_some(),
+        ':' => cx.css_pseudo || cx.css_value.is_some() || cx.member.is_some(),
+        '.' => cx.member.is_some(),
+        '@' => cx.css_at,
+        _ => false,
+    }
+}
+
+pub const VOID: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr", "param"];
 const HTML5: &str = "<!DOCTYPE html>\n<html lang=\"${1:en}\">\n<head>\n\t<meta charset=\"UTF-8\">\n\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n\t<title>${2:Document}</title>\n</head>\n<body>\n\t$0\n</body>\n</html>";
+
+// údaje z data.rs, rozložené raz
+struct Db {
+    tags: Vec<(&'static str, &'static str)>,
+    tag_attrs: HashMap<&'static str, Vec<&'static str>>,
+    values: HashMap<&'static str, Vec<&'static str>>,
+    css: Vec<(&'static str, Vec<&'static str>)>,
+    members: HashMap<(&'static str, &'static str), Vec<&'static str>>,
+}
+
+fn split_vals(v: &'static str) -> Vec<&'static str> {
+    if v.contains('|') {
+        v.split('|').map(str::trim).filter(|x| !x.is_empty()).collect()
+    } else {
+        v.split_whitespace().collect()
+    }
+}
+
+fn db() -> &'static Db {
+    static DB: std::sync::OnceLock<Db> = std::sync::OnceLock::new();
+    DB.get_or_init(|| {
+        let pairs = |s: &'static str| s.lines().filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim(), v)).collect::<Vec<_>>();
+        Db {
+            tags: data::TAGS.lines().filter_map(|l| l.split_once('|')).collect(),
+            tag_attrs: pairs(data::TAG_ATTRS).into_iter().map(|(k, v)| (k, v.split_whitespace().collect())).collect(),
+            values: pairs(data::ATTR_VALUES).into_iter().map(|(k, v)| (k, split_vals(v))).collect(),
+            css: pairs(data::CSS).into_iter().map(|(k, v)| (k, split_vals(v))).collect(),
+            members: data::MEMBERS
+                .lines()
+                .filter_map(|l| {
+                    let (k, v) = l.split_once(": ")?;
+                    let (lang, obj) = k.split_once(' ')?;
+                    Some(((lang, obj), v.split(';').map(str::trim).filter(|x| !x.is_empty()).collect()))
+                })
+                .collect(),
+        }
+    })
+}
 
 fn tag_body(t: &str) -> String {
     match t {
@@ -225,6 +513,17 @@ fn tag_body(t: &str) -> String {
         "script" => "script src=\"$1\"></script>".into(),
         "input" => "input type=\"${1:text}\" $0>".into(),
         "meta" => "meta $0>".into(),
+        "html" => "html lang=\"${1:en}\">\n$0\n</html>".into(),
+        "form" => "form action=\"$1\">$0</form>".into(),
+        "label" => "label for=\"$1\">$0</label>".into(),
+        "iframe" => "iframe src=\"$1\" frameborder=\"0\">$0</iframe>".into(),
+        "video" => "video src=\"$1\" controls>$0</video>".into(),
+        "audio" => "audio src=\"$1\" controls>$0</audio>".into(),
+        "source" => "source src=\"$1\" type=\"$2\">".into(),
+        "button" => "button type=\"${1:button}\">$0</button>".into(),
+        "option" => "option value=\"$1\">$0</option>".into(),
+        "ul" | "ol" => format!("{t}>\n\t<li>$0</li>\n</{t}>"),
+        "table" => "table>\n\t<tr>\n\t\t<td>$0</td>\n\t</tr>\n</table>".into(),
         t if VOID.contains(&t) => format!("{t}>"),
         t => format!("{t}>$0</{t}>"),
     }
@@ -365,37 +664,192 @@ fn rank(prefix: &str, w: &str) -> Option<u8> {
     }
 }
 
-// hlavné návrhy: úryvky a značky/vlastnosti podľa miesta, potom slová a funkcie (so zátvorkami)
-pub fn suggest_at(lang: &str, prefix: &str, cx: &Ctx, words: &HashMap<String, usize>, calls: &std::collections::HashSet<String>, extra: &[Item], limit: usize) -> Vec<Item> {
-    // HTML: za „<“ len značky
-    if cx.after_lt {
-        let mut v: Vec<(u8, Item)> = TAGS
-            .iter()
-            .filter_map(|t| rank(prefix, t).map(|r| (r, Item::snip(t, Kind::Tag, &tag_body(t), &tag_preview(t)))))
-            .collect();
-        v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.label.len().cmp(&b.1.label.len())));
-        return v.into_iter().take(limit).map(|x| x.1).collect();
+// slová zo súboru, ktoré stoja za bodkou (self.meno, obj.metoda) – návrhy za „objekt.“
+pub fn members(text: &str, lang: &str) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    let mut cur = String::new();
+    let mut dot = false;
+    let mut prev = ' ';
+    for c in text.chars().chain(std::iter::once(' ')) {
+        if ident_char(c, lang) {
+            if cur.is_empty() {
+                dot = prev == '.';
+            }
+            cur.push(c);
+        } else {
+            if dot && cur.chars().count() >= 2 && !cur.chars().next().is_some_and(|ch| ch.is_ascii_digit()) {
+                out.insert(std::mem::take(&mut cur));
+            }
+            cur.clear();
+        }
+        prev = c;
     }
-    if cx.in_tag {
-        let mut v: Vec<(u8, Item)> = ATTRS.iter().filter_map(|a| rank(prefix, a).map(|r| (r, Item::snip(a, Kind::Property, &format!("{a}=\"$0\""), &format!("{a}=\"\""))))).collect();
-        v.sort_by(|a, b| a.0.cmp(&b.0));
-        return v.into_iter().take(limit).map(|x| x.1).collect();
+    out
+}
+
+// poradie: zhoda začiatku > bez veľkosti písmen > obsahuje; potom skupina; pri prázdnom začiatku poradie zoznamu
+fn ranked(prefix: &str, list: Vec<(u8, Item)>, limit: usize) -> Vec<Item> {
+    let mut v: Vec<(u8, u8, usize, Item)> = list.into_iter().enumerate().filter_map(|(i, (g, it))| rank(prefix, &it.label).map(|r| (r, g, i, it))).collect();
+    if prefix.is_empty() {
+        v.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)));
+    } else {
+        v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.3.label.len().cmp(&b.3.label.len())).then(a.3.label.cmp(&b.3.label)));
+    }
+    let mut seen = std::collections::HashSet::new();
+    v.into_iter().filter(|x| seen.insert(x.3.label.clone())).take(limit).map(|x| x.3).collect()
+}
+
+// člen z podpisu „log(...data)“ → položka s „log($0)“
+fn member_item(sig: &str) -> Item {
+    match sig.split_once('(') {
+        Some((name, args)) => {
+            let body = if args.starts_with(')') { format!("{name}()$0") } else { format!("{name}($0)") };
+            Item { label: name.into(), kind: Kind::Builtin, insert: Some(body), detail: Some(sig.into()), doc: None }
+        }
+        None => Item { label: sig.into(), kind: Kind::Property, insert: None, detail: None, doc: None },
+    }
+}
+
+fn value_item(v: &str) -> Item {
+    match v.strip_suffix("()") {
+        Some(f) => Item::snip(v, Kind::Builtin, &format!("{f}($0)"), ""),
+        None => Item::plain(v.to_string(), Kind::Keyword),
+    }
+}
+
+// hlavné návrhy podľa miesta: značky/atribúty/hodnoty, vlastnosti CSS, členy, moduly; inak úryvky, slová a funkcie
+#[allow(clippy::too_many_arguments)]
+pub fn suggest_at(
+    lang: &str,
+    prefix: &str,
+    cx: &Ctx,
+    words: &HashMap<String, usize>,
+    calls: &std::collections::HashSet<String>,
+    mems: &std::collections::HashSet<String>,
+    extra: &[Item],
+    limit: usize,
+) -> Vec<Item> {
+    let lang = cx.lang.unwrap_or(lang);
+    let fam = family(lang);
+    let d = db();
+    // HTML: „</“ → neuzavreté značky (najvnútornejšia prvá)
+    if cx.close {
+        let mut v: Vec<(u8, Item)> = cx.open_tags.iter().rev().map(|t| (0, Item::snip(t, Kind::Tag, &format!("{t}>$0"), &format!("</{t}>")))).collect();
+        v.extend(d.tags.iter().filter(|t| !VOID.contains(&t.0)).map(|(t, _)| (1, Item::snip(t, Kind::Tag, &format!("{t}>$0"), &format!("</{t}>")))));
+        return ranked(prefix, v, limit);
+    }
+    // HTML: za „<“ všetky značky s popisom
+    if cx.after_lt {
+        // v <head> najprv značky hlavičky; zastarané (font, center…) až za ostatnými
+        let in_head = cx.open_tags.last().is_some_and(|t| t == "head");
+        let group = |t: &str, doc: &str| {
+            if in_head && matches!(t, "title" | "meta" | "link" | "script" | "style" | "base" | "noscript") {
+                0
+            } else if doc.contains("deprecated") {
+                2
+            } else {
+                1
+            }
+        };
+        let mut v: Vec<(u8, Item)> = d.tags.iter().map(|(t, doc)| (group(t, doc), Item::snip(t, Kind::Tag, &tag_body(t), &tag_preview(t)).doc(doc))).collect();
+        if "!".starts_with(prefix) || prefix.is_empty() {
+            v.push((1, Item::snip("!--", Kind::Snippet, "!-- $0 -->", "<!-- -->")));
+        }
+        return ranked(prefix, v, limit);
+    }
+    if let Some((tag, attr)) = &cx.attr_value {
+        let mut v: Vec<(u8, Item)> = vec![];
+        for key in [format!("{tag}.{attr}"), attr.clone()] {
+            if let Some(vals) = d.values.get(key.as_str()) {
+                v.extend(vals.iter().map(|x| (0, Item::plain(x.to_string(), Kind::Keyword))));
+                break;
+            }
+        }
+        return ranked(prefix, v, limit);
+    }
+    if let Some(tag) = &cx.in_tag {
+        let bools: Vec<&str> = data::BOOL_ATTRS.split_whitespace().collect();
+        let mk = |a: &str| {
+            if a == "data-" {
+                Item::snip("data-", Kind::Property, "data-$1=\"$0\"", "data-*=\"\"")
+            } else if bools.contains(&a) {
+                Item::plain(a.to_string(), Kind::Property)
+            } else {
+                Item::snip(a, Kind::Property, &format!("{a}=\"$0\""), &format!("{a}=\"\""))
+            }
+        };
+        let mut v: Vec<(u8, Item)> = d.tag_attrs.get(tag.as_str()).map(|l| l.iter().map(|a| (0, mk(a))).collect()).unwrap_or_default();
+        v.extend(data::GLOBAL_ATTRS.split_whitespace().map(|a| (1, mk(a))));
+        v.extend(data::EVENT_ATTRS.split_whitespace().map(|a| (2, mk(a))));
+        return ranked(prefix, v, limit);
+    }
+    if fam == "css" {
+        if cx.css_at {
+            let v = data::CSS_AT.iter().map(|(n, body)| (0, Item::snip(n, Kind::Snippet, body, &format!("@{n}")))).collect();
+            return ranked(prefix, v, limit);
+        }
+        if cx.css_pseudo {
+            let v = data::CSS_PSEUDO.split_whitespace().map(|p| (0, match p.strip_suffix("()") {
+                Some(f) => Item::snip(p, Kind::Keyword, &format!("{f}($0)"), ""),
+                None => Item::plain(p.to_string(), Kind::Keyword),
+            })).collect();
+            return ranked(prefix, v, limit);
+        }
+        if let Some(prop) = &cx.css_value {
+            let mut v: Vec<(u8, Item)> = d.css.iter().find(|(p, _)| p == prop).map(|(_, vals)| vals.iter().map(|x| (0, value_item(x))).collect()).unwrap_or_default();
+            if prop.contains("color") || matches!(prop.as_str(), "background" | "border" | "border-top" | "border-bottom" | "border-left" | "border-right" | "outline" | "fill" | "stroke" | "box-shadow" | "text-shadow" | "caret-color") {
+                v.extend(data::CSS_COLORS.split_whitespace().map(|x| (1, value_item(x))));
+            }
+            v.extend(data::CSS_COMMON.split_whitespace().map(|x| (2, value_item(x))));
+            return ranked(prefix, v, limit);
+        }
+        if cx.css_block {
+            let v = d.css.iter().map(|(p, _)| (0, Item::snip(p, Kind::Property, &format!("{p}: $0;"), &format!("{p}: ;")))).collect();
+            return ranked(prefix, v, limit);
+        }
+        // selektor: značky HTML a triedy/mená zo súboru
+        if prefix.is_empty() {
+            return vec![];
+        }
+        let mut v: Vec<(u8, Item)> = d.tags.iter().map(|(t, doc)| (0, Item::plain(t.to_string(), Kind::Tag).doc(doc))).collect();
+        v.extend(words.keys().map(|w| (1, Item::plain(w.clone(), Kind::Word))));
+        return ranked(prefix, v, limit);
+    }
+    if let Some(m) = &cx.import {
+        let mut v: Vec<(u8, Item)> = vec![];
+        if m.is_empty() {
+            let mods = if fam == "js" { data::JS_MODULES } else { data::PY_MODULES };
+            v.extend(mods.split_whitespace().map(|x| (0, Item::plain(x.to_string(), Kind::Keyword))));
+        } else if let Some(list) = d.members.get(&(fam, m.as_str())) {
+            v.extend(list.iter().map(|sig| (0, Item::plain(sig.split('(').next().unwrap_or(sig).to_string(), Kind::Builtin))));
+        }
+        return ranked(prefix, v, limit);
+    }
+    if let Some(obj) = &cx.member {
+        let lf = if fam == "c" { "cpp" } else { fam };
+        let last = obj.rsplit('.').next().unwrap_or(obj);
+        let known = d.members.get(&(lf, obj.as_str())).or_else(|| d.members.get(&(lf, last)));
+        let mut v: Vec<(u8, Item)> = known.map(|l| l.iter().map(|s| (0, member_item(s))).collect()).unwrap_or_default();
+        // slová zo súboru za bodkou (vlastné metódy, self.meno…)
+        let mut own: Vec<&String> = mems.iter().filter(|w| w.as_str() != prefix).collect();
+        own.sort();
+        v.extend(own.into_iter().map(|w| {
+            let mut it = Item::plain(w.clone(), Kind::Word);
+            if calls.contains(w) {
+                it.insert = Some(format!("{w}($0)"));
+                it.detail = Some(format!("{w}()"));
+            }
+            (1, it)
+        }));
+        if known.is_none() {
+            if let Some(l) = d.members.get(&(lf, "*")) {
+                v.extend(l.iter().map(|s| (2, member_item(s))));
+            }
+        }
+        return ranked(prefix, v, limit);
     }
     let mut out: Vec<(u8, u8, Item)> = vec![];
-    if let Some(prop) = &cx.css_value {
-        for v in css_values(prop) {
-            if let Some(r) = rank(prefix, v) {
-                out.push((r, 0, Item::snip(v, Kind::Keyword, &format!("{v};$0"), "")));
-            }
-        }
-    } else if matches!(lang, "css" | "scss" | "less") {
-        for p in builtins(lang).iter().filter(|w| w.contains('-') || CSS_PROPS.contains(w)) {
-            if let Some(r) = rank(prefix, p) {
-                out.push((r, 0, Item::snip(p, Kind::Property, &format!("{p}: $0;"), &format!("{p}: ;"))));
-            }
-        }
-    }
-    if matches!(lang, "html" | "htm") && "!".starts_with(prefix) {
+    if fam == "html" && "!".starts_with(prefix) {
         out.push((0, 0, Item::snip("!", Kind::Snippet, HTML5, "HTML5 page")));
     }
     for (trig, body, prev) in snippets(lang) {
@@ -423,23 +877,6 @@ pub fn suggest_at(lang: &str, prefix: &str, cx: &Ctx, words: &HashMap<String, us
     }
     out.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     out.into_iter().take(limit).map(|x| x.2).collect()
-}
-
-const CSS_PROPS: &[&str] = &["color", "background", "margin", "padding", "border", "display", "flex", "grid", "position", "width", "height", "gap", "transition", "transform", "opacity", "cursor", "overflow"];
-
-fn css_values(prop: &str) -> &'static [&'static str] {
-    match prop {
-        "display" => &["block", "inline", "inline-block", "flex", "grid", "none"],
-        "position" => &["relative", "absolute", "fixed", "sticky", "static"],
-        "justify-content" => &["center", "flex-start", "flex-end", "space-between", "space-around", "space-evenly"],
-        "align-items" => &["center", "flex-start", "flex-end", "stretch", "baseline"],
-        "flex-direction" => &["row", "column", "row-reverse", "column-reverse"],
-        "text-align" => &["left", "center", "right", "justify"],
-        "font-weight" => &["normal", "bold", "400", "500", "600", "700"],
-        "cursor" => &["pointer", "default", "text", "move", "not-allowed"],
-        "overflow" => &["hidden", "auto", "scroll", "visible"],
-        _ => &["auto", "none", "inherit", "initial"],
-    }
 }
 
 fn tag_preview(t: &str) -> String {
@@ -531,39 +968,124 @@ mod tests {
         let before: Vec<char> = "<head>\n  <ti".chars().collect();
         let cx = context("html", &before);
         assert!(cx.after_lt);
-        let s = suggest_at("html", "ti", &cx, &HashMap::new(), &Default::default(), &[], 8);
+        let s = suggest_at("html", "ti", &cx, &HashMap::new(), &Default::default(), &Default::default(), &[], 8);
         assert_eq!(s[0].label, "title");
         let (t, stops) = expand(s[0].insert.as_deref().unwrap(), "", "  ");
         assert_eq!(t, "title></title>");
         assert_eq!(stops, vec![(6, 6)]);
         let b2: Vec<char> = "<div cl".chars().collect();
         let cx2 = context("html", &b2);
-        assert!(cx2.in_tag);
-        assert_eq!(suggest_at("html", "cl", &cx2, &HashMap::new(), &Default::default(), &[], 8)[0].insert.as_deref(), Some("class=\"$0\""));
+        assert_eq!(cx2.in_tag.as_deref(), Some("div"));
+        assert_eq!(suggest_at("html", "cl", &cx2, &HashMap::new(), &Default::default(), &Default::default(), &[], 8)[0].insert.as_deref(), Some("class=\"$0\""));
     }
 
     #[test]
     fn complete_python_for() {
         let before: Vec<char> = "    fo".chars().collect();
         let cx = context("py", &before);
-        let s = suggest_at("py", "fo", &cx, &HashMap::new(), &Default::default(), &[], 8);
+        let s = suggest_at("py", "fo", &cx, &HashMap::new(), &Default::default(), &Default::default(), &[], 8);
         assert_eq!(s[0].label, "for");
         let (t, stops) = expand(s[0].insert.as_deref().unwrap(), "    ", "    ");
         assert_eq!(t, "for item in items:\n        ");
         assert_eq!(stops, vec![(4, 8), (12, 17), (27, 27)]);
         // vstavaná funkcia so zátvorkami
-        let p = suggest_at("py", "pri", &cx, &HashMap::new(), &Default::default(), &[], 8);
+        let p = suggest_at("py", "pri", &cx, &HashMap::new(), &Default::default(), &Default::default(), &[], 8);
         assert_eq!(p[0].insert.as_deref(), Some("print($0)"));
     }
 
     #[test]
     fn complete_css_property_and_value() {
         let b: Vec<char> = "a {\n  disp".chars().collect();
-        let s = suggest_at("css", "disp", &context("css", &b), &HashMap::new(), &Default::default(), &[], 8);
+        let s = suggest_at("css", "disp", &context("css", &b), &HashMap::new(), &Default::default(), &Default::default(), &[], 8);
         assert_eq!(s[0].insert.as_deref(), Some("display: $0;"));
         let b2: Vec<char> = "a { display: fl".chars().collect();
         let cx = context("css", &b2);
         assert_eq!(cx.css_value.as_deref(), Some("display"));
-        assert_eq!(suggest_at("css", "fl", &cx, &HashMap::new(), &Default::default(), &[], 8)[0].label, "flex");
+        assert_eq!(suggest_at("css", "fl", &cx, &HashMap::new(), &Default::default(), &Default::default(), &[], 8)[0].label, "flex");
+    }
+
+    fn at(lang: &str, text: &str) -> Vec<Item> {
+        let b: Vec<char> = text.chars().collect();
+        let cx = context(lang, &b);
+        let plen = b.iter().rev().take_while(|ch| ident_char(**ch, lang)).count();
+        let prefix: String = b[b.len() - plen..].iter().collect();
+        suggest_at(lang, &prefix, &cx, &words(text, lang), &calls(text, lang), &members(text, lang), &[], 60)
+    }
+
+    #[test]
+    fn complete_html_lt_and_font() {
+        // „<“ samo = všetky značky (ako VS Code), so spúšťačom
+        let b: Vec<char> = "<body>\n<".chars().collect();
+        assert!(trigger("html", &b));
+        let all = at("html", "<body>\n<");
+        assert!(all.len() >= 50, "{}", all.len());
+        let f = at("html", "<p><fo");
+        assert!(f.iter().any(|i| i.label == "font"), "{f:?}");
+        let font = f.iter().find(|i| i.label == "font").unwrap();
+        assert_eq!(font.insert.as_deref(), Some("font>$0</font>"));
+        assert!(font.doc.is_some());
+        // atribúty značky font a ich hodnoty
+        let a = at("html", "<font ");
+        assert!(trigger("html", &"<font ".chars().collect::<Vec<_>>()));
+        assert_eq!(a[0].label, "color");
+        let v = at("html", "<font size=\"");
+        assert!(v.iter().any(|i| i.label == "3"));
+        let t = at("html", "<input type=\"che");
+        assert_eq!(t[0].label, "checkbox");
+        // bez hodnoty
+        assert_eq!(at("html", "<input disa")[0].insert, None);
+    }
+
+    #[test]
+    fn complete_html_close_tag() {
+        let text = "<div>\n  <ul>\n    <li>a</li>\n  </";
+        assert!(trigger("html", &text.chars().collect::<Vec<_>>()));
+        let s = at("html", text);
+        assert_eq!(s[0].label, "ul");
+        assert_eq!(s[0].insert.as_deref(), Some("ul>$0"));
+        assert_eq!(s[1].label, "div");
+        assert_eq!(open_tags(&"<html><body><br><img src=\"a\"/><p>x</p><!-- <b> -->".chars().collect::<Vec<_>>()), vec!["html", "body"]);
+    }
+
+    #[test]
+    fn complete_html_embedded_css_js() {
+        let s = at("html", "<style>\n  body { disp");
+        assert_eq!(s[0].insert.as_deref(), Some("display: $0;"));
+        let j = at("html", "<script>\n  console.");
+        assert!(j.iter().any(|i| i.label == "log"), "{j:?}");
+        // po </style> zase HTML
+        assert!(at("html", "<style></style>\n<sp").iter().any(|i| i.label == "span"));
+    }
+
+    #[test]
+    fn complete_members() {
+        let s = at("js", "console.");
+        assert_eq!(s[0].label, "log");
+        assert_eq!(s[0].insert.as_deref(), Some("log($0)"));
+        assert!(trigger("js", &"document.".chars().collect::<Vec<_>>()));
+        assert!(at("js", "document.getE").iter().any(|i| i.label == "getElementById"));
+        assert!(!trigger("js", &"x = 3.".chars().collect::<Vec<_>>()));
+        let p = at("py", "import os\nos.path.");
+        assert!(p.iter().any(|i| i.label == "join"));
+        // vlastné členy zo súboru
+        let o = at("py", "class A:\n    def go(self):\n        self.count = 1\n        self.");
+        assert!(o.iter().any(|i| i.label == "count"), "{o:?}");
+        let n = at("py", "name = 'a'\nname.up");
+        assert_eq!(n[0].label, "upper");
+        assert_eq!(n[0].insert.as_deref(), Some("upper()$0"));
+        assert!(at("cpp", "std::co").iter().any(|i| i.label == "cout"));
+        assert_eq!(at("py", "import ra")[0].label, "random");
+        assert!(at("py", "from math import sq").iter().any(|i| i.label == "sqrt"));
+    }
+
+    #[test]
+    fn complete_css_more() {
+        assert!(at("css", "a:ho").iter().any(|i| i.label == "hover"));
+        assert!(at("css", "@me").iter().any(|i| i.label == "media"));
+        let c = at("css", "a { color: re");
+        assert_eq!(c[0].label, "red");
+        assert!(at("css", "a { background-color: ").iter().any(|i| i.label == "transparent"));
+        assert!(trigger("css", &"a { color: ".chars().collect::<Vec<_>>()));
+        assert!(at("css", "a { gri").iter().any(|i| i.label == "grid-template-columns"));
     }
 }

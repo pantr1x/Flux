@@ -2,6 +2,19 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.24 – 2026-10-04
+
+### Suggestions like in VS Code
+- In HTML, typing **<** shows every tag right away, each with a short description – *font*, *center*, *details*, *dialog*, *figure* and all the others are there now. **</** offers the tags that are still open, the innermost first.
+- Inside a tag, a space shows its attributes (`<font ` → *color*, *face*, *size*), and inside the quotes their values (`type="` → *checkbox*, *email*, *password*…). Choosing an attribute opens its values at once.
+- CSS suggests all common properties and their values, colors, `:hover` and the other pseudo-classes, and `@media` / `@keyframes`. The same works inside `<style>` and `<script>` in an HTML file.
+- After a dot you get the object's methods with their parameters: `console.`, `document.`, `Math.`, `os.path.`, `random.`, `System.out.`, `fmt.`, `std::`… plus your own names from the file (`self.score`). `import ` lists modules.
+- The list scrolls (mouse wheel or arrows) and shows the description of the selected item next to it.
+- Esc closes the suggestions and keeps typing in the editor.
+
+### Window
+- The thin line along the top edge of the window is gone.
+
 ## 0.9.23 – 2026-10-04
 
 ### Plugins

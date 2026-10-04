@@ -71,11 +71,14 @@ enum Bottom {
 pub struct Sug {
     items: Vec<crate::complete::Item>,
     sel: usize,
+    top: usize, // prvý viditeľný riadok (zoznam sa posúva)
     start: usize,
     end: usize,
     path: String,
     pos: egui::Pos2,
 }
+
+const SUG_ROWS: usize = 10; // naraz viditeľné návrhy (ďalšie sa posúvajú)
 
 // ikonky návrhov (kreslené, 14 px) vo farbách VS Code
 fn kind_icon(pt: &egui::Painter, c: egui::Pos2, kind: crate::complete::Kind, func: bool) {
@@ -199,7 +202,7 @@ pub struct App {
     lint_asked: HashMap<String, u64>,
     lint_jump: Option<usize>, // klik na „N problémov“ → riadok
     sug: Option<Sug>,         // otvorené návrhy pri písaní
-    sug_words: Option<(String, u64, HashMap<String, usize>, std::collections::HashSet<String>)>, // slová súboru pre návrhy (cesta, verzia textu) // „Čo je nové“ po aktualizácii: indexy verzií v release_notes()             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
+    sug_words: Option<(String, u64, HashMap<String, usize>, std::collections::HashSet<String>, std::collections::HashSet<String>)>, // slová súboru pre návrhy (cesta, verzia textu) // „Čo je nové“ po aktualizácii: indexy verzií v release_notes()             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
     unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
     shown: String,
@@ -230,6 +233,7 @@ pub struct App {
     focus_window: bool, // ďalšie spustenie Fluxu → toto okno dopredu
     rounded: bool,      // pozadie okna je zaoblený obdĺžnik (priehľadné okno)
     snip: Option<Snip>,
+    sug_again: bool, // po vložení atribútu (class="") hneď ponúknuť jeho hodnoty
     plug: plugins_ui::PlugState,
     plug_run: Vec<String>,          // flux.commands.run z pluginu (vykoná sa v ďalšej snímke)
     plug_cursor: Option<usize>,     // kurzor po vložení textu pluginom
@@ -250,6 +254,7 @@ impl App {
             crate::glass::no_frame(cc);
         }
         crate::glass::round(cc);
+        crate::glass::no_top_line(cc);
         // rozmazané priehľadné okno: rozmazanie robí Windows (glass.rs)
         if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && core.setting("material").as_str() == Some("blur") && !crate::glass::blur(cc, true) {
             eprintln!("[flux] blur behind the window is not available, staying clear");
@@ -365,6 +370,7 @@ impl App {
             focus_window: false,
             rounded: false,
             snip: None,
+            sug_again: false,
             plug: Default::default(),
             plug_run: vec![],
             plug_cursor: None,
@@ -569,6 +575,7 @@ impl App {
         let line_start = tab.text[..a].rfind('\n').map(|i| i + 1).unwrap_or(0);
         let indent: String = tab.text[line_start..a].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
         let (text, stops) = crate::complete::expand(&body, &indent, "    ");
+        self.sug_again = body.ends_with("=\"$0\"");
         tab.text.replace_range(a..e, &text);
         self.last_edit = Some(Instant::now());
         let abs: Vec<(usize, usize)> = stops.iter().map(|(x, y)| (sg.start + x, sg.start + y)).collect();
@@ -600,34 +607,57 @@ impl App {
         Some(r)
     }
 
-    // okno s návrhmi pod písaným slovom
+    // okno s návrhmi pod písaným slovom (10 riadkov, posúva sa) a vedľa popis vybranej položky
     fn sug_ui(&mut self, ctx: &egui::Context, ed_id: egui::Id) {
         let Some(sg) = self.sug.as_ref() else { return };
         if self.tabs.get(self.active).map(|t| &t.path) != Some(&sg.path) || sg.pos == egui::Pos2::ZERO {
             return;
         }
         let p = self.pal;
-        let (pos, items, sel) = (sg.pos, sg.items.clone(), sg.sel);
+        let (pos, items, sel, top) = (sg.pos, sg.items.clone(), sg.sel, sg.top);
         let mut clicked = None;
+        let mut scroll = 0i32;
+        let shown = items.len().min(SUG_ROWS);
+        let top = top.min(items.len().saturating_sub(shown));
         egui::Area::new(egui::Id::new("suggest")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
             let w = items
                 .iter()
                 .map(|it| widgets::text_w(ui, &it.label, theme::mono(13.0)) + it.detail.as_ref().map(|d| widgets::text_w(ui, d, theme::mono(12.0)) + 14.0).unwrap_or(0.0))
-                .fold(160.0f32, f32::max)
+                .fold(220.0f32, f32::max)
                 + 52.0;
-            let h = items.len() as f32 * 24.0 + 8.0;
-            let (r, _) = ui.allocate_exact_size(vec2(w.min(520.0), h), Sense::hover());
+            let h = shown as f32 * 24.0 + 8.0;
+            let (r, resp_all) = ui.allocate_exact_size(vec2(w.min(460.0), h), Sense::hover());
             ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
             ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
             ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-            for (k, it) in items.iter().enumerate() {
-                let row = Rect::from_min_size(r.min + vec2(4.0, 4.0 + k as f32 * 24.0), vec2(r.width() - 8.0, 24.0));
+            if resp_all.hovered() {
+                let dy: f32 = ui.input(|i| {
+                    i.raw
+                        .events
+                        .iter()
+                        .map(|e| match e {
+                            egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, .. } => delta.y,
+                            egui::Event::MouseWheel { delta, .. } => delta.y * 24.0,
+                            _ => 0.0,
+                        })
+                        .sum()
+                });
+                if dy.abs() > 0.5 {
+                    scroll = if dy > 0.0 { -1 } else { 1 } * ((dy.abs() / 24.0).ceil() as i32).max(1);
+                }
+            }
+            let mut sel_row = None;
+            for (k, it) in items.iter().enumerate().skip(top).take(shown) {
+                let row = Rect::from_min_size(r.min + vec2(4.0, 4.0 + (k - top) as f32 * 24.0), vec2(r.width() - 8.0, 24.0));
                 let resp = ui.interact(row, ui.id().with(("sg", k)), Sense::click());
                 if k == sel || resp.hovered() {
                     ui.painter().rect_filled(row, CornerRadius::same(6), if k == sel { p.active } else { p.hover });
                 }
+                if k == sel {
+                    sel_row = Some(row);
+                }
                 // ikonka druhu ako vo VS Code (funkcia = kocka, značka = </>, úryvok = {}, …)
-                let func = it.insert.as_deref().is_some_and(|b| b.ends_with("($0)"));
+                let func = it.insert.as_deref().is_some_and(|b| b.ends_with("($0)") || b.ends_with("()$0"));
                 kind_icon(ui.painter(), pos2(row.left() + 13.0, row.center().y), it.kind, func);
                 ui.painter().text(pos2(row.left() + 28.0, row.center().y), Align2::LEFT_CENTER, &it.label, theme::mono(13.0), p.text);
                 // náhľad toho, čo sa vloží (ako VS Code)
@@ -639,7 +669,34 @@ impl App {
                     clicked = Some(k);
                 }
             }
+            // posuvník, keď je návrhov viac
+            if items.len() > shown {
+                let track = Rect::from_min_max(pos2(r.right() - 5.0, r.top() + 6.0), pos2(r.right() - 2.0, r.bottom() - 6.0));
+                let th = (track.height() * shown as f32 / items.len() as f32).max(14.0);
+                let ty = track.top() + (track.height() - th) * top as f32 / (items.len() - shown) as f32;
+                ui.painter().rect_filled(Rect::from_min_size(pos2(track.left(), ty), vec2(track.width(), th)), CornerRadius::same(2), p.line_strong);
+            }
+            // popis vybranej položky vpravo (značky HTML, členy s parametrami)
+            if let (Some(it), Some(row)) = (items.get(sel), sel_row) {
+                if let Some(doc) = it.doc {
+                    let font = theme::ui(12.5);
+                    let g = ui.painter().layout(doc.to_string(), font, p.text2, 260.0);
+                    let head = it.detail.clone().unwrap_or_else(|| it.label.clone());
+                    let box_r = Rect::from_min_size(pos2(r.right() + 6.0, row.top() - 4.0), vec2(g.size().x.max(widgets::text_w(ui, &head, theme::mono(12.5))) + 24.0, g.size().y + 42.0));
+                    ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(box_r, CornerRadius::same(10)));
+                    ui.painter().rect_filled(box_r, CornerRadius::same(10), p.solid);
+                    ui.painter().rect_stroke(box_r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                    ui.painter().text(box_r.min + vec2(12.0, 18.0), Align2::LEFT_CENTER, &head, theme::mono(12.5), p.text);
+                    ui.painter().galley(box_r.min + vec2(12.0, 32.0), g, p.text2);
+                }
+            }
         });
+        if scroll != 0 {
+            if let Some(sg) = self.sug.as_mut() {
+                let max = sg.items.len().saturating_sub(SUG_ROWS);
+                sg.top = (sg.top as i32 + scroll).clamp(0, max as i32) as usize;
+            }
+        }
         if let Some(k) = clicked {
             if let Some(c) = self.accept_sug(k) {
                 let (a, b) = self.snip_sel.take().unwrap_or((c, c));
@@ -2057,7 +2114,7 @@ impl App {
         let sug_on = self.get("suggest").as_bool() != Some(false);
         let mut force_sug = false;
         if focused && sug_on {
-            force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space));
+            force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space)) || std::mem::take(&mut self.sug_again);
             let open = self.sug.as_ref().is_some_and(|s| s.path == self.tabs[self.active].path);
             if open {
                 let (up, down, acc, esc) = ctx.input_mut(|i| {
@@ -2075,6 +2132,12 @@ impl App {
                     }
                     if down {
                         sg.sel = (sg.sel + 1) % n;
+                    }
+                    // vybraný riadok vždy viditeľný
+                    if sg.sel < sg.top {
+                        sg.top = sg.sel;
+                    } else if sg.sel >= sg.top + SUG_ROWS {
+                        sg.top = sg.sel + 1 - SUG_ROWS;
                     }
                 }
                 if esc {
@@ -2222,6 +2285,8 @@ impl App {
                     .desired_width(if wrap { ui.available_width() - 12.0 } else { f32::INFINITY })
                     .desired_rows(lines.max(1))
                     .lock_focus(true)
+                    // Esc editor nevypne (ako VS Code) – zavrie len návrhy, úryvok, hľadanie
+                    .event_filter(egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true })
                     .layouter(&mut layouter)
                     .show(ui);
                 // ---- farby len pre riadky na obrazovke (+ 300 pod nimi sa dofarbí vopred) ----
@@ -2241,15 +2306,17 @@ impl App {
                             if bang {
                                 plen = 1;
                             }
-                            // značka HTML hneď od prvého písmena za „<“, inak od dvoch písmen
-                            if (typed_ident && (plen >= 2 || (cx.after_lt && plen >= 1))) || bang || force_sug {
+                            // ako VS Code: „<“, „</“, „.“, medzera v značke, „"“ atribútu… otvoria návrhy hneď;
+                            // na mieste s vlastnými návrhmi (značka, atribút, člen) od prvého písmena, inak od dvoch
+                            let trig = !typed_ident && crate::complete::trigger(&lang, &before);
+                            if (typed_ident && (plen >= 2 || (cx.rich() && plen >= 1))) || trig || bang || force_sug {
                                 let prefix: String = before[c - plen..].iter().collect();
                                 if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), hlc.gen)) {
-                                    *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang)));
+                                    *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang), crate::complete::members(&tab.text, &lang)));
                                 }
                                 let w = sug_words.as_ref().unwrap();
-                                let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &plug_snips, 8);
-                                *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
+                                let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &w.4, &plug_snips, 60);
+                                *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, top: 0, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
                             } else {
                                 *sug_slot = None;
                             }
