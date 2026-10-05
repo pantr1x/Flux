@@ -4,6 +4,7 @@ use crate::theme::Pal;
 use alacritty_terminal::event::{Event, EventListener};
 use std::sync::{Arc, Mutex};
 use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
@@ -47,6 +48,7 @@ pub struct TermView {
     pub pty: Pty,
     id: egui::Id,
     pub font_size: f32,
+    sel: Option<((i32, usize), (i32, usize))>, // výber myšou: (riadok mriežky, stĺpec) začiatok a koniec
 }
 
 impl TermView {
@@ -54,10 +56,12 @@ impl TermView {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
         let replies = Replies::default();
-        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0 }
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, sel: None }
     }
 
     pub fn feed(&mut self, text: &str) {
+        // nový výstup posúva riadky mriežky, výber by ukazoval inam
+        self.sel = None;
         self.parser.advance(&mut self.term, text.as_bytes());
         for r in self.take_replies() {
             self.pty.write(&r);
@@ -137,9 +141,45 @@ impl TermView {
         .or(if fg { Some(p.text) } else { None })
     }
 
-    // Klávesy → bajty pre program (ako xterm).
-    fn keys(&mut self, ui: &egui::Ui) -> Vec<String> {
+    // vybraný rozsah v poradí (začiatok, koniec); prázdny výber (klik) sa nepočíta
+    fn ordered(&self) -> Option<((i32, usize), (i32, usize))> {
+        let (a, b) = self.sel?;
+        if a == b {
+            return None;
+        }
+        Some(if a <= b { (a, b) } else { (b, a) })
+    }
+
+    // text vybraných buniek: konce riadkov bez medzier, zalomené riadky sa spoja
+    fn selected_text(&self) -> Option<String> {
+        let (a, b) = self.ordered()?;
+        let (top, bot) = (self.term.topmost_line().0, self.term.bottommost_line().0);
+        let cols = self.term.columns();
+        let mut out = String::new();
+        for l in a.0.max(top)..=b.0.min(bot) {
+            let from = if l == a.0 { a.1 } else { 0 };
+            let to = if l == b.0 { b.1 } else { cols - 1 };
+            let row = &self.term.grid()[Line(l)];
+            let mut line = String::new();
+            for c in from..=to.min(cols - 1) {
+                let cell = &row[Column(c)];
+                if !cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                    line.push(if cell.c == '\0' { ' ' } else { cell.c });
+                }
+            }
+            let wrapped = row[Column(cols - 1)].flags.contains(Flags::WRAPLINE) && to == cols - 1;
+            out.push_str(if wrapped { &line } else { line.trim_end() });
+            if l < b.0 && !wrapped {
+                out.push('\n');
+            }
+        }
+        Some(out)
+    }
+
+    // Klávesy → bajty pre program (ako xterm); Ctrl+C s výberom (alebo Ctrl+Shift+C) kopíruje namiesto prerušenia
+    fn keys(&mut self, ui: &egui::Ui, has_sel: bool) -> (Vec<String>, bool) {
         let mut out = vec![];
+        let mut copy = false;
         ui.input(|i| {
             for ev in &i.events {
                 match ev {
@@ -158,7 +198,11 @@ impl TermView {
                             egui::Key::Home => "\x1b[H",
                             egui::Key::End => "\x1b[F",
                             egui::Key::Delete => "\x1b[3~",
-                            egui::Key::C if modifiers.ctrl && !modifiers.shift => "\x03",
+                            egui::Key::C if modifiers.ctrl && (modifiers.shift || has_sel) => {
+                                copy = true;
+                                ""
+                            }
+                            egui::Key::C if modifiers.ctrl => "\x03",
                             egui::Key::D if modifiers.ctrl => "\x04",
                             egui::Key::L if modifiers.ctrl => "\x0c",
                             _ => "",
@@ -171,7 +215,7 @@ impl TermView {
                 }
             }
         });
-        out
+        (out, copy)
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui, p: &Pal) {
@@ -179,8 +223,8 @@ impl TermView {
         let (cw, ch) = ui.fonts_mut(|f| (f.glyph_width(&font, 'M'), f.row_height(&font)));
         let avail = ui.available_size();
         let (rect, _) = ui.allocate_exact_size(avail, Sense::hover());
-        let resp = ui.interact(rect, self.id, Sense::click());
-        if resp.clicked() {
+        let resp = ui.interact(rect, self.id, Sense::click_and_drag());
+        if resp.clicked() || resp.drag_started() {
             resp.request_focus();
         }
         // veľkosť mriežky podľa miesta
@@ -202,16 +246,73 @@ impl TermView {
                 }
             }
         }
+        // výber myšou: ťahanie označí bunky, klik ho zruší; mimo okna sa história posúva
+        let offset0 = self.term.grid().display_offset() as i32;
+        let cell_at = |pos: egui::Pos2| {
+            let row = (((pos.y - rect.min.y - 2.0) / ch).floor().max(0.0) as usize).min(rows - 1);
+            let col = (((pos.x - rect.min.x - 4.0) / cw).floor().max(0.0) as usize).min(cols - 1);
+            (row as i32 - offset0, col)
+        };
+        if resp.drag_started() {
+            if let Some(pos) = resp.interact_pointer_pos() {
+                let c = cell_at(pos);
+                self.sel = Some((c, c));
+            }
+        } else if resp.dragged() {
+            if let (Some(pos), Some((a, _))) = (ui.ctx().pointer_interact_pos(), self.sel) {
+                self.sel = Some((a, cell_at(pos)));
+                if pos.y < rect.top() {
+                    self.term.scroll_display(alacritty_terminal::grid::Scroll::Delta(1));
+                    ui.ctx().request_repaint();
+                } else if pos.y > rect.bottom() {
+                    self.term.scroll_display(alacritty_terminal::grid::Scroll::Delta(-1));
+                    ui.ctx().request_repaint();
+                }
+            }
+        } else if resp.clicked() {
+            self.sel = None;
+        }
+        let mut copy = false;
         if resp.has_focus() {
             ui.memory_mut(|m| m.set_focus_lock_filter(self.id, egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true }));
-            for s in self.keys(ui) {
+            let (keys, c) = self.keys(ui, self.ordered().is_some());
+            copy = c;
+            for s in keys {
                 self.pty.write(&s);
+            }
+        }
+        resp.context_menu(|ui| {
+            if ui.add_enabled(self.ordered().is_some(), egui::Button::new(crate::i18n::t("Copy"))).clicked() {
+                copy = true;
+                ui.close();
+            }
+            if ui.button(crate::i18n::t("Select all")).clicked() {
+                self.sel = Some(((self.term.topmost_line().0, 0), (self.term.bottommost_line().0, cols - 1)));
+                ui.close();
+            }
+        });
+        if copy {
+            if let Some(text) = self.selected_text() {
+                ui.ctx().copy_text(text);
             }
         }
         let painter = ui.painter_at(rect);
         let content = self.term.renderable_content();
         let cursor = content.cursor.point;
         let offset = content.display_offset as i32;
+        if let Some((a, b)) = self.ordered() {
+            for r in 0..rows {
+                let l = r as i32 - offset;
+                if l < a.0 || l > b.0 {
+                    continue;
+                }
+                let from = if l == a.0 { a.1 } else { 0 };
+                let to = if l == b.0 { b.1 } else { cols - 1 };
+                let x = rect.min.x + 4.0 + from as f32 * cw;
+                let r = egui::Rect::from_min_size(egui::pos2(x, rect.min.y + 2.0 + r as f32 * ch), egui::vec2((to + 1 - from) as f32 * cw, ch));
+                painter.rect_filled(r, 0.0, p.accent.gamma_multiply(0.35));
+            }
+        }
         let mut jobs: Vec<LayoutJob> = (0..rows).map(|_| LayoutJob::default()).collect();
         // susedné bunky s rovnakými farbami idú do jedného úseku a medzery na konci riadku sa vynechajú
         // (predtým jeden append + String na každú bunku ≈ 2 400 za snímku)
@@ -287,6 +388,20 @@ impl TermView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // výber vráti text bez medzier na konci riadkov, aj cez viac riadkov
+    #[test]
+    fn term_selection_text() {
+        let mut v = TermView::new("t");
+        v.parser.advance(&mut v.term, b"hello world\r\nsecond   line\r\n");
+        assert_eq!(v.selected_text(), None);
+        v.sel = Some(((0, 6), (0, 10)));
+        assert_eq!(v.selected_text().as_deref(), Some("world"));
+        v.sel = Some(((1, 5), (0, 3))); // opačný smer
+        assert_eq!(v.selected_text().as_deref(), Some("lo world\nsecond"));
+        v.sel = Some(((0, 2), (0, 2)));
+        assert_eq!(v.selected_text(), None);
+    }
 
     #[test]
     fn term_answers_cursor_query() {

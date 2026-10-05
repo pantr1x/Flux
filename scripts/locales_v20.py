@@ -287,5 +287,6 @@ _V20 = {
     "Moved {name}.": ('Presunuté: {name}.', '{name} verschoben.', 'Se movió {name}.', '{name} déplacé.', '{name} spostato.', 'Przeniesiono {name}.', '{name} movido.', 'Переміщено {name}.'),
     "{name} already exists there.": ('{name} tam už existuje.', '{name} existiert dort bereits.', '{name} ya existe allí.', '{name} existe déjà à cet endroit.', '{name} esiste già lì.', '{name} już tam istnieje.', '{name} já existe lá.', '{name} там уже існує.'),
     "Can't move a folder into itself.": ('Priečinok sa nedá presunúť sám do seba.', 'Ein Ordner kann nicht in sich selbst verschoben werden.', 'No se puede mover una carpeta dentro de sí misma.', 'Impossible de déplacer un dossier dans lui-même.', 'Non si può spostare una cartella dentro se stessa.', 'Nie można przenieść folderu do samego siebie.', 'Não é possível mover uma pasta para dentro dela mesma.', 'Не можна перемістити папку саму в себе.'),
+    "Select all": ('Vybrať všetko', 'Alles auswählen', 'Seleccionar todo', 'Tout sélectionner', 'Seleziona tutto', 'Zaznacz wszystko', 'Selecionar tudo', 'Вибрати все'),
 }
 V20 = {code: {k: v[i] for k, v in _V20.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

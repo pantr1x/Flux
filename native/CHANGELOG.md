@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.43
+
+**Output and Terminal**
+- You can now **select and copy text** in Output and Terminal: drag with the mouse to select (it keeps scrolling when you drag past the edge), then press **Ctrl+C** (with a selection it copies; without one it still stops the program) or **Ctrl+Shift+C**. Right-click opens *Copy* and *Select all*. New output clears the selection.
+
 ## 0.9.42
 
 **Output and Terminal**
