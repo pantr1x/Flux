@@ -93,6 +93,49 @@ pub fn indent(text: &mut String, a: usize, b: usize, back: bool) -> (usize, usiz
     }
 }
 
+// Enter: nový riadok s odsadením aktuálneho riadka (ako VS Code). Za otvorenou zátvorkou / značkou / „:“ v Pythone
+// odsadí o krok navyše; medzi `{|}` alebo `<ul>|</ul>` rozdelí na tri riadky. Riadok len z medzier sa vyprázdni.
+pub fn enter(text: &mut String, a: usize, b: usize, ext: &str) -> (usize, usize) {
+    const STEP: &str = "    ";
+    let (lo, hi) = (a.min(b), a.max(b));
+    let (blo, bhi) = (byte_at(text, lo), byte_at(text, hi));
+    let ls = text[..blo].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let before_line = text[ls..blo].to_string();
+    let indent: String = before_line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+    let blank = before_line.trim().is_empty();
+    let before = before_line.trim_end();
+    let line_end = text[bhi..].find('\n').map(|i| bhi + i).unwrap_or(text.len());
+    let after_t = text[bhi..line_end].trim_start().to_string();
+    let html = matches!(ext, "html" | "htm" | "xml" | "vue" | "svelte" | "php" | "svg");
+    let brace = before.chars().last().filter(|c| "{([".contains(*c)).map(|c| match c {
+        '{' => '}',
+        '(' => ')',
+        _ => ']',
+    });
+    let open_tag = html && !blank && before.ends_with('>') && !before.ends_with("/>") && {
+        let seg = &before[before.rfind('<').unwrap_or(0)..];
+        let name: String = seg.chars().skip(1).take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ':').collect();
+        seg.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic()) && !crate::complete::VOID.contains(&name.to_ascii_lowercase().as_str())
+    };
+    let opens = !blank && (brace.is_some() || open_tag || (matches!(ext, "py" | "pyw") && before.ends_with(':')));
+    let closes_here = opens && ((open_tag && after_t.starts_with("</")) || brace.is_some_and(|c| after_t.starts_with(c)));
+    let mid = format!("\n{indent}{}", if opens { STEP } else { "" });
+    let (from, ins) = if closes_here { (if blank { ls } else { blo }, format!("{mid}\n{indent}")) } else { (if blank { ls } else { blo }, mid.clone()) };
+    // kurzor: na konci stredného riadka (pri rozdelení pred zatvárací riadok)
+    let caret_byte = from + mid.len();
+    // riadok len z medzier sa vyprázdni: odstráni sa od začiatku riadka, odsadenie ide do nového riadka
+    let tail_from = if closes_here { bhi } else { bhi };
+    let tail = text[tail_from..].to_string();
+    let mut out = String::with_capacity(text.len() + ins.len());
+    out.push_str(&text[..from]);
+    out.push_str(&ins);
+    let trimmed_tail = if closes_here { tail.trim_start_matches([' ', '\t']).to_string() } else { tail };
+    out.push_str(&trimmed_tail);
+    *text = out;
+    let c = text[..caret_byte].chars().count();
+    (c, c)
+}
+
 // Ctrl+/: zakomentuje alebo odkomentuje riadky výberu
 pub fn toggle_comment(text: &mut String, a: usize, b: usize, ext: &str) -> (usize, usize) {
     let (open, close) = comment_of(ext);
@@ -462,5 +505,73 @@ mod tag_tests {
         assert!(super::link_target("missing.png", &ds, None).is_none());
         assert!(super::link_target("#top", &ds, None).is_none());
         assert_eq!(super::link_target("https://a.b/c", &ds, None).as_deref(), Some("https://a.b/c"));
+    }
+}
+
+#[cfg(test)]
+mod enter_tests {
+    use super::enter;
+
+    fn run(text: &str, caret: usize, ext: &str) -> (String, usize) {
+        let mut t = text.to_string();
+        let (c, _) = enter(&mut t, caret, caret, ext);
+        (t, c)
+    }
+
+    #[test]
+    fn editing_enter_keeps_indent() {
+        let (t, c) = run("    <dd>idk</dd>", 16, "html");
+        assert_eq!(t, "    <dd>idk</dd>\n    ");
+        assert_eq!(c, t.chars().count());
+    }
+
+    #[test]
+    fn editing_enter_trims_blank_line() {
+        // riadok len z medzier: vyprázdni sa, nový dostane to isté odsadenie
+        let (t, c) = run("a\n    ", 6, "txt");
+        assert_eq!(t, "a\n\n    ");
+        assert_eq!(c, t.chars().count());
+        // 8× Enter nenechá za sebou medzery
+        let mut t = "    x".to_string();
+        let mut c = 5;
+        for _ in 0..8 {
+            let r = enter(&mut t, c, c, "txt");
+            c = r.0;
+        }
+        assert_eq!(t, "    x\n\n\n\n\n\n\n\n    ");
+        assert_eq!(c, t.chars().count());
+    }
+
+    #[test]
+    fn editing_enter_between_braces() {
+        let (t, c) = run("fn a() {}", 8, "rs");
+        assert_eq!(t, "fn a() {\n    \n}");
+        assert_eq!(c, "fn a() {\n    ".chars().count());
+        let (t, _) = run("if x {", 6, "js");
+        assert_eq!(t, "if x {\n    ");
+    }
+
+    #[test]
+    fn editing_enter_html_open_tag() {
+        let (t, c) = run("<ul></ul>", 4, "html");
+        assert_eq!(t, "<ul>\n    \n</ul>");
+        assert_eq!(c, "<ul>\n    ".chars().count());
+        let (t, _) = run("<body>\n    <div>", 16, "html");
+        assert_eq!(t, "<body>\n    <div>\n        ");
+    }
+
+    #[test]
+    fn editing_enter_void_and_comment() {
+        assert_eq!(run("  <br>", 6, "html").0, "  <br>\n  ");
+        assert_eq!(run("  <img src=\"a\">", 15, "html").0, "  <img src=\"a\">\n  ");
+        assert_eq!(run("<!-- x -->", 10, "html").0, "<!-- x -->\n");
+        assert_eq!(run("</div>", 6, "html").0, "</div>\n");
+        assert_eq!(run("<br/>", 5, "html").0, "<br/>\n");
+    }
+
+    #[test]
+    fn editing_enter_python_colon() {
+        assert_eq!(run("def f():", 8, "py").0, "def f():\n    ");
+        assert_eq!(run("x = {1: 2}", 10, "py").0, "x = {1: 2}\n");
     }
 }

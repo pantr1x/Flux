@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.38
+
+**Editor**
+- Pressing **Enter** now keeps the indentation of the line you are on, like in VS Code. After an opening `{`, `(`, `[`, an opening HTML tag or a Python `:` it indents one step more, and between `{}` or `<ul></ul>` it opens a middle line for you. A line with only spaces is emptied when you press Enter, so you never leave stray spaces behind. Turn it off in Settings → Editor → *Auto indent*.
+
 ## 0.9.37
 
 **Live Server**

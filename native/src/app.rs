@@ -2267,6 +2267,13 @@ impl App {
                     }
                 })
             });
+            // Enter: nový riadok s odsadením (autoIndent); ponuka návrhov si Enter vzala skôr
+            if self.sug.is_none() && self.get("autoIndent").as_bool() != Some(false) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+                let (a, b) = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).map(|r| (usize::from(r.secondary.index), usize::from(r.primary.index))).unwrap_or((0, 0));
+                let ext = self.tabs[self.active].ext();
+                new_sel = Some(editing::enter(&mut self.tabs[self.active].text, a, b, &ext));
+                self.last_edit = Some(Instant::now());
+            }
             if tab_k || back_k || comment_k {
                 let (a, b) = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).map(|r| (usize::from(r.secondary.index), usize::from(r.primary.index))).unwrap_or((0, 0));
                 let ext = self.tabs[self.active].ext();

@@ -16,7 +16,7 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" => json!(true),
+        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
@@ -389,6 +389,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 "Behaviour",
                 vec![
                     Row::Toggle("minimap", "Code map", "small preview of the code on the right"),
+                    Row::Toggle("autoIndent", "Auto indent", "Enter keeps the indentation of the line above and indents after an opening bracket or tag"),
                     Row::Toggle("autosave", "Auto save", "saves the file shortly after you stop typing"),
                     Row::Toggle("autoReload", "Reload changed files without asking", "when another program changes an open file, the editor shows the new version right away"),
                 ],
