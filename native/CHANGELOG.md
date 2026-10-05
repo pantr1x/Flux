@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.34
+
+**Live Server**
+- Fixed a few lines of strange code (`(async()=>{…`) that sometimes showed up in the page while you were typing. Flux's helper script now sits at the very top of the page, so a half-written tag can no longer swallow it.
+
 ## 0.9.33
 
 **Live Server**

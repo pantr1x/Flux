@@ -38,6 +38,20 @@ pub fn key(p: &Path) -> String {
 // Druhý skript posiela, nad ktorým prvkom (data-flux-l = riadok v zdroji) je myš – Flux ten riadok zvýrazní.
 const RELOAD: &str = "<script>(async()=>{let v='';for(;;){try{const t=await (await fetch('/__flux/ver?v='+v,{cache:'no-store'})).text();const[n,k]=t.split(':');if(v!==''&&n!==v){if(k==='css'){document.querySelectorAll('link[rel=stylesheet]').forEach(l=>{const u=new URL(l.href);u.searchParams.set('v',n);l.href=u.href})}else{location.reload();return}}v=n}catch(e){await new Promise(r=>setTimeout(r,400))}}})();(()=>{let last=-1;const send=l=>{if(l===last)return;last=l;fetch('/__flux/hover?p='+encodeURIComponent(location.pathname)+'&l='+l,{cache:'no-store'}).catch(()=>{})};document.addEventListener('mouseover',e=>{const x=e.target.closest&&e.target.closest('[data-flux-l]');send(x?+x.dataset.fluxL:0)},true);document.documentElement.addEventListener('mouseleave',()=>send(0))})()</script>";
 
+// skript sa vloží na začiatok dokumentu (za <head>/<html>/doctype), nie na koniec: pri písaní býva značka rozpísaná
+// (`<ol` bez `>`) a skript vložený za ňou by sa zmenil na jej atribúty a ukázal sa ako text
+pub fn inject(html: &str) -> String {
+    let low = html.to_ascii_lowercase();
+    let after = |tag: &str| -> Option<usize> {
+        let i = low.find(tag)?;
+        let end = low[i..].find('>')?;
+        // značka musí byť celá: v jej vnútri nesmie byť ďalšie „<“
+        (!low[i + 1..i + end].contains('<')).then_some(i + end + 1)
+    };
+    let at = after("<head").or_else(|| after("<html")).or_else(|| low.starts_with("<!doctype").then(|| low.find('>').map(|e| e + 1)).flatten()).unwrap_or(0);
+    format!("{}{RELOAD}{}", &html[..at], &html[at..])
+}
+
 // do každej otváracej značky pridá data-flux-l="riadok" (číslo riadku v zdroji); komentáre a obsah script/style preskočí
 pub fn annotate(html: &str) -> String {
     let b = html.as_bytes();
@@ -172,11 +186,7 @@ fn handle(s: TcpStream, root: &Path, ver: &AtomicU64, css: &AtomicBool, live: &L
             let ct = mime(&file);
             if ct.starts_with("text/html") {
                 let html = annotate(&String::from_utf8_lossy(&body));
-                let low = html.to_lowercase();
-                let with = match low.rfind("</body>") {
-                    Some(i) => format!("{}{RELOAD}{}", &html[..i], &html[i..]),
-                    None => format!("{html}{RELOAD}"),
-                };
+                let with = inject(&html);
                 body = with.into_bytes();
             }
             respond(s, "200 OK", ct, &body)
@@ -255,7 +265,17 @@ impl Drop for Server {
 
 #[cfg(test)]
 mod tests {
-    use super::annotate;
+    use super::{annotate, inject};
+
+    #[test]
+    fn server_inject_survives_broken_markup() {
+        let h = "<!doctype html>\n<html>\n<head><title>x</title></head>\n<body>\n<ol\n</body></html>";
+        let o = inject(h);
+        assert!(o.find("<script>").unwrap() < o.find("<body>").unwrap());
+        let h2 = "<p>bez hlavicky</p>";
+        assert!(inject(h2).starts_with("<script>"));
+        assert!(inject("<!doctype html><p>a</p>").starts_with("<!doctype html><script>"));
+    }
 
     #[test]
     fn server_annotate_lines() {
