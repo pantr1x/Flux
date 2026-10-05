@@ -247,51 +247,6 @@ jobs:
             exit 1
           }
           "## Plugin test passed (4 plugins installed and running)" | Add-Content $env:GITHUB_STEP_SUMMARY
-      - name: Experiment – see-through window variants (diagnostics only)
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          Add-Type -Name W2 -Namespace U2 -MemberDefinition @'
-          [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
-          [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
-          public struct RECT { public int L, T, R, B; }
-          '@
-          New-Item -ItemType Directory out -Force | Out-Null
-          $img = "$env:RUNNER_TEMP\exp-wall.png"
-          $bmp = New-Object System.Drawing.Bitmap 64, 64; $g0 = [System.Drawing.Graphics]::FromImage($bmp); $g0.Clear([System.Drawing.Color]::Red); $bmp.Save($img, [System.Drawing.Imaging.ImageFormat]::Png); $g0.Dispose(); $bmp.Dispose()
-          $proj = "$env:RUNNER_TEMP\exp-proj"; New-Item -ItemType Directory $proj -Force | Out-Null; Set-Content "$proj\main.py" "print(1)"
-          $lines = @()
-          $variants = [ordered]@{ 'glow' = @{}; 'wgpu' = @{ FLUX_RENDERER = 'wgpu' }; 'glow-opaque' = @{ FLUX_TR_OPAQUE = '1' } }
-          $i = 0
-          foreach ($name in $variants.Keys) {
-            $i++
-            $ud = "$env:RUNNER_TEMP\ud-exp-$name"; New-Item -ItemType Directory $ud -Force | Out-Null
-            @{ onboarded = $true; lastFolder = $proj; projects = @(@{ dir = $proj }); autoUpdate = $false; lastSeenVersion = 'x'; liveWallMode = 'see'; liveCache = @{ file = $img; video = $false; preview = $img; source = 'lively' } } | ConvertTo-Json -Depth 5 | Set-Content "$ud\settings.json" -Encoding utf8NoBOM
-            $env:FLUX_USER_DATA = $ud; $env:FLUX_SEE_THROUGH = '1'; $env:FLUX_NO_WATCHDOG = '1'
-            foreach ($k in $variants[$name].Keys) { Set-Item "Env:$k" $variants[$name][$k] }
-            $err = "out\exp-$name.log"
-            $p = Start-Process (Get-ChildItem target\release\flux-native.exe).FullName -PassThru -RedirectStandardError $err -RedirectStandardOutput "out\exp-$name.out"
-            Start-Sleep 15
-            $p.Refresh()
-            $h = $p.MainWindowHandle
-            $vis = if ($h -ne 0) { [U2.W2]::IsWindowVisible($h) } else { $false }
-            $r = New-Object U2.W2+RECT; if ($h -ne 0) { [void][U2.W2]::GetWindowRect($h, [ref]$r) }
-            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-            $shot = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-            $g = [System.Drawing.Graphics]::FromImage($shot); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-            $px = if ($h -ne 0 -and $r.R -gt $r.L) { $shot.GetPixel([math]::Min($b.Width - 1, [math]::Max(0, [int](($r.L + $r.R) / 2))), [math]::Min($b.Height - 1, [math]::Max(0, [int](($r.T + $r.B) / 2)))) } else { 'n/a' }
-            $shot.Save("out\exp-$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $shot.Dispose()
-            $lines += "$name : exited=$($p.HasExited) hwnd=$h visible=$vis rect=$($r.L),$($r.T),$($r.R),$($r.B) centerPixel=$px"
-            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-            Start-Sleep 2
-            $lines += (Get-Content $err -ErrorAction SilentlyContinue | Select-Object -First 30 | ForEach-Object { "    $_" })
-            foreach ($k in $variants[$name].Keys) { Remove-Item "Env:$k" }
-          }
-          Remove-Item Env:FLUX_SEE_THROUGH, Env:FLUX_NO_WATCHDOG, Env:FLUX_USER_DATA
-          $lines | Set-Content out\exp.txt
-          $lines | ForEach-Object { Write-Host $_ }
-          "## See-through experiment`n``````n$($lines -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Measure memory (Flux Native)
         shell: pwsh
         run: |
@@ -326,15 +281,15 @@ jobs:
           }
           function Start-FluxRun($label, $exe, $argList) {
             $p = if ($argList) { Start-Process $exe -ArgumentList $argList -PassThru } else { Start-Process $exe -PassThru }
-            Start-Sleep 40
+            Start-Sleep 20
             Shot $label
-            # tri merania po 5 s, berie sa stredné
-            $ms = @(); for ($i = 0; $i -lt 3; $i++) { $ms += ,(Get-FluxMem $p.Id); Start-Sleep 5 }
+            # tri merania po 2 s, berie sa stredné
+            $ms = @(); for ($i = 0; $i -lt 3; $i++) { $ms += ,(Get-FluxMem $p.Id); Start-Sleep 2 }
             $mid = @($ms | Sort-Object { $_['priv'] })[[math]::Floor($ms.Count / 2)]
             if (-not $mid) { $mid = $ms[-1] }
             $out = @("$label : $($mid.priv) MB private (Task Manager), $($mid.ws) MB working set, $($mid.count) processes") + ($mid.rows | ForEach-Object { "   $_" })
             Stop-Process -Id (Tree $p.Id) -Force -ErrorAction SilentlyContinue
-            Start-Sleep 3
+            Start-Sleep 1
             $out
           }
           function Shot($name) {
@@ -348,8 +303,8 @@ jobs:
           $env:FLUX_USER_DATA = $nd
           $env:FLUX_TEST = "2:open=main.py"
           try { $report += Start-FluxRun 'native' (Get-ChildItem target\release\flux-native.exe).FullName $null } catch { $report += "native: measurement failed: $_" }
-          # živá tapeta (falošný Lively s ukážkovým videom): koľko stojí jedna snímka a prehrávanie vo Fluxe
-          try {
+          # živá tapeta (falošný Lively s ukážkovým videom): len pri ručnom spustení (sťahuje video a trvá ~2 min)
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { try {
             $lv = "$env:RUNNER_TEMP\fake-local"; $wp = "$lv\wp1"
             New-Item -ItemType Directory "$lv\Lively Wallpaper", $wp -Force | Out-Null
             Invoke-WebRequest -UseBasicParsing -TimeoutSec 60 "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4" -OutFile "$wp\video.mp4"
@@ -363,7 +318,7 @@ jobs:
               $report += Start-FluxRun "native-live-$mode" (Get-ChildItem target\release\flux-native.exe).FullName $null
             }
             $env:LOCALAPPDATA = $realLocal; Remove-Item Env:FLUX_LIVE_TEST
-          } catch { $report += "live wallpaper measurement skipped: $_" }
+          } catch { $report += "live wallpaper measurement skipped: $_" } }
           $report += "Program size: $([math]::Round((Get-Item target\release\flux-native.exe).Length / 1MB, 1)) MB"
           $report | Set-Content out\memory.txt
           # program na stiahnutie a vyskúšanie (bez inštalátora, rovnaké nastavenia ako Electron Flux)
