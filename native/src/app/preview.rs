@@ -25,6 +25,8 @@ pub struct Preview {
     #[allow(dead_code)] // len Windows (čo je práve načítané vo WebView2)
     shown_url: String,
     reload: bool,
+    #[cfg(windows)]
+    zoomed: f64, // zväčšenie, ktoré má WebView2 práve nastavené
     pub body: Option<Rect>, // kde má byť stránka (v bodoch egui) – nastaví preview_ui
     #[allow(dead_code)]
     covered: bool, // minulý snímok bola stránka zakrytá
@@ -43,7 +45,10 @@ fn tab_title(url: &str) -> String {
 }
 
 // (názov, šírka stránky v px; 0 = celý panel)
-const DEVICES: [(&str, f32); 3] = [("Full", 0.0), ("Tablet", 768.0), ("Phone", 390.0)];
+// šírka −1 = „16:9“: stránka sa rozloží na 1920 px široký (stolový) displej a zmenší sa, aby sa vošla do panela
+const DEVICES: [(&str, f32); 4] = [("Full", 0.0), ("Tablet", 768.0), ("Phone", 390.0), ("16:9", -1.0)];
+#[allow(dead_code)] // len Windows (WebView2 zoom)
+const DESKTOP_W: f32 = 1920.0;
 
 impl Preview {
     pub fn new(url: String) -> Self {
@@ -64,6 +69,8 @@ impl Preview {
             go: Default::default(),
             shown_url: String::new(),
             reload: false,
+            #[cfg(windows)]
+            zoomed: 1.0,
             body: None,
             covered: false,
         }
@@ -208,8 +215,13 @@ impl App {
         // vľavo 6 px voľných – tam sa chytá okraj na zmenu šírky (WebView2 je nad egui a zakrýval by ho)
         let area = Rect::from_min_max(pos2(rect.left() + 6.0, bar.bottom() + 1.0), rect.max);
         let dw = DEVICES[pv.device].1;
-        let body = if dw > 0.0 && dw < area.width() { Rect::from_center_size(pos2(area.center().x, area.center().y), vec2(dw, area.height())) } else { area };
-        if dw > 0.0 {
+        let body = if dw < 0.0 {
+            // najväčší obdĺžnik 16:9, ktorý sa vojde do panela (na stred)
+            let m = area.shrink(8.0);
+            let w = m.width().min(m.height() * 16.0 / 9.0).max(40.0);
+            Rect::from_center_size(m.center(), vec2(w, w * 9.0 / 16.0))
+        } else if dw > 0.0 && dw < area.width() { Rect::from_center_size(pos2(area.center().x, area.center().y), vec2(dw, area.height())) } else { area };
+        if dw != 0.0 {
             ui.painter().rect_filled(area, 0.0, p.card2);
         }
         pv.body = Some(body);
@@ -288,6 +300,7 @@ impl App {
                     Ok(v) => {
                         let _ = v.focus_parent();
                         pv.shown_url = pv.url.clone();
+                        pv.zoomed = 1.0; // nový WebView2 začína na 100 %
                         pv.view = Some(v);
                     }
                     Err(e) => {
@@ -301,6 +314,12 @@ impl App {
                 // odkaz z nového okna a poloha myši v stránke prídu z iných vlákien – Flux ich zistí pri najbližšom snímku
                 ctx.request_repaint_after(std::time::Duration::from_millis(80));
                 let _ = v.set_bounds(bounds);
+                // 16:9: stránka sa rozloží na 1920 px a zmenší na veľkosť panela (WebView2 zoom), inak 100 %
+                let want = if pv.device == 3 { (b.width() * zoom) as f64 / DESKTOP_W as f64 } else { 1.0 };
+                if (want - pv.zoomed).abs() > 0.002 {
+                    pv.zoomed = want;
+                    let _ = v.zoom(want);
+                }
                 let _ = v.set_visible(!covered);
                 // klik kamkoľvek do Fluxu (mimo stránky) alebo zakrytá stránka → klávesnica späť Fluxu;
                 // WebView2 je samostatné okno a inak by si písanie nechal

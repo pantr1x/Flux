@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.39
+
+**Live Server**
+- New **16:9** button next to Full / Tablet / Phone: the page is laid out like on a 1920 px wide desktop screen and shown zoomed out in a 16:9 frame that fits your panel, so you see the whole design as on a real monitor.
+
 ## 0.9.38
 
 **Editor**
