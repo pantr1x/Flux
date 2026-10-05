@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.35
+
+**Templates**
+- New HTML, CSS and JavaScript starter files now indent with 4 spaces – the same step as the Tab key and the code suggestions – so what you add lines up with the template.
+
 ## 0.9.34
 
 **Live Server**

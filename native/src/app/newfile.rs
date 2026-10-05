@@ -9,8 +9,8 @@ use std::path::Path;
 // (id, názov, prípona, predvolené meno, začiatok súboru; {name} = meno bez prípony)
 const LANGS: [(&str, &str, &str, &str, &str); 21] = [
     ("python", "Python", "py", "main", "print(\"Hello!\")\n"),
-    ("html", "HTML", "html", "index", "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>{name}</title>\n</head>\n<body>\n  <h1>{name}</h1>\n</body>\n</html>\n"),
-    ("css", "CSS", "css", "style", "body {\n  font-family: system-ui, sans-serif;\n}\n"),
+    ("html", "HTML", "html", "index", "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>{name}</title>\n</head>\n<body>\n    <h1>{name}</h1>\n</body>\n</html>\n"),
+    ("css", "CSS", "css", "style", "body {\n    font-family: system-ui, sans-serif;\n}\n"),
     ("js", "JavaScript", "js", "script", "console.log('Hello!');\n"),
     ("ts", "TypeScript", "ts", "main", "const name: string = \"TypeScript\";\nconsole.log(`Hello from ${name}!`);\n"),
     ("java", "Java", "java", "Main", "public class {name} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello from Java!\");\n    }\n}\n"),
