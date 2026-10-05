@@ -88,11 +88,32 @@ pub fn create(target: &str, is_dir: bool) -> Result<Value, String> {
     Ok(json!(target))
 }
 
+// premenovanie; vo Windows ho krátko blokuje čokoľvek, čo ešte drží priečinok (sledovanie zmien, terminál) – skúsiť znova
+fn rename_retry(from: &Path, to: &Path) -> Result<(), String> {
+    let mut tries = 0;
+    loop {
+        match std::fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                let locked = cfg!(windows) && matches!(e.raw_os_error(), Some(5) | Some(32));
+                if locked && tries < 12 {
+                    tries += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                } else if locked {
+                    return Err("Windows won't let go of it – another program is using it. Close that program and try again.".into());
+                } else {
+                    return Err(e.to_string());
+                }
+            }
+        }
+    }
+}
+
 pub fn rename(from: &str, to: &str) -> Result<Value, String> {
     if Path::new(to).exists() {
         return Err("Already exists".into());
     }
-    std::fs::rename(from, to).map_err(|e| e.to_string())?;
+    rename_retry(Path::new(from), Path::new(to))?;
     Ok(json!(to))
 }
 
@@ -258,7 +279,7 @@ pub fn rename_project(s: &Flux, dir: &str, name: &str) -> Result<Value, String> 
     if target.exists() {
         return Err("A folder with this name already exists.".into());
     }
-    std::fs::rename(dir, &target).map_err(|e| e.to_string())?;
+    rename_retry(Path::new(dir), &target)?;
     let t = target.to_string_lossy().to_string();
     update_projects(s, |o| {
         let swap = |v: &mut Value| {

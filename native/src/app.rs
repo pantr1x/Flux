@@ -91,6 +91,37 @@ pub struct ColorPick {
     opened: f64,
 }
 
+// výsledok poľa na premenovanie
+enum Rn {
+    Editing,
+    Done,
+    Cancel,
+}
+
+// pole na premenovanie v zozname: pri otvorení označí meno (súbor bez prípony); Enter alebo klik inam potvrdí, Esc zruší.
+// Fokus sa žiada len na začiatku – opakované žiadanie každý snímok by Enter „zjedlo“ (lost_focus by nikdy nepršal).
+fn rename_field(ui: &mut egui::Ui, id: egui::Id, text: &mut String, margin: Margin, stem_only: bool) -> Rn {
+    let init = id.with("init");
+    let te = ui.add(egui::TextEdit::singleline(text).id(id).desired_width(f32::INFINITY).margin(margin));
+    if te.lost_focus() {
+        ui.data_mut(|d| d.remove::<bool>(init));
+        return if ui.input(|i| i.key_pressed(egui::Key::Escape)) { Rn::Cancel } else { Rn::Done };
+    }
+    if !te.has_focus() {
+        te.request_focus();
+        ui.ctx().request_repaint();
+    } else if ui.data(|d| d.get_temp::<bool>(init)).is_none() {
+        // označí sa meno (až keď pole fokus má, inak by ho TextEdit prepísal)
+        let n = if stem_only { text.rfind('.').filter(|i| *i > 0).map(|i| text[..i].chars().count()) } else { None }.unwrap_or_else(|| text.chars().count());
+        let mut st = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+        st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(n))));
+        st.store(ui.ctx(), id);
+        ui.data_mut(|d| d.insert_temp(init, true));
+        ui.ctx().request_repaint();
+    }
+    Rn::Editing
+}
+
 const SUG_ROWS: usize = 10; // naraz viditeľné návrhy (ďalšie sa posúvajú)
 
 // ikonky návrhov (kreslené, 14 px) vo farbách VS Code
@@ -173,7 +204,6 @@ pub struct App {
     projects: Vec<Value>,
     summaries: HashMap<String, Value>,
     recent_files: Vec<String>,
-    show_hidden: bool,
     new_project: Option<newproj::NewProj>,
     new_file: Option<newfile::NewFile>, // okno Nový súbor
     new_item: Option<(bool, String)>,   // (priečinok?, meno) pre nový súbor/priečinok v strome
@@ -313,7 +343,6 @@ impl App {
             projects: vec![],
             summaries: HashMap::new(),
             recent_files: vec![],
-            show_hidden: false,
             new_project: None,
             new_item: None,
             new_file: None,
@@ -409,6 +438,7 @@ impl App {
         }
         app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         app.gh_plugin_migrate();
+        app.hidden_migrate();
         // „Čo je nové“: po aktualizácii (nie pri prvom štarte ani pri tichom štarte na pozadí)
         let cur = env!("CARGO_PKG_VERSION");
         let quiet = std::env::args().any(|a| a == "--background" || a == "--minimized");
@@ -1569,40 +1599,39 @@ impl App {
         pr: &Value,
         ws: Option<&str>,
         open: &mut Option<String>,
-        menu_for: &mut Option<(egui::Response, String, bool, bool)>,
+        menu_for: &mut Option<(egui::Response, String, bool)>,
         rename: &mut Option<(String, String)>,
     ) {
         let p = self.pal;
         let dir = pr["dir"].as_str().unwrap_or("").to_string();
         let name = pr["name"].as_str().unwrap_or("").to_string();
         let pinned = pr["pinned"].as_bool() == Some(true);
-        let hidden = pr["hidden"].as_bool() == Some(true);
         let sel = ws == Some(dir.as_str());
         let sub = self.project_sub(&dir);
         let spec = self.project_icon(&dir);
         let lead = Lead::Project(&spec);
         if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == dir) {
-            let te = ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 8)));
-            te.request_focus();
-            if te.lost_focus() {
-                let (f, n) = (from.clone(), new.clone());
-                self.renaming = None;
-                // Enter aj klik inam uloží, Esc zruší
-                if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            // Enter aj klik inam uloží, Esc zruší
+            match rename_field(ui, egui::Id::new(("rename", &dir)), new, Margin::symmetric(10, 8), false) {
+                Rn::Editing => {}
+                Rn::Done => {
+                    let (f, n) = (from.clone(), new.clone());
+                    self.renaming = None;
                     *rename = Some((f, n));
                 }
+                Rn::Cancel => self.renaming = None,
             }
             return;
         }
         let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
         if r.secondary_clicked() || r.context_menu_opened() {
-            *menu_for = Some((r.clone(), dir.clone(), pinned, hidden));
+            *menu_for = Some((r.clone(), dir.clone(), pinned));
         }
         let over = ui.rect_contains_pointer(r.rect);
         let k = ui.ctx().animate_bool_with_time(r.id.with("acts"), over, 0.15);
         let cy = r.rect.center().y;
         if k > 0.0 || pinned {
-            // špendlík (pripnutý = vždy viditeľný a vyplnený accentom), vedľa neho skryť
+            // špendlík (pripnutý = vždy viditeľný a vyplnený accentom), vedľa neho „odstrániť z Fluxu“
             let pin_r = Rect::from_center_size(pos2(r.rect.right() - 16.0, cy), vec2(24.0, 24.0));
             let pr_ = ui.interact(pin_r, ui.id().with(("pin", &dir)), Sense::click()).on_hover_text(t(if pinned { "Unpin" } else { "Pin to top" }));
             if pr_.hovered() {
@@ -1616,14 +1645,13 @@ impl App {
             }
             if k > 0.0 {
                 let hide_r = Rect::from_center_size(pos2(r.rect.right() - 40.0, cy), vec2(24.0, 24.0));
-                let hr = ui.interact(hide_r, ui.id().with(("hide", &dir)), Sense::click()).on_hover_text(t(if hidden { "Show in the sidebar" } else { "Hide from the sidebar" }));
+                let hr = ui.interact(hide_r, ui.id().with(("forget", &dir)), Sense::click()).on_hover_text(t("Remove from Flux (the files stay in the folder)"));
                 if hr.hovered() {
                     ui.painter().rect_filled(hide_r, CornerRadius::same(7), p.active);
                 }
-                widgets::icon_at(ui, hide_r.center(), 13.0 * (0.8 + 0.2 * k), if hidden { "eye" } else { "eyeOff" }, (if hr.hovered() { p.text } else { p.text3 }).gamma_multiply(k));
+                widgets::icon_at(ui, hide_r.center(), 12.0 * (0.8 + 0.2 * k), "x", (if hr.hovered() { p.text } else { p.text3 }).gamma_multiply(k));
                 if hr.clicked() {
-                    fsops::hide(&self.core, &dir, !hidden);
-                    self.reload_projects();
+                    self.forget_project(&dir);
                 }
             }
         }
@@ -1644,12 +1672,11 @@ impl App {
                 self.side_top(ui, true);
                 let ws = self.workspace();
                 let mut open = None;
-                let mut menu_for: Option<(egui::Response, String, bool, bool)> = None;
+                let mut menu_for: Option<(egui::Response, String, bool)> = None;
                 let mut rename: Option<(String, String)> = None;
-                let hidden = self.projects.iter().filter(|pr| pr["hidden"].as_bool() == Some(true)).count();
                 let projects = self.projects.clone();
                 // ---- PINNED (pripnuté projekty v jemnom rámčeku, .pr-pinned) ----
-                let pinned: Vec<Value> = projects.iter().filter(|pr| pr["pinned"].as_bool() == Some(true) && pr["hidden"].as_bool() != Some(true)).cloned().collect();
+                let pinned: Vec<Value> = projects.iter().filter(|pr| pr["pinned"].as_bool() == Some(true)).cloned().collect();
                 if !pinned.is_empty() {
                     let (cap, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
                     widgets::icon_at(ui, pos2(cap.left() + 13.0, cap.center().y), 11.0, "pin", p.text3);
@@ -1686,16 +1713,13 @@ impl App {
                 }
                 let sout = sa.show(ui, |ui| {
                     for pr in projects.iter().filter(|pr| pr["pinned"].as_bool() != Some(true)) {
-                        if pr["hidden"].as_bool() == Some(true) && !self.show_hidden {
-                            continue;
-                        }
                         self.project_row(ui, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
                     }
                 });
                 self.smooth.end(sk, &sout);
                 self.tour_rects.insert("projects", Rect::from_min_size(sout.inner_rect.min, vec2(sout.inner_rect.width(), sout.content_size.y.min(sout.inner_rect.height()))));
-                if let Some((r, d, pinned, hid)) = menu_for {
-                    self.project_menu(&r, &d, pinned, hid);
+                if let Some((r, d, pinned)) = menu_for {
+                    self.project_menu(&r, &d, pinned);
                 }
                 if let Some((f, n)) = rename {
                     self.finish_rename(&f, &n);
@@ -1709,12 +1733,6 @@ impl App {
                 }
                 if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New project"), None, false, &p).clicked() {
                     self.open_new_project();
-                }
-                if hidden > 0
-                    && widgets::row(ui, false, 10.0, Lead::Line(if self.show_hidden { "eyeOff" } else { "eye" }), &crate::i18n::tf("{n} hidden", &[("n", &hidden.to_string())]), None, false, &p)
-                        .clicked()
-                {
-                    self.show_hidden = !self.show_hidden;
                 }
                 // ---- FILES (súbory otvorené mimo projektu) ----
                 // vždy viditeľné, s riadkom „+ New file“ (ako „+ New project“ pri projektoch)
@@ -1871,19 +1889,20 @@ impl App {
         for (name, path, is_dir) in items {
             let indent = 6.0 + depth as f32 * 14.0;
             if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == path) {
-                let mut te = None;
+                let mut res = Rn::Editing;
                 ui.horizontal(|ui| {
                     ui.add_space(indent);
-                    te = Some(ui.add(egui::TextEdit::singleline(new).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5))));
+                    // pri súbore sa označí meno bez prípony
+                    res = rename_field(ui, egui::Id::new(("rename", &path)), new, Margin::symmetric(10, 5), !is_dir);
                 });
-                let te = te.unwrap();
-                te.request_focus();
-                if te.lost_focus() {
-                    let (f, n) = (from.clone(), new.clone());
-                    self.renaming = None;
-                    if !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                match res {
+                    Rn::Editing => {}
+                    Rn::Done => {
+                        let (f, n) = (from.clone(), new.clone());
+                        self.renaming = None;
                         self.finish_rename(&f, &n);
                     }
+                    Rn::Cancel => self.renaming = None,
                 }
                 continue;
             }
@@ -2312,6 +2331,7 @@ impl App {
                 let cached = hlc.galley.clone();
                 let same = hlc.same_text(&tab.text);
                 let gen = hlc.gen;
+                let swatches_on = tab.text.len() <= crate::colors::MAX_BYTES;
                 let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_w: f32| {
                     let w = if wrap { wrap_w } else { f32::INFINITY };
                     wrap_at.set(w);
@@ -2321,7 +2341,15 @@ impl App {
                             return gal.clone();
                         }
                     }
-                    let mut job = egui::text::LayoutJob::single_section(buf.as_str().to_owned(), fmt.clone());
+                    // pred farbou medzera na štvorček (colors.rs) – ten istý rozklad robí aj farebná vrstva nižšie
+                    let toks = if swatches_on { crate::colors::all_starts(buf.as_str(), &lang) } else { vec![] };
+                    let mut job = if toks.is_empty() {
+                        egui::text::LayoutJob::single_section(buf.as_str().to_owned(), fmt.clone())
+                    } else {
+                        let mut j = egui::text::LayoutJob::default();
+                        crate::colors::append(&mut j, buf.as_str(), 0, buf.as_str().len(), &toks, &fmt);
+                        j
+                    };
                     job.wrap.max_width = w;
                     let gal = ui.fonts_mut(|f| f.layout_job(job));
                     *built.borrow_mut() = Some(gal.clone());
@@ -2432,18 +2460,19 @@ impl App {
                         }
                         let mut job = egui::text::LayoutJob::default();
                         job.wrap.max_width = wrap_at.get();
+                        let toks = if swatches_on { crate::colors::starts(text, &lang) } else { vec![] };
                         match hlc.spans(i) {
                             Some(sp) => {
                                 let mut at_b = 0usize;
                                 for (len, c) in sp {
                                     let end = (at_b + *len as usize).min(text.len());
                                     if end > at_b {
-                                        job.append(&text[at_b..end], 0.0, egui::TextFormat { color: *c, ..fmt.clone() });
+                                        crate::colors::append(&mut job, text, at_b, end, &toks, &egui::TextFormat { color: *c, ..fmt.clone() });
                                     }
                                     at_b = end;
                                 }
                             }
-                            None => job.append(text, 0.0, egui::TextFormat { color: fg, ..fmt.clone() }),
+                            None => crate::colors::append(&mut job, text, 0, text.len(), &toks, &egui::TextFormat { color: fg, ..fmt.clone() }),
                         }
                         let g = ui.fonts_mut(|f| f.layout_job(job));
                         shapes.push(egui::Shape::galley(at, g, fg));
@@ -2459,7 +2488,9 @@ impl App {
                             let Some(&at) = vis_lines.get(&d.line) else { continue };
                             let col_c = d.color.unwrap_or(if d.err { p.red } else { Color32::from_rgb(0xe0, 0xa4, 0x3c) });
                             let text = if d.line < hlc.lines() { hlc.line_text(d.line).trim_end_matches('\n') } else { "" };
-                            let mut job = egui::text::LayoutJob::single_section(text.to_string(), egui::TextFormat { color: Color32::TRANSPARENT, ..fmt.clone() });
+                            let mut job = egui::text::LayoutJob::default();
+                            let toks = if swatches_on { crate::colors::starts(text, &lang) } else { vec![] };
+                            crate::colors::append(&mut job, text, 0, text.len(), &toks, &egui::TextFormat { color: Color32::TRANSPARENT, ..fmt.clone() });
                             job.wrap.max_width = wrap_at.get();
                             let lg = ui.fonts_mut(|f| f.layout_job(job));
                             let n = text.chars().count();
@@ -2502,12 +2533,16 @@ impl App {
                             continue;
                         }
                         let text = hlc.line_text(i).trim_end_matches('\n');
-                        if text.len() > 3000 || !text.contains(['#', '(', ':']) {
+                        if !swatches_on || crate::colors::starts(text, &lang).is_empty() {
                             continue;
                         }
+                        // začiatok riadka v znakoch – presné miesta berieme z rozloženia (platí aj pri zalamovaní)
+                        let line_c = usize::from(te.galley.cursor_from_pos(at - te.galley_pos + vec2(2.0, lh / 2.0)).index);
                         for f in crate::colors::find(text, &lang) {
-                            let x = at.x + ui.fonts_mut(|fo| fo.layout_no_wrap(text[..f.start].to_string(), font.clone(), Color32::WHITE).size().x);
-                            let sq = Rect::from_center_size(pos2(x - 7.0, at.y + lh / 2.0), vec2(10.0, 10.0));
+                            let cidx = line_c + text[..f.start].chars().count();
+                            let gp = te.galley.pos_from_cursor(egui::text::CCursor::new(cidx));
+                            let (gx, gy) = (te.galley_pos.x + gp.left(), te.galley_pos.y + gp.center().y - 1.0);
+                            let sq = Rect::from_center_size(pos2(gx - crate::colors::GAP / 2.0 - 0.5, gy), vec2(10.0, 10.0));
                             if !vclip.intersects(sq) {
                                 continue;
                             }
@@ -2519,8 +2554,7 @@ impl App {
                             ui.painter().rect_stroke(sq, CornerRadius::same(2), Stroke::new(1.0, p.line_strong), StrokeKind::Outside);
                             let r = ui.interact(sq.expand(2.0), ui.id().with(("swatch", i, f.start)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
                             if r.clicked() {
-                                let line_start: usize = tab.text.split('\n').take(i).map(|l| l.chars().count() + 1).sum();
-                                let st = line_start + text[..f.start].chars().count();
+                                let st = cidx;
                                 color_req = Some((st, text[f.start..f.start + f.len].chars().count(), f.color, f.fmt, sq));
                             }
                         }

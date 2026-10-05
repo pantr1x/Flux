@@ -1,6 +1,11 @@
 // Farby v kóde (ako VS Code): #hex, rgb()/rgba(), hsl()/hsla() a pomenované farby v CSS.
 // Editor pred ne kreslí štvorček; klik otvorí výber farby a zmena sa zapíše späť v rovnakom zápise.
-use eframe::egui::Color32;
+use eframe::egui::{text::LayoutJob, Color32, TextFormat};
+
+// medzera pred farbou na štvorček (px); editor ju vkladá do rozloženia textu, takže nič neprekrýva
+pub const GAP: f32 = 13.0;
+// väčší súbor štvorčeky nemá (rozloženie by sa pri každej zmene prechádzalo celé)
+pub const MAX_BYTES: usize = 1_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Fmt {
@@ -28,6 +33,47 @@ const NAMED: &[(&str, u32)] = &[
     ("dodgerblue", 0x1e90ff), ("hotpink", 0xff69b4), ("darkred", 0x8b0000), ("darkgreen", 0x006400), ("darkblue", 0x00008b), ("lightgray", 0xd3d3d3),
     ("lightgrey", 0xd3d3d3), ("darkgray", 0xa9a9a9), ("darkgrey", 0xa9a9a9), ("whitesmoke", 0xf5f5f5), ("slategray", 0x708090), ("rebeccapurple", 0x663399),
 ];
+
+fn is_css(lang: &str) -> bool {
+    matches!(lang, "css" | "scss" | "less" | "html" | "htm" | "vue" | "svelte")
+}
+
+// začiatky farieb v riadku (bajty); rýchly predfilter, aby bežný riadok nestál nič
+pub fn starts(line: &str, lang: &str) -> Vec<usize> {
+    let css = is_css(lang);
+    if line.len() > 3000 || !(line.contains('#') || line.contains("rgb") || line.contains("hsl") || (css && line.contains(':'))) {
+        return vec![];
+    }
+    find(line, lang).into_iter().map(|f| f.start).collect()
+}
+
+// začiatky farieb v celom texte (bajty od začiatku textu)
+pub fn all_starts(text: &str, lang: &str) -> Vec<usize> {
+    if text.len() > MAX_BYTES {
+        return vec![];
+    }
+    let mut out = vec![];
+    let mut off = 0;
+    for line in text.split('\n') {
+        out.extend(starts(line, lang).into_iter().map(|s| off + s));
+        off += line.len() + 1;
+    }
+    out
+}
+
+// text[from..to] do rozloženia tak, aby pred každou farbou (toks = jej začiatky, vzostupne) bola medzera GAP
+pub fn append(job: &mut LayoutJob, text: &str, from: usize, to: usize, toks: &[usize], fmt: &TextFormat) {
+    if from >= to {
+        return;
+    }
+    let lead = |a: usize| if toks.binary_search(&a).is_ok() { GAP } else { 0.0 };
+    let mut a = from;
+    for &t in toks.iter().filter(|t| **t > from && **t < to) {
+        job.append(&text[a..t], lead(a), fmt.clone());
+        a = t;
+    }
+    job.append(&text[a..to], lead(a), fmt.clone());
+}
 
 // jazyky, kde „#“ začína komentár: #hex len v úvodzovkách
 fn hash_comment(lang: &str) -> bool {
@@ -95,7 +141,7 @@ pub fn find(line: &str, lang: &str) -> Vec<Found> {
     let mut out = vec![];
     let b = line.as_bytes();
     let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'-';
-    let css = matches!(lang, "css" | "scss" | "less" | "html" | "htm" | "vue" | "svelte");
+    let css = is_css(lang);
     // úvodzovky pred bajtom i (párne/nepárne) – pre jazyky s # komentármi
     let quoted = |i: usize| {
         let mut q: Option<u8> = None;
@@ -255,5 +301,17 @@ mod tests {
         assert_eq!(parse("#ff0000"), Some(Color32::from_rgb(255, 0, 0)));
         assert_eq!(parse("  blue "), Some(Color32::from_rgb(0, 0, 255)));
         assert_eq!(parse("nope"), None);
+    }
+
+    #[test]
+    fn colors_layout_gap() {
+        let mut job = LayoutJob::default();
+        let text = "a { color: #fff; x: red }";
+        let toks = starts(text, "css");
+        assert_eq!(toks, vec![11, 20]);
+        append(&mut job, text, 0, text.len(), &toks, &TextFormat::default());
+        assert_eq!(job.text, text);
+        assert_eq!(job.sections.iter().filter(|s| s.leading_space > 0.0).count(), 2);
+        assert!(starts("let x = 3;", "rs").is_empty());
     }
 }

@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.30 – 2026-10-05
+
+### Fixes
+- **Renaming works again** – for projects (right-click → *Rename…*) and for files and folders in the tree. Press Enter to confirm, Esc to cancel. For a file the name without its extension is selected. If Windows still holds the folder, Flux tries again for a moment and then tells you why.
+- **Color squares fit properly:** there is now a small space for the square before the color, so it no longer covers the colon or the text next to it.
+
+### Projects
+- **"Hide" is gone.** Instead, the **×** next to a project (and *Remove from Flux* in its menu) takes it off the list. The files stay in the folder – to get it back, open the folder again. Projects you had hidden before are removed from the list the same way.
+
 ## 0.9.29 – 2026-10-05
 
 ### Safer for Windows Defender

@@ -431,7 +431,7 @@ impl App {
     }
 
     // ---------- pravý klik na projekt ----------
-    pub(super) fn project_menu(&mut self, resp: &Response, dir: &str, pinned: bool, hidden: bool) {
+    pub(super) fn project_menu(&mut self, resp: &Response, dir: &str, pinned: bool) {
         let p = self.pal;
         let mut picked: Option<&str> = None;
         resp.context_menu(|ui| {
@@ -443,10 +443,7 @@ impl App {
             if item(ui, Some("edit"), &t("Rename…"), "", false, true, &p).clicked() {
                 picked = Some("rename");
             }
-            if item(ui, Some("sidebar"), &t(if hidden { "Show in the sidebar" } else { "Hide from the sidebar (stays on the home screen)" }), "", false, true, &p).clicked() {
-                picked = Some("hide");
-            }
-            if item(ui, Some("x"), &t("Remove from Flux (files stay on disk)"), "", false, true, &p).clicked() {
+            if item(ui, Some("x"), &t("Remove from Flux (the files stay in the folder)"), "", false, true, &p).clicked() {
                 picked = Some("forget");
             }
             if item(ui, Some("trash"), &t("Delete project… (moves the folder to the Recycle Bin)"), "", false, true, &p).clicked() {
@@ -457,11 +454,9 @@ impl App {
             Some("pin") => {
                 fsops::pin(&self.core, dir, !pinned);
             }
-            Some("hide") => {
-                fsops::hide(&self.core, dir, !hidden);
-            }
             Some("forget") => {
-                fsops::forget(&self.core, dir);
+                self.forget_project(dir);
+                return;
             }
             Some("rename") => self.renaming = Some((dir.to_string(), widgets::file_name(dir))),
             Some("trash") => {
@@ -474,6 +469,51 @@ impl App {
             _ => {}
         }
         if picked.is_some() {
+            self.reload_projects();
+        }
+    }
+
+    // projekt zmizne zo zoznamu Fluxu (súbory ostanú v priečinku; znova sa otvorí cez „Open folder“) – skrývanie zaniklo
+    pub(super) fn forget_project(&mut self, dir: &str) {
+        let open = self.workspace().as_deref() == Some(dir);
+        if open {
+            // otvorený projekt sa zavrie: karty (neuložené sa uložia), sledovanie zmien, terminál, server, náhľad
+            for i in (0..self.tabs.len()).rev() {
+                if self.tabs[i].path.starts_with(&format!("{dir}{}", std::path::MAIN_SEPARATOR)) {
+                    self.close_tab(i);
+                }
+            }
+            *self.core.workspace.lock().unwrap() = None;
+            self.watcher = None;
+            self.tree.clear();
+            self.open_dirs.clear();
+            self.out.pty.kill();
+            self.sh.pty.kill();
+            self.shell_started = false;
+            self.server = None;
+            self.close_preview();
+            self.update_settings(|o| {
+                o.remove("lastFolder");
+            });
+            self.home = true;
+        }
+        fsops::forget(&self.core, dir);
+        self.reload_projects();
+        self.note(tf("{name} was removed from Flux. Its files are still in the folder – open the folder again to bring it back.", &[("name", &widgets::file_name(dir))]));
+    }
+
+    // raz pri štarte: skryté projekty (skrývanie zaniklo) sa odstránia zo zoznamu, súbory ostanú
+    pub(super) fn hidden_migrate(&mut self) {
+        let hid: Vec<String> = self
+            .core
+            .setting("projects")
+            .as_array()
+            .map(|a| a.iter().filter(|p| p["hidden"].as_bool() == Some(true)).filter_map(|p| p["dir"].as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        for d in &hid {
+            fsops::forget(&self.core, d);
+        }
+        if !hid.is_empty() {
             self.reload_projects();
         }
     }
@@ -500,6 +540,10 @@ impl App {
             match fsops::rename_project(&self.core, from, name) {
                 Ok(v) => {
                     let to = v["dir"].as_str().map(String::from).unwrap_or_else(|| Path::new(from).parent().unwrap_or(Path::new("")).join(name).to_string_lossy().to_string());
+                    // súhrn (jazyky, počet súborov) ide s projektom, nech riadok nezostane prázdny
+                    if let Some(sm) = self.summaries.remove(from) {
+                        self.summaries.insert(to.clone(), sm);
+                    }
                     // popis, úlohy a ikona idú s projektom
                     self.update_settings(|o| {
                         if let Some(all) = o.get_mut("projectMeta").and_then(|m| m.as_object_mut()) {
@@ -523,7 +567,7 @@ impl App {
                     self.note(tf("Renamed to {name}.", &[("name", name)]));
                 }
                 Err(e) => {
-                    self.status = t(&e);
+                    self.status = rename_error(&e);
                     if open {
                         self.open_folder(from);
                     }
@@ -541,7 +585,7 @@ impl App {
                 }
                 self.tree.clear();
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status = rename_error(&e),
         }
     }
 
@@ -741,5 +785,14 @@ impl App {
         } else if no {
             self.ask = None;
         }
+    }
+}
+
+// chyba premenovania v zrozumiteľnom jazyku (text z flux-core sa prekladá tu, aby ho našiel extract-strings)
+fn rename_error(e: &str) -> String {
+    if e.starts_with("Windows won't let go") {
+        t("Windows won't let go of it – another program is using it. Close that program and try again.")
+    } else {
+        t(e)
     }
 }

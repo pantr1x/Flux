@@ -187,12 +187,12 @@ impl App {
             sa = sa.vertical_scroll_offset(o);
         }
         let mut go: Option<String> = None;
-        let mut menu_for: Option<(egui::Response, String, bool, bool)> = None;
+        let mut menu_for: Option<(egui::Response, String, bool)> = None;
         let tpl: Option<&str> = None;
         let mut act: Option<&str> = None;
         let mut file: Option<String> = None;
         // ---- minimalistická domovská obrazovka: logo, pozdrav, hľadanie, posledné projekty ----
-        let shown: Vec<Value> = self.projects.iter().filter(|pr| pr["hidden"].as_bool() != Some(true)).cloned().collect();
+        let shown: Vec<Value> = self.projects.clone();
         let q = self.start_q.trim().to_lowercase();
         let desc = |app: &App, d: &str| app.core.setting("projectMeta")[d]["description"].as_str().unwrap_or("").to_string();
         // zoznam: pripnuté, potom nedávne; pri hľadaní aj nedávne súbory
@@ -328,7 +328,7 @@ impl App {
                         widgets::icon_at(ui, pos2(r.left() + 40.0, r.top() + 12.0), 9.0, "pin", p.accent);
                     }
                     if resp.secondary_clicked() {
-                        menu_for = Some((resp.clone(), key.clone(), pr["pinned"].as_bool() == Some(true), pr["hidden"].as_bool() == Some(true)));
+                        menu_for = Some((resp.clone(), key.clone(), pr["pinned"].as_bool() == Some(true)));
                     }
                 }
                 if resp.clicked() {
@@ -368,8 +368,8 @@ impl App {
             }
         }
         self.smooth.end(sk, &sout);
-        if let Some((r, d, pinned, hid)) = menu_for {
-            self.project_menu(&r, &d, pinned, hid);
+        if let Some((r, d, pinned)) = menu_for {
+            self.project_menu(&r, &d, pinned);
         }
         // Esc = späť (ak je kam)
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) && self.settings.is_none() && self.palette.is_none() && (self.workspace().is_some() || !self.tabs.is_empty()) {
