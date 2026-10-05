@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.36
+
+**Suggestions**
+- In HTML, attribute names such as `type`, `class`, `href`, `src`, `alt`, `value` and `placeholder` are now always completed with their quotes (`type=""`) and the cursor inside – wherever the suggestion pops up, not only inside a tag.
+
 ## 0.9.35
 
 **Templates**

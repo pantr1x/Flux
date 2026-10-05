@@ -1072,6 +1072,15 @@ pub fn suggest_at(
         if have.contains(&it.label) {
             continue;
         }
+        // HTML: názov atribútu (type, class, href…) sa všade dopĺňa ako atribút – s =""
+        if fam == "html" && it.insert.is_none() && !d.tags.iter().any(|t| t.0 == it.label) {
+            let known = d.tag_attrs.values().any(|l| l.contains(&it.label.as_str())) || data::GLOBAL_ATTRS.split_whitespace().chain(data::EVENT_ATTRS.split_whitespace()).any(|a| a == it.label);
+            if known && !data::BOOL_ATTRS.split_whitespace().any(|a| a == it.label) {
+                it.insert = Some(format!("{}=\"$0\"", it.label));
+                it.detail = Some(format!("{}=\"\"", it.label));
+                it.kind = Kind::Property;
+            }
+        }
         let f = (it.kind == Kind::Builtin && callable(lang, &it.label)) || (it.kind == Kind::Word && calls.contains(&it.label));
         if f && !it.label.ends_with('!') {
             it.insert = Some(format!("{}($0)", it.label));
@@ -1239,6 +1248,16 @@ mod tests {
         assert_eq!(t[0].label, "checkbox");
         // bez hodnoty
         assert_eq!(at("html", "<input disa")[0].insert, None);
+    }
+
+    #[test]
+    fn complete_html_attr_word_gets_quotes() {
+        // aj mimo značky (napr. v rozpísanom `</ul ty`) sa „type“ dopĺňa ako type=""
+        let s = at("html", "<ul>\n</ul ty");
+        let it = s.iter().find(|i| i.label == "type").expect("type");
+        assert_eq!(it.insert.as_deref(), Some("type=\"$0\""));
+        let s = at("html", "<body>\ncla");
+        assert_eq!(s.iter().find(|i| i.label == "class").and_then(|i| i.insert.clone()).as_deref(), Some("class=\"$0\""));
     }
 
     #[test]
