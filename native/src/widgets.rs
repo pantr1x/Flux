@@ -161,7 +161,7 @@ pub fn row_ex(ui: &mut egui::Ui, selected: bool, fill: bool, indent: f32, lead: 
         (false, false) => 28.0,
         (false, true) => 24.0,
     };
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click_and_drag());
     let hovered = resp.hovered();
     // plynulé zvýraznenie pri prejdení myšou
     let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), hovered, ui.style().animation_time);

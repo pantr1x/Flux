@@ -641,6 +641,37 @@ impl App {
         }
     }
 
+    // presun súboru / priečinka (ťahaním v strome alebo na projekt) do priečinka `target`
+    pub(super) fn move_item(&mut self, src: &str, target: &str) {
+        let name = widgets::file_name(src);
+        let sep = std::path::MAIN_SEPARATOR;
+        if Path::new(src).parent().is_some_and(|p| p == Path::new(target)) {
+            return;
+        }
+        if target == src || target.starts_with(&format!("{src}{sep}")) {
+            self.status = t("Can't move a folder into itself.");
+            return;
+        }
+        let to = Path::new(target).join(&name).to_string_lossy().to_string();
+        if Path::new(&to).exists() {
+            self.status = tf("{name} already exists there.", &[("name", &name)]);
+            return;
+        }
+        match fsops::rename(src, &to) {
+            Ok(_) => {
+                for tab in self.tabs.iter_mut() {
+                    if tab.path == src || tab.path.starts_with(&format!("{src}{sep}")) {
+                        tab.path = format!("{to}{}", &tab.path[src.len()..]);
+                    }
+                }
+                self.tree.clear();
+                self.open_dirs.insert(target.to_string());
+                self.note(tf("Moved {name}.", &[("name", &name)]));
+            }
+            Err(e) => self.status = rename_error(&e),
+        }
+    }
+
     // ---------- paleta ----------
     pub(super) fn open_palette(&mut self, mode: PaletteMode, ctx: &egui::Context) {
         let files = fsops::list_all(&self.core).as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();

@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.41
+
+**Files**
+- You can now **drag files and folders in the file tree**: drop them on a folder to move them in, on a file to move them next to it, on **Move to the project folder** (it appears at the top while you drag) to move them out of folders, or on another project in the sidebar to move them there. Open tabs follow the moved file. A name that already exists in the target is never overwritten.
+
 ## 0.9.40
 
 **Fixes**

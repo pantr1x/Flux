@@ -127,6 +127,24 @@ fn name_field(ui: &mut egui::Ui, id: egui::Id, text: &mut String, margin: Margin
     Rn::Editing
 }
 
+// či sa dá `src` pustiť do priečinka `target` (nie do seba, nie tam, kde už je)
+fn drop_ok(src: &str, target: &str) -> bool {
+    let same_parent = Path::new(src).parent().is_some_and(|p| p == Path::new(target));
+    let inside = target == src || target.starts_with(&format!("{src}{}", std::path::MAIN_SEPARATOR));
+    !same_parent && !inside
+}
+
+// názov ťahaného súboru pri kurzore
+fn drag_ghost(ctx: &egui::Context, name: &str) {
+    if let Some(pos) = ctx.pointer_latest_pos() {
+        egui::Area::new(egui::Id::new("dnd-ghost")).order(egui::Order::Tooltip).fixed_pos(pos + vec2(14.0, 14.0)).interactable(false).show(ctx, |ui| {
+            Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(name);
+            });
+        });
+    }
+}
+
 const SUG_ROWS: usize = 10; // naraz viditeľné návrhy (ďalšie sa posúvajú)
 // pás aktuálneho / zvýrazneného riadka sedí o chlp vyššie, aby bol text (podľa x-výšky) v jeho strede
 const BAND_UP: f32 = 2.0;
@@ -1635,6 +1653,15 @@ impl App {
             return;
         }
         let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
+        // súbor z iného projektu sa dá pustiť na riadok projektu (do jeho koreňa)
+        if let Some(src) = r.dnd_hover_payload::<String>() {
+            if drop_ok(&src, &dir) {
+                ui.painter().rect_stroke(r.rect, CornerRadius::same(8), Stroke::new(1.5, p.accent), StrokeKind::Inside);
+            }
+        }
+        if let Some(src) = r.dnd_release_payload::<String>() {
+            self.move_item(&src, &dir);
+        }
         if r.secondary_clicked() || r.context_menu_opened() {
             *menu_for = Some((r.clone(), dir.clone(), pinned));
         }
@@ -1814,6 +1841,18 @@ impl App {
                         let bg = ui.painter().add(egui::Shape::Noop);
                         let origin = ui.min_rect().top();
                         self.tree_sel = None;
+                        // pri ťahaní: miesto na vytiahnutie von z priečinkov (do koreňa projektu)
+                        if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx()) {
+                            let rr = widgets::row_ex(ui, false, false, 6.0, Lead::Line("folderOpen"), &t("Move to the project folder"), None, false, &self.pal);
+                            if let Some(src) = rr.dnd_hover_payload::<String>() {
+                                if drop_ok(&src, &w) {
+                                    ui.painter().rect_stroke(rr.rect, CornerRadius::same(8), Stroke::new(1.5, self.pal.accent), StrokeKind::Inside);
+                                }
+                            }
+                            if let Some(src) = rr.dnd_release_payload::<String>() {
+                                self.move_item(&src, &w);
+                            }
+                        }
                         self.tree_ui(ui, &w, 0);
                         if let Some(r) = self.tree_sel {
                             let t = if self.anim_on() { 0.2 } else { 0.0 };
@@ -1935,6 +1974,23 @@ impl App {
                 self.tree_sel = Some(r.rect);
             }
             self.tree_menu(&r, &path, is_dir);
+            // ťahanie: riadok sa dá chytiť a pustiť na priečinok (alebo súbor = jeho priečinok); mimo priečinka cez „Move to the project folder“
+            if r.drag_started() {
+                egui::DragAndDrop::set_payload(ui.ctx(), path.clone());
+            }
+            if r.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                drag_ghost(ui.ctx(), &name);
+            }
+            let tgt_dir = if is_dir { path.clone() } else { Path::new(&path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default() };
+            if let Some(src) = r.dnd_hover_payload::<String>() {
+                if drop_ok(&src, &tgt_dir) {
+                    ui.painter().rect_stroke(r.rect, CornerRadius::same(8), Stroke::new(1.5, p.accent), StrokeKind::Inside);
+                }
+            }
+            if let Some(src) = r.dnd_release_payload::<String>() {
+                self.move_item(&src, &tgt_dir);
+            }
             if dirty {
                 ui.painter().circle_filled(pos2(r.rect.right() - 12.0, r.rect.center().y), 3.0, p.accent);
             }
