@@ -194,17 +194,14 @@ fn main() -> eframe::Result {
         }
     }
     // Flux beží len raz: súbor z Prieskumníka (alebo ďalšie spustenie) prevezme bežiace okno.
-    // Najprv preč „duchovia“ bez okna – inak by prevzali spustenie a Flux by sa vôbec neotvoril (0.9.18).
-    boot::kill_ghosts();
+    // Proces bez viditeľného okna („duch“) spustenie neprevezme (single::forward) – iné procesy Flux nikdy neukončuje.
     if !args.iter().any(|a| a == "--background") && single::forward(single::path_arg(&args).as_deref()) {
         return Ok(());
     }
     remember_path();
     let _ = log::set_logger(&Log).map(|_| log::set_max_level(log::LevelFilter::Warn));
     boot::catch_hard_crashes();
-    boot::kill_ghosts();
     boot::begin();
-    pins::repair();
     boot::watchdog();
     let started = std::time::Instant::now();
     std::panic::set_hook(Box::new(move |info| {

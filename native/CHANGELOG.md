@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.29 – 2026-10-05
+
+### Safer for Windows Defender
+- Flux no longer closes other Flux windows or programs at start and no longer looks through and changes your shortcuts (taskbar, Start menu, desktop). Windows Defender saw these as suspicious and could block Flux.
+- Every new version is now checked by Windows Defender before it is offered as an update.
+
 ## 0.9.28 – 2026-10-04
 
 ### Images, links and colors

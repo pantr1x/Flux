@@ -38,10 +38,6 @@ pub fn begin() {
     }
     if stage == "starting" || stage == "window" {
         fails += 1;
-        // minulá inštancia ešte beží bez okna → ukončiť, inak by sa hromadili neviditeľné procesy
-        if let Some(pid) = last["pid"].as_u64() {
-            kill_if_flux(pid as u32);
-        }
     }
     FAILS.store(fails, Ordering::Relaxed);
     if fails > 0 || forced {
@@ -75,34 +71,6 @@ pub fn closed() {
     }
 }
 
-#[cfg(windows)]
-fn kill_if_flux(pid: u32) {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, TerminateProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE};
-    if pid == std::process::id() {
-        return;
-    }
-    unsafe {
-        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, 0, pid);
-        if h.is_null() {
-            return;
-        }
-        // len ak je to naozaj Flux Native (pid sa mohol medzitým použiť inde)
-        let mut buf = [0u16; 1024];
-        let mut n = buf.len() as u32;
-        if QueryFullProcessImageNameW(h, 0, buf.as_mut_ptr(), &mut n) != 0 {
-            let name = String::from_utf16_lossy(&buf[..n as usize]).to_lowercase();
-            let me = std::env::current_exe().ok().and_then(|e| e.file_name().map(|f| f.to_string_lossy().to_lowercase())).unwrap_or_default();
-            if name.ends_with(&me) || name.contains("flux-native") {
-                TerminateProcess(h, 1);
-            }
-        }
-        CloseHandle(h);
-    }
-}
-
-#[cfg(not(windows))]
-fn kill_if_flux(_pid: u32) {}
 
 // tvrdé pády mimo Rustu (ovládač grafiky, Media Foundation, WebView2…) → záznam do crash logu
 #[cfg(windows)]
@@ -158,49 +126,6 @@ pub(crate) fn has_visible_window(pid: u32) -> bool {
     q.found
 }
 
-// „duchovia“: iné procesy Flux Native bez viditeľného okna (napr. z priehľadného okna vo verziách 0.7–0.8.3)
-// blokujú premenovanie aj prepísanie programu – ukončiť ich
-#[cfg(windows)]
-pub fn kill_ghosts() {
-    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
-    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
-    let me = std::process::id();
-    let mut ghosts = vec![];
-    unsafe {
-        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if snap == INVALID_HANDLE_VALUE {
-            return;
-        }
-        let mut e: PROCESSENTRY32W = std::mem::zeroed();
-        e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        let mut ok = Process32FirstW(snap, &mut e) != 0;
-        while ok {
-            let n = e.szExeFile.iter().position(|c| *c == 0).unwrap_or(e.szExeFile.len());
-            let name = String::from_utf16_lossy(&e.szExeFile[..n]).to_lowercase();
-            if e.th32ProcessID != me && name.starts_with("flux-native") && name.ends_with(".exe") {
-                ghosts.push(e.th32ProcessID);
-            }
-            ok = Process32NextW(snap, &mut e) != 0;
-        }
-        CloseHandle(snap);
-    }
-    for pid in ghosts {
-        // most MCP (--mcp-bridge) okno nemá a byť ho má
-        if !has_visible_window(pid) && !crate::mcp::bridge_mark(pid).exists() {
-            unsafe {
-                let h = OpenProcess(PROCESS_TERMINATE, 0, pid);
-                if !h.is_null() {
-                    TerminateProcess(h, 1);
-                    CloseHandle(h);
-                }
-            }
-        }
-    }
-}
-
-#[cfg(not(windows))]
-pub fn kill_ghosts() {}
 
 // ďalšie spustenie: okno bežiaceho Fluxu obnoviť zo zbalenia a dať dopredu (zbalené okno samo nekreslí,
 // takže by požiadavku spracovalo až po kliknutí); spúšťajúci proces má od Windows právo meniť popredie

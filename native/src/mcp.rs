@@ -407,7 +407,7 @@ pub fn add_to_claude_desktop() -> Result<String, String> {
 
 // ---------- most (Flux-Native.exe --mcp-bridge) ----------
 
-// procesy mosta nemajú okno – boot::kill_ghosts ich podľa tohto súboru nechá bežať
+// procesy mosta nemajú okno – single::forward podľa tohto súboru vie, že spustenie môžu prevziať
 pub fn bridge_mark(pid: u32) -> PathBuf {
     settings::user_data().join("mcp-bridges").join(pid.to_string())
 }

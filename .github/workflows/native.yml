@@ -23,6 +23,25 @@ jobs:
           workspaces: '. -> target'
       - name: Build Flux Native
         run: cargo build -p flux-native --release
+      - name: Windows Defender check (no publish when the build is flagged)
+        shell: pwsh
+        run: |
+          # aktuálne definície (ak sa dá) a sken samotného programu; nález = žiadna aktualizácia pre ľudí
+          try { Update-MpSignature -ErrorAction Stop } catch { Write-Host "signature update failed: $_" }
+          $mp = Get-ChildItem "$env:ProgramData\Microsoft\Windows Defender\Platform\*\MpCmdRun.exe" -ErrorAction SilentlyContinue | Sort-Object FullName | Select-Object -Last 1
+          if (-not $mp) { $mp = Get-Item "$env:ProgramFiles\Windows Defender\MpCmdRun.exe" -ErrorAction SilentlyContinue }
+          if (-not $mp) { "## Defender check skipped (MpCmdRun not found)" | Add-Content $env:GITHUB_STEP_SUMMARY; exit 0 }
+          $exe = (Get-Item target\release\flux-native.exe).FullName
+          $out = & $mp.FullName -Scan -ScanType 3 -File $exe -DisableRemediation 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          $ver = (Get-MpComputerStatus -ErrorAction SilentlyContinue).AntivirusSignatureVersion
+          if ($code -eq 2) {
+            "## Windows Defender FLAGGED the build (signatures $ver)`n``````n$out`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
+            Write-Host "::error::Windows Defender flagged Flux-Native.exe"
+            exit 1
+          }
+          "## Windows Defender: clean (signatures $ver, exit $code)" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Smoke test (must start with real-world settings)
         shell: pwsh
         run: |
@@ -145,10 +164,11 @@ jobs:
           if ($id0 -ne $id1) { $problems += "the program file was replaced (file id $id0 -> $id1), a taskbar pin would break" }
           if ((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() -ne $hash) { $problems += "the program file has the wrong content after the update" }
           if (Test-Path "$app\Flux-Native(18).new") { $problems += "the downloaded .new file was not removed" }
-          foreach ($n in 'Flux.lnk', 'Flux broken.lnk') {
-            $t = $sh.CreateShortcut("$pins\$n").TargetPath
-            if ($t -ne $exe) { $problems += "shortcut $n points to $t" }
-          }
+          $t = $sh.CreateShortcut("$pins\Flux.lnk").TargetPath
+          if ($t -ne $exe) { $problems += "shortcut Flux.lnk points to $t" }
+          # Flux pri štarte odkazy neprepisuje (Windows Defender to považuje za podozrivé) – iný odkaz ostane, ako bol
+          $t = $sh.CreateShortcut("$pins\Flux broken.lnk").TargetPath
+          if ($t -ne "$app\Flux-Native(18).old") { $problems += "Flux changed another shortcut (Flux broken.lnk -> $t)" }
           if (Test-Path "$ud\flux-native-crash.log") { $problems += "crash log: $(Get-Content "$ud\flux-native-crash.log" -Raw)" }
           Get-ChildItem $app | Format-Table Name, Length | Out-String | Write-Host
           Get-CimInstance Win32_Process -Filter "Name like 'Flux-Native%'" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }

@@ -1,33 +1,9 @@
-// Oprava odkazov na Flux (pripnutie na paneli úloh, ponuka Štart, plocha). Aktualizácie do 0.9.9 premenovali bežiaci
-// program na .old – Windows presunul pripnutie za ním a po zmazaní .old ostal odkaz mŕtvy. Pri štarte ho nasmerujeme späť.
-
-#[cfg(windows)]
-pub fn repair() {
-    std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        let Ok(exe) = std::env::current_exe() else { return };
-        retarget(&|t| stale(t, &exe), &exe, false);
-    });
-}
-
-#[cfg(not(windows))]
-pub fn repair() {}
+// Presmerovanie odkazov (pripnutie, ponuka Štart, plocha) zo starého Fluxu (Electron) – len raz pri --migrate.
+// Pri bežnom štarte Flux odkazy neprehľadáva ani neprepisuje (Windows Defender to považuje za podozrivé).
 
 #[cfg(not(windows))]
 pub fn retarget(_matches: &dyn Fn(&std::path::Path) -> bool, _exe: &std::path::Path, _clear_id: bool) -> usize {
     0
-}
-
-// odkaz ukazuje na našu starú kópiu (.old, .old-<čas>, .bad) alebo na neexistujúci súbor s naším menom v našom priečinku
-#[cfg_attr(not(windows), allow(dead_code))]
-fn stale(target: &std::path::Path, exe: &std::path::Path) -> bool {
-    let low = |p: &std::path::Path| p.to_string_lossy().to_lowercase();
-    if target.as_os_str().is_empty() || low(target) == low(exe) || target.parent().map(low) != exe.parent().map(low) {
-        return false;
-    }
-    let stem = exe.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
-    let name = target.file_name().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
-    name == format!("{stem}.old") || name.starts_with(&format!("{stem}.old-")) || name == format!("{stem}.bad") || (name.starts_with(&stem) && !target.exists())
 }
 
 // priečinky s odkazmi: pripnutia na paneli úloh, Quick Launch, ponuka Štart, plocha
@@ -119,17 +95,4 @@ pub fn retarget(matches: &dyn Fn(&std::path::Path) -> bool, exe: &std::path::Pat
         }
     }
     n
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn stale_links() {
-        let exe = std::path::Path::new("/x/Flux-Native(18).exe");
-        assert!(super::stale("/x/Flux-Native(18).old".as_ref(), exe));
-        assert!(super::stale("/X/flux-native(18).old-123".as_ref(), exe));
-        assert!(!super::stale("/x/Flux-Native(18).exe".as_ref(), exe));
-        assert!(!super::stale("/y/Flux-Native(18).old".as_ref(), exe));
-        assert!(!super::stale("/x/Other.old".as_ref(), exe));
-    }
 }

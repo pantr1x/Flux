@@ -21,6 +21,14 @@ pub fn path_arg(args: &[String]) -> Option<String> {
 pub fn forward(path: Option<&str>) -> bool {
     let Ok(text) = std::fs::read_to_string(port_file()) else { return false };
     let Some(port) = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v["port"].as_u64()) else { return false };
+    // bežiaci Flux bez viditeľného okna (napr. zaseknutý) by spustenie prevzal a nič by sa neotvorilo (0.9.18) –
+    // vtedy sa spustí nový Flux; starý proces sa neukončuje (Windows Defender to považuje za podozrivé)
+    #[cfg(windows)]
+    if let Some(pid) = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v["pid"].as_u64()) {
+        if !crate::boot::has_visible_window(pid as u32) && !crate::mcp::bridge_mark(pid as u32).exists() {
+            return false;
+        }
+    }
     let Ok(mut s) = TcpStream::connect_timeout(&([127, 0, 0, 1], port as u16).into(), Duration::from_millis(400)) else { return false };
     let _ = s.set_read_timeout(Some(Duration::from_millis(1500)));
     let msg = serde_json::json!({ "flux": 1, "open": path }).to_string();
