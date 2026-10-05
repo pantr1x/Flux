@@ -13,6 +13,7 @@ pub struct Preview {
     active: usize,
     device: usize, // 0 = celá šírka, 1 = tablet, 2 = mobil
     pub width: f32,
+    pub dragging: bool, // ťahá sa okraj panela → WebView2 sa skryje (inak by zachytil myš)
     #[cfg(windows)]
     view: Option<wry::WebView>,
     #[cfg(windows)]
@@ -52,6 +53,7 @@ impl Preview {
             url,
             device: 0,
             width: 0.0,
+            dragging: false,
             #[cfg(windows)]
             view: None,
             #[cfg(windows)]
@@ -203,7 +205,8 @@ impl App {
         let addr = pv.url.trim_start_matches("http://").to_string();
         widgets::text(ui, pos2(bar.left() + 26.0, cy), Align2::LEFT_CENTER, &addr, theme::ui(12.0), p.text2, (rx - bar.left() - 34.0).max(20.0));
         // stránka (šírka podľa zariadenia, v strede)
-        let area = Rect::from_min_max(pos2(rect.left() + 1.0, bar.bottom() + 1.0), rect.max);
+        // vľavo 6 px voľných – tam sa chytá okraj na zmenu šírky (WebView2 je nad egui a zakrýval by ho)
+        let area = Rect::from_min_max(pos2(rect.left() + 6.0, bar.bottom() + 1.0), rect.max);
         let dw = DEVICES[pv.device].1;
         let body = if dw > 0.0 && dw < area.width() { Rect::from_center_size(pos2(area.center().x, area.center().y), vec2(dw, area.height())) } else { area };
         if dw > 0.0 {
@@ -229,7 +232,7 @@ impl App {
     // vložený WebView2: vytvorí ho, drží ho na mieste panela a skryje, keď je nad ním niečo z egui
     #[allow(unused_variables)]
     pub(super) fn sync_preview(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let covered = self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
+        let covered = self.preview.as_ref().is_some_and(|p| p.dragging) || self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
         #[cfg(windows)]
         {
             let zoom = ctx.zoom_factor();
@@ -246,28 +249,31 @@ impl App {
             };
             if pv.view.is_none() && !pv.failed {
                 // bez zobratia klávesnice – inak by nešlo písať v editore ani hľadať
-                // odkazy: svoje stránky sa otvoria v paneli (aj target=_blank), cudzie webové adresy v prehliadači
+                // odkazy: target=_blank aj odkaz na iný web sa otvorí v novej karte panela (nie v prehliadači)
                 let origin = pv.url.split('/').take(3).collect::<Vec<_>>().join("/");
-                let (cur, go) = (pv.cur.clone(), pv.go.clone());
-                let (o1, o2) = (origin.clone(), origin);
+                let go = pv.go.clone();
+                let (go2, cur2) = (go.clone(), pv.cur.clone());
                 let nav = move |u: String| {
-                    if u.starts_with(&o1) || !u.starts_with("http") {
-                        if let Ok(mut c) = cur.lock() {
+                    let here = cur2.lock().map(|c| c.clone()).unwrap_or_default();
+                    let base = if here.is_empty() { origin.clone() } else { here.split('/').take(3).collect::<Vec<_>>().join("/") };
+                    if here.is_empty() || !u.starts_with("http") || u.starts_with(&base) {
+                        if let Ok(mut c) = cur2.lock() {
                             *c = u;
                         }
                         true
                     } else {
-                        flux_core::settings::open_external(&u);
+                        // iná doména: stránka karty ostane, odkaz ide do novej karty
+                        if let Ok(mut g) = go2.lock() {
+                            g.push(u);
+                        }
                         false
                     }
                 };
                 let neww = move |u: String, _f: wry::NewWindowFeatures| {
-                    if u.starts_with(&o2) {
+                    if u.starts_with("http") {
                         if let Ok(mut g) = go.lock() {
                             g.push(u);
                         }
-                    } else if u.starts_with("http") {
-                        flux_core::settings::open_external(&u);
                     }
                     wry::NewWindowResponse::Deny
                 };

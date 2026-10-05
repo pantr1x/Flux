@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.33
+
+**Live Server**
+- Windows like *New file*, *New project*, the colour picker and *What's new* now appear **on top of** the Live Server page (before, the page covered them).
+- A link to another website now opens in a **new tab inside Flux**, not in the browser.
+- The Live Server panel can be **resized** again: drag the thin edge on its left side (the page is hidden while you drag, so the mouse is not lost).
+
 ## 0.9.32
 
 **Live Server**

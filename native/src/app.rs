@@ -3821,10 +3821,11 @@ impl eframe::App for App {
                         pv.width
                     };
                     let pr = Rect::from_min_max(pos2(main.right() - pw, main.top()), main.max);
-                    let grip = Rect::from_min_max(pos2(pr.left() - 3.0, pr.top()), pos2(pr.left() + 3.0, pr.bottom()));
+                    let grip = Rect::from_min_max(pos2(pr.left() - 4.0, pr.top()), pos2(pr.left() + 6.0, pr.bottom()));
                     let gr = card_ui.interact(grip, card_ui.id().with("pv-grip"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeColumn);
-                    if gr.dragged() {
-                        if let Some(pv) = self.preview.as_mut() {
+                    if let Some(pv) = self.preview.as_mut() {
+                        pv.dragging = gr.dragged();
+                        if gr.dragged() {
                             pv.width = (pv.width - gr.drag_delta().x).max(280.0);
                         }
                     }
