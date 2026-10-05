@@ -13,7 +13,7 @@ pub struct Preview {
     active: usize,
     device: usize, // 0 = celá šírka, 1 = tablet, 2 = mobil
     pub width: f32,
-    pub dragging: bool, // ťahá sa okraj panela → WebView2 sa skryje (inak by zachytil myš)
+    pub dragging: bool, // ťahá sa okraj panela (stránka sa pritom mení naživo)
     #[cfg(windows)]
     view: Option<wry::WebView>,
     #[cfg(windows)]
@@ -232,7 +232,7 @@ impl App {
     // vložený WebView2: vytvorí ho, drží ho na mieste panela a skryje, keď je nad ním niečo z egui
     #[allow(unused_variables)]
     pub(super) fn sync_preview(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let covered = self.preview.as_ref().is_some_and(|p| p.dragging) || self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
+        let covered = self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
         #[cfg(windows)]
         {
             let zoom = ctx.zoom_factor();

@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.37
+
+**Live Server**
+- When you drag the edge of the panel, the page now resizes **live** with it, instead of going black until you let go.
+
+**Editor**
+- The highlighted line (current line and the line you point at in Live Server) now sits centred on the text instead of a little below it.
+
 ## 0.9.36
 
 **Suggestions**

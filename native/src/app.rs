@@ -123,6 +123,8 @@ fn rename_field(ui: &mut egui::Ui, id: egui::Id, text: &mut String, margin: Marg
 }
 
 const SUG_ROWS: usize = 10; // naraz viditeľné návrhy (ďalšie sa posúvajú)
+// pás aktuálneho / zvýrazneného riadka sedí o chlp vyššie, aby bol text (podľa x-výšky) v jeho strede
+const BAND_UP: f32 = 2.0;
 
 // ikonky návrhov (kreslené, 14 px) vo farbách VS Code
 fn kind_icon(pt: &egui::Painter, c: egui::Pos2, kind: crate::complete::Kind, func: bool) {
@@ -2658,11 +2660,11 @@ impl App {
                         continue;
                     }
                     if n == hover_ln && first {
-                        let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top()..=rr.top() + lh);
+                        let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top() - BAND_UP..=rr.top() - BAND_UP + lh);
                         ui.painter().set(hov, egui::Shape::rect_filled(band, 0.0, p.accent.gamma_multiply(0.22)));
                     }
                     if n == cur_line && first {
-                        let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top()..=rr.top() + lh);
+                        let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top() - BAND_UP..=rr.top() - BAND_UP + lh);
                         ui.painter().set(hl, egui::Shape::rect_filled(band, 0.0, if p.dark { Color32::from_white_alpha(7) } else { Color32::from_black_alpha(8) }));
                     }
                     let c = if n == cur_line { p.text } else { p.text3.gamma_multiply(0.75) };
