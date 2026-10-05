@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.40
+
+**Fixes**
+- Creating a **new folder** (or a new file in the file tree) works again: type the name and press Enter. Esc cancels.
+
+**About Flux**
+- Flux is now open source under the MIT license. This is the first step to getting Flux Native signed by the SignPath Foundation, so Windows Defender trusts it.
+
 ## 0.9.39
 
 **Live Server**

@@ -101,8 +101,13 @@ enum Rn {
 // pole na premenovanie v zozname: pri otvorení označí meno (súbor bez prípony); Enter alebo klik inam potvrdí, Esc zruší.
 // Fokus sa žiada len na začiatku – opakované žiadanie každý snímok by Enter „zjedlo“ (lost_focus by nikdy nepršal).
 fn rename_field(ui: &mut egui::Ui, id: egui::Id, text: &mut String, margin: Margin, stem_only: bool) -> Rn {
+    name_field(ui, id, text, margin, stem_only, "")
+}
+
+// to isté s nápovedou v prázdnom poli (nový súbor / priečinok)
+fn name_field(ui: &mut egui::Ui, id: egui::Id, text: &mut String, margin: Margin, stem_only: bool, hint: &str) -> Rn {
     let init = id.with("init");
-    let te = ui.add(egui::TextEdit::singleline(text).id(id).desired_width(f32::INFINITY).margin(margin));
+    let te = ui.add(egui::TextEdit::singleline(text).id(id).hint_text(hint).desired_width(f32::INFINITY).margin(margin));
     if te.lost_focus() {
         ui.data_mut(|d| d.remove::<bool>(init));
         return if ui.input(|i| i.key_pressed(egui::Key::Escape)) { Rn::Cancel } else { Rn::Done };
@@ -1865,28 +1870,32 @@ impl App {
         if target != dir {
             return;
         }
-        let mut r = None;
+        let hint = if *is_dir { t("Folder name") } else { t("File name") };
+        let mut res = Rn::Editing;
         ui.horizontal(|ui| {
             ui.add_space(indent);
-            r = Some(ui.add(egui::TextEdit::singleline(name).hint_text(if *is_dir { t("Folder name") } else { t("File name") }).desired_width(f32::INFINITY).margin(Margin::symmetric(10, 5))));
+            // Enter / klik inam potvrdí, Esc zruší (fokus sa žiada len raz – inak by Enter „zjedlo“ rename_field)
+            res = name_field(ui, egui::Id::new(("new-item", dir)), name, Margin::symmetric(10, 5), false, &hint);
         });
-        let r = r.unwrap();
-        r.request_focus();
-        if r.lost_focus() {
-            let (d, n) = (*is_dir, name.trim().to_string());
-            self.new_item = None;
-            self.new_in = None;
-            if ui.input(|i| i.key_pressed(egui::Key::Enter)) && !n.is_empty() {
-                let target = Path::new(dir).join(&n).to_string_lossy().to_string();
-                match fsops::create(&target, d) {
-                    Ok(_) => {
-                        self.tree.clear();
-                        if !d {
-                            self.open_file(&target);
-                        }
+        if matches!(res, Rn::Editing) {
+            return;
+        }
+        let (d, n) = (*is_dir, name.trim().to_string());
+        self.new_item = None;
+        self.new_in = None;
+        if matches!(res, Rn::Done) && !n.is_empty() {
+            let target = Path::new(dir).join(&n).to_string_lossy().to_string();
+            match fsops::create(&target, d) {
+                Ok(_) => {
+                    self.tree.clear();
+                    self.open_dirs.insert(dir.to_string());
+                    if d {
+                        self.open_dirs.insert(target);
+                    } else {
+                        self.open_file(&target);
                     }
-                    Err(e) => self.status = e,
                 }
+                Err(e) => self.status = e,
             }
         }
     }

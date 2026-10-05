@@ -118,6 +118,7 @@
     "monaco-editor": "^0.56.0"
   },
   "author": "pantr1x",
+  "license": "MIT",
   "flux": {
     "githubClientId": "Ov23lizS4t9eZvEEScJ8"
   },

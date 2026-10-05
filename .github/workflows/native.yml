@@ -15,6 +15,8 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -23,6 +25,35 @@ jobs:
           workspaces: '. -> target'
       - name: Build Flux Native
         run: cargo build -p flux-native --release
+      # podpis SignPath Foundation (zadarmo pre open-source): beží len keď je v repozitári tajomstvo SIGNPATH_API_TOKEN – inak sa preskočí
+      - name: Upload unsigned exe for signing
+        id: unsigned
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-exe
+          path: target/release/flux-native.exe
+      - name: Sign with SignPath
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - name: Use the signed exe
+        if: ${{ env.SIGNPATH_API_TOKEN != '' }}
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem signed -Recurse -Filter flux-native.exe | Select-Object -First 1
+          if (-not $signed) { Write-Host "::error::SignPath returned no flux-native.exe"; exit 1 }
+          Copy-Item $signed.FullName target\release\flux-native.exe -Force
+          $sig = Get-AuthenticodeSignature target\release\flux-native.exe
+          "## Code signing: $($sig.Status) – $($sig.SignerCertificate.Subject)" | Add-Content $env:GITHUB_STEP_SUMMARY
+          if ($sig.Status -ne 'Valid') { Write-Host "::error::signature is $($sig.Status)"; exit 1 }
       - name: Windows Defender check (no publish when the build is flagged)
         shell: pwsh
         run: |

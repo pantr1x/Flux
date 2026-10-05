@@ -123,3 +123,9 @@ Flux is built with Electron, Monaco (the editor of VS Code), xterm.js and basedp
 The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`). How the website, releases and the rest of the repository work is described in [`CLAUDE.md`](CLAUDE.md).
 
 A new version is released by raising `version` in `package.json` and adding its notes to `CHANGELOG.md` – GitHub Actions builds the installer and publishes the release, and installed copies update themselves.
+
+## License and code signing
+
+Flux is open source under the [MIT License](LICENSE). Flux Native builds for Windows are built from this repository on GitHub Actions and code-signed
+as described in the [code signing policy](docs/CODE-SIGNING.md) (free signing for open-source projects by the [SignPath Foundation](https://signpath.org/foundation)).
+
