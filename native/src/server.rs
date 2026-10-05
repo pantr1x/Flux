@@ -16,12 +16,15 @@ pub struct Server {
     ver: Arc<AtomicU64>,
     css: Arc<AtomicBool>, // posledná zmena bola len CSS → stránka vymení štýly bez načítania
     live: Live,
+    hover: Hover,
 }
 
 // neuložený text otvorených súborov – stránka sa mení už počas písania
 type Live = Arc<Mutex<HashMap<String, String>>>;
+// nad čím je myš v stránke: (súbor, riadok v zdroji)
+type Hover = Arc<Mutex<Option<(String, usize)>>>;
 
-fn key(p: &Path) -> String {
+pub fn key(p: &Path) -> String {
     let s = p.to_string_lossy().replace('\\', "/");
     if cfg!(windows) {
         s.to_lowercase()
@@ -30,8 +33,53 @@ fn key(p: &Path) -> String {
     }
 }
 
-// odpoveď /__flux/ver = „číslo:css“ alebo „číslo:page“; pri CSS sa len vymenia štýly (stránka nebliká)
-const RELOAD: &str = "<script>(()=>{let v=null;setInterval(async()=>{try{const t=await (await fetch('/__flux/ver',{cache:'no-store'})).text();const[n,k]=t.split(':');if(v!==null&&n!==v){if(k==='css'){document.querySelectorAll('link[rel=stylesheet]').forEach(l=>{const u=new URL(l.href);u.searchParams.set('v',n);l.href=u.href})}else location.reload()}v=n}catch(e){}},200)})()</script>";
+// stránka drží otvorené „dlhé pýtanie“ /__flux/ver?v=N – server odpovie hneď, ako sa číslo zmení (bez 200 ms intervalu);
+// odpoveď = „číslo:css“ alebo „číslo:page“; pri CSS sa len vymenia štýly (stránka nebliká).
+// Druhý skript posiela, nad ktorým prvkom (data-flux-l = riadok v zdroji) je myš – Flux ten riadok zvýrazní.
+const RELOAD: &str = "<script>(async()=>{let v='';for(;;){try{const t=await (await fetch('/__flux/ver?v='+v,{cache:'no-store'})).text();const[n,k]=t.split(':');if(v!==''&&n!==v){if(k==='css'){document.querySelectorAll('link[rel=stylesheet]').forEach(l=>{const u=new URL(l.href);u.searchParams.set('v',n);l.href=u.href})}else{location.reload();return}}v=n}catch(e){await new Promise(r=>setTimeout(r,400))}}})();(()=>{let last=-1;const send=l=>{if(l===last)return;last=l;fetch('/__flux/hover?p='+encodeURIComponent(location.pathname)+'&l='+l,{cache:'no-store'}).catch(()=>{})};document.addEventListener('mouseover',e=>{const x=e.target.closest&&e.target.closest('[data-flux-l]');send(x?+x.dataset.fluxL:0)},true);document.documentElement.addEventListener('mouseleave',()=>send(0))})()</script>";
+
+// do každej otváracej značky pridá data-flux-l="riadok" (číslo riadku v zdroji); komentáre a obsah script/style preskočí
+pub fn annotate(html: &str) -> String {
+    let b = html.as_bytes();
+    let mut out = String::with_capacity(html.len() + html.len() / 8);
+    let (mut i, mut line, mut last) = (0usize, 1usize, 0usize);
+    while i < b.len() {
+        if b[i] == b'\n' {
+            line += 1;
+        }
+        if b[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        let rest = &html[i..];
+        if rest.starts_with("<!--") {
+            let end = rest.find("-->").map(|e| i + e + 3).unwrap_or(b.len());
+            line += html[i..end].matches('\n').count();
+            i = end;
+            continue;
+        }
+        if b.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic()) {
+            let name_end = rest[1..].find(|c: char| !(c.is_ascii_alphanumeric() || c == '-')).map(|e| i + 1 + e).unwrap_or(b.len());
+            let name = html[i + 1..name_end].to_ascii_lowercase();
+            if !matches!(name.as_str(), "html" | "head" | "script" | "style" | "meta" | "link" | "title" | "base") {
+                out.push_str(&html[last..name_end]);
+                out.push_str(&format!(" data-flux-l=\"{line}\""));
+                last = name_end;
+            }
+            if name == "script" || name == "style" {
+                let close = format!("</{name}");
+                let from = name_end;
+                let end = html[from..].to_ascii_lowercase().find(&close).map(|e| from + e).unwrap_or(b.len());
+                line += html[i..end].matches('\n').count();
+                i = end.max(i + 1);
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out.push_str(&html[last..]);
+    out
+}
 
 fn mime(p: &Path) -> &'static str {
     match p.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
@@ -82,30 +130,48 @@ fn respond(mut s: TcpStream, code: &str, ctype: &str, body: &[u8]) {
     let _ = s.write_all(body);
 }
 
-fn handle(s: TcpStream, root: &Path, ver: &AtomicU64, css: &AtomicBool, live: &Live) {
+fn handle(s: TcpStream, root: &Path, ver: &AtomicU64, css: &AtomicBool, live: &Live, hover: &Hover) {
     let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
     let mut line = String::new();
     if BufReader::new(&s).read_line(&mut line).is_err() {
         return;
     }
-    let path = line.split_whitespace().nth(1).unwrap_or("/");
-    let path = decode(path.split(['?', '#']).next().unwrap_or("/"));
+    let target = line.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let query = target.split_once('?').map(|x| x.1.split('#').next().unwrap_or("").to_string()).unwrap_or_default();
+    let arg = |k: &str| query.split('&').find_map(|kv| kv.strip_prefix(&format!("{k}="))).map(decode).unwrap_or_default();
+    let path = decode(target.split(['?', '#']).next().unwrap_or("/"));
     if path == "/__flux/ver" {
+        // čaká (najviac 20 s), kým sa číslo zmení oproti tomu, ktoré stránka už má
+        let have = arg("v");
+        let t0 = std::time::Instant::now();
+        while !have.is_empty() && have == ver.load(Ordering::Relaxed).to_string() && t0.elapsed() < Duration::from_secs(20) {
+            std::thread::sleep(Duration::from_millis(4));
+        }
         let kind = if css.load(Ordering::Relaxed) { "css" } else { "page" };
         return respond(s, "200 OK", "text/plain", format!("{}:{kind}", ver.load(Ordering::Relaxed)).as_bytes());
     }
     // len súbory v projekte (žiadne „..“)
-    let rel: PathBuf = path.split('/').filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
-    let mut file = root.join(rel);
-    if file.is_dir() {
-        file = file.join("index.html");
+    let resolve = |p: &str| {
+        let rel: PathBuf = p.split('/').filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
+        let f = root.join(rel);
+        if f.is_dir() {
+            f.join("index.html")
+        } else {
+            f
+        }
+    };
+    if path == "/__flux/hover" {
+        let l: usize = arg("l").parse().unwrap_or(0);
+        *hover.lock().unwrap() = if l > 0 { Some((resolve(&arg("p")).to_string_lossy().to_string(), l)) } else { None };
+        return respond(s, "200 OK", "text/plain", b"");
     }
+    let file = resolve(&path);
     let unsaved = live.lock().unwrap().get(&key(&file)).cloned();
     match unsaved.map(|t| Ok(t.into_bytes())).unwrap_or_else(|| std::fs::read(&file)) {
         Ok(mut body) => {
             let ct = mime(&file);
             if ct.starts_with("text/html") {
-                let html = String::from_utf8_lossy(&body).into_owned();
+                let html = annotate(&String::from_utf8_lossy(&body));
                 let low = html.to_lowercase();
                 let with = match low.rfind("</body>") {
                     Some(i) => format!("{}{RELOAD}{}", &html[..i], &html[i..]),
@@ -129,20 +195,21 @@ impl Server {
         let ver = Arc::new(AtomicU64::new(1));
         let css = Arc::new(AtomicBool::new(false));
         let live: Live = Default::default();
-        let (st, v, r, c, l) = (stop.clone(), ver.clone(), root.to_path_buf(), css.clone(), live.clone());
+        let hover: Hover = Default::default();
+        let (st, v, r, c, l, h0) = (stop.clone(), ver.clone(), root.to_path_buf(), css.clone(), live.clone(), hover.clone());
         std::thread::spawn(move || {
             while !st.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((s, _)) => {
                         let _ = s.set_nonblocking(false);
-                        let (v, r, c, l) = (v.clone(), r.clone(), c.clone(), l.clone());
-                        std::thread::spawn(move || handle(s, &r, &v, &c, &l));
+                        let (v, r, c, l, h) = (v.clone(), r.clone(), c.clone(), l.clone(), h0.clone());
+                        std::thread::spawn(move || handle(s, &r, &v, &c, &l, &h));
                     }
                     Err(_) => std::thread::sleep(Duration::from_millis(40)),
                 }
             }
         });
-        Ok(Server { port, root: root.to_path_buf(), stop, ver, css, live })
+        Ok(Server { port, root: root.to_path_buf(), stop, ver, css, live, hover })
     }
 
     // adresa stránky (súbor relatívne ku koreňu)
@@ -169,6 +236,11 @@ impl Server {
         self.ver.fetch_add(1, Ordering::Relaxed);
     }
 
+    // nad ktorým riadkom zdroja je myš v stránke
+    pub fn hover(&self) -> Option<(String, usize)> {
+        self.hover.lock().unwrap().clone()
+    }
+
     // uložené – znova z disku
     pub fn clear_live(&self, file: &str) {
         self.live.lock().unwrap().remove(&key(Path::new(file)));
@@ -178,5 +250,22 @@ impl Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::annotate;
+
+    #[test]
+    fn server_annotate_lines() {
+        let h = "<!doctype html>\n<html>\n<body>\n<!-- <p> -->\n<h1 class=\"a\">Hi</h1>\n<script>if (a<b) {}</script>\n<p>x</p>\n</body></html>";
+        let o = annotate(h);
+        assert!(o.contains("<h1 data-flux-l=\"5\" class"));
+        assert!(o.contains("<p data-flux-l=\"7\">"));
+        assert!(o.contains("<body data-flux-l=\"3\">"));
+        assert!(!o.contains("<html data-flux"));
+        assert!(!o.contains("<script data-flux"));
+        assert!(!o.contains("<p> -->\n<h1 data-flux-l=\"5\" class=\"a\">Hi</h1>\n<script data"));
     }
 }

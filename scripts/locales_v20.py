@@ -280,5 +280,6 @@ _V20 = {
     "Open a project first, then add files to it.": ('Najprv otvor projekt, potom do neho pridaj súbory.', 'Öffne zuerst ein Projekt und füge dann Dateien hinzu.', 'Abre primero un proyecto y luego añade archivos.', 'Ouvrez d’abord un projet, puis ajoutez-y des fichiers.', 'Apri prima un progetto, poi aggiungi i file.', 'Najpierw otwórz projekt, potem dodaj do niego pliki.', 'Abra primeiro um projeto e depois adicione arquivos.', 'Спершу відкрийте проєкт, потім додайте до нього файли.'),
     "Added {name}.": ('Pridané: {name}.', '{name} hinzugefügt.', 'Se añadió {name}.', '{name} ajouté.', '{name} aggiunto.', 'Dodano {name}.', '{name} adicionado.', 'Додано {name}.'),
     "Added {n} files.": ('Pridaných súborov: {n}.', '{n} Dateien hinzugefügt.', 'Se añadieron {n} archivos.', '{n} fichiers ajoutés.', '{n} file aggiunti.', 'Dodano plików: {n}.', '{n} arquivos adicionados.', 'Додано файлів: {n}.'),
+    "New tab": ('Nová karta', 'Neuer Tab', 'Nueva pestaña', 'Nouvel onglet', 'Nuova scheda', 'Nowa karta', 'Nova aba', 'Нова вкладка'),
 }
 V20 = {code: {k: v[i] for k, v in _V20.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

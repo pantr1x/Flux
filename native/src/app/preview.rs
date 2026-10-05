@@ -8,7 +8,9 @@ use crate::widgets;
 use eframe::egui::{self, pos2, vec2, Align2, CornerRadius, Rect, Sense, Stroke};
 
 pub struct Preview {
-    pub url: String,
+    pub url: String,           // adresa aktívnej karty
+    tabs: Vec<String>,         // adresy kariet (tabs[active] == url)
+    active: usize,
     device: usize, // 0 = celá šírka, 1 = tablet, 2 = mobil
     pub width: f32,
     #[cfg(windows)]
@@ -18,7 +20,7 @@ pub struct Preview {
     #[cfg(windows)]
     cur: std::sync::Arc<std::sync::Mutex<String>>, // adresa, na ktorej je stránka práve (odkazy)
     #[cfg(windows)]
-    go: std::sync::Arc<std::sync::Mutex<Option<String>>>, // odkaz z nového okna (target=_blank) → načítať v paneli
+    go: std::sync::Arc<std::sync::Mutex<Vec<String>>>, // odkazy z nových okien (target=_blank) → nová karta
     #[allow(dead_code)] // len Windows (čo je práve načítané vo WebView2)
     shown_url: String,
     reload: bool,
@@ -27,12 +29,26 @@ pub struct Preview {
     covered: bool, // minulý snímok bola stránka zakrytá
 }
 
+// názov karty: súbor z adresy (index.html pre koreň)
+fn tab_title(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or("").trim_start_matches("http://").trim_start_matches("https://");
+    let rest = path.split_once('/').map(|x| x.1).unwrap_or("");
+    let name = rest.rsplit('/').next().unwrap_or("");
+    if name.is_empty() {
+        "index.html".into()
+    } else {
+        name.replace("%20", " ")
+    }
+}
+
 // (názov, šírka stránky v px; 0 = celý panel)
 const DEVICES: [(&str, f32); 3] = [("Full", 0.0), ("Tablet", 768.0), ("Phone", 390.0)];
 
 impl Preview {
     pub fn new(url: String) -> Self {
         Preview {
+            tabs: vec![url.clone()],
+            active: 0,
             url,
             device: 0,
             width: 0.0,
@@ -69,7 +85,13 @@ impl App {
     pub(super) fn open_preview(&mut self) {
         let Some(url) = self.live_url() else { return };
         match &mut self.preview {
-            Some(p) => p.url = url,
+            Some(p) => {
+                p.url = url.clone();
+                let a = p.active.min(p.tabs.len().saturating_sub(1));
+                if let Some(t) = p.tabs.get_mut(a) {
+                    *t = url;
+                }
+            }
             None => {
                 let mut p = Preview::new(url.clone());
                 // bez vloženého zobrazenia otvoriť aj prehliadač
@@ -92,7 +114,58 @@ impl App {
         let p = self.pal;
         let Some(pv) = self.preview.as_mut() else { return };
         ui.painter().vline(rect.left(), rect.y_range(), Stroke::new(1.0, p.line));
-        let bar = Rect::from_min_size(rect.min, vec2(rect.width(), 40.0));
+        // ---- karty stránok (odkaz s target=_blank sa otvorí v novej karte) ----
+        const TABS_H: f32 = 32.0;
+        let tabs_r = Rect::from_min_size(rect.min, vec2(rect.width(), TABS_H));
+        ui.painter().hline(tabs_r.x_range(), tabs_r.bottom(), Stroke::new(1.0, p.line));
+        let (mut switch, mut close_tab, mut add_tab) = (None, None, false);
+        {
+            let n = pv.tabs.len().max(1);
+            let aw = (tabs_r.width() - 40.0).max(60.0);
+            let tw = (aw / n as f32).clamp(70.0, 170.0);
+            for (i, u) in pv.tabs.iter().enumerate() {
+                let r = Rect::from_min_size(pos2(tabs_r.left() + 6.0 + i as f32 * (tw + 2.0), tabs_r.top() + 4.0), vec2(tw, TABS_H - 7.0));
+                if r.right() > tabs_r.right() - 30.0 {
+                    break;
+                }
+                let on = i == pv.active;
+                let resp = ui.interact(r, ui.id().with(("pv-tab", i)), Sense::click()).on_hover_text(u);
+                if on || resp.hovered() {
+                    ui.painter().rect_filled(r, CornerRadius::same(8), if on { p.active } else { p.hover });
+                }
+                let can_close = pv.tabs.len() > 1;
+                let xr = Rect::from_center_size(pos2(r.right() - 13.0, r.center().y), vec2(18.0, 18.0));
+                let tw_text = r.width() - 14.0 - if can_close { 22.0 } else { 0.0 };
+                widgets::text(ui, pos2(r.left() + 10.0, r.center().y), Align2::LEFT_CENTER, &tab_title(u), theme::ui(12.0), if on { p.text } else { p.text2 }, tw_text.max(10.0));
+                let mut x_clicked = false;
+                if can_close && (on || resp.hovered()) {
+                    x_clicked = widgets::icon_button_at(ui, xr, "x", 11.0, &p, true).clicked();
+                }
+                if x_clicked {
+                    close_tab = Some(i);
+                } else if resp.clicked() {
+                    switch = Some(i);
+                }
+            }
+            let plus_x = (tabs_r.left() + 6.0 + pv.tabs.len() as f32 * (tw + 2.0) + 12.0).min(tabs_r.right() - 16.0);
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(plus_x, tabs_r.center().y), vec2(24.0, 24.0)), "plus", 13.0, &p, true).on_hover_text(t("New tab")).clicked() {
+                add_tab = true;
+            }
+        }
+        if let Some(i) = close_tab {
+            pv.tabs.remove(i);
+            if pv.active >= i && pv.active > 0 {
+                pv.active -= 1;
+            }
+            pv.url = pv.tabs[pv.active].clone();
+        } else if let Some(i) = switch {
+            pv.active = i;
+            pv.url = pv.tabs[i].clone();
+        } else if add_tab {
+            pv.tabs.push(pv.url.clone());
+            pv.active = pv.tabs.len() - 1;
+        }
+        let bar = Rect::from_min_size(pos2(rect.left(), rect.top() + TABS_H), vec2(rect.width(), 40.0));
         let cy = bar.center().y;
         ui.painter().hline(bar.x_range(), bar.bottom(), Stroke::new(1.0, p.line));
         // vpravo: ×, prehliadač, obnoviť
@@ -127,11 +200,7 @@ impl App {
         }
         // vľavo: zelená bodka + adresa
         ui.painter().circle_filled(pos2(bar.left() + 16.0, cy), 3.5, p.green);
-        #[cfg(windows)]
-        let shown = pv.cur.lock().map(|c| c.clone()).unwrap_or_default();
-        #[cfg(not(windows))]
-        let shown = String::new();
-        let addr = if shown.is_empty() { pv.url.clone() } else { shown }.trim_start_matches("http://").to_string();
+        let addr = pv.url.trim_start_matches("http://").to_string();
         widgets::text(ui, pos2(bar.left() + 26.0, cy), Align2::LEFT_CENTER, &addr, theme::ui(12.0), p.text2, (rx - bar.left() - 34.0).max(20.0));
         // stránka (šírka podľa zariadenia, v strede)
         let area = Rect::from_min_max(pos2(rect.left() + 1.0, bar.bottom() + 1.0), rect.max);
@@ -195,7 +264,7 @@ impl App {
                 let neww = move |u: String, _f: wry::NewWindowFeatures| {
                     if u.starts_with(&o2) {
                         if let Ok(mut g) = go.lock() {
-                            *g = Some(u);
+                            g.push(u);
                         }
                     } else if u.starts_with("http") {
                         flux_core::settings::open_external(&u);
@@ -223,8 +292,8 @@ impl App {
                 }
             }
             if let Some(v) = &pv.view {
-                // odkaz z nového okna príde z vlákna WebView2 – Flux ho zistí pri najbližšom snímku
-                ctx.request_repaint_after(std::time::Duration::from_millis(300));
+                // odkaz z nového okna a poloha myši v stránke prídu z iných vlákien – Flux ich zistí pri najbližšom snímku
+                ctx.request_repaint_after(std::time::Duration::from_millis(80));
                 let _ = v.set_bounds(bounds);
                 let _ = v.set_visible(!covered);
                 // klik kamkoľvek do Fluxu (mimo stránky) alebo zakrytá stránka → klávesnica späť Fluxu;
@@ -240,10 +309,22 @@ impl App {
                     if let Ok(mut c) = pv.cur.lock() {
                         c.clear();
                     }
+                } else {
+                    // stránka sa v karte posunula na iný odkaz → karta a adresa ho nasledujú
+                    let cur = pv.cur.lock().map(|c| c.clone()).unwrap_or_default();
+                    if !cur.is_empty() && cur != pv.url {
+                        pv.url = cur.clone();
+                        pv.shown_url = cur.clone();
+                        let a = pv.active.min(pv.tabs.len() - 1);
+                        pv.tabs[a] = cur;
+                    }
                 }
-                let link = pv.go.lock().ok().and_then(|mut g| g.take());
-                if let Some(u) = link {
-                    let _ = v.load_url(&u);
+                // odkazy z nových okien → nové karty
+                let links: Vec<String> = pv.go.lock().map(|mut g| std::mem::take(&mut *g)).unwrap_or_default();
+                for u in links {
+                    pv.tabs.push(u.clone());
+                    pv.active = pv.tabs.len() - 1;
+                    pv.url = u;
                 }
                 if pv.reload {
                     pv.reload = false;

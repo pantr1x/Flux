@@ -224,6 +224,8 @@ pub struct App {
     started: Instant,
     cursor: (usize, usize),
     scroll_to: Option<f32>,
+    hover_src: Option<(String, usize)>, // súbor (kľúč) a riadok, nad ktorým je myš v Live Serveri
+    hover_new: bool,                    // riadok sa práve zmenil → ak nie je vidno, doskrolovať
     intro: Option<intro::Intro>,
     find: Option<editing::Find>,
     find_goto: bool,
@@ -363,6 +365,8 @@ impl App {
             started: Instant::now(),
             cursor: (1, 1),
             scroll_to: None,
+            hover_src: None,
+            hover_new: false,
             intro: None,
             find: None,
             find_goto: false,
@@ -2310,6 +2314,7 @@ impl App {
         let ext = tab.ext();
         let lang = if ext.is_empty() { "txt".to_string() } else { ext };
         let cur_line = self.cursor.0;
+        let hover_ln = self.hover_src.as_ref().filter(|h| h.0 == crate::server::key(Path::new(&tab.path))).map(|h| h.1).unwrap_or(0);
         let mut edited = false;
         let mut cursor = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(ed_rect));
@@ -2325,6 +2330,7 @@ impl App {
             ui.horizontal_top(|ui| {
                 ui.add_space(gutter);
                 let hl = ui.painter().add(egui::Shape::Noop);
+                let hov = ui.painter().add(egui::Shape::Noop);
                 let found_shapes = ui.painter().add(egui::Shape::Noop);
                 let text_shapes = ui.painter().add(egui::Shape::Noop); // farebný text: pod kurzorom a výberom
                 // TextEdit rozloží text bez farieb (neviditeľný); farby sa kreslia nižšie len pre viditeľné riadky
@@ -2651,6 +2657,10 @@ impl App {
                     if rr.bottom() < clip.top() || rr.top() > clip.bottom() {
                         continue;
                     }
+                    if n == hover_ln && first {
+                        let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top()..=rr.top() + lh);
+                        ui.painter().set(hov, egui::Shape::rect_filled(band, 0.0, p.accent.gamma_multiply(0.22)));
+                    }
                     if n == cur_line && first {
                         let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top()..=rr.top() + lh);
                         ui.painter().set(hl, egui::Shape::rect_filled(band, 0.0, if p.dark { Color32::from_white_alpha(7) } else { Color32::from_black_alpha(8) }));
@@ -2834,6 +2844,14 @@ impl App {
         }
         // posuvník minimapy: viditeľná časť; klik/ťahanie posúva editor
         let mr = ui.interact(mini, ui.id().with("minimap"), Sense::click_and_drag());
+        // riadok zvýraznený myšou v Live Serveri mimo obrazovky → doskrolovať k nemu
+        if std::mem::take(&mut self.hover_new) && hover_ln > 0 {
+            let y = (hover_ln - 1) as f32 * lh + PAD;
+            if y < out.state.offset.y || y + lh > out.state.offset.y + view_h {
+                self.scroll_to = Some((y - view_h / 2.0).max(0.0));
+                ui.ctx().request_repaint();
+            }
+        }
         let top_line = ((out.state.offset.y - PAD).max(0.0)) / lh;
         let slider = Rect::from_min_size(pos2(mini.left() + 1.0, y0 + top_line * pitch), vec2(mini_w - 1.0, view_h / lh * pitch));
         let hk = ui.ctx().animate_bool_with_time(ui.id().with("mm-h"), mr.hovered() || mr.dragged(), 0.15);
@@ -3687,12 +3705,22 @@ impl eframe::App for App {
             let web = matches!(tab.ext().as_str(), "html" | "htm" | "css" | "js");
             let due = self.live_push.is_none_or(|p| p < edit);
             if web && due && tab.dirty() {
-                if self.live_push.is_none_or(|p| p.elapsed() >= Duration::from_millis(120)) {
+                if self.live_push.is_none_or(|p| p.elapsed() >= Duration::from_millis(40)) {
                     s.set_live(&tab.path, &tab.text);
                     self.live_push = Some(Instant::now());
                 } else {
-                    ctx.request_repaint_after(Duration::from_millis(120));
+                    ctx.request_repaint_after(Duration::from_millis(40));
                 }
+            }
+        }
+        // myš nad prvkom v Live Serveri → zvýrazniť jeho riadok v kóde
+        {
+            let h = self.server.as_ref().filter(|_| self.preview.is_some()).and_then(|s| s.hover());
+            let h = h.map(|(f, l)| (crate::server::key(Path::new(&f)), l));
+            if h != self.hover_src {
+                self.hover_new = h.is_some();
+                self.hover_src = h;
+                ctx.request_repaint();
             }
         }
         // výsledky GitHubu (prihlásenie, import, nový repozitár) aj keď okná nie sú otvorené

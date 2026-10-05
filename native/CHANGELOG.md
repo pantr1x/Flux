@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.32
+
+**Live Server**
+- The panel has **tabs** at the top. A link that opens in a new tab (`target="_blank"`) opens in a new tab here, and a click on a normal link moves the current tab to that page. Use **+** for another tab and **×** to close one.
+- Move the mouse over something in the page and Flux **highlights the line of code** that made it (and scrolls to it when it is off screen).
+- Much **faster**: the page now gets the change the moment it happens (no waiting for a timer), and typing is sent after 40 ms instead of 120 ms.
+
 ## 0.9.31
 
 **Adding files**
