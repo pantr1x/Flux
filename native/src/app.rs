@@ -1778,6 +1778,9 @@ impl App {
                         if widgets::icon_button(ui, "folderPlus", &p, true).on_hover_text(t("New folder")).clicked() {
                             self.new_item = Some((true, String::new()));
                         }
+                        if widgets::icon_button(ui, "upload", &p, true).on_hover_text(t("Add files from your computer")).clicked() {
+                            self.add_files(None);
+                        }
                         if widgets::icon_button(ui, "refresh", &p, true).on_hover_text(t("Refresh")).clicked() {
                             self.tree.clear();
                         }
@@ -1785,7 +1788,7 @@ impl App {
                             self.open_dirs.clear();
                         }
                     });
-                    self.tour_rects.insert("files", Rect::from_min_size(tb.response.rect.min, vec2(4.0 * 30.0 + 4.0, tb.response.rect.height())));
+                    self.tour_rects.insert("files", Rect::from_min_size(tb.response.rect.min, vec2(5.0 * 30.0 + 4.0, tb.response.rect.height())));
                     ui.add_space(4.0);
                     // strom končí presne nad pätou (aj s medzerou medzi prvkami)
                     let h = (ui.max_rect().bottom() - footer_h - ui.cursor().top() - ui.spacing().item_spacing.y - 2.0).max(40.0);
@@ -3564,6 +3567,7 @@ impl eframe::App for App {
         let ctx = root.ctx().clone();
         let ctx = &ctx;
         self.lint_tick(ctx);
+        self.dropped(ctx);
         if std::mem::take(&mut self.focus_out) {
             self.out.focus(ctx);
         }

@@ -386,6 +386,9 @@ impl App {
             if item(ui, Some("folderPlus"), &t("New folder…"), "", false, true, &p).clicked() {
                 picked = Some("new-folder");
             }
+            if item(ui, Some("upload"), &t("Add files…"), "", false, true, &p).clicked() {
+                picked = Some("add-files");
+            }
             sep(ui, &p);
             if ws.as_deref() != Some(path) {
                 if item(ui, Some("edit"), &t("Rename…"), "", false, true, &p).clicked() {
@@ -411,6 +414,7 @@ impl App {
                 self.run();
             }
             Some("new-file") => self.open_new_file(Some(base.clone())),
+            Some("add-files") => self.add_files(Some(base.clone())),
             Some("new-folder") => {
                 self.new_in = Some(base.clone());
                 self.open_dirs.insert(base);
@@ -500,6 +504,54 @@ impl App {
         fsops::forget(&self.core, dir);
         self.reload_projects();
         self.note(tf("{name} was removed from Flux. Its files are still in the folder – open the folder again to bring it back.", &[("name", &widgets::file_name(dir))]));
+    }
+
+    // súbory a priečinky z počítača (obrázky, ...) do priečinka stromu alebo projektu
+    pub(super) fn add_files(&mut self, dir: Option<String>) {
+        let Some(dir) = dir.or_else(|| self.workspace()) else {
+            self.note(t("Open a project first, then add files to it."));
+            return;
+        };
+        if let Some(files) = rfd::FileDialog::new().set_title(t("Add files")).pick_files() {
+            self.import_into(files, &dir);
+        }
+    }
+
+    fn import_into(&mut self, files: Vec<std::path::PathBuf>, dir: &str) {
+        match fsops::import(&files, dir) {
+            Ok(done) if !done.is_empty() => {
+                self.tree.clear();
+                self.open_dirs.insert(dir.to_string());
+                let msg = if done.len() == 1 {
+                    tf("Added {name}.", &[("name", &widgets::file_name(&done[0]))])
+                } else {
+                    tf("Added {n} files.", &[("n", &done.len().to_string())])
+                };
+                // jediný obrázok / text sa rovno otvorí
+                if done.len() == 1 && Path::new(&done[0]).is_file() {
+                    self.open_file(&done[0]);
+                }
+                self.note(msg);
+            }
+            Ok(_) => {}
+            Err(e) => self.status = e,
+        }
+    }
+
+    // súbory pustené do okna: do otvoreného projektu; bez projektu sa otvoria ako voľné súbory
+    pub(super) fn dropped(&mut self, ctx: &egui::Context) {
+        let files: Vec<std::path::PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
+        if files.is_empty() {
+            return;
+        }
+        match self.workspace() {
+            Some(w) => self.import_into(files, &w),
+            None => {
+                for f in files.iter().filter(|f| f.is_file()) {
+                    self.open_external(&f.to_string_lossy());
+                }
+            }
+        }
     }
 
     // raz pri štarte: skryté projekty (skrývanie zaniklo) sa odstránia zo zoznamu, súbory ostanú

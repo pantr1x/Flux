@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.31
+
+**Adding files**
+- You can now add pictures and other files to a project: drag them into the Flux window, press the new upload button above the file tree, or use *Add files…* in the right-click menu of a folder. Folders work too, and a name that already exists becomes `name (1).png`.
+
+**Live Server**
+- Clicking a link in the Live Server panel now takes you to that page, also links that open in a new tab. The address at the top follows the page. Links to other websites open in your browser.
+
 ## 0.9.30 – 2026-10-05
 
 ### Fixes

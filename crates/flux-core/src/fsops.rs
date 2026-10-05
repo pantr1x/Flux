@@ -88,6 +88,51 @@ pub fn create(target: &str, is_dir: bool) -> Result<Value, String> {
     Ok(json!(target))
 }
 
+// skopíruje súbory a priečinky z počítača do priečinka `dir`; existujúce meno dostane „ (1)“; vráti nové cesty
+pub fn import(srcs: &[PathBuf], dir: &str) -> Result<Vec<String>, String> {
+    fn free(dir: &Path, name: &str) -> PathBuf {
+        let mut to = dir.join(name);
+        let (stem, ext) = match name.rsplit_once('.') {
+            Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+            _ => (name.to_string(), String::new()),
+        };
+        let mut n = 1;
+        while to.exists() {
+            to = dir.join(format!("{stem} ({n}){ext}"));
+            n += 1;
+        }
+        to
+    }
+    fn copy(from: &Path, to: &Path) -> Result<(), String> {
+        if from.is_dir() {
+            std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+            for e in std::fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
+                let n = e.file_name().to_string_lossy().to_string();
+                if IGNORED.contains(&n.as_str()) {
+                    continue;
+                }
+                copy(&e.path(), &to.join(&n))?;
+            }
+            Ok(())
+        } else {
+            std::fs::copy(from, to).map(|_| ()).map_err(|e| e.to_string())
+        }
+    }
+    let d = Path::new(dir);
+    std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+    let mut out = vec![];
+    for s in srcs {
+        let name = name_of(s);
+        if name.is_empty() || (s.is_dir() && d.starts_with(s)) {
+            continue;
+        }
+        let to = free(d, &name);
+        copy(s, &to)?;
+        out.push(to.to_string_lossy().to_string());
+    }
+    Ok(out)
+}
+
 // premenovanie; vo Windows ho krátko blokuje čokoľvek, čo ešte drží priečinok (sledovanie zmien, terminál) – skúsiť znova
 fn rename_retry(from: &Path, to: &Path) -> Result<(), String> {
     let mut tries = 0;
@@ -404,4 +449,25 @@ pub fn reveal(target: &str) {
     let _ = std::process::Command::new("open").args(["-R", target]).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(Path::new(target).parent().unwrap_or(Path::new("/"))).spawn();
+}
+
+#[cfg(test)]
+mod import_tests {
+    use super::*;
+
+    #[test]
+    fn import_copies_and_renames() {
+        let base = std::env::temp_dir().join(format!("flux-imp-{}", std::process::id()));
+        let (src, dst) = (base.join("src"), base.join("dst"));
+        std::fs::create_dir_all(src.join("pics")).unwrap();
+        std::fs::write(src.join("a.png"), b"x").unwrap();
+        std::fs::write(src.join("pics/b.jpg"), b"y").unwrap();
+        let d = dst.to_string_lossy().to_string();
+        let r1 = import(&[src.join("a.png"), src.join("pics")], &d).unwrap();
+        let r2 = import(&[src.join("a.png")], &d).unwrap();
+        assert_eq!(r1.len(), 2);
+        assert!(dst.join("pics/b.jpg").exists());
+        assert!(r2[0].ends_with("a (1).png"));
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

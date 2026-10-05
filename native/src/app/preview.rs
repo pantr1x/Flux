@@ -15,6 +15,10 @@ pub struct Preview {
     view: Option<wry::WebView>,
     #[cfg(windows)]
     failed: bool,
+    #[cfg(windows)]
+    cur: std::sync::Arc<std::sync::Mutex<String>>, // adresa, na ktorej je stránka práve (odkazy)
+    #[cfg(windows)]
+    go: std::sync::Arc<std::sync::Mutex<Option<String>>>, // odkaz z nového okna (target=_blank) → načítať v paneli
     #[allow(dead_code)] // len Windows (čo je práve načítané vo WebView2)
     shown_url: String,
     reload: bool,
@@ -36,6 +40,10 @@ impl Preview {
             view: None,
             #[cfg(windows)]
             failed: false,
+            #[cfg(windows)]
+            cur: Default::default(),
+            #[cfg(windows)]
+            go: Default::default(),
             shown_url: String::new(),
             reload: false,
             body: None,
@@ -119,7 +127,11 @@ impl App {
         }
         // vľavo: zelená bodka + adresa
         ui.painter().circle_filled(pos2(bar.left() + 16.0, cy), 3.5, p.green);
-        let addr = pv.url.trim_start_matches("http://").to_string();
+        #[cfg(windows)]
+        let shown = pv.cur.lock().map(|c| c.clone()).unwrap_or_default();
+        #[cfg(not(windows))]
+        let shown = String::new();
+        let addr = if shown.is_empty() { pv.url.clone() } else { shown }.trim_start_matches("http://").to_string();
         widgets::text(ui, pos2(bar.left() + 26.0, cy), Align2::LEFT_CENTER, &addr, theme::ui(12.0), p.text2, (rx - bar.left() - 34.0).max(20.0));
         // stránka (šírka podľa zariadenia, v strede)
         let area = Rect::from_min_max(pos2(rect.left() + 1.0, bar.bottom() + 1.0), rect.max);
@@ -165,7 +177,39 @@ impl App {
             };
             if pv.view.is_none() && !pv.failed {
                 // bez zobratia klávesnice – inak by nešlo písať v editore ani hľadať
-                match wry::WebViewBuilder::new().with_url(&pv.url).with_bounds(bounds).with_focused(false).build_as_child(frame) {
+                // odkazy: svoje stránky sa otvoria v paneli (aj target=_blank), cudzie webové adresy v prehliadači
+                let origin = pv.url.split('/').take(3).collect::<Vec<_>>().join("/");
+                let (cur, go) = (pv.cur.clone(), pv.go.clone());
+                let (o1, o2) = (origin.clone(), origin);
+                let nav = move |u: String| {
+                    if u.starts_with(&o1) || !u.starts_with("http") {
+                        if let Ok(mut c) = cur.lock() {
+                            *c = u;
+                        }
+                        true
+                    } else {
+                        flux_core::settings::open_external(&u);
+                        false
+                    }
+                };
+                let neww = move |u: String, _f: wry::NewWindowFeatures| {
+                    if u.starts_with(&o2) {
+                        if let Ok(mut g) = go.lock() {
+                            *g = Some(u);
+                        }
+                    } else if u.starts_with("http") {
+                        flux_core::settings::open_external(&u);
+                    }
+                    wry::NewWindowResponse::Deny
+                };
+                match wry::WebViewBuilder::new()
+                    .with_url(&pv.url)
+                    .with_bounds(bounds)
+                    .with_focused(false)
+                    .with_navigation_handler(nav)
+                    .with_new_window_req_handler(neww)
+                    .build_as_child(frame)
+                {
                     Ok(v) => {
                         let _ = v.focus_parent();
                         pv.shown_url = pv.url.clone();
@@ -179,6 +223,8 @@ impl App {
                 }
             }
             if let Some(v) = &pv.view {
+                // odkaz z nového okna príde z vlákna WebView2 – Flux ho zistí pri najbližšom snímku
+                ctx.request_repaint_after(std::time::Duration::from_millis(300));
                 let _ = v.set_bounds(bounds);
                 let _ = v.set_visible(!covered);
                 // klik kamkoľvek do Fluxu (mimo stránky) alebo zakrytá stránka → klávesnica späť Fluxu;
@@ -191,6 +237,13 @@ impl App {
                 if pv.shown_url != pv.url {
                     pv.shown_url = pv.url.clone();
                     let _ = v.load_url(&pv.url);
+                    if let Ok(mut c) = pv.cur.lock() {
+                        c.clear();
+                    }
+                }
+                let link = pv.go.lock().ok().and_then(|mut g| g.take());
+                if let Some(u) = link {
+                    let _ = v.load_url(&u);
                 }
                 if pv.reload {
                     pv.reload = false;
