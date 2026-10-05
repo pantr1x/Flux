@@ -45,6 +45,7 @@ struct Tab {
     unloaded: bool, // dlho nevidený neupravený súbor: text je preč z pamäte, načíta sa pri otvorení
     stale: bool,    // súbor sa zmenil na disku, kým karta nebola aktívna → načítať pri otvorení
     image: bool,    // obrázok: karta ukazuje náhľad (imageview.rs), text je prázdny
+    sess: Option<Box<Sess>>, // vlastný Výstup + Terminál tohto súboru (vzniká až pri prvom použití)
 }
 
 impl Tab {
@@ -56,6 +57,61 @@ impl Tab {
     }
     fn dirty(&self) -> bool {
         self.text != self.saved
+    }
+}
+
+// Výstup + Terminál jedného súboru: každá karta má svoje, aby sa pri prepnutí nemiešali
+struct Sess {
+    id: u64, // značka udalostí z pty (run:* / shell:*) – patria tejto karte
+    out: TermView,
+    sh: TermView,
+    shell_started: bool,
+    running: bool,
+    bottom: Bottom,
+}
+
+impl Sess {
+    fn new(id: u64, font: f32) -> Self {
+        let mut out = TermView::new(&format!("flux-output-{id}"));
+        let mut sh = TermView::new(&format!("flux-shell-{id}"));
+        out.font_size = font;
+        sh.font_size = font;
+        out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
+        Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output }
+    }
+
+    // udalosti z pty tejto karty idú do aplikácie s jej značkou
+    fn emit(&self, base: &Emit) -> Emit {
+        let (id, base) = (self.id, base.clone());
+        Arc::new(move |ch: &str, v: Value| base(ch, json!({ "sid": id, "v": v })))
+    }
+
+    fn kill(&mut self) {
+        self.out.pty.kill();
+        self.sh.pty.kill();
+        self.shell_started = false;
+    }
+
+    fn event(&mut self, ch: &str, v: &Value) {
+        match ch {
+            "run:start" => {
+                self.running = true;
+                self.out.feed(&format!("\x1b[90m\u{25B6} {}\x1b[0m\r\n", v["label"].as_str().unwrap_or("")));
+            }
+            "run:data" => self.out.feed(v.as_str().unwrap_or("")),
+            "run:exit" => {
+                self.running = false;
+                let code = v["code"].as_i64().unwrap_or(-1);
+                if let Some(e) = v["error"].as_str() {
+                    self.out.feed(&format!("\r\n\x1b[31m{e}\x1b[0m\r\n"));
+                }
+                let (color, word) = if code == 0 { ("32", t("Finished")) } else { ("31", crate::i18n::tf("Exited with code {code}", &[("code", &code.to_string())])) };
+                self.out.feed(&format!("\r\n\x1b[{color}m{word}\x1b[0m \x1b[90min {:.2} s\x1b[0m\r\n", v["ms"].as_u64().unwrap_or(0) as f64 / 1000.0));
+            }
+            "shell:data" => self.sh.feed(v.as_str().unwrap_or("")),
+            "shell:exit" => self.shell_started = false,
+            _ => {}
+        }
     }
 }
 
@@ -234,13 +290,10 @@ pub struct App {
     new_item: Option<(bool, String)>,   // (priečinok?, meno) pre nový súbor/priečinok v strome
     new_todo: String,
     side_open: bool,
-    out: TermView,
-    sh: TermView,
-    shell_started: bool,
-    bottom: Bottom,
+    next_sid: u64,
+    term_fs: f32,
     panel_open: bool,
     panel_h: f32,
-    running: bool,
     python: Option<Value>,
     last_edit: Option<Instant>,
     status: String,
@@ -375,13 +428,10 @@ impl App {
             new_file: None,
             new_todo: String::new(),
             side_open: true,
-            out: TermView::new("flux-output"),
-            sh: TermView::new("flux-shell"),
-            shell_started: false,
-            bottom: Bottom::Output,
+            next_sid: 1,
+            term_fs: 13.0,
             panel_open: true,
             panel_h: 190.0,
-            running: false,
             python: None,
             last_edit: None,
             status: String::new(),
@@ -465,7 +515,6 @@ impl App {
         if app.core.setting("onboarded").as_bool() != Some(true) || std::env::var("FLUX_INTRO").is_ok() {
             app.intro = Some(intro::Intro::new(app.core.setting("userName").as_str().unwrap_or("")));
         }
-        app.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         app.gh_plugin_migrate();
         app.hidden_migrate();
         // „Čo je nové“: po aktualizácii (nie pri prvom štarte ani pri tichom štarte na pozadí)
@@ -983,8 +1032,11 @@ impl App {
             s.animation_time = if self.anim_on() { 0.12 } else { 0.0 };
         });
         let fs = self.get("terminalFontSize").as_f64().unwrap_or(13.0) as f32;
-        self.out.font_size = fs;
-        self.sh.font_size = fs;
+        self.term_fs = fs;
+        for s in self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()) {
+            s.out.font_size = fs;
+            s.sh.font_size = fs;
+        }
     }
 
     fn radius(&self) -> u8 {
@@ -1162,14 +1214,14 @@ impl App {
         }
         // obrázok sa otvorí ako náhľad
         if imageview::is_image(path) {
-            self.tabs.push(Tab { path: path.to_string(), saved: String::new(), text: String::new(), seen: Instant::now(), unloaded: false, stale: false, image: true });
+            self.tabs.push(Tab { path: path.to_string(), saved: String::new(), text: String::new(), seen: Instant::now(), unloaded: false, stale: false, image: true, sess: None });
             self.activate(self.tabs.len() - 1);
             return;
         }
         match fsops::read(path, true) {
             Ok(v) => {
                 let text = v.as_str().unwrap_or("").replace("\r\n", "\n");
-                self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text, seen: Instant::now(), unloaded: false, stale: false, image: false });
+                self.tabs.push(Tab { path: path.to_string(), saved: text.clone(), text, seen: Instant::now(), unloaded: false, stale: false, image: false, sess: None });
                 self.activate(self.tabs.len() - 1);
                 self.plug_emit("open");
             }
@@ -1237,7 +1289,10 @@ impl App {
             if self.tabs[i].dirty() {
                 self.save(i);
             }
-            let gone = self.tabs.remove(i);
+            let mut gone = self.tabs.remove(i);
+            if let Some(s) = gone.sess.as_mut() {
+                s.kill();
+            }
             if gone.image {
                 self.imgs.forget(&gone.path);
             }
@@ -1346,52 +1401,52 @@ impl App {
             let v = python::find(ws.as_deref(), None);
             self.python = if v["path"].is_string() { Some(v) } else { None };
             if self.python.is_none() {
-                self.out.feed("\r\n\x1b[31mPython was not found. Install it from python.org or the Microsoft Store.\x1b[0m\r\n");
+                if let Some(s) = self.sess_mut() {
+                    s.out.feed("\r\n\x1b[31mPython was not found. Install it from python.org or the Microsoft Store.\x1b[0m\r\n");
+                }
                 return;
             }
         }
-        self.bottom = Bottom::Output;
         self.panel_open = true;
-        if self.get("clearOnRun").as_bool() != Some(false) {
-            self.out.clear();
-        } else {
-            self.out.feed("\r\n");
-        }
+        let clear = self.get("clearOnRun").as_bool() != Some(false);
         let py = self.python.as_ref().and_then(|v| v["path"].as_str()).unwrap_or("").to_string();
-        let r = runner::run_file(&self.out.pty, &self.emit, &path, &py, "");
-        self.focus_out = r["ok"] != Value::Bool(false);
+        let base = self.emit.clone();
+        let Some(s) = self.sess_mut() else { return };
+        s.bottom = Bottom::Output;
+        if clear {
+            s.out.clear();
+        } else {
+            s.out.feed("\r\n");
+        }
+        let r = runner::run_file(&s.out.pty, &s.emit(&base), &path, &py, "");
         if r["ok"] == Value::Bool(false) {
-            self.out.feed(&format!("\x1b[31m{}\x1b[0m\r\n", r["error"].as_str().unwrap_or("Can't run this file.")));
-        } else if let Some(ws) = self.workspace() {
-            // počítadlo spustení – to isté ako activity.js v Electron Fluxe
-            self.update_settings(|o| {
-                let mut all = o.get("activity").cloned().unwrap_or(json!({}));
-                let runs = all[&ws]["runs"].as_u64().unwrap_or(0) + 1;
-                all[&ws]["runs"] = json!(runs);
-                o.insert("activity".into(), all);
-            });
+            s.out.feed(&format!("\x1b[31m{}\x1b[0m\r\n", r["error"].as_str().unwrap_or("Can't run this file.")));
+        }
+        self.focus_out = r["ok"] != Value::Bool(false);
+        if r["ok"] != Value::Bool(false) {
+            if let Some(ws) = self.workspace() {
+                // počítadlo spustení – to isté ako activity.js v Electron Fluxe
+                self.update_settings(|o| {
+                    let mut all = o.get("activity").cloned().unwrap_or(json!({}));
+                    let runs = all[&ws]["runs"].as_u64().unwrap_or(0) + 1;
+                    all[&ws]["runs"] = json!(runs);
+                    o.insert("activity".into(), all);
+                });
+            }
         }
     }
 
     fn events(&mut self) {
         while let Ok((ch, v)) = self.rx.try_recv() {
+            // udalosti programu a terminálu nesú značku karty (Sess::emit); zatvorená karta ich zahodí
+            if matches!(ch.as_str(), "run:start" | "run:data" | "run:exit" | "shell:data" | "shell:exit") {
+                let sid = v["sid"].as_u64().unwrap_or(0);
+                if let Some(s) = self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()).find(|s| s.id == sid) {
+                    s.event(&ch, &v["v"]);
+                }
+                continue;
+            }
             match ch.as_str() {
-                "run:start" => {
-                    self.running = true;
-                    self.out.feed(&format!("\x1b[90m\u{25B6} {}\x1b[0m\r\n", v["label"].as_str().unwrap_or("")));
-                }
-                "run:data" => self.out.feed(v.as_str().unwrap_or("")),
-                "run:exit" => {
-                    self.running = false;
-                    let code = v["code"].as_i64().unwrap_or(-1);
-                    if let Some(e) = v["error"].as_str() {
-                        self.out.feed(&format!("\r\n\x1b[31m{e}\x1b[0m\r\n"));
-                    }
-                    let (color, word) = if code == 0 { ("32", t("Finished")) } else { ("31", crate::i18n::tf("Exited with code {code}", &[("code", &code.to_string())])) };
-                    self.out.feed(&format!("\r\n\x1b[{color}m{word}\x1b[0m \x1b[90min {:.2} s\x1b[0m\r\n", v["ms"].as_u64().unwrap_or(0) as f64 / 1000.0));
-                }
-                "shell:data" => self.sh.feed(v.as_str().unwrap_or("")),
-                "shell:exit" => self.shell_started = false,
                 "ipc:open" => {
                     if let Some(f) = v.as_str() {
                         self.open_external(f);
@@ -1442,16 +1497,47 @@ impl App {
         }
     }
 
-    fn start_shell(&mut self) {
-        if self.shell_started {
-            return;
+    // Výstup + Terminál aktívnej karty (vznikne pri prvom použití); obrázky a stránky ho nemajú
+    fn sess_mut(&mut self) -> Option<&mut Sess> {
+        if self.home {
+            return None;
         }
+        let (id, fs) = (self.next_sid, self.term_fs);
+        let tab = self.tabs.get_mut(self.active).filter(|t| !t.image)?;
+        if tab.sess.is_none() {
+            self.next_sid += 1;
+            tab.sess = Some(Box::new(Sess::new(id, fs)));
+        }
+        tab.sess.as_deref_mut()
+    }
+
+    // zastaví programy a terminály všetkých kariet (zatvorenie/premenovanie/zmazanie projektu)
+    fn kill_sessions(&mut self) {
+        for s in self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()) {
+            s.kill();
+        }
+    }
+
+    fn running(&self) -> bool {
+        !self.home && self.tabs.get(self.active).and_then(|t| t.sess.as_deref()).is_some_and(|s| s.running)
+    }
+
+    fn any_running(&self) -> bool {
+        self.tabs.iter().any(|t| t.sess.as_deref().is_some_and(|s| s.running))
+    }
+
+    fn start_shell(&mut self) {
         let cmd = runner::shell_command();
         let cwd = self.workspace().or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string())).unwrap_or_default();
-        match self.sh.pty.spawn(&self.emit, &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit") {
-            Ok(_) => self.shell_started = true,
+        let base = self.emit.clone();
+        let Some(s) = self.sess_mut() else { return };
+        if s.shell_started {
+            return;
+        }
+        match s.sh.pty.spawn(&s.emit(&base), &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit") {
+            Ok(_) => s.shell_started = true,
             // terminál sa nespustil – povedať prečo, nie prázdne okno
-            Err(e) => self.sh.feed(&format!("\x1b[31m{} ({}): {e}\x1b[0m\r\n", t("The terminal could not start"), cmd.cmd)),
+            Err(e) => s.sh.feed(&format!("\x1b[31m{} ({}): {e}\x1b[0m\r\n", t("The terminal could not start"), cmd.cmd)),
         }
     }
 
@@ -1470,12 +1556,22 @@ impl App {
                     self.open_file(&p);
                 }
                 "run" => self.run(),
-                "type" => self.out.pty.write(&arg.replace("\\r", "\r")),
+                "type" => {
+                    if let Some(s) = self.sess_mut() {
+                        s.out.pty.write(&arg.replace("\\r", "\r"));
+                    }
+                }
                 "terminal" => {
-                    self.bottom = Bottom::Terminal;
+                    if let Some(s) = self.sess_mut() {
+                        s.bottom = Bottom::Terminal;
+                    }
                     self.start_shell();
                 }
-                "shell" => self.sh.pty.write(&arg.replace("\\r", "\r")),
+                "shell" => {
+                    if let Some(s) = self.sess_mut() {
+                        s.sh.pty.write(&arg.replace("\\r", "\r"));
+                    }
+                }
                 "home" => self.home = true,
                 "find" => {
                     self.find = Some(editing::Find { q: arg.to_string(), repl: String::new(), replace: true, idx: 0, focus: false });
@@ -2051,10 +2147,11 @@ impl App {
         // jedno tlačidlo: ▶ Run ↔ ■ Stop; pri HTML/CSS/JS webu Live Server (ako v Electron Fluxe)
         let web = can_run && self.is_web_file();
         let live_on = self.server.is_some();
-        if can_run || self.running || live_on {
-            let stopping = self.running || (web && live_on);
+        let running = self.running();
+        if can_run || running || live_on {
+            let stopping = running || (web && live_on);
             let (icon, label, tip) = if stopping {
-                ("stop", t("Stop"), if self.running { t("Stop (Shift+F5)") } else { t("Stop Live Server") })
+                ("stop", t("Stop"), if running { t("Stop (Shift+F5)") } else { t("Stop Live Server") })
             } else if web {
                 ("globe", t("Live Server"), t("Open the page in the browser – it reloads when you save (F5)"))
             } else {
@@ -2084,8 +2181,10 @@ impl App {
             widgets::icon_at(ui, pos2(run.left() + 18.0, cy), if stopping { 12.0 } else { 14.0 }, icon, fg);
             clip.text(pos2(run.left() + 32.0, cy), Align2::LEFT_CENTER, &label, theme::bold(13.5), fg);
             if rr.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                if self.running {
-                    self.out.pty.kill();
+                if running {
+                    if let Some(s) = self.sess_mut() {
+                        s.out.pty.kill();
+                    }
                 } else if web && live_on {
                     self.close_preview();
                 } else {
@@ -3244,6 +3343,7 @@ impl App {
             _ => ui.painter().hline(rect.x_range(), rect.top(), Stroke::new(1.0, p.line)),
         };
         // pilulky Output | Terminal
+        let bottom = self.sess_mut().map(|s| s.bottom).unwrap_or(Bottom::Output);
         let gw = 4.0 + [t("Output"), t("Terminal")].iter().map(|l| widgets::text_w(ui, l, theme::bold(12.5)) + 22.0).sum::<f32>();
         let group = Rect::from_min_size(pos2(rect.left() + 15.0, rect.top() + 7.0), vec2(gw, 26.0));
         ui.painter().rect_filled(group, CornerRadius::same(8), p.card2);
@@ -3252,18 +3352,24 @@ impl App {
             let w = widgets::text_w(ui, &t(label), theme::bold(12.5)) + 22.0;
             let r = Rect::from_min_size(pos2(x, group.top() + 2.0), vec2(w, 22.0));
             let resp = ui.interact(r, ui.id().with(label), Sense::click());
-            let sel = self.bottom == b;
+            let sel = bottom == b;
             if sel {
                 ui.painter().rect_filled(r, CornerRadius::same(6), p.active);
             }
             ui.painter().text(r.center(), Align2::CENTER_CENTER, t(label), theme::bold(12.5), if sel || resp.hovered() { p.text } else { p.text3 });
             if resp.clicked() {
-                self.bottom = b;
+                if let Some(s) = self.sess_mut() {
+                    s.bottom = b;
+                }
                 if b == Bottom::Terminal {
                     self.start_shell();
-                    self.sh.focus(ui.ctx());
-                } else {
-                    self.out.focus(ui.ctx());
+                }
+                if let Some(s) = self.sess_mut() {
+                    if b == Bottom::Terminal {
+                        s.sh.focus(ui.ctx());
+                    } else {
+                        s.out.focus(ui.ctx());
+                    }
                 }
             }
             x += w;
@@ -3273,19 +3379,23 @@ impl App {
             self.panel_open = false;
         }
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 60.0, cy), vec2(26.0, 26.0)), "trash", 15.0, &p, true).on_hover_text(t("Clear")).clicked() {
-            if self.bottom == Bottom::Output {
-                self.out.clear();
-            } else {
-                self.sh.clear();
+            if let Some(s) = self.sess_mut() {
+                if s.bottom == Bottom::Output {
+                    s.out.clear();
+                } else {
+                    s.sh.clear();
+                }
             }
         }
         let body = Rect::from_min_max(pos2(rect.left() + 10.0, rect.top() + 36.0), pos2(rect.right() - 10.0, rect.bottom() - 4.0));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
         child.set_clip_rect(body);
-        if self.bottom == Bottom::Output {
-            self.out.show(&mut child, &p);
-        } else {
-            self.sh.show(&mut child, &p);
+        if let Some(s) = self.sess_mut() {
+            if s.bottom == Bottom::Output {
+                s.out.show(&mut child, &p);
+            } else {
+                s.sh.show(&mut child, &p);
+            }
         }
     }
 
@@ -3308,9 +3418,10 @@ impl App {
             let r = widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, if src == "PATH" { "PATH" } else { src }, theme::ui(11.0), p.text3, 120.0);
             x = r.right() + 18.0;
         }
-        let (dot, label) = if self.running { (p.green, t("Running")) } else { (p.text3, t("Ready")) };
+        let running = self.running();
+        let (dot, label) = if running { (p.green, t("Running")) } else { (p.text3, t("Ready")) };
         ui.painter().circle_filled(pos2(x + 3.0, cy), 3.0, dot);
-        let r = widgets::text(ui, pos2(x + 11.0, cy), Align2::LEFT_CENTER, &label, small.clone(), if self.running { p.green } else { p.text3 }, 100.0);
+        let r = widgets::text(ui, pos2(x + 11.0, cy), Align2::LEFT_CENTER, &label, small.clone(), if running { p.green } else { p.text3 }, 100.0);
         x = r.right() + 18.0;
         // vývojárske počítadlo: snímky za sekundu (pri nečinnosti má byť ~0)
         if self.developer() && self.get("devFps").as_bool() == Some(true) {
@@ -3661,7 +3772,9 @@ impl eframe::App for App {
         self.lint_tick(ctx);
         self.dropped(ctx);
         if std::mem::take(&mut self.focus_out) {
-            self.out.focus(ctx);
+            if let Some(s) = self.sess_mut() {
+                s.out.focus(ctx);
+            }
         }
         if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
             crate::glass::blur(&*frame, self.get("material").as_str() == Some("blur"));
@@ -3709,7 +3822,7 @@ impl eframe::App for App {
         if matches!(self.upd.state(), crate::update::State::Ready { .. })
             && self.get("autoUpdate").as_bool() != Some(false)
             && self.unfocused_at.is_some_and(|t| t.elapsed() > Duration::from_secs(60))
-            && !self.running
+            && !self.any_running()
             && self.server.is_none()
             && !self.tabs.iter().any(|t| t.dirty())
             && !self.ai.shared.lock().unwrap().running
@@ -3923,7 +4036,9 @@ impl eframe::App for App {
                 }
                 let show_editor = !self.home && !self.tabs.is_empty();
                 let pos = self.get("panelPos").as_str().unwrap_or("bottom").to_string();
-                if self.panel_open && show_editor {
+                // obrázky Výstup ani Terminál nepotrebujú
+                let show_panel = show_editor && !self.tabs[self.active].image;
+                if self.panel_open && show_panel {
                     // Výstup/Terminál dole, vpravo alebo vľavo (panelPos) s ťahadlom
                     let panel = if pos == "bottom" {
                         let h = self.panel_h.clamp(90.0, (main.height() - 120.0).max(90.0));
@@ -3957,7 +4072,7 @@ impl eframe::App for App {
                         "right" => main.max.x = panel.left(),
                         _ => main.min.x = panel.right(),
                     }
-                } else if show_editor {
+                } else if show_panel {
                     // skrytý panel: malé tlačidlo na jeho vrátenie
                     let b = Rect::from_center_size(pos2(main.right() - 136.0, main.bottom() - 18.0), vec2(26.0, 26.0));
                     if widgets::icon_button_at(&mut card_ui, b, "panel", 15.0, &p, true).on_hover_text(t("Show Output")).clicked() {
@@ -4089,4 +4204,30 @@ fn regex_lite_find(text: &str, pat: &str) -> bool {
         from = at + head.len();
     }
     false
+}
+
+#[cfg(test)]
+mod sess_tests {
+    use super::*;
+
+    // udalosti pty nesú značku karty a prídu len jej relácii
+    #[test]
+    fn sess_emit_tags_events() {
+        let (tx, rx) = std::sync::mpsc::channel::<(String, Value)>();
+        let base: Emit = Arc::new(move |ch: &str, v: Value| {
+            let _ = tx.send((ch.to_string(), v));
+        });
+        let mut a = Sess::new(1, 13.0);
+        let b = Sess::new(2, 13.0);
+        (b.emit(&base))("run:data", json!("hi"));
+        let (ch, v) = rx.try_recv().unwrap();
+        assert_eq!(ch, "run:data");
+        assert_eq!(v["sid"].as_u64(), Some(2));
+        assert_eq!(v["v"].as_str(), Some("hi"));
+        assert_ne!(a.id, v["sid"].as_u64().unwrap());
+        a.event("run:start", &json!({"label": "x"}));
+        assert!(a.running);
+        a.event("run:exit", &json!({"code": 0, "ms": 5}));
+        assert!(!a.running);
+    }
 }

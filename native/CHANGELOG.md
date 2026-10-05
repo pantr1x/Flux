@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.42
+
+**Output and Terminal**
+- **Every file now has its own Output and Terminal.** Switching to another file no longer shows the same terminal: each file keeps its own program output, its own shell, and remembers whether you were looking at Output or Terminal. Closing a file stops its program and terminal.
+- **Images have no Output or Terminal panel** – the picture gets the whole card.
+
 ## 0.9.41
 
 **Files**

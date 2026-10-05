@@ -167,15 +167,19 @@ impl App {
             "run" => self.run(),
             "stop" => {
                 // zastaví program, inak Live Server
-                if self.running {
-                    self.out.pty.kill();
+                if self.running() {
+                    if let Some(s) = self.sess_mut() {
+                        s.out.pty.kill();
+                    }
                 } else {
                     self.close_preview();
                 }
             }
             "terminal" => {
                 self.panel_open = true;
-                self.bottom = Bottom::Terminal;
+                if let Some(s) = self.sess_mut() {
+                    s.bottom = Bottom::Terminal;
+                }
                 self.start_shell();
             }
             "sidebar" => self.side_open = !self.side_open,
@@ -212,9 +216,7 @@ impl App {
                     if self.workspace().as_deref() == Some(d.as_str()) {
                         // Windows nezmaže priečinok, ktorý drží sledovanie zmien alebo terminál
                         self.watcher = None;
-                        self.out.pty.kill();
-                        self.sh.pty.kill();
-                        self.shell_started = false;
+                        self.kill_sessions();
                         self.server = None;
                         self.close_preview();
                     }
@@ -335,7 +337,7 @@ impl App {
                 if item(ui, Some("play"), &t("Run current file"), "F5", false, has_file, &p).clicked() {
                     picked = Some("run".into());
                 }
-                if item(ui, Some("stop"), &t("Stop program"), "Shift+F5", false, self.running, &p).clicked() {
+                if item(ui, Some("stop"), &t("Stop program"), "Shift+F5", false, self.running(), &p).clicked() {
                     picked = Some("stop".into());
                 }
                 sep(ui, &p);
@@ -491,9 +493,7 @@ impl App {
             self.watcher = None;
             self.tree.clear();
             self.open_dirs.clear();
-            self.out.pty.kill();
-            self.sh.pty.kill();
-            self.shell_started = false;
+            self.kill_sessions();
             self.server = None;
             self.close_preview();
             self.update_settings(|o| {
@@ -582,9 +582,7 @@ impl App {
             let open = self.workspace().as_deref() == Some(from);
             if open {
                 self.watcher = None;
-                self.out.pty.kill();
-                self.sh.pty.kill();
-                self.shell_started = false;
+                self.kill_sessions();
                 self.server = None;
                 self.close_preview();
                 std::thread::sleep(std::time::Duration::from_millis(150));

@@ -278,7 +278,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                                 app.wall.describe(),
                                 if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) { "see-through window".into() } else { String::new() },
                                 if app.preview.is_some() { "Live Server preview".into() } else { String::new() },
-                                if app.running { "program".into() } else { String::new() },
+                                if app.any_running() { "program".into() } else { String::new() },
                             ]
                             .into_iter()
                             .filter(|s| !s.is_empty())
