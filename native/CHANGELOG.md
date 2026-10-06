@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.45
+
+**Editor**
+- Typing `f"`, `r'`, `b"` and other string prefixes now closes the quote too (it used to add only one `"`, which showed an *unterminated f-string* error). Inside it, `{` still adds the closing `}`.
+
 ## 0.9.44
 
 **Suggestions**

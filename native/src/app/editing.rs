@@ -199,11 +199,15 @@ pub fn auto_close(text: &mut String, cursor: usize, typed: char) -> bool {
     if next.map(|c| c.is_alphanumeric() || c == '_').unwrap_or(false) {
         return false;
     }
-    // pri úvodzovkách nie za písmenom (napr. „don't“)
+    // pri úvodzovkách nie za písmenom (napr. „don't“); predpona reťazca (f"…", r'…', b"…") sa zatvára
     if (typed == '"' || typed == '\'') && cursor >= 2 {
-        let prev = text[..byte_at(text, cursor - 1)].chars().last();
-        if prev.map(|c| c.is_alphanumeric()).unwrap_or(false) {
-            return false;
+        let head = &text[..byte_at(text, cursor - 1)];
+        if head.chars().last().map(|c| c.is_alphanumeric()).unwrap_or(false) {
+            let word: String = head.chars().rev().take_while(|c| c.is_alphanumeric()).collect::<Vec<_>>().into_iter().rev().collect();
+            let prefix = matches!(word.to_lowercase().as_str(), "f" | "r" | "b" | "u" | "fr" | "rf" | "br" | "rb" | "l" | "u8" | "ur");
+            if !prefix {
+                return false;
+            }
         }
     }
     text.insert(bi, close);
@@ -516,6 +520,21 @@ mod enter_tests {
         let mut t = text.to_string();
         let (c, _) = enter(&mut t, caret, caret, ext);
         (t, c)
+    }
+
+    #[test]
+    fn editing_auto_close_string_prefix() {
+        // f"…" sa zatvorí, don't nie; v f-reťazci { sa zatvorí na {}
+        let mut t = String::from("print(f\")");
+        assert!(super::auto_close(&mut t, 8, '"'));
+        assert_eq!(t, "print(f\"\")");
+        let mut t = String::from("x = r'");
+        assert!(super::auto_close(&mut t, 6, '\''));
+        let mut t = String::from("don'");
+        assert!(!super::auto_close(&mut t, 4, '\''));
+        let mut t = String::from("print(f\"Ahoj {\")");
+        assert!(super::auto_close(&mut t, 14, '{'));
+        assert_eq!(t, "print(f\"Ahoj {}\")");
     }
 
     #[test]
