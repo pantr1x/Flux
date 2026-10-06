@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.44
+
+**Suggestions**
+- **Space no longer replaces what you typed with a suggestion.** Only Enter, Tab or a click accept one.
+- A word you typed in full, like `str` or `print`, still shows in the suggestions instead of the list closing.
+
 ## 0.9.43
 
 **Output and Terminal**

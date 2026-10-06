@@ -157,7 +157,8 @@ pub fn suggest(lang: &str, prefix: &str, words: &HashMap<String, usize>, limit: 
     }
     let mut v: Vec<(u8, usize, String, Kind)> = all
         .into_iter()
-        .filter(|(w, _)| w != prefix)
+        // úplne napísaný kľúčový výraz/vstavaná funkcia (str, print) sa ukáže ďalej; vlastné slovo, ktoré práve píšem, nie
+        .filter(|(w, (k, _))| w != prefix || !matches!(k, Kind::Word))
         .filter_map(|(w, (k, n))| {
             let lw = w.to_lowercase();
             let rank = if w.starts_with(prefix) {
@@ -1166,6 +1167,9 @@ mod tests {
         assert!(s.iter().any(|i| i.label == "printer"));
         assert!(s.iter().any(|i| i.label == "total_price"), "contains match: {s:?}");
         assert!(!s.iter().any(|i| i.label == "pri"));
+        // vstavaná funkcia napísaná celá sa ponúka ďalej
+        let b = suggest("py", "str", &HashMap::new(), 8);
+        assert_eq!(b[0].label, "str", "{b:?}");
     }
 
     #[test]

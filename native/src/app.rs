@@ -781,7 +781,8 @@ impl App {
             let mut sel_row = None;
             for (k, it) in items.iter().enumerate().skip(top).take(shown) {
                 let row = Rect::from_min_size(r.min + vec2(4.0, 4.0 + (k - top) as f32 * 24.0), vec2(r.width() - 8.0, 24.0));
-                let resp = ui.interact(row, ui.id().with(("sg", k)), Sense::click());
+                // bez fokusu (Sense::CLICK): zaostrený klikateľný prvok by egui „klikol“ aj na Medzerník/Enter a vložil by návrh
+                let resp = ui.interact(row, ui.id().with(("sg", k)), Sense::CLICK);
                 if k == sel || resp.hovered() {
                     ui.painter().rect_filled(row, CornerRadius::same(6), if k == sel { p.active } else { p.hover });
                 }
