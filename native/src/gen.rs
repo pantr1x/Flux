@@ -135,40 +135,30 @@ pub fn line(name: &str) -> Option<&'static str> {
         "robot" => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"5\" y=\"8\" width=\"14\" height=\"11\" rx=\"3\"/><path d=\"M12 5v3M9.5 12.5v1M14.5 12.5v1M9.5 16h5M3 12.5v2.5M21 12.5v2.5\"/><circle cx=\"12\" cy=\"4\" r=\"1\"/></svg>",
         "sparkle" => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z\"/><path d=\"M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7Z\"/></svg>",
         "save" => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z\"/><path d=\"M8 3v5h7M8 21v-7h8v7\"/></svg>",
+        "copy" => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"9\" width=\"11\" height=\"11\" rx=\"2\"/><path d=\"M5 15V6a2 2 0 0 1 2-2h8\"/></svg>",
         "github" => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 16 16\" fill=\"#fff\"><path d=\"M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z\"/></svg>",
         _ => return None,
     })
 }
 
 pub const DEFAULT_THEME: &str = "vscode-dark";
-pub const THEME_KEYS: [&str; 16] =
-    ["fg", "comment", "keyword", "storage", "string", "number", "type", "function", "variable", "parameter", "property", "constant", "tag", "attr", "delimiter", "regexp"];
+pub const THEME_KEYS: [&str; 16] = ["fg", "comment", "keyword", "storage", "string", "number", "type", "function", "variable", "parameter", "property", "constant", "tag", "attr", "delimiter", "regexp"];
 
 // (tmavá?, farby, kurzíva komentárov)
 pub fn code_theme(id: &str) -> Option<(bool, [u32; 16], bool)> {
     Some(match id {
-        "vscode-dark" => {
-            (true, [0xD4D4D4, 0x6A9955, 0xC586C0, 0x569CD6, 0xCE9178, 0xB5CEA8, 0x4EC9B0, 0xDCDCAA, 0x9CDCFE, 0x9CDCFE, 0x9CDCFE, 0x4FC1FF, 0x569CD6, 0x9CDCFE, 0xD4D4D4, 0xD16969], false)
-        }
+        "vscode-dark" => (true, [0xD4D4D4, 0x6A9955, 0xC586C0, 0x569CD6, 0xCE9178, 0xB5CEA8, 0x4EC9B0, 0xDCDCAA, 0x9CDCFE, 0x9CDCFE, 0x9CDCFE, 0x4FC1FF, 0x569CD6, 0x9CDCFE, 0xD4D4D4, 0xD16969], false),
         "flux" => (true, [0xE2E2EA, 0x7A7A90, 0xC792EA, 0xC792EA, 0xA8DB8A, 0xFFA86B, 0x7DD3FC, 0x82AAFF, 0xE2E2EA, 0xF7C98B, 0xB4C2F0, 0xFF9E64, 0xF7768E, 0xE0AF68, 0xA9B1D6, 0xB4F9F8], true),
         "one-dark" => (true, [0xABB2BF, 0x7F848E, 0xC678DD, 0xC678DD, 0x98C379, 0xD19A66, 0xE5C07B, 0x61AFEF, 0xE06C75, 0xD19A66, 0xE06C75, 0xD19A66, 0xE06C75, 0xD19A66, 0xABB2BF, 0x56B6C2], true),
         "dracula" => (true, [0xF8F8F2, 0x6272A4, 0xFF79C6, 0xFF79C6, 0xF1FA8C, 0xBD93F9, 0x8BE9FD, 0x50FA7B, 0xF8F8F2, 0xFFB86C, 0xF8F8F2, 0xBD93F9, 0xFF79C6, 0x50FA7B, 0xF8F8F2, 0xFF5555], false),
         "tokyo-night" => (true, [0xC0CAF5, 0x565F89, 0xBB9AF7, 0x9D7CD8, 0x9ECE6A, 0xFF9E64, 0x2AC3DE, 0x7AA2F7, 0xC0CAF5, 0xE0AF68, 0x73DACA, 0xFF9E64, 0xF7768E, 0xBB9AF7, 0x89DDFF, 0xB4F9F8], true),
         "catppuccin" => (true, [0xCDD6F4, 0x7F849C, 0xCBA6F7, 0xCBA6F7, 0xA6E3A1, 0xFAB387, 0xF9E2AF, 0x89B4FA, 0xCDD6F4, 0xEBA0AC, 0xB4BEFE, 0xFAB387, 0x89B4FA, 0xF9E2AF, 0x9399B2, 0xF5C2E7], true),
         "nord" => (true, [0xD8DEE9, 0x616E88, 0x81A1C1, 0x81A1C1, 0xA3BE8C, 0xB48EAD, 0x8FBCBB, 0x88C0D0, 0xD8DEE9, 0xD8DEE9, 0xD8DEE9, 0x81A1C1, 0x81A1C1, 0x8FBCBB, 0xECEFF4, 0xEBCB8B], true),
-        "github-dark" => {
-            (true, [0xE6EDF3, 0x8B949E, 0xFF7B72, 0xFF7B72, 0xA5D6FF, 0x79C0FF, 0xFFA657, 0xD2A8FF, 0xE6EDF3, 0xFFA657, 0x79C0FF, 0x79C0FF, 0x7EE787, 0x79C0FF, 0xE6EDF3, 0x7EE787], false)
-        }
+        "github-dark" => (true, [0xE6EDF3, 0x8B949E, 0xFF7B72, 0xFF7B72, 0xA5D6FF, 0x79C0FF, 0xFFA657, 0xD2A8FF, 0xE6EDF3, 0xFFA657, 0x79C0FF, 0x79C0FF, 0x7EE787, 0x79C0FF, 0xE6EDF3, 0x7EE787], false),
         "monokai" => (true, [0xF8F8F2, 0x88846F, 0xF92672, 0x66D9EF, 0xE6DB74, 0xAE81FF, 0xA6E22E, 0xA6E22E, 0xF8F8F2, 0xFD971F, 0xF8F8F2, 0xAE81FF, 0xF92672, 0xA6E22E, 0xF8F8F2, 0xE6DB74], false),
-        "vscode-light" => {
-            (false, [0x1F1F1F, 0x008000, 0xAF00DB, 0x0000FF, 0xA31515, 0x098658, 0x267F99, 0x795E26, 0x001080, 0x001080, 0x001080, 0x0070C1, 0x800000, 0xE50000, 0x1F1F1F, 0x811F3F], false)
-        }
-        "github-light" => {
-            (false, [0x1F2328, 0x6E7781, 0xCF222E, 0xCF222E, 0x0A3069, 0x0550AE, 0x953800, 0x8250DF, 0x1F2328, 0x953800, 0x0550AE, 0x0550AE, 0x116329, 0x0550AE, 0x1F2328, 0x116329], false)
-        }
-        "catppuccin-latte" => {
-            (false, [0x4C4F69, 0x8C8FA1, 0x8839EF, 0x8839EF, 0x40A02B, 0xFE640B, 0xDF8E1D, 0x1E66F5, 0x4C4F69, 0xE64553, 0x7287FD, 0xFE640B, 0x1E66F5, 0xDF8E1D, 0x7C7F93, 0xEA76CB], true)
-        }
+        "vscode-light" => (false, [0x1F1F1F, 0x008000, 0xAF00DB, 0x0000FF, 0xA31515, 0x098658, 0x267F99, 0x795E26, 0x001080, 0x001080, 0x001080, 0x0070C1, 0x800000, 0xE50000, 0x1F1F1F, 0x811F3F], false),
+        "github-light" => (false, [0x1F2328, 0x6E7781, 0xCF222E, 0xCF222E, 0x0A3069, 0x0550AE, 0x953800, 0x8250DF, 0x1F2328, 0x953800, 0x0550AE, 0x0550AE, 0x116329, 0x0550AE, 0x1F2328, 0x116329], false),
+        "catppuccin-latte" => (false, [0x4C4F69, 0x8C8FA1, 0x8839EF, 0x8839EF, 0x40A02B, 0xFE640B, 0xDF8E1D, 0x1E66F5, 0x4C4F69, 0xE64553, 0x7287FD, 0xFE640B, 0x1E66F5, 0xDF8E1D, 0x7C7F93, 0xEA76CB], true),
         _ => return None,
     })
 }

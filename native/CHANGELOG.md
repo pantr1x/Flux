@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.46
+
+**Editor and Output**
+- **Spaces are shown as small dots** in the code and in Output and Terminal, like in PyCharm. It is on by default; turn it off in Settings → Editor → *Show spaces as dots*.
+- **Copy all output**: new button next to the trash icon in the Output / Terminal header copies everything. *Run* still clears the old output first, so you get just the latest run.
+- The selection in Output and Terminal is now centered on the text, and the little `code` boxes in these notes sit on the same line as the words around them.
+
 ## 0.9.45
 
 **Editor**

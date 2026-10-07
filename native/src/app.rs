@@ -71,11 +71,13 @@ struct Sess {
 }
 
 impl Sess {
-    fn new(id: u64, font: f32) -> Self {
+    fn new(id: u64, font: f32, dots: bool) -> Self {
         let mut out = TermView::new(&format!("flux-output-{id}"));
         let mut sh = TermView::new(&format!("flux-shell-{id}"));
         out.font_size = font;
         sh.font_size = font;
+        out.dots = dots;
+        sh.dots = dots;
         out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
         Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output }
     }
@@ -1034,9 +1036,12 @@ impl App {
         });
         let fs = self.get("terminalFontSize").as_f64().unwrap_or(13.0) as f32;
         self.term_fs = fs;
+        let dots = self.get("showWhitespace").as_bool() != Some(false);
         for s in self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()) {
             s.out.font_size = fs;
             s.sh.font_size = fs;
+            s.out.dots = dots;
+            s.sh.dots = dots;
         }
     }
 
@@ -1503,11 +1508,11 @@ impl App {
         if self.home {
             return None;
         }
-        let (id, fs) = (self.next_sid, self.term_fs);
+        let (id, fs, dots) = (self.next_sid, self.term_fs, self.get("showWhitespace").as_bool() != Some(false));
         let tab = self.tabs.get_mut(self.active).filter(|t| !t.image)?;
         if tab.sess.is_none() {
             self.next_sid += 1;
-            tab.sess = Some(Box::new(Sess::new(id, fs)));
+            tab.sess = Some(Box::new(Sess::new(id, fs, dots)));
         }
         tab.sess.as_deref_mut()
     }
@@ -2348,6 +2353,7 @@ impl App {
         let mut new_sel: Option<(usize, usize)> = self.plug_cursor.take().map(|c| (c, c));
         let mut sel_out: Option<(usize, usize)> = None;
         let sug_on = self.get("suggest").as_bool() != Some(false);
+        let ws_flag = self.get("showWhitespace").as_bool() != Some(false);
         let mut force_sug = false;
         if focused && sug_on {
             force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space)) || std::mem::take(&mut self.sug_again);
@@ -2515,6 +2521,7 @@ impl App {
                 let same = hlc.same_text(&tab.text);
                 let gen = hlc.gen;
                 let swatches_on = tab.text.len() <= crate::colors::MAX_BYTES;
+                let ws_on = ws_flag;
                 let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_w: f32| {
                     let w = if wrap { wrap_w } else { f32::INFINITY };
                     wrap_at.set(w);
@@ -2658,6 +2665,15 @@ impl App {
                             None => crate::colors::append(&mut job, text, 0, text.len(), &toks, &egui::TextFormat { color: fg, ..fmt.clone() }),
                         }
                         let g = ui.fonts_mut(|f| f.layout_job(job));
+                        // medzery ako bodky (showWhitespace): len kreslené, rozloženie textu sa nemení
+                        if ws_on {
+                            for row in &g.rows {
+                                for gl in row.glyphs.iter().filter(|gl| gl.chr == ' ') {
+                                    let c = at + row.pos.to_vec2() + gl.pos.to_vec2() + vec2(gl.advance_width / 2.0, -0.27 * fsz); // gl.pos.y je už základná čiara
+                                    shapes.push(egui::Shape::circle_filled(c, (fsz * 0.09).max(1.0), p.text3.gamma_multiply(0.55)));
+                                }
+                            }
+                        }
                         shapes.push(egui::Shape::galley(at, g, fg));
                     }
                     // vysvetlivky chýb: vlnovka pod miestom, bodka pri čísle riadku, text za koncom riadku
@@ -3378,6 +3394,11 @@ impl App {
         let cy = group.center().y;
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 22.0, cy), vec2(26.0, 26.0)), "panel", 15.0, &p, true).on_hover_text(t("Hide panel")).clicked() {
             self.panel_open = false;
+        }
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 98.0, cy), vec2(26.0, 26.0)), "copy", 15.0, &p, true).on_hover_text(t("Copy all output")).clicked() {
+            let text = self.sess_mut().map(|s| if s.bottom == Bottom::Output { s.out.all_text() } else { s.sh.all_text() }).unwrap_or_default();
+            ui.ctx().copy_text(text);
+            self.note(t("Output copied"));
         }
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 60.0, cy), vec2(26.0, 26.0)), "trash", 15.0, &p, true).on_hover_text(t("Clear")).clicked() {
             if let Some(s) = self.sess_mut() {
@@ -4218,8 +4239,8 @@ mod sess_tests {
         let base: Emit = Arc::new(move |ch: &str, v: Value| {
             let _ = tx.send((ch.to_string(), v));
         });
-        let mut a = Sess::new(1, 13.0);
-        let b = Sess::new(2, 13.0);
+        let mut a = Sess::new(1, 13.0, true);
+        let b = Sess::new(2, 13.0, true);
         (b.emit(&base))("run:data", json!("hi"));
         let (ch, v) = rx.try_recv().unwrap();
         assert_eq!(ch, "run:data");

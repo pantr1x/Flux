@@ -48,6 +48,7 @@ pub struct TermView {
     pub pty: Pty,
     id: egui::Id,
     pub font_size: f32,
+    pub dots: bool, // medzery ako bodky (showWhitespace)
     sel: Option<((i32, usize), (i32, usize))>, // výber myšou: (riadok mriežky, stĺpec) začiatok a koniec
 }
 
@@ -56,7 +57,7 @@ impl TermView {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
         let replies = Replies::default();
-        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, sel: None }
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, dots: true, sel: None }
     }
 
     pub fn feed(&mut self, text: &str) {
@@ -153,6 +154,10 @@ impl TermView {
     // text vybraných buniek: konce riadkov bez medzier, zalomené riadky sa spoja
     fn selected_text(&self) -> Option<String> {
         let (a, b) = self.ordered()?;
+        Some(self.text_between(a, b))
+    }
+
+    fn text_between(&self, a: (i32, usize), b: (i32, usize)) -> String {
         let (top, bot) = (self.term.topmost_line().0, self.term.bottommost_line().0);
         let cols = self.term.columns();
         let mut out = String::new();
@@ -173,7 +178,19 @@ impl TermView {
                 out.push('\n');
             }
         }
-        Some(out)
+        out
+    }
+
+    // celý výstup (história aj obrazovka) bez prázdnych riadkov na konci
+    pub fn all_text(&self) -> String {
+        let (top, bot) = (self.term.topmost_line().0, self.term.bottommost_line().0);
+        let cols = self.term.columns();
+        let used = (top..=bot).rev().find(|&l| {
+            let row = &self.term.grid()[Line(l)];
+            (0..cols).any(|c| !matches!(row[Column(c)].c, ' ' | '\0'))
+        });
+        let Some(last) = used else { return String::new() };
+        self.text_between((top, 0), (last, cols - 1))
     }
 
     // Klávesy → bajty pre program (ako xterm); Ctrl+C s výberom (alebo Ctrl+Shift+C) kopíruje namiesto prerušenia
@@ -300,6 +317,13 @@ impl TermView {
         let content = self.term.renderable_content();
         let cursor = content.cursor.point;
         let offset = content.display_offset as i32;
+        // výška stredu malých písmen od vrchu riadka: výber, kurzor a bodky sedia na texte, nie na celom riadku
+        // (písmo má pod a nad znakmi voľné miesto, takže stred riadka je nižšie než stred textu)
+        let ascent = ui.fonts_mut(|f| f.layout_no_wrap("x".into(), font.clone(), Color32::WHITE)).rows.first().and_then(|r| r.glyphs.first()).map(|g| g.font_ascent).unwrap_or(ch * 0.8);
+        let mid = ascent - 0.27 * self.font_size;
+        let band = mid - ch / 2.0;
+        let mut row_spaces: Vec<Vec<usize>> = vec![vec![]; rows];
+        let mut row_last: Vec<Option<usize>> = vec![None; rows];
         if let Some((a, b)) = self.ordered() {
             for r in 0..rows {
                 let l = r as i32 - offset;
@@ -309,7 +333,7 @@ impl TermView {
                 let from = if l == a.0 { a.1 } else { 0 };
                 let to = if l == b.0 { b.1 } else { cols - 1 };
                 let x = rect.min.x + 4.0 + from as f32 * cw;
-                let r = egui::Rect::from_min_size(egui::pos2(x, rect.min.y + 2.0 + r as f32 * ch), egui::vec2((to + 1 - from) as f32 * cw, ch));
+                let r = egui::Rect::from_min_size(egui::pos2(x, rect.min.y + 2.0 + band + r as f32 * ch), egui::vec2((to + 1 - from) as f32 * cw, ch));
                 painter.rect_filled(r, 0.0, p.accent.gamma_multiply(0.35));
             }
         }
@@ -350,9 +374,14 @@ impl TermView {
                 }
             }
             let c = if cell.cell.c == '\0' { ' ' } else { cell.cell.c };
+            let col = cell.point.column.0;
             if c == ' ' && bg == Color32::TRANSPARENT {
+                row_spaces[line].push(col);
                 spaces += 1;
                 continue;
+            }
+            if c != ' ' {
+                row_last[line] = Some(col);
             }
             if spaces > 0 {
                 if run.is_empty() || run_f.1 != Color32::TRANSPARENT {
@@ -376,10 +405,21 @@ impl TermView {
             let galley = ui.fonts_mut(|f| f.layout_job(job));
             painter.galley(rect.min + egui::vec2(4.0, 2.0 + i as f32 * ch), galley, p.text);
         }
+        // medzery medzi znakmi ako bodky (ako v PyCharme); prázdna mriežka za koncom riadka sa nekreslí
+        if self.dots {
+            let (r, c) = ((self.font_size * 0.09).max(1.0), p.text3.gamma_multiply(0.6));
+            for (i, cols_) in row_spaces.iter().enumerate() {
+                let Some(last) = row_last[i] else { continue };
+                let y = rect.min.y + 2.0 + i as f32 * ch + mid;
+                for &col in cols_.iter().filter(|c| **c < last) {
+                    painter.circle_filled(egui::pos2(rect.min.x + 4.0 + (col as f32 + 0.5) * cw, y), r, c);
+                }
+            }
+        }
         // kurzor
         if resp.has_focus() && offset == 0 {
             let x = rect.min.x + 4.0 + cursor.column.0 as f32 * cw;
-            let y = rect.min.y + 2.0 + cursor.line.0 as f32 * ch;
+            let y = rect.min.y + 2.0 + band + cursor.line.0 as f32 * ch;
             painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(2.0, ch)), 0.0, p.accent);
         }
     }
@@ -401,6 +441,15 @@ mod tests {
         assert_eq!(v.selected_text().as_deref(), Some("lo world\nsecond"));
         v.sel = Some(((0, 2), (0, 2)));
         assert_eq!(v.selected_text(), None);
+    }
+
+    // celý výstup bez prázdnych riadkov na konci, medzery na koncoch riadkov sa orežú
+    #[test]
+    fn term_all_text() {
+        let mut v = TermView::new("t");
+        assert_eq!(v.all_text(), "");
+        v.parser.advance(&mut v.term, b"hello world   \r\nsecond line\r\n\r\n\r\n");
+        assert_eq!(v.all_text(), "hello world\nsecond line");
     }
 
     #[test]

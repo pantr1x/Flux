@@ -16,7 +16,7 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => json!(true),
+        "minimap" | "showWhitespace" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
@@ -183,7 +183,8 @@ pub fn note_lines(ui: &mut egui::Ui, note: &Note, w: f32, p: &theme::Pal) {
         let mut job = egui::text::LayoutJob::default();
         job.wrap.max_width = (w - indent - 28.0).max(60.0);
         for (part, k) in spans(text) {
-            let base = egui::TextFormat { font_id: if head { theme::bold(size) } else { theme::ui(size) }, color: if head { p.text } else { p.text2 }, line_height: Some(lh), ..Default::default() };
+            // všetky úseky v jednom riadku na jednej stredovej čiare (inak `kód` v inom písme „pláva“ nad textom)
+            let base = egui::TextFormat { font_id: if head { theme::bold(size) } else { theme::ui(size) }, color: if head { p.text } else { p.text2 }, line_height: Some(lh), valign: egui::Align::Center, ..Default::default() };
             let f = match k {
                 Span::Plain => base,
                 Span::Bold => egui::TextFormat { font_id: theme::bold(size), color: p.text, ..base },
@@ -389,6 +390,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 "Behaviour",
                 vec![
                     Row::Toggle("minimap", "Code map", "small preview of the code on the right"),
+                    Row::Toggle("showWhitespace", "Show spaces as dots", "every space is shown as a small dot in the code and in Output and Terminal, like in PyCharm"),
                     Row::Toggle("autoIndent", "Auto indent", "Enter keeps the indentation of the line above and indents after an opening bracket or tag"),
                     Row::Toggle("autosave", "Auto save", "saves the file shortly after you stop typing"),
                     Row::Toggle("autoReload", "Reload changed files without asking", "when another program changes an open file, the editor shows the new version right away"),

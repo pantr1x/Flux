@@ -57,6 +57,7 @@ const paths = {
   robot: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 5v3M9.5 12.5v1M14.5 12.5v1M9.5 16h5M3 12.5v2.5M21 12.5v2.5"/><circle cx="12" cy="4" r="1"/>',
   sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7Z"/>',
   save: '<path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"/><path d="M8 3v5h7M8 21v-7h8v7"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>',
 };
 
 // Plné (nie obrysové) ikony – logo GitHubu.
