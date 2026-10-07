@@ -16,11 +16,12 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "showWhitespace" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => json!(true),
+        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
         "lineNumbers" => json!("on"),
+        "whitespace" => json!("indent"),
         "cornerRadius" => json!(14),
         "darkLift" => json!(0),
         "glassDim" => json!(45),
@@ -189,7 +190,7 @@ pub fn note_lines(ui: &mut egui::Ui, note: &Note, w: f32, p: &theme::Pal) {
                 Span::Plain => base,
                 Span::Bold => egui::TextFormat { font_id: theme::bold(size), color: p.text, ..base },
                 Span::Italic => egui::TextFormat { italics: true, ..base },
-                Span::Code => egui::TextFormat { font_id: theme::mono(size - 1.0), color: p.text, background: p.hover, ..base },
+                Span::Code => egui::TextFormat { color: p.text, background: p.hover, ..base }, // rovnaké písmo ako okolie, inak „pláva“ nad riadkom
             };
             job.append(&part, 0.0, f);
         }
@@ -390,7 +391,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 "Behaviour",
                 vec![
                     Row::Toggle("minimap", "Code map", "small preview of the code on the right"),
-                    Row::Toggle("showWhitespace", "Show spaces as dots", "every space is shown as a small dot in the code and in Output and Terminal, like in PyCharm"),
+                    Row::Select("whitespace", "Show spaces as dots", "small dots show the indentation and wider gaps in the code and in Output and Terminal", o(&[("indent", "indentation and gaps"), ("all", "every space"), ("off", "off")])),
                     Row::Toggle("autoIndent", "Auto indent", "Enter keeps the indentation of the line above and indents after an opening bracket or tag"),
                     Row::Toggle("autosave", "Auto save", "saves the file shortly after you stop typing"),
                     Row::Toggle("autoReload", "Reload changed files without asking", "when another program changes an open file, the editor shows the new version right away"),

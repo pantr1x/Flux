@@ -48,7 +48,9 @@ pub struct TermView {
     pub pty: Pty,
     id: egui::Id,
     pub font_size: f32,
-    pub dots: bool, // medzery ako bodky (showWhitespace)
+    pub ws: crate::ws::Mode, // medzery ako bodky (whitespace)
+    pub zoom: i32,           // Ctrl + koliesko nad panelom: kroky zmeny písma (spotrebuje app)
+    zoom_acc: f32,           // egui rozloží jedno cvaknutie na viac snímok – kroky počítame zo súčtu
     sel: Option<((i32, usize), (i32, usize))>, // výber myšou: (riadok mriežky, stĺpec) začiatok a koniec
 }
 
@@ -57,7 +59,7 @@ impl TermView {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
         let replies = Replies::default();
-        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, dots: true, sel: None }
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None }
     }
 
     pub fn feed(&mut self, text: &str) {
@@ -253,6 +255,16 @@ impl TermView {
             self.term.resize(Size { cols, rows });
             self.pty.resize(cols as u16, rows as u16);
         }
+        // Ctrl + koliesko = veľkosť písma (ako v PyCharme)
+        if resp.hovered() {
+            let z = ui.input(|i| i.zoom_delta());
+            if (z - 1.0).abs() > 0.0001 {
+                self.zoom_acc += z.ln();
+                let steps = (self.zoom_acc / 0.19).trunc();
+                self.zoom_acc -= steps * 0.19;
+                self.zoom += steps as i32;
+            }
+        }
         // koliesko = história
         if resp.hovered() {
             let dy = ui.input(|i| i.smooth_scroll_delta.y);
@@ -322,8 +334,7 @@ impl TermView {
         let ascent = ui.fonts_mut(|f| f.layout_no_wrap("x".into(), font.clone(), Color32::WHITE)).rows.first().and_then(|r| r.glyphs.first()).map(|g| g.font_ascent).unwrap_or(ch * 0.8);
         let mid = ascent - 0.27 * self.font_size;
         let band = mid - ch / 2.0;
-        let mut row_spaces: Vec<Vec<usize>> = vec![vec![]; rows];
-        let mut row_last: Vec<Option<usize>> = vec![None; rows];
+        let mut row_chars: Vec<Vec<char>> = vec![vec!['\0'; cols]; rows];
         if let Some((a, b)) = self.ordered() {
             for r in 0..rows {
                 let l = r as i32 - offset;
@@ -375,13 +386,12 @@ impl TermView {
             }
             let c = if cell.cell.c == '\0' { ' ' } else { cell.cell.c };
             let col = cell.point.column.0;
+            if col < cols {
+                row_chars[line][col] = c;
+            }
             if c == ' ' && bg == Color32::TRANSPARENT {
-                row_spaces[line].push(col);
                 spaces += 1;
                 continue;
-            }
-            if c != ' ' {
-                row_last[line] = Some(col);
             }
             if spaces > 0 {
                 if run.is_empty() || run_f.1 != Color32::TRANSPARENT {
@@ -406,12 +416,11 @@ impl TermView {
             painter.galley(rect.min + egui::vec2(4.0, 2.0 + i as f32 * ch), galley, p.text);
         }
         // medzery medzi znakmi ako bodky (ako v PyCharme); prázdna mriežka za koncom riadka sa nekreslí
-        if self.dots {
-            let (r, c) = ((self.font_size * 0.09).max(1.0), p.text3.gamma_multiply(0.6));
-            for (i, cols_) in row_spaces.iter().enumerate() {
-                let Some(last) = row_last[i] else { continue };
+        if self.ws != crate::ws::Mode::Off {
+            let (r, c) = ((self.font_size * 0.075).max(0.8), p.text3.gamma_multiply(0.45));
+            for (i, chars) in row_chars.iter().enumerate() {
                 let y = rect.min.y + 2.0 + i as f32 * ch + mid;
-                for &col in cols_.iter().filter(|c| **c < last) {
+                for col in crate::ws::dot_cols(chars, self.ws, false) {
                     painter.circle_filled(egui::pos2(rect.min.x + 4.0 + (col as f32 + 0.5) * cw, y), r, c);
                 }
             }

@@ -71,14 +71,14 @@ struct Sess {
 }
 
 impl Sess {
-    fn new(id: u64, font: f32, dots: bool) -> Self {
+    fn new(id: u64, font: f32, ws: crate::ws::Mode) -> Self {
         let mut out = TermView::new(&format!("flux-output-{id}"));
         let mut sh = TermView::new(&format!("flux-shell-{id}"));
         out.font_size = font;
         sh.font_size = font;
-        out.dots = dots;
-        sh.dots = dots;
-        out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.")));
+        out.ws = ws;
+        sh.ws = ws;
+        out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.").replace('▶', "›")));
         Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output }
     }
 
@@ -98,7 +98,7 @@ impl Sess {
         match ch {
             "run:start" => {
                 self.running = true;
-                self.out.feed(&format!("\x1b[90m\u{25B6} {}\x1b[0m\r\n", v["label"].as_str().unwrap_or("")));
+                self.out.feed(&format!("\x1b[90m\u{203A} {}\x1b[0m\r\n", v["label"].as_str().unwrap_or("")));
             }
             "run:data" => self.out.feed(v.as_str().unwrap_or("")),
             "run:exit" => {
@@ -293,6 +293,7 @@ pub struct App {
     new_todo: String,
     side_open: bool,
     next_sid: u64,
+    zoom_acc: f32,
     term_fs: f32,
     panel_open: bool,
     panel_h: f32,
@@ -431,6 +432,7 @@ impl App {
             new_todo: String::new(),
             side_open: true,
             next_sid: 1,
+            zoom_acc: 0.0,
             term_fs: 13.0,
             panel_open: true,
             panel_h: 190.0,
@@ -1036,12 +1038,12 @@ impl App {
         });
         let fs = self.get("terminalFontSize").as_f64().unwrap_or(13.0) as f32;
         self.term_fs = fs;
-        let dots = self.get("showWhitespace").as_bool() != Some(false);
+        let ws = self.ws_mode();
         for s in self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()) {
             s.out.font_size = fs;
             s.sh.font_size = fs;
-            s.out.dots = dots;
-            s.sh.dots = dots;
+            s.out.ws = ws;
+            s.sh.ws = ws;
         }
     }
 
@@ -1508,11 +1510,11 @@ impl App {
         if self.home {
             return None;
         }
-        let (id, fs, dots) = (self.next_sid, self.term_fs, self.get("showWhitespace").as_bool() != Some(false));
+        let (id, fs, ws) = (self.next_sid, self.term_fs, self.ws_mode());
         let tab = self.tabs.get_mut(self.active).filter(|t| !t.image)?;
         if tab.sess.is_none() {
             self.next_sid += 1;
-            tab.sess = Some(Box::new(Sess::new(id, fs, dots)));
+            tab.sess = Some(Box::new(Sess::new(id, fs, ws)));
         }
         tab.sess.as_deref_mut()
     }
@@ -1522,6 +1524,11 @@ impl App {
         for s in self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()) {
             s.kill();
         }
+    }
+
+    // režim bodiek za medzery (nastavenie `whitespace`, staré `showWhitespace` = vypnuté → off)
+    fn ws_mode(&self) -> crate::ws::Mode {
+        crate::ws::Mode::from_settings(&self.core.setting("whitespace"), &self.core.setting("showWhitespace"))
     }
 
     fn running(&self) -> bool {
@@ -2334,6 +2341,18 @@ impl App {
         let wrap = self.get("wordWrap").as_bool() == Some(true);
         let font = theme::mono(fsz);
         let ed_rect = Rect::from_min_max(rect.min, pos2(rect.right() - mini_w, rect.bottom()));
+        // Ctrl + koliesko nad editorom = veľkosť písma (ako v PyCharme)
+        let z = ui.input(|i| i.zoom_delta());
+        if (z - 1.0).abs() > 0.0001 && ui.input(|i| i.pointer.hover_pos()).is_some_and(|pt| ed_rect.contains(pt)) {
+            // egui rozloží jedno cvaknutie kolieska na viac snímok: kroky počítame zo súčtu (jedno cvaknutie ≈ 0.2)
+            self.zoom_acc += z.ln();
+            let steps = (self.zoom_acc / 0.19).trunc();
+            self.zoom_acc -= steps * 0.19;
+            let new = (fsz as i32 + steps as i32).clamp(8, 40);
+            if new != fsz as i32 {
+                self.set("fontSize", json!(new), ui.ctx());
+            }
+        }
         let mini = Rect::from_min_max(pos2(rect.right() - mini_w, rect.top()), rect.max);
         // ---- klávesy editora pred TextEdit: Tab/Shift+Tab, Ctrl+/, Ctrl+F/H, písané zátvorky ----
         let ed_id = egui::Id::new(("editor", self.tabs[self.active].path.clone()));
@@ -2353,7 +2372,7 @@ impl App {
         let mut new_sel: Option<(usize, usize)> = self.plug_cursor.take().map(|c| (c, c));
         let mut sel_out: Option<(usize, usize)> = None;
         let sug_on = self.get("suggest").as_bool() != Some(false);
-        let ws_flag = self.get("showWhitespace").as_bool() != Some(false);
+        let ws_flag = self.ws_mode();
         let mut force_sug = false;
         if focused && sug_on {
             force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space)) || std::mem::take(&mut self.sug_again);
@@ -2665,12 +2684,20 @@ impl App {
                             None => crate::colors::append(&mut job, text, 0, text.len(), &toks, &egui::TextFormat { color: fg, ..fmt.clone() }),
                         }
                         let g = ui.fonts_mut(|f| f.layout_job(job));
-                        // medzery ako bodky (showWhitespace): len kreslené, rozloženie textu sa nemení
-                        if ws_on {
-                            for row in &g.rows {
-                                for gl in row.glyphs.iter().filter(|gl| gl.chr == ' ') {
-                                    let c = at + row.pos.to_vec2() + gl.pos.to_vec2() + vec2(gl.advance_width / 2.0, -0.27 * fsz); // gl.pos.y je už základná čiara
-                                    shapes.push(egui::Shape::circle_filled(c, (fsz * 0.09).max(1.0), p.text3.gamma_multiply(0.55)));
+                        // medzery ako bodky (whitespace): len kreslené, rozloženie textu sa nemení
+                        if ws_on != crate::ws::Mode::Off {
+                            let chars: Vec<char> = text.chars().collect();
+                            let dots: std::collections::HashSet<usize> = crate::ws::dot_cols(&chars, ws_on, true).into_iter().collect();
+                            if !dots.is_empty() {
+                                let mut k = 0usize;
+                                for row in &g.rows {
+                                    for gl in row.glyphs.iter() {
+                                        if dots.contains(&k) && gl.chr == ' ' {
+                                            let c = at + row.pos.to_vec2() + gl.pos.to_vec2() + vec2(gl.advance_width / 2.0, -0.27 * fsz); // gl.pos.y je už základná čiara
+                                            shapes.push(egui::Shape::circle_filled(c, (fsz * 0.075).max(0.8), p.text3.gamma_multiply(0.45)));
+                                        }
+                                        k += 1;
+                                    }
                                 }
                             }
                         }
@@ -3412,11 +3439,20 @@ impl App {
         let body = Rect::from_min_max(pos2(rect.left() + 10.0, rect.top() + 36.0), pos2(rect.right() - 10.0, rect.bottom() - 4.0));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
         child.set_clip_rect(body);
+        let mut zoom = 0;
         if let Some(s) = self.sess_mut() {
             if s.bottom == Bottom::Output {
                 s.out.show(&mut child, &p);
             } else {
                 s.sh.show(&mut child, &p);
+            }
+            zoom = std::mem::take(&mut s.out.zoom) + std::mem::take(&mut s.sh.zoom);
+        }
+        // Ctrl + koliesko nad Výstupom/Terminálom = veľkosť jeho písma
+        if zoom != 0 {
+            let new = (self.term_fs as i32 + zoom).clamp(9, 28);
+            if new != self.term_fs as i32 {
+                self.set("terminalFontSize", json!(new), ui.ctx());
             }
         }
     }
@@ -4239,8 +4275,8 @@ mod sess_tests {
         let base: Emit = Arc::new(move |ch: &str, v: Value| {
             let _ = tx.send((ch.to_string(), v));
         });
-        let mut a = Sess::new(1, 13.0, true);
-        let b = Sess::new(2, 13.0, true);
+        let mut a = Sess::new(1, 13.0, crate::ws::Mode::Indent);
+        let b = Sess::new(2, 13.0, crate::ws::Mode::Indent);
         (b.emit(&base))("run:data", json!("hi"));
         let (ch, v) = rx.try_recv().unwrap();
         assert_eq!(ch, "run:data");

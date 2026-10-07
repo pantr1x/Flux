@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.47
+
+**Editor and Output**
+- **Cleaner space dots**: by default only the indentation, wider gaps and trailing spaces get a small, faint dot – a single space between words has none, like in VS Code. Settings → Editor → *Show spaces as dots* can show every space or turn it off. It works the same in Output and Terminal.
+- **Ctrl + mouse wheel zooms the text** in the editor and in Output / Terminal (like in PyCharm); the size is saved in the settings.
+- The little play arrow in Flux's own Output messages sat lower than the text; it is now a `›`.
+- The little `code` boxes in release notes use the same font as the words around them, so they stay on the line.
+
 ## 0.9.46
 
 **Editor and Output**

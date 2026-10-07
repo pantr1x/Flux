@@ -51,6 +51,7 @@ mod secret;
 mod server;
 mod smooth;
 mod term;
+mod ws;
 mod theme;
 mod update;
 mod wall;
