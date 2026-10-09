@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.48
+
+**Editor**
+- **Enter makes a new line** even when the suggestion list is open. A suggestion is taken with **Tab**, or with **↑/↓ and then Enter**.
+
 ## 0.9.47
 
 **Editor and Output**

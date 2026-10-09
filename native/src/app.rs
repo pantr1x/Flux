@@ -132,6 +132,7 @@ pub struct Sug {
     items: Vec<crate::complete::Item>,
     sel: usize,
     top: usize, // prvý viditeľný riadok (zoznam sa posúva)
+    picked: bool, // užívateľ si vybral šípkami → až vtedy Enter prijme návrh (inak je to nový riadok)
     start: usize,
     end: usize,
     path: String,
@@ -2379,19 +2380,30 @@ impl App {
             let open = self.sug.as_ref().is_some_and(|s| s.path == self.tabs[self.active].path);
             if open {
                 let (up, down, acc, esc) = ctx.input_mut(|i| {
-                    // Ctrl+Tab = ďalší návrh, Ctrl+Shift+Tab = predchádzajúci; Tab / Enter vyberie
+                    // Ctrl+Tab = ďalší návrh, Ctrl+Shift+Tab = predchádzajúci; Tab vyberie, Enter len po výbere šípkami
                     let ctrl_shift = egui::Modifiers { ctrl: true, shift: true, ..Default::default() };
                     let prev = i.consume_key(ctrl_shift, egui::Key::Tab);
                     let next = i.consume_key(egui::Modifiers::CTRL, egui::Key::Tab);
                     (
                         i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) | prev,
                         i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) | next,
-                        i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) | i.consume_key(egui::Modifiers::NONE, egui::Key::Tab),
+                        {
+                            let picked = self.sug.as_ref().is_some_and(|s| s.picked);
+                            let enter = if picked { i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) } else { false };
+                            enter | i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)
+                        },
                         i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
                     )
                 });
+                // Enter bez výberu: návrh zavrieme a Enter ide ďalej (nový riadok s odsadením)
+                if self.sug.as_ref().is_some_and(|s| !s.picked) && ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    self.sug = None;
+                }
                 if let Some(sg) = self.sug.as_mut() {
                     let n = sg.items.len().max(1);
+                    if up || down {
+                        sg.picked = true;
+                    }
                     if up {
                         sg.sel = (sg.sel + n - 1) % n;
                     }
@@ -2610,7 +2622,7 @@ impl App {
                                 }
                                 let w = sug_words.as_ref().unwrap();
                                 let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &w.4, &plug_snips, 60);
-                                *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, top: 0, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
+                                *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, top: 0, picked: false, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
                             } else {
                                 *sug_slot = None;
                             }
