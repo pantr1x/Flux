@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.49
+
+**Linux**
+- **Flux Native for Linux**: install with one command in a terminal – `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash` (also on the website, with a Copy button). It updates itself the same way as on Windows (Settings → General → About & updates, or automatically).
+
 ## 0.9.48
 
 **Editor**

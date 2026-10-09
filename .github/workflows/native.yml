@@ -396,3 +396,61 @@ jobs:
           path: |
             out/*
             target/release/flux-native.exe
+
+  # Flux Native pre Linux: zostaví sa až po úspešnej Windows zostave (smoke test + Defender), vyskúša sa spustenie a aktualizácia
+  # a publikuje sa do vetvy ci-native-linux (vetva ci-native sa pri každom vydaní zakladá odznova, preto samostatná)
+  linux:
+    runs-on: ubuntu-latest
+    needs: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcb1-dev libwayland-dev xvfb
+      - name: Build Flux Native (Linux)
+        run: cargo build -p flux-native --release
+      - name: Tests
+        run: cargo test -p flux-native --release
+      - name: Smoke test (starts with a window, no crash)
+        run: |
+          ud="$RUNNER_TEMP/ud-smoke"; mkdir -p "$ud"
+          echo '{"onboarded":true,"autoUpdate":false}' > "$ud/settings.json"
+          FLUX_USER_DATA="$ud" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>&1 & p=$!; sleep 15; if ! kill -0 $p 2>/dev/null; then echo "::error::Flux Native exited"; exit 1; fi; kill $p'
+          if [ -e "$ud/flux-native-crash.log" ]; then cat "$ud/flux-native-crash.log"; echo "::error::crash log written"; exit 1; fi
+      - name: Update test (same file replaced, restart with --updated)
+        run: |
+          u="$RUNNER_TEMP/upd"; mkdir -p "$u/srv" "$u/app" "$u/ud"
+          cp target/release/flux-native "$u/srv/Flux-Native"; cp target/release/flux-native "$u/app/flux-native"
+          h=$(sha256sum "$u/srv/Flux-Native" | cut -d' ' -f1); sz=$(stat -c %s "$u/srv/Flux-Native")
+          echo "{\"version\":\"9.9.9\",\"sha\":\"ci-update-test\",\"sha256\":\"$h\",\"size\":$sz}" > "$u/srv/native.json"
+          echo '{"onboarded":true,"autoUpdate":false}' > "$u/ud/settings.json"
+          (cd "$u/srv" && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+          sleep 2
+          ino0=$(stat -c %i "$u/app/flux-native")
+          FLUX_USER_DATA="$u/ud" FLUX_UPDATE_URL=http://127.0.0.1:8765/ FLUX_TEST="3:update;8:update-get;20:update-install" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c "'$u/app/flux-native' >/dev/null 2>&1 & sleep 45; ps -eo args | grep -c '[f]lux-native --updated' > '$u/updated.txt'; pkill -x flux-native || true"
+          ok=1
+          [ "$(cat "$u/updated.txt")" -ge 1 ] || { echo "::error::Flux did not restart with --updated"; ok=0; }
+          [ "$ino0" = "$(stat -c %i "$u/app/flux-native")" ] || { echo "::error::program file was replaced, not written in place"; ok=0; }
+          cmp "$u/app/flux-native" "$u/srv/Flux-Native" || { echo "::error::wrong content after the update"; ok=0; }
+          [ ! -e "$u/app/flux-native.new" ] || { echo "::error::.new was not removed"; ok=0; }
+          [ $ok = 1 ]
+      - name: Publish (branch ci-native-linux)
+        if: success()
+        run: |
+          mkdir -p outl && cp target/release/flux-native outl/Flux-Native
+          ver=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' native/Cargo.toml | head -n1)
+          h=$(sha256sum outl/Flux-Native | cut -d' ' -f1); sz=$(stat -c %s outl/Flux-Native)
+          echo "{\"version\":\"$ver\",\"sha\":\"$GITHUB_SHA\",\"sha256\":\"$h\",\"size\":$sz}" > outl/native.json
+          cd outl
+          git init -q -b ci-native-linux
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Native (Linux) from ${GITHUB_SHA::7}"
+          for i in 1 2 3 4; do git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-native-linux && exit 0; sleep $((i * 5)); done
+          exit 1

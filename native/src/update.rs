@@ -43,8 +43,15 @@ pub struct Updater {
     ctx: Option<egui::Context>, // pre opätovné stiahnutie z install()
 }
 
+// Windows: vetva ci-native (Flux-Native.exe); Linux: ci-native-linux (Flux-Native) – ci-native sa pri každom vydaní zakladá odznova
 fn base() -> String {
-    std::env::var("FLUX_UPDATE_URL").unwrap_or_else(|_| "https://raw.githubusercontent.com/pantr1x/Flux/ci-native/".into())
+    let branch = if cfg!(windows) { "ci-native" } else { "ci-native-linux" };
+    std::env::var("FLUX_UPDATE_URL").unwrap_or_else(|_| format!("https://raw.githubusercontent.com/pantr1x/Flux/{branch}/"))
+}
+
+// názov programu na serveri aktualizácií
+fn asset() -> &'static str {
+    if cfg!(windows) { "Flux-Native.exe" } else { "Flux-Native" }
 }
 
 fn curl() -> std::process::Command {
@@ -429,7 +436,7 @@ fn download_now(state: &Arc<Mutex<State>>, info: &Arc<Mutex<Option<Info>>>, ctx:
     }
     let _ = std::fs::remove_file(&new);
     set(State::Downloading { got: 0, total: i.size });
-    let child = curl().args(["-fsSL", "--max-time", "600", "-o"]).arg(&new).arg(format!("{}Flux-Native.exe", base())).spawn();
+    let child = curl().args(["-fsSL", "--max-time", "600", "-o"]).arg(&new).arg(format!("{}{}", base(), asset())).spawn();
     let Ok(mut child) = child else {
         return set(State::Error(crate::i18n::t("Download failed")));
     };

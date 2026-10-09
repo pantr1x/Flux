@@ -1,9 +1,10 @@
 # Flux
 
-> Flux is a free, small and modern code editor built on Monaco (the editor inside VS Code). It runs code with one click, shows websites live while you type and has Claude AI built in – with nothing to set up. It runs on Windows 10 and 11; macOS and Linux versions are being prepared.
+> Flux is a free, small and modern code editor built on Monaco (the editor inside VS Code). It runs code with one click, shows websites live while you type and has Claude AI built in – with nothing to set up. It runs on Windows 10 and 11 and on Linux (x86_64); a macOS version is being prepared.
 
 - Website: https://pantr1x.github.io/Flux/
-- Download (newest installer): https://github.com/pantr1x/Flux/releases/latest
+- Download (newest Windows installer): https://github.com/pantr1x/Flux/releases/latest
+- Linux install (one command, updates itself): `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash`
 - Source code: https://github.com/pantr1x/Flux
 - Price: free, no account, no ads
 

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Inštalácia Fluxu na Linux jedným príkazom:
+# Inštalácia Flux Native (Rust, malý a rýchly) na Linux jedným príkazom:
 #   curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash
-# Stiahne najnovší Flux AppImage do ~/.local/share/flux, pridá príkaz `flux` a ikonu do menu aplikácií.
-# Ďalšie aktualizácie si Flux robí sám. Odinštalovanie:  curl -fsSL …/install.sh | bash -s -- --uninstall
+# Stiahne program z vetvy ci-native-linux do ~/.local/share/flux, pridá príkaz `flux` a ikonu do menu aplikácií.
+# Ďalšie aktualizácie si Flux robí sám (Nastavenia → General → About & updates, alebo automaticky).
+# Odinštalovanie:  curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash -s -- --uninstall
 set -euo pipefail
 
-REPO="pantr1x/Flux"
+BASE="${FLUX_INSTALL_URL:-https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux}"
+SITE="${FLUX_SITE_URL:-https://pantr1x.github.io/Flux}"
 DIR="$HOME/.local/share/flux"
 BIN="$HOME/.local/bin"
 APPS="$HOME/.local/share/applications"
@@ -24,49 +26,46 @@ fi
 [ "$(uname -s)" = Linux ] || die "This installer is for Linux."
 [ "$(uname -m)" = x86_64 ] || die "Flux for Linux is built for x86_64 only (you have $(uname -m))."
 command -v curl >/dev/null || die "curl is needed."
+command -v sha256sum >/dev/null || die "sha256sum is needed."
 
-# AppImage potrebuje FUSE 2 (libfuse.so.2) – doinštalovať podľa distribúcie
-if ! ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2' && [ ! -e /usr/lib/libfuse.so.2 ] && [ ! -e /usr/lib64/libfuse.so.2 ]; then
-  say "Installing FUSE 2 (needed by AppImage) – you may be asked for your password"
-  if command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm fuse2
-  elif command -v apt-get >/dev/null; then sudo apt-get install -y libfuse2t64 2>/dev/null || sudo apt-get install -y libfuse2
-  elif command -v dnf >/dev/null; then sudo dnf install -y fuse-libs
-  elif command -v zypper >/dev/null; then sudo zypper install -y libfuse2
-  else say "Could not install FUSE 2 automatically – Flux will unpack itself on each start instead."; fi
+# knižnice, ktoré okno potrebuje (X11/Wayland, OpenGL, klávesnica) – doinštalovať, ak chýbajú
+need=0
+for lib in libxkbcommon.so.0 libGL.so.1 libxcb.so.1 libX11.so.6; do
+  ldconfig -p 2>/dev/null | grep -q "$lib" || need=1
+done
+if [ "$need" = 1 ]; then
+  say "Installing the libraries Flux needs – you may be asked for your password"
+  if command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm libxkbcommon mesa libxcb libx11 libglvnd
+  elif command -v apt-get >/dev/null; then sudo apt-get install -y libxkbcommon0 libxkbcommon-x11-0 libgl1 libxcb1 libx11-6 libwayland-client0 libegl1 || true
+  elif command -v dnf >/dev/null; then sudo dnf install -y libxkbcommon mesa-libGL libxcb libX11 libwayland-client mesa-libEGL || true
+  elif command -v zypper >/dev/null; then sudo zypper install -y libxkbcommon0 Mesa-libGL1 libxcb1 libX11-6 libwayland-client0 Mesa-libEGL1 || true
+  else say "Could not install the libraries automatically – if Flux does not start, install libxkbcommon, OpenGL (mesa) and libxcb."; fi
 fi
 
-# najnovšie vydanie, ktoré má AppImage (API vracia vydania od najnovšieho)
-say "Looking for the newest Flux for Linux"
-url=$(curl -fsSL -H 'User-Agent: flux-install' "https://api.github.com/repos/$REPO/releases?per_page=30" |
-  grep -o '"browser_download_url": *"[^"]*\.AppImage"' | head -n1 | cut -d'"' -f4) || true
-[ -n "$url" ] || die "No Linux build found on https://github.com/$REPO/releases"
-ver=$(basename "$url" .AppImage); ver=${ver#Flux-}
+say "Looking for the newest Flux"
+info=$(curl -fsSL "$BASE/native.json") || die "Could not reach $BASE (no Linux build published yet?)"
+field() { printf '%s' "$info" | tr -d '\n ' | grep -o "\"$1\":\"[^\"]*\"" | head -n1 | cut -d'"' -f4; }
+ver=$(field version); want=$(field sha256)
+[ -n "$ver" ] && [ -n "$want" ] || die "Unexpected answer from $BASE/native.json"
 
 say "Downloading Flux $ver"
 mkdir -p "$DIR" "$BIN" "$APPS" "$ICONS"
-curl -fL --progress-bar -o "$DIR/Flux.AppImage.part" "$url"
-chmod +x "$DIR/Flux.AppImage.part"
-mv -f "$DIR/Flux.AppImage.part" "$DIR/Flux.AppImage"
+curl -fL --progress-bar -o "$DIR/flux-native.part" "$BASE/Flux-Native"
+got=$(sha256sum "$DIR/flux-native.part" | cut -d' ' -f1)
+[ "$got" = "$want" ] || { rm -f "$DIR/flux-native.part"; die "The download is damaged (checksum mismatch). Try again."; }
+chmod +x "$DIR/flux-native.part"
+mv -f "$DIR/flux-native.part" "$DIR/flux-native"
 
-# príkaz `flux` (bez FUSE sa AppImage rozbalí pri každom štarte)
-cat >"$BIN/flux" <<EOF
+# príkaz `flux`
+cat >"$BIN/flux" <<WRAP
 #!/bin/sh
-if [ ! -e /dev/fuse ] || ! ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then export APPIMAGE_EXTRACT_AND_RUN=1; fi
-exec "$DIR/Flux.AppImage" "\$@"
-EOF
+exec "$DIR/flux-native" "\$@"
+WRAP
 chmod +x "$BIN/flux"
 
-# ikona priamo z AppImage (záloha: z webu); v .desktop s plnou cestou – funguje v každom menu
-tmp=$(mktemp -d)
-(cd "$tmp" && "$DIR/Flux.AppImage" --appimage-extract 'usr/share/icons/hicolor/512x512/apps/flux.png' >/dev/null 2>&1) || true
-if [ -s "$tmp/squashfs-root/usr/share/icons/hicolor/512x512/apps/flux.png" ]; then
-  cp -f "$tmp/squashfs-root/usr/share/icons/hicolor/512x512/apps/flux.png" "$DIR/flux.png"
-else
-  curl -fsSL -o "$DIR/flux.png" "https://pantr1x.github.io/Flux/icon.png" || true
-fi
-rm -rf "$tmp"
-cp -f "$DIR/flux.png" "$ICONS/flux.png" 2>/dev/null || true
-cat >"$APPS/flux.desktop" <<EOF
+curl -fsSL -o "$DIR/flux.png" "$SITE/icon.png" || true
+[ -s "$DIR/flux.png" ] && cp -f "$DIR/flux.png" "$ICONS/flux.png" 2>/dev/null || true
+cat >"$APPS/flux.desktop" <<DESK
 [Desktop Entry]
 Type=Application
 Name=Flux
@@ -77,9 +76,10 @@ Icon=$DIR/flux.png
 Terminal=false
 Categories=Development;TextEditor;IDE;
 MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;
-EOF
+DESK
 command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 say "Flux $ver is installed. Open it from your app menu, or run: flux"
+say "It updates itself from now on."
 case ":$PATH:" in *":$BIN:"*) ;; *) say "Tip: add ~/.local/bin to PATH to use the 'flux' command." ;; esac
