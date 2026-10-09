@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.50
+
+**Linux**
+- **Same look as on Windows**: Flux now finds the system fonts on every distribution (on Arch and others it used to fall back to its own fonts, without bold text). It prefers Segoe UI, then Inter, Noto Sans or DejaVu Sans; code uses Cascadia Mono, JetBrains Mono or DejaVu Sans Mono.
+- The installer removes the old Flux (Electron AppImage), warns when another `flux` command would start instead, and shows how to add `~/.local/bin` to PATH.
+- `flux --version` shows which Flux is installed.
+
 ## 0.9.49
 
 **Linux**

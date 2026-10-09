@@ -54,6 +54,11 @@ ver=$(field version); want=$(field sha256)
 [ -n "$ver" ] && [ -n "$want" ] || die "Unexpected answer from $BASE/native.json"
 
 say "Downloading Flux $ver"
+# starý Flux (Electron AppImage z install-electron.sh) by sa inak mohol spúšťať namiesto nového
+if [ -e "$DIR/Flux.AppImage" ] || ls "$APPS"/appimagekit*[Ff]lux*.desktop >/dev/null 2>&1; then
+  say "Removing the old Flux (Electron AppImage)"
+  rm -f "$DIR/Flux.AppImage" "$APPS"/appimagekit*[Ff]lux*.desktop
+fi
 mkdir -p "$DIR" "$BIN" "$APPS" "$ICONS"
 curl -fL --progress-bar -o "$DIR/flux-native.part" "$BASE/Flux-Native"
 got=$(sha256sum "$DIR/flux-native.part" | cut -d' ' -f1)
@@ -79,6 +84,7 @@ Comment=A small, good-looking code editor
 Exec=$BIN/flux %F
 Icon=$DIR/flux.png
 Terminal=false
+StartupWMClass=flux
 Categories=Development;TextEditor;IDE;
 MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;
 DESK
@@ -87,4 +93,15 @@ command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$HOME/.
 
 say "Flux $ver is installed. Open it from your app menu, or run: flux"
 say "It updates itself from now on."
-case ":$PATH:" in *":$BIN:"*) ;; *) say "Tip: add ~/.local/bin to PATH to use the 'flux' command." ;; esac
+case ":$PATH:" in
+  *":$BIN:"*) ;;
+  *) say "Tip: ~/.local/bin is not in your PATH, so the 'flux' command is not found yet. Add it:"
+     printf '     bash/zsh:  echo '\''export PATH="$HOME/.local/bin:$PATH"'\'' >> ~/.%src\n' "$(basename "${SHELL:-bash}")"
+     printf '     fish:      fish_add_path ~/.local/bin\n' ;;
+esac
+# iný „flux“ skôr v PATH (napr. starý Flux z balíčka) by sa spúšťal namiesto tohto
+other=$(command -v flux 2>/dev/null || true)
+if [ -n "$other" ] && [ "$other" != "$BIN/flux" ]; then
+  say "Warning: 'flux' in your terminal runs $other, not the new Flux. Run $BIN/flux or remove the other one."
+fi
+say "Check: $DIR/flux-native --version"

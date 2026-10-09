@@ -106,6 +106,7 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
     eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Flux")
+            .with_app_id("flux")
             // vlastná titulná lišta ako v Electron Fluxe (− □ × kreslí app/chrome.rs)
             .with_decorations(false)
             // spustený mostom MCP (--background): nekradnúť fokus
@@ -166,6 +167,11 @@ fn main() -> eframe::Result {
     // most pre Claude Desktop: stdin/stdout ↔ MCP server bežiaceho Fluxu, bez okna
     // CI: rozdiel oproti predošlej zostave (update.rs)
     let args: Vec<String> = std::env::args().collect();
+    // flux --version: ktorá zostava beží (kontrola po inštalácii/aktualizácii)
+    if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
+        println!("Flux Native {} ({})", env!("CARGO_PKG_VERSION"), &update::SHA[..update::SHA.len().min(7)]);
+        return Ok(());
+    }
     if args.len() == 5 && args[1] == "--make-patch" {
         if let Err(e) = update::make_patch(args[2].as_ref(), args[3].as_ref(), args[4].as_ref()) {
             eprintln!("make-patch: {e}");

@@ -164,13 +164,62 @@ pub fn mono(size: f32) -> FontId {
     FontId::monospace(size)
 }
 
-// Písma Windows (Segoe UI, Cascadia Mono); na Linuxe DejaVu; inak zostanú pribalené písma egui (aj ako záloha znakov).
+// Linux: písma bývajú v rôznych podpriečinkoch (Debian truetype/dejavu, Arch TTF/, Fedora dejavu-sans-fonts/…) –
+// zoznam súborov podľa mena (malými písmenami) z bežných priečinkov; FLUX_FONT_DIRS (oddelené „:“) pre testy
+#[cfg(not(windows))]
+fn font_index() -> std::collections::HashMap<String, std::path::PathBuf> {
+    let mut roots: Vec<std::path::PathBuf> = match std::env::var("FLUX_FONT_DIRS") {
+        Ok(v) => v.split(':').filter(|x| !x.is_empty()).map(Into::into).collect(),
+        Err(_) => vec!["/usr/share/fonts".into(), "/usr/local/share/fonts".into()],
+    };
+    if std::env::var("FLUX_FONT_DIRS").is_err() {
+        if let Ok(h) = std::env::var("HOME") {
+            roots.push(std::path::Path::new(&h).join(".local/share/fonts"));
+            roots.push(std::path::Path::new(&h).join(".fonts"));
+        }
+    }
+    let mut map = std::collections::HashMap::new();
+    let mut stack: Vec<(std::path::PathBuf, u32)> = roots.into_iter().map(|r| (r, 0)).collect();
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if depth < 6 {
+                    stack.push((p, depth + 1));
+                }
+            } else if let Some(n) = p.file_name().map(|n| n.to_string_lossy().to_lowercase()) {
+                if n.ends_with(".ttf") || n.ends_with(".otf") {
+                    map.entry(n).or_insert(p);
+                }
+            }
+        }
+    }
+    map
+}
+
+// Písma Windows (Segoe UI, Cascadia Mono); na Linuxe Segoe/Inter/Noto/DejaVu odkiaľkoľvek z priečinkov písiem;
+// inak zostanú pribalené písma egui (aj ako záloha znakov).
 pub fn fonts(ctx: &egui::Context, code_font: &str) {
     let mut defs = FontDefinitions::default();
     let win = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
     let fonts_dir = std::path::Path::new(&win).join("Fonts");
-    let linux = std::path::Path::new("/usr/share/fonts/truetype/dejavu");
-    let read = |files: &[&str]| -> Option<Vec<u8>> { files.iter().find_map(|f| std::fs::read(fonts_dir.join(f)).ok().or_else(|| std::fs::read(linux.join(f)).ok())) };
+    #[cfg(not(windows))]
+    let index = font_index();
+    let read = |files: &[&str]| -> Option<Vec<u8>> {
+        files.iter().find_map(|f| {
+            #[cfg(not(windows))]
+            {
+                index.get(&f.to_lowercase()).and_then(|p| std::fs::read(p).ok())
+            }
+            #[cfg(windows)]
+            {
+                std::fs::read(fonts_dir.join(f)).ok()
+            }
+        })
+    };
+    #[cfg(not(windows))]
+    let _ = &fonts_dir;
     let fallback: Vec<String> = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     let add = |defs: &mut FontDefinitions, name: &str, files: &[&str], family: FontFamily| {
         if let Some(bytes) = read(files) {
@@ -178,7 +227,7 @@ pub fn fonts(ctx: &egui::Context, code_font: &str) {
             defs.families.entry(family).or_default().insert(0, name.into());
         }
     };
-    add(&mut defs, "ui", &["segoeui.ttf", "DejaVuSans.ttf"], FontFamily::Proportional);
+    add(&mut defs, "ui", &["segoeui.ttf", "Inter-Regular.ttf", "Inter-Regular.otf", "NotoSans-Regular.ttf", "DejaVuSans.ttf"], FontFamily::Proportional);
     // písmo kódu podľa nastavenia fontFamily (FONTS v app.js), s náhradou
     let mut files: Vec<&str> = match code_font {
         "Cascadia Code" => vec!["CascadiaCode.ttf"],
@@ -188,7 +237,7 @@ pub fn fonts(ctx: &egui::Context, code_font: &str) {
         "Courier New" => vec!["cour.ttf"],
         _ => vec!["consola.ttf"],
     };
-    files.extend(["CascadiaMono.ttf", "consola.ttf", "DejaVuSansMono.ttf"]);
+    files.extend(["CascadiaMono.ttf", "consola.ttf", "JetBrainsMono-Regular.ttf", "DejaVuSansMono.ttf"]);
     // písma nainštalované len pre používateľa
     let user = std::env::var("LOCALAPPDATA").map(|l| std::path::Path::new(&l).join("Microsoft\\Windows\\Fonts")).ok();
     let mut added = false;
@@ -204,6 +253,6 @@ pub fn fonts(ctx: &egui::Context, code_font: &str) {
     }
     let bold = FontFamily::Name("bold".into());
     defs.families.insert(bold.clone(), fallback);
-    add(&mut defs, "ui-bold", &["seguisb.ttf", "segoeuib.ttf", "DejaVuSans-Bold.ttf"], bold);
+    add(&mut defs, "ui-bold", &["seguisb.ttf", "segoeuib.ttf", "Inter-SemiBold.ttf", "Inter-SemiBold.otf", "NotoSans-SemiBold.ttf", "DejaVuSans-Bold.ttf"], bold);
     ctx.set_fonts(defs);
 }
