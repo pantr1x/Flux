@@ -30,8 +30,13 @@ command -v sha256sum >/dev/null || die "sha256sum is needed."
 
 # knižnice, ktoré okno potrebuje (X11/Wayland, OpenGL, klávesnica) – doinštalovať, ak chýbajú
 need=0
+have_lib() {
+  { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null || true; } | grep -q "$1" && return 0
+  for d in /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /lib64; do [ -e "$d/$1" ] && return 0; done
+  return 1
+}
 for lib in libxkbcommon.so.0 libGL.so.1 libxcb.so.1 libX11.so.6; do
-  ldconfig -p 2>/dev/null | grep -q "$lib" || need=1
+  have_lib "$lib" || need=1
 done
 if [ "$need" = 1 ]; then
   say "Installing the libraries Flux needs – you may be asked for your password"
