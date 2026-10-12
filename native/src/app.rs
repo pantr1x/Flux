@@ -1956,7 +1956,9 @@ impl App {
                         let bg = ui.painter().add(egui::Shape::Noop);
                         let origin = ui.min_rect().top();
                         self.tree_sel = None;
-                        // pri ťahaní: miesto na vytiahnutie von z priečinkov (do koreňa projektu)
+                        self.tree_ui(ui, &w, 0);
+                        // pri ťahaní: miesto na vytiahnutie von z priečinkov (do koreňa projektu) – až pod stromom;
+                        // nad ním by po začatí ťahania posunulo všetky riadky a pod kurzorom by bol iný priečinok
                         if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx()) {
                             let rr = widgets::row_ex(ui, false, false, 6.0, Lead::Line("folderOpen"), &t("Move to the project folder"), None, false, &self.pal);
                             if let Some(src) = rr.dnd_hover_payload::<String>() {
@@ -1968,7 +1970,6 @@ impl App {
                                 self.move_item(&src, &w);
                             }
                         }
-                        self.tree_ui(ui, &w, 0);
                         if let Some(r) = self.tree_sel {
                             let t = if self.anim_on() { 0.2 } else { 0.0 };
                             let y = ui.ctx().animate_value_with_time(egui::Id::new("tree-glide"), r.top() - origin, t);

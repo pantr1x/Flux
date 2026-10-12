@@ -35,6 +35,11 @@ pub struct Preview {
     pub body: Option<Rect>, // kde má byť stránka (v bodoch egui) – nastaví preview_ui
     #[allow(dead_code)]
     covered: bool, // minulý snímok bola stránka zakrytá
+    away_since: Option<f64>, // od kedy je stránka zakrytá (nastavenia, hľadanie…)
+    active_at: f64,          // kedy mal Flux naposledy fokus alebo vstup od používateľa
+    asleep: bool,            // stránka je dočasne zavretá (šetrí pamäť), po návrate sa otvorí znova
+    #[cfg(windows)]
+    low_mem: bool, // WebView2 je v režime nízkej pamäte (Flux bez fokusu)
 }
 
 // názov karty: súbor z adresy (index.html pre koreň)
@@ -88,6 +93,11 @@ impl Preview {
             lfail: None,
             body: None,
             covered: false,
+            away_since: None,
+            active_at: -1.0,
+            asleep: false,
+            #[cfg(windows)]
+            low_mem: false,
         }
     }
 
@@ -274,14 +284,44 @@ impl App {
     #[allow(unused_variables)]
     pub(super) fn sync_preview(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         let covered = self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
+        // stránka (WebView2 / WebKit) berie desiatky až stovky MB: keď ju nevidno, zavrie sa a po návrate sa otvorí znova –
+        // zbalené okno hneď, Flux bez fokusu po 45 s, zakrytá stránka (nastavenia…) po 20 s; karty a adresy ostanú
+        let (now, focused, minimized, input) = ctx.input(|i| (i.time, i.viewport().focused.unwrap_or(true), i.viewport().minimized.unwrap_or(false), !i.events.is_empty() || i.pointer.is_moving()));
+        if let Some(pv) = self.preview.as_mut() {
+            // „používaný“ = má fokus alebo doň ide myš/klávesnica (niektoré prostredia fokus nehlásia spoľahlivo)
+            if focused || input || pv.active_at < 0.0 {
+                pv.active_at = now;
+            }
+            if !covered {
+                pv.away_since = None;
+            } else if pv.away_since.is_none() {
+                pv.away_since = Some(now);
+            }
+            let idle = now - pv.active_at > 45.0;
+            pv.asleep = minimized || idle || pv.away_since.is_some_and(|t| now - t > 20.0);
+            if (covered || !focused) && !pv.asleep {
+                // bez fokusu sa nekreslí – zobudiť sa, aby sa stránka po limite naozaj zavrela
+                ctx.request_repaint_after(std::time::Duration::from_secs(5));
+            }
+        }
         #[cfg(windows)]
         {
             let zoom = ctx.zoom_factor();
             let Some(pv) = self.preview.as_mut() else { return };
-            // zbalené okno: WebView2 zavrieť (jeho procesy berú desiatky MB), po obnovení sa vytvorí znova
-            if ctx.input(|i| i.viewport().minimized.unwrap_or(false)) {
-                pv.view = None;
+            // nevidno ju: WebView2 zavrieť (jeho procesy berú desiatky MB), po návrate sa vytvorí znova
+            if pv.asleep {
+                if pv.view.take().is_some() {
+                    pv.shown_url.clear();
+                }
                 return;
+            }
+            // bez fokusu: WebView2 uvoľní, čo sa dá (MemoryUsageTargetLevel Low), kým sa celkom nezavrie
+            if let Some(v) = &pv.view {
+                use wry::WebViewExtWindows;
+                if pv.low_mem == focused {
+                    pv.low_mem = !focused;
+                    let _ = v.set_memory_usage_level(if focused { wry::MemoryUsageLevel::Normal } else { wry::MemoryUsageLevel::Low });
+                }
             }
             let Some(b) = pv.body else { return };
             let bounds = wry::Rect {
@@ -318,7 +358,13 @@ impl App {
                     }
                     wry::NewWindowResponse::Deny
                 };
+                use wry::WebViewBuilderExtWindows;
+                // štíhlejší WebView2: jeden proces pre stránky, bez prekladača, synchronizácie a služieb na pozadí
+                // (predvolené argumenty wry sa musia zopakovať – tento zoznam ich nahrádza)
+                let args = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,Translate,AutofillServerCommunication,OptimizationHints,MediaRouter,SpareRendererForSitePerProcess,msEdgeShoppingAssistant \
+                            --renderer-process-limit=1 --disable-background-networking --disable-component-update --disable-sync --js-flags=--max-old-space-size=128";
                 match wry::WebViewBuilder::new()
+                    .with_additional_browser_args(args)
                     .with_url(&pv.url)
                     .with_bounds(bounds)
                     .with_focused(false)
@@ -330,6 +376,7 @@ impl App {
                         let _ = v.focus_parent();
                         pv.shown_url = pv.url.clone();
                         pv.zoomed = 1.0; // nový WebView2 začína na 100 %
+                        pv.low_mem = false;
                         pv.view = Some(v);
                     }
                     Err(e) => {
@@ -402,8 +449,10 @@ impl App {
         if pv.lfail.is_some() {
             return;
         }
-        if ctx.input(|i| i.viewport().minimized.unwrap_or(false)) {
-            pv.helper = None;
+        if pv.asleep {
+            if pv.helper.take().is_some() {
+                pv.shown_url.clear();
+            }
             return;
         }
         let Some(b) = pv.body else { return };

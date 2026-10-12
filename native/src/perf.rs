@@ -32,7 +32,7 @@ impl Drop for Frame {
             let n = FRAMES.swap(0, Relaxed).max(1);
             let total = TOTAL_US.swap(0, Relaxed);
             let max = MAX_US.swap(0, Relaxed);
-            eprintln!("perf: frames {n}, avg {:.2} ms, max {:.2} ms", total as f64 / n as f64 / 1000.0, max as f64 / 1000.0);
+            eprintln!("perf: frames {n}, avg {:.2} ms, max {:.2} ms, heap {:.1} MB", total as f64 / n as f64 / 1000.0, max as f64 / 1000.0, crate::heap_mb());
             *last = Some(Instant::now());
         }
     }

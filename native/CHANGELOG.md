@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.54
+
+**Less memory with Live Server**
+- The page in the Live Server panel (WebView2 on Windows, WebKit on Linux – together about 90 MB or more) now closes by itself when you don't use Flux for 45 seconds, when Flux is minimized, or when Settings cover it for 20 seconds. As soon as you come back it opens again, on the same page and tabs.
+- Windows: the page runs leaner (one page process, no translator, sync or background services) and frees memory as soon as Flux is in the background.
+
+**Files**
+- **Moving files by dragging works again**: when you started dragging, the *Move to the project folder* row appeared at the top and pushed the whole list down, so the file landed in the wrong place (or nowhere). The row is now at the bottom of the list.
+
 ## 0.9.53
 
 **Live Server**

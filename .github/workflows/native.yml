@@ -334,6 +334,13 @@ jobs:
           $env:FLUX_USER_DATA = $nd
           $env:FLUX_TEST = "2:open=main.py"
           try { $report += Start-FluxRun 'native' (Get-ChildItem target\release\flux-native.exe).FullName $null } catch { $report += "native: measurement failed: $_" }
+          # Live Server so stránkou vo Fluxe (WebView2 – jeho procesy sú deti Fluxu, rátajú sa do súčtu)
+          '<!DOCTYPE html><html><head><title>t</title></head><body><h1>Flux</h1><p>Live Server memory test</p></body></html>' | Set-Content "$proj\index.html"
+          $ld = "$env:RUNNER_TEMP\ud-native-ls"; Settings $ld
+          $env:FLUX_USER_DATA = $ld
+          $env:FLUX_TEST = "2:open=index.html;4:run"
+          try { $report += Start-FluxRun 'native-liveserver' (Get-ChildItem target\release\flux-native.exe).FullName $null } catch { $report += "native-liveserver: measurement failed: $_" }
+          $env:FLUX_TEST = "2:open=main.py"
           # živá tapeta (falošný Lively s ukážkovým videom): len pri ručnom spustení (sťahuje video a trvá ~2 min)
           if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { try {
             $lv = "$env:RUNNER_TEMP\fake-local"; $wp = "$lv\wp1"
