@@ -933,6 +933,7 @@
  "The normal cursor is back.": "Звичайний курсор повернуто.",
  "The page opens with everything filled in – just press “Generate token” at the bottom and copy it.": "Сторінка відкривається з усім заповненим – просто натисніть «Generate token» унизу й скопіюйте його.",
  "The path is outside the open folder.": "Шлях поза відкритою папкою.",
+ "The preview could not start – details are in flux-preview.log in the settings folder": "Не вдалося запустити попередній перегляд – подробиці у flux-preview.log у теці налаштувань",
  "The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.": "Прозоре скло не спрацювало на цьому комп’ютері, тож Flux повернувся до рухомих шпалер.",
  "The selected file is not a working Python.": "Вибраний файл не є робочим Python.",
  "The store could not be loaded: {e}": "Не вдалося завантажити магазин: {e}",

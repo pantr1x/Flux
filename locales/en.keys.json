@@ -910,6 +910,7 @@
  "The normal cursor is back.",
  "The page opens with everything filled in – just press “Generate token” at the bottom and copy it.",
  "The path is outside the open folder.",
+ "The preview could not start – details are in flux-preview.log in the settings folder",
  "The selected file is not a working Python.",
  "The store could not be loaded: {e}",
  "The tag <{name} is never closed with >.",

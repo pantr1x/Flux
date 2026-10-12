@@ -411,7 +411,7 @@ jobs:
       - name: Install system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcb1-dev libwayland-dev xvfb libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcb1-dev libwayland-dev xvfb libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev weston xwayland
       - name: Build Flux Native (Linux)
         run: cargo build -p flux-native -p flux-preview --release
       - name: Tests
@@ -430,6 +430,23 @@ jobs:
           FLUX_PREVIEW_HELPER="$PWD/target/release/flux-preview" FLUX_USER_DATA="$ud" FLUX_TEST="2:open=index.html;4:run" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>"$RUNNER_TEMP/preview.err" & p=$!; sleep 15; pgrep -x flux-preview > "$RUNNER_TEMP/preview.pid" || true; kill $p'
           cat "$RUNNER_TEMP/preview.err" | tail -20
           [ -s "$RUNNER_TEMP/preview.pid" ] || { echo "::error::flux-preview did not start"; exit 1; }
+      # ako na Ubuntu: Wayland (weston) + XWayland – pomocník tam padal, kým GTK nešlo cez X11
+      - name: Live Server preview test on Wayland (weston + XWayland)
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg"; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+          weston --backend=headless --xwayland --socket=wl-ci --width=1280 --height=800 > "$RUNNER_TEMP/weston.log" 2>&1 &
+          sleep 4
+          d=$(grep -o "xserver listening on display :[0-9]*" "$RUNNER_TEMP/weston.log" | grep -o ":[0-9]*" | head -n1)
+          [ -n "$d" ] || { cat "$RUNNER_TEMP/weston.log"; echo "::error::weston did not start XWayland"; exit 1; }
+          w="$RUNNER_TEMP/web"; ud="$RUNNER_TEMP/ud-preview-wl"; mkdir -p "$ud"
+          echo "{\"onboarded\":true,\"autoUpdate\":false,\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
+          WAYLAND_DISPLAY=wl-ci DISPLAY="$d" LIBGL_ALWAYS_SOFTWARE=1 FLUX_PREVIEW_HELPER="$PWD/target/release/flux-preview" FLUX_USER_DATA="$ud" FLUX_TEST="2:open=index.html;4:run" target/release/flux-native >/dev/null 2>"$RUNNER_TEMP/preview-wl.err" &
+          p=$!
+          sleep 20
+          ok=$(pgrep -x flux-preview || true)
+          kill $p || true
+          tail -20 "$RUNNER_TEMP/preview-wl.err"
+          [ -n "$ok" ] || { echo "::error::flux-preview did not stay running on Wayland"; exit 1; }
       - name: Update test (same file replaced, restart with --updated)
         run: |
           u="$RUNNER_TEMP/upd"; mkdir -p "$u/srv" "$u/app" "$u/ud"

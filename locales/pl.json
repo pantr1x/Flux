@@ -946,6 +946,7 @@
  "The normal cursor is back.": "Zwykły kursor wrócił.",
  "The page opens with everything filled in – just press “Generate token” at the bottom and copy it.": "Strona otworzy się wypełniona – naciśnij na dole „Generate token” i skopiuj go.",
  "The path is outside the open folder.": "Ścieżka jest poza otwartym folderem.",
+ "The preview could not start – details are in flux-preview.log in the settings folder": "Nie udało się uruchomić podglądu – szczegóły w pliku flux-preview.log w folderze ustawień",
  "The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.": "Przezroczyste szkło nie zadziałało na tym komputerze, więc Flux wrócił do ruchomej tapety.",
  "The selected file is not a working Python.": "Wybrany plik nie jest działającym Pythonem.",
  "The store could not be loaded: {e}": "Nie udało się wczytać sklepu: {e}",

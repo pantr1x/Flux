@@ -58,6 +58,13 @@ mod linux {
             eprintln!("usage: flux-preview --parent <xid> --url <url>");
             std::process::exit(2);
         };
+        // vkladáme do X11 okna Fluxu – GTK musí ísť cez X11 aj pod Waylandom (inak GDK zvolí Wayland a spadne)
+        std::env::set_var("GDK_BACKEND", "x11");
+        // chyba = čisté ukončenie s hlásením na stderr (Flux ho zapíše do flux-preview.log), nie „pád aplikácie“
+        std::panic::set_hook(Box::new(|i| {
+            eprintln!("flux-preview panic: {i}");
+            std::process::exit(6);
+        }));
         // DMA-BUF prenos obrazu WebKitu nefunguje v cudzom X11 podokne (XWayland, virtuálky) – zostane čierne
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");

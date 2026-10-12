@@ -244,8 +244,14 @@ impl App {
             ui.painter().text(pos2(c.x, c.y - 10.0), Align2::CENTER_CENTER, t("Live Server"), theme::bold(15.0), p.text);
             ui.painter().text(pos2(c.x, c.y + 12.0), Align2::CENTER_CENTER, t("Open the page in the browser – it reloads when you save (F5)"), theme::ui(12.0), p.text3);
             #[cfg(target_os = "linux")]
-            if pv.lfail.as_deref() == Some("webkit") {
-                ui.painter().text(pos2(c.x, c.y + 90.0), Align2::CENTER_CENTER, t("To see the page here, install webkit2gtk (libwebkit2gtk-4.1)"), theme::ui(11.5), p.text3);
+            match pv.lfail.as_deref() {
+                Some("webkit") => {
+                    ui.painter().text(pos2(c.x, c.y + 90.0), Align2::CENTER_CENTER, t("To see the page here, install webkit2gtk (libwebkit2gtk-4.1)"), theme::ui(11.5), p.text3);
+                }
+                Some("helper") => {
+                    ui.painter().text(pos2(c.x, c.y + 90.0), Align2::CENTER_CENTER, t("The preview could not start – details are in flux-preview.log in the settings folder"), theme::ui(11.5), p.text3);
+                }
+                _ => {}
             }
             let mut b = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_center_size(pos2(c.x, c.y + 48.0), vec2(220.0, 32.0))).layout(egui::Layout::top_down(egui::Align::Center)));
             if widgets::button(&mut b, Some("external"), &t("Open in browser"), p.accent, p.accent_fg, 30.0, &p).clicked() {
@@ -436,6 +442,8 @@ impl App {
         if h.exited() {
             let err = h.err.lock().map(|e| e.clone()).unwrap_or_default();
             eprintln!("[flux] preview helper exited: {err}");
+            // pre hlásenie chyby: čo pomocník vypísal (chýbajúca knižnica, GTK, WebKit…)
+            let _ = std::fs::write(flux_core::settings::user_data().join("flux-preview.log"), format!("flux-preview exited\n{err}"));
             pv.lfail = Some(if err.contains("libwebkit") || err.contains("shared librar") { "webkit".into() } else { "helper".into() });
             pv.helper = None;
             return;

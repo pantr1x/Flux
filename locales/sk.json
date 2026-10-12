@@ -990,6 +990,7 @@
  "The normal cursor is back.": "Bežný kurzor je späť.",
  "The page opens with everything filled in – just press “Generate token” at the bottom and copy it.": "Stránka sa otvorí už vyplnená – stačí dole stlačiť „Generate token“ a skopírovať ho.",
  "The path is outside the open folder.": "Cesta je mimo otvoreného priečinka.",
+ "The preview could not start – details are in flux-preview.log in the settings folder": "Náhľad sa nepodarilo spustiť – podrobnosti sú v súbore flux-preview.log v priečinku nastavení",
  "The see-through glass did not work on this computer, so Flux went back to the moving wallpaper.": "Priehľadné sklo na tomto počítači nefungovalo, Flux sa preto vrátil k pohyblivej tapete.",
  "The selected file is not a working Python.": "Vybraný súbor nie je funkčný Python.",
  "The store could not be loaded: {e}": "Obchod sa nepodarilo načítať: {e}",

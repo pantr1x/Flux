@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.52
+
+**Linux**
+- **Live Server preview fixed on Wayland desktops (Ubuntu, Fedora…)**: the preview helper crashed there, so the panel stayed empty. It now always uses X11 like the Flux window. If the preview still can't start, the panel says so and the reason is in `flux-preview.log` in the settings folder.
+
 ## 0.9.51
 
 **Linux**
