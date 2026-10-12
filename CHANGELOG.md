@@ -2,6 +2,13 @@
 
 Every version with its changes. Flux shows these notes in **Settings → General → About & updates** and on the [website](https://pantr1x.github.io/Flux/#releases).
 
+## 1.5.0 – 2026-10-12
+
+**Flux moves to Flux Native**
+- This is the last version of this Flux. It downloads **Flux Native** – the new Flux written in Rust: much smaller and faster (about 15 MB of memory instead of more than 100 MB) – and switches to it by itself.
+- Your settings, projects and pinned taskbar icon move over automatically. Files you open with Flux keep opening in Flux.
+- From then on Flux Native updates itself. Nothing else to do.
+
 ## 1.4.36 – 2026-10-03
 
 ### HTML: attributes are suggested again inside a tag
