@@ -976,6 +976,7 @@
  "This {c} has no opening {o} – remove it or add the opening one.": "Ця {c} не має відкривальної {o} – приберіть її або додайте відкривальну.",
  "This {open} is never closed – add the matching {close}.": "Цю {open} ніде не закрито – додайте відповідну {close}.",
  "Tip": "Порада",
+ "To see the page here, install webkit2gtk (libwebkit2gtk-4.1)": "Щоб бачити сторінку тут, встанови webkit2gtk (libwebkit2gtk-4.1)",
  "To-do": "Завдання",
  "Together": "Разом",
  "Together is on – find it in the sidebar under your files.": "Together увімкнено – він на бічній панелі під файлами.",

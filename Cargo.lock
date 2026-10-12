@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.50"
+version = "0.9.51"
 dependencies = [
  "alacritty_terminal",
  "chrono",
@@ -1712,8 +1712,19 @@ dependencies = [
  "syntect",
  "windows",
  "windows-sys 0.59.0",
+ "winit",
  "wry",
  "zstd",
+]
+
+[[package]]
+name = "flux-preview"
+version = "0.1.0"
+dependencies = [
+ "gtk",
+ "raw-window-handle",
+ "serde_json",
+ "wry",
 ]
 
 [[package]]

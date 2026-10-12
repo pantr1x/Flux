@@ -1,7 +1,7 @@
 # Flux v Ruste: spoločné jadro (crates/flux-core), Tauri verzia (desktop/) a natívna verzia (native/).
 [workspace]
 resolver = "2"
-members = ["crates/flux-core", "desktop", "native"]
+members = ["crates/flux-core", "crates/flux-preview", "desktop", "native"]
 
 [profile.release]
 # čo najmenší a najrýchlejší program

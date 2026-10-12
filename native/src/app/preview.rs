@@ -27,6 +27,10 @@ pub struct Preview {
     reload: bool,
     #[cfg(windows)]
     zoomed: f64, // zväčšenie, ktoré má WebView2 práve nastavené
+    #[cfg(target_os = "linux")]
+    helper: Option<crate::lpreview::Helper>,
+    #[cfg(target_os = "linux")]
+    pub lfail: Option<String>, // prečo náhľad vo Fluxe nejde (chýba webkit2gtk, Wayland…) – zobrazí sa karta
     pub body: Option<Rect>, // kde má byť stránka (v bodoch egui) – nastaví preview_ui
     #[allow(dead_code)]
     covered: bool, // minulý snímok bola stránka zakrytá
@@ -71,6 +75,10 @@ impl Preview {
             reload: false,
             #[cfg(windows)]
             zoomed: 1.0,
+            #[cfg(target_os = "linux")]
+            helper: None,
+            #[cfg(target_os = "linux")]
+            lfail: None,
             body: None,
             covered: false,
         }
@@ -82,7 +90,11 @@ impl Preview {
         {
             !self.failed
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "linux")]
+        {
+            self.lfail.is_none()
+        }
+        #[cfg(not(any(windows, target_os = "linux")))]
         {
             false
         }
@@ -103,8 +115,8 @@ impl App {
             }
             None => {
                 let mut p = Preview::new(url.clone());
-                // bez vloženého zobrazenia otvoriť aj prehliadač
-                if !p.embedded() {
+                // bez vloženého zobrazenia otvoriť aj prehliadač (Linux: rozhodne sa až pri prvom snímku)
+                if !p.embedded() && !cfg!(target_os = "linux") {
                     flux_core::settings::open_external(&url);
                 }
                 p.width = 0.0;
@@ -231,6 +243,10 @@ impl App {
             widgets::icon_at(ui, pos2(c.x, c.y - 44.0), 26.0, "globe", p.text3);
             ui.painter().text(pos2(c.x, c.y - 10.0), Align2::CENTER_CENTER, t("Live Server"), theme::bold(15.0), p.text);
             ui.painter().text(pos2(c.x, c.y + 12.0), Align2::CENTER_CENTER, t("Open the page in the browser – it reloads when you save (F5)"), theme::ui(12.0), p.text3);
+            #[cfg(target_os = "linux")]
+            if pv.lfail.as_deref() == Some("webkit") {
+                ui.painter().text(pos2(c.x, c.y + 90.0), Align2::CENTER_CENTER, t("To see the page here, install webkit2gtk (libwebkit2gtk-4.1)"), theme::ui(11.5), p.text3);
+            }
             let mut b = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_center_size(pos2(c.x, c.y + 48.0), vec2(220.0, 32.0))).layout(egui::Layout::top_down(egui::Align::Center)));
             if widgets::button(&mut b, Some("external"), &t("Open in browser"), p.accent, p.accent_fg, 30.0, &p).clicked() {
                 flux_core::settings::open_external(&pv.url);
@@ -354,6 +370,105 @@ impl App {
                 if pv.reload {
                     pv.reload = false;
                     let _ = v.reload();
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        self.sync_preview_linux(ctx, frame, covered);
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl App {
+    // Linux: pomocník flux-preview (WebKitGTK) ako podokno nášho X11 okna; príkazy cez stdin (lpreview.rs)
+    fn sync_preview_linux(&mut self, ctx: &egui::Context, frame: &eframe::Frame, covered: bool) {
+        use crate::lpreview::{get, Ev, Get, Helper};
+        let zoom = ctx.zoom_factor();
+        let Some(pv) = self.preview.as_mut() else { return };
+        if pv.lfail.is_some() {
+            return;
+        }
+        if ctx.input(|i| i.viewport().minimized.unwrap_or(false)) {
+            pv.helper = None;
+            return;
+        }
+        let Some(b) = pv.body else { return };
+        let bounds = [(b.left() * zoom) as f64, (b.top() * zoom) as f64, (b.width() * zoom).max(1.0) as f64, (b.height() * zoom).max(1.0) as f64];
+        if pv.helper.is_none() {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            let xid = match frame.window_handle().map(|h| h.as_raw()) {
+                Ok(RawWindowHandle::Xlib(h)) => h.window as u64,
+                Ok(RawWindowHandle::Xcb(h)) => h.window.get() as u64,
+                _ => 0,
+            };
+            if xid == 0 {
+                pv.lfail = Some("wayland".into());
+                flux_core::settings::open_external(&pv.url);
+                return;
+            }
+            match get() {
+                Get::Busy => {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(200));
+                    return;
+                }
+                Get::Failed(e) => {
+                    eprintln!("[flux] preview helper: {e}");
+                    pv.lfail = Some("helper".into());
+                    flux_core::settings::open_external(&pv.url);
+                    return;
+                }
+                Get::Ready(path) => match Helper::spawn(&path, xid, &pv.url, bounds) {
+                    Ok(h) => {
+                        pv.helper = Some(h);
+                        pv.shown_url = pv.url.clone();
+                    }
+                    Err(e) => {
+                        eprintln!("[flux] preview helper: {e}");
+                        pv.lfail = Some("helper".into());
+                        flux_core::settings::open_external(&pv.url);
+                        return;
+                    }
+                },
+            }
+        }
+        let Some(h) = pv.helper.as_mut() else { return };
+        if h.exited() {
+            let err = h.err.lock().map(|e| e.clone()).unwrap_or_default();
+            eprintln!("[flux] preview helper exited: {err}");
+            pv.lfail = Some(if err.contains("libwebkit") || err.contains("shared librar") { "webkit".into() } else { "helper".into() });
+            pv.helper = None;
+            return;
+        }
+        ctx.request_repaint_after(std::time::Duration::from_millis(80));
+        let want = if pv.device == 3 { (b.width() * zoom) as f64 / DESKTOP_W as f64 } else { 1.0 };
+        h.state(bounds, !covered, want);
+        if pv.shown_url != pv.url {
+            pv.shown_url = pv.url.clone();
+            h.send(serde_json::json!({ "url": pv.url }));
+        }
+        if pv.reload {
+            pv.reload = false;
+            h.send(serde_json::json!({ "reload": true }));
+        }
+        let evs: Vec<Ev> = h.rx.try_iter().collect();
+        for ev in evs {
+            match ev {
+                // stránka v karte prešla na iný odkaz → karta a adresa ho nasledujú
+                Ev::Nav(u) => {
+                    if u != pv.url && u.starts_with("http") {
+                        pv.url = u.clone();
+                        pv.shown_url = u.clone();
+                        let a = pv.active.min(pv.tabs.len().saturating_sub(1));
+                        if let Some(t) = pv.tabs.get_mut(a) {
+                            *t = u;
+                        }
+                    }
+                }
+                Ev::Tab(u) => {
+                    pv.tabs.push(u.clone());
+                    pv.active = pv.tabs.len() - 1;
+                    pv.url = u;
                 }
             }
         }

@@ -411,9 +411,9 @@ jobs:
       - name: Install system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcb1-dev libwayland-dev xvfb
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-0 libgl1-mesa-dev libgl1-mesa-dri libx11-dev libxcb1-dev libwayland-dev xvfb libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
       - name: Build Flux Native (Linux)
-        run: cargo build -p flux-native --release
+        run: cargo build -p flux-native -p flux-preview --release
       - name: Tests
         run: cargo test -p flux-native --release
       - name: Smoke test (starts with a window, no crash)
@@ -422,6 +422,14 @@ jobs:
           echo '{"onboarded":true,"autoUpdate":false}' > "$ud/settings.json"
           FLUX_USER_DATA="$ud" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>&1 & p=$!; sleep 15; if ! kill -0 $p 2>/dev/null; then echo "::error::Flux Native exited"; exit 1; fi; kill $p'
           if [ -e "$ud/flux-native-crash.log" ]; then cat "$ud/flux-native-crash.log"; echo "::error::crash log written"; exit 1; fi
+      - name: Live Server preview test (page inside Flux via flux-preview)
+        run: |
+          w="$RUNNER_TEMP/web"; ud="$RUNNER_TEMP/ud-preview"; mkdir -p "$w" "$ud"
+          echo '<!DOCTYPE html><html><head><title>t</title></head><body><h1>Flux preview</h1></body></html>' > "$w/index.html"
+          echo "{\"onboarded\":true,\"autoUpdate\":false,\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
+          FLUX_PREVIEW_HELPER="$PWD/target/release/flux-preview" FLUX_USER_DATA="$ud" FLUX_TEST="2:open=index.html;4:run" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>"$RUNNER_TEMP/preview.err" & p=$!; sleep 15; pgrep -x flux-preview > "$RUNNER_TEMP/preview.pid" || true; kill $p'
+          cat "$RUNNER_TEMP/preview.err" | tail -20
+          [ -s "$RUNNER_TEMP/preview.pid" ] || { echo "::error::flux-preview did not start"; exit 1; }
       - name: Update test (same file replaced, restart with --updated)
         run: |
           u="$RUNNER_TEMP/upd"; mkdir -p "$u/srv" "$u/app" "$u/ud"
@@ -442,10 +450,11 @@ jobs:
       - name: Publish (branch ci-native-linux)
         if: success()
         run: |
-          mkdir -p outl && cp target/release/flux-native outl/Flux-Native
+          mkdir -p outl && cp target/release/flux-native outl/Flux-Native && cp target/release/flux-preview outl/Flux-Preview
           ver=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' native/Cargo.toml | head -n1)
           h=$(sha256sum outl/Flux-Native | cut -d' ' -f1); sz=$(stat -c %s outl/Flux-Native)
-          echo "{\"version\":\"$ver\",\"sha\":\"$GITHUB_SHA\",\"sha256\":\"$h\",\"size\":$sz}" > outl/native.json
+          ph=$(sha256sum outl/Flux-Preview | cut -d' ' -f1); ps=$(stat -c %s outl/Flux-Preview)
+          echo "{\"version\":\"$ver\",\"sha\":\"$GITHUB_SHA\",\"sha256\":\"$h\",\"size\":$sz,\"preview\":{\"sha256\":\"$ph\",\"size\":$ps}}" > outl/native.json
           cd outl
           git init -q -b ci-native-linux
           git config user.name "github-actions[bot]"

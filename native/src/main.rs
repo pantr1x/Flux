@@ -11,6 +11,8 @@ mod lint;
 mod complete;
 mod colors;
 mod perf;
+#[cfg(target_os = "linux")]
+mod lpreview;
 
 // počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
 struct Count;
@@ -116,8 +118,28 @@ fn options(renderer: eframe::Renderer) -> eframe::NativeOptions {
             .with_min_inner_size([760.0, 480.0])
             .with_icon(std::sync::Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon64.png")).unwrap_or_default())),
         renderer,
+        event_loop_builder: x11_hook(),
         ..Default::default()
     }
+}
+
+// Linux: X11 (pod Waylandom XWayland) – len do X11 okna sa dá vložiť náhľad Live Servera (flux-preview);
+// linuxWayland: true v nastaveniach necháva natívny Wayland (náhľad potom ide do prehliadača)
+#[cfg(target_os = "linux")]
+fn x11_hook() -> Option<eframe::EventLoopBuilderHook> {
+    let s = flux_core::settings::load();
+    if std::env::var_os("DISPLAY").is_none() || s["linuxWayland"].as_bool() == Some(true) {
+        return None;
+    }
+    Some(Box::new(|b| {
+        use winit::platform::x11::EventLoopBuilderExtX11;
+        b.with_x11();
+    }))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn x11_hook() -> Option<eframe::EventLoopBuilderHook> {
+    None
 }
 
 // chyba pri štarte: záznam do userData/flux-native-crash.log a okno s hlásením (bez konzoly by inak nebolo nič vidieť)

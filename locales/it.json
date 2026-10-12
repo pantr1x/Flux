@@ -990,6 +990,7 @@
  "This {c} has no opening {o} – remove it or add the opening one.": "Questa {c} non ha la {o} di apertura – toglila o aggiungi quella di apertura.",
  "This {open} is never closed – add the matching {close}.": "Questa {open} non viene mai chiusa – aggiungi la {close} corrispondente.",
  "Tip": "Suggerimento",
+ "To see the page here, install webkit2gtk (libwebkit2gtk-4.1)": "Per vedere la pagina qui, installa webkit2gtk (libwebkit2gtk-4.1)",
  "To-do": "Da fare",
  "Together": "Insieme",
  "Together is on – find it in the sidebar under your files.": "Together è attivo: lo trovi nella barra laterale sotto i file.",

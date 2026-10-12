@@ -951,6 +951,7 @@
  "This {c} has no opening {o} – remove it or add the opening one.",
  "This {open} is never closed – add the matching {close}.",
  "Tip",
+ "To see the page here, install webkit2gtk (libwebkit2gtk-4.1)",
  "To-do",
  "Together",
  "Together is on – find it in the sidebar under your files.",

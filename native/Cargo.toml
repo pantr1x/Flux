@@ -1,6 +1,6 @@
 [package]
 name = "flux-native"
-version = "0.9.50"
+version = "0.9.51"
 edition = "2021"
 license = "MIT"
 description = "Flux – natívna verzia v Ruste (egui), bez Chromia"
@@ -34,3 +34,8 @@ windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win
 raw-window-handle = "0.6"
 wry = { version = "0.57", default-features = false }
 windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_Storage_FileSystem", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D10", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Foundation"] }
+
+# Linux: okno cez X11 (aj pod Waylandom cez XWayland), aby sa doň dal vložiť náhľad Live Servera (flux-preview)
+[target.'cfg(target_os = "linux")'.dependencies]
+winit = { version = "0.30", default-features = false, features = ["x11"] }
+raw-window-handle = "0.6"

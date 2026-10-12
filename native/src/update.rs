@@ -44,7 +44,7 @@ pub struct Updater {
 }
 
 // Windows: vetva ci-native (Flux-Native.exe); Linux: ci-native-linux (Flux-Native) – ci-native sa pri každom vydaní zakladá odznova
-fn base() -> String {
+pub(crate) fn base() -> String {
     let branch = if cfg!(windows) { "ci-native" } else { "ci-native-linux" };
     std::env::var("FLUX_UPDATE_URL").unwrap_or_else(|_| format!("https://raw.githubusercontent.com/pantr1x/Flux/{branch}/"))
 }

@@ -38,12 +38,14 @@ have_lib() {
 for lib in libxkbcommon.so.0 libGL.so.1 libxcb.so.1 libX11.so.6; do
   have_lib "$lib" || need=1
 done
+# náhľad Live Servera vo Fluxe (flux-preview) potrebuje WebKitGTK – bez neho sa stránka otvorí v prehliadači
+have_lib libwebkit2gtk-4.1.so.0 || need=1
 if [ "$need" = 1 ]; then
   say "Installing the libraries Flux needs – you may be asked for your password"
-  if command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm libxkbcommon mesa libxcb libx11 libglvnd
-  elif command -v apt-get >/dev/null; then sudo apt-get install -y libxkbcommon0 libxkbcommon-x11-0 libgl1 libxcb1 libx11-6 libwayland-client0 libegl1 || true
-  elif command -v dnf >/dev/null; then sudo dnf install -y libxkbcommon mesa-libGL libxcb libX11 libwayland-client mesa-libEGL || true
-  elif command -v zypper >/dev/null; then sudo zypper install -y libxkbcommon0 Mesa-libGL1 libxcb1 libX11-6 libwayland-client0 Mesa-libEGL1 || true
+  if command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm libxkbcommon mesa libxcb libx11 libglvnd webkit2gtk-4.1 || true
+  elif command -v apt-get >/dev/null; then sudo apt-get install -y libxkbcommon0 libxkbcommon-x11-0 libgl1 libxcb1 libx11-6 libwayland-client0 libegl1 libwebkit2gtk-4.1-0 || true
+  elif command -v dnf >/dev/null; then sudo dnf install -y libxkbcommon mesa-libGL libxcb libX11 libwayland-client mesa-libEGL webkit2gtk4.1 || true
+  elif command -v zypper >/dev/null; then sudo zypper install -y libxkbcommon0 Mesa-libGL1 libxcb1 libX11-6 libwayland-client0 Mesa-libEGL1 libwebkit2gtk-4_1-0 || true
   else say "Could not install the libraries automatically – if Flux does not start, install libxkbcommon, OpenGL (mesa) and libxcb."; fi
 fi
 
@@ -65,6 +67,14 @@ got=$(sha256sum "$DIR/flux-native.part" | cut -d' ' -f1)
 [ "$got" = "$want" ] || { rm -f "$DIR/flux-native.part"; die "The download is damaged (checksum mismatch). Try again."; }
 chmod +x "$DIR/flux-native.part"
 mv -f "$DIR/flux-native.part" "$DIR/flux-native"
+
+# pomocník pre náhľad Live Servera vo Fluxe (inak si ho Flux stiahne sám pri prvom náhľade)
+psha=$(printf '%s' "$info" | tr -d '\n ' | grep -o '"preview":{[^}]*}' | grep -o '"sha256":"[^"]*"' | cut -d'"' -f4 || true)
+if [ -n "$psha" ] && curl -fsL -o "$DIR/flux-preview.part" "$BASE/Flux-Preview" && [ "$(sha256sum "$DIR/flux-preview.part" | cut -d' ' -f1)" = "$psha" ]; then
+  chmod +x "$DIR/flux-preview.part"; mv -f "$DIR/flux-preview.part" "$DIR/flux-preview"
+else
+  rm -f "$DIR/flux-preview.part"
+fi
 
 # príkaz `flux`
 cat >"$BIN/flux" <<WRAP

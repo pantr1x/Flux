@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.51
+
+**Linux**
+- **Live Server shows the page inside Flux**, next to the code, like on Windows – with tabs, Full / Tablet / Phone / 16:9, reload and links in new tabs. It uses the system WebKitGTK; the small preview helper downloads by itself the first time (the installer adds both). Without WebKitGTK the page opens in the browser as before.
+- Flux runs through X11 (XWayland on Wayland desktops) so the page can sit inside its window. To keep native Wayland, set `"linuxWayland": true` in settings.json.
+
 ## 0.9.50
 
 **Linux**
