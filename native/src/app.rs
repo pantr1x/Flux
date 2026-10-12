@@ -630,25 +630,21 @@ impl App {
         p.solid = p.solid.lerp_to_gamma(p.card, 0.5);
         // tapeta za oknom: pozadie a karta sú priesvitné (--base-alpha, --card v Electron Fluxe)
         if self.wall_on() {
-            let alpha = (self.get("cardAlpha").as_f64().unwrap_or(74.0) / 100.0).clamp(0.3, 1.0) as f32;
             // adaptColors: pri svetlej tapete v tmavej téme (a naopak) sú panely menej priesvitné, aby bol text čitateľný
             let lum = self.wall.lum.unwrap_or(0.3);
             let clash = if p.dark { (lum - 0.25).max(0.0) } else { (0.65 - lum).max(0.0) };
-            // priehľadné okno: pozadie stmaví len toľko, koľko chce používateľ (Vzhľad → Stmavenie pozadia)
-            let base_a = if self.see_through() {
-                (self.get("glassDim").as_f64().unwrap_or(45.0) / 100.0).clamp(0.0, 0.9) as f32
-            } else {
-                (if p.dark { 0.62 } else { 0.66 }) + (clash * 0.9).min(0.3)
-            };
-            // priehľadné okno (živá tapeta): pod kartou nie je rozmazaná kópia → karta plnšia
-            let card_def = if self.see_through() {
-                0.94
-            } else if p.dark {
-                0.9
-            } else {
-                0.88
-            };
-            let card_a = if (alpha - 0.74).abs() > 0.001 { alpha } else { (card_def + clash * 0.2).min(0.96) };
+            // nepriehľadnosť každej časti (Vzhľad → Okno); bez nastavenia predvolené – menej priesvitné ako predtým
+            let pct = |k: &str| self.core.setting(k).as_f64().map(|v| (v / 100.0).clamp(0.0, 1.0) as f32);
+            // pri tapete, ktorá sa s témou bije (svetlá v tmavej), o trochu plnšie – text ostane čitateľný
+            let base_def = (0.78 + if self.see_through() { 0.0 } else { (clash * 0.5).min(0.15) }).min(0.95);
+            let card_def = 0.96;
+            let a = [pct("alphaSide").unwrap_or(base_def), pct("alphaTop").unwrap_or(base_def), pct("alphaEditor").unwrap_or(card_def), pct("alphaPanel").unwrap_or(card_def)];
+            // pozadie okna / karta = priesvitnejšia z dvoch častí, tá druhá sa dofarbí (p.layer) na svoju hodnotu
+            let base_a = a[0].min(a[1]);
+            let card_a = a[2].min(a[3]);
+            let (base_o, card_o) = (p.base, p.card);
+            let extra = |c: Color32, under: f32, want: f32| if want > under + 0.002 && under < 0.999 { c.gamma_multiply((want - under) / (1.0 - under)) } else { Color32::TRANSPARENT };
+            p.layer = [extra(base_o, base_a, a[0]), extra(base_o, base_a, a[1]), extra(card_o, card_a, a[2]), extra(card_o, card_a, a[3])];
             p.base = p.base.gamma_multiply(base_a);
             p.card = p.card.gamma_multiply(card_a);
         }
@@ -1817,6 +1813,15 @@ impl App {
             // spodok ako karta: päta končí GAP nad okrajom a je v rovine so stavovým riadkom
             .frame(Frame::new().fill(self.base_fill()).inner_margin(Margin { left: 8, right: 6, top: 0, bottom: GAP as i8 }))
             .show(root, |ui| {
+                // nepriehľadnosť bočného panela (Vzhľad → Okno)
+                if p.layer[0].a() > 0 {
+                    let r = ui.max_rect();
+                    let full = Rect::from_min_max(pos2(r.left() - 8.0, r.top()), pos2(r.right() + 6.0, r.bottom() + GAP));
+                    let right = self.get("sidePos").as_str() == Some("right");
+                    let k = if self.rounded { 8 } else { 0 };
+                    let cr = if right { CornerRadius { ne: k, se: k, ..Default::default() } } else { CornerRadius { nw: k, sw: k, ..Default::default() } };
+                    ui.ctx().layer_painter(ui.layer_id()).rect_filled(full, cr, p.layer[0]);
+                }
                 self.side_top(ui, true);
                 let ws = self.workspace();
                 let mut open = None;
@@ -4034,11 +4039,19 @@ impl eframe::App for App {
         let radius = self.radius();
         let side_right = self.get("sidePos").as_str() == Some("right");
         let now = ctx.input(|i| i.time);
-        // panel Live Servera sleduje aktívnu stránku
+        // panel Live Servera sleduje aktívnu stránku – len pri prepnutí súboru; inak by každý snímok
+        // vrátil stránku späť a odkazy v náhľade by nikam neviedli
         if self.preview.is_some() && self.is_web_file() {
             if let Some(u) = self.live_url() {
                 if let Some(pv) = self.preview.as_mut() {
-                    pv.url = u;
+                    if pv.follow != u {
+                        pv.follow = u.clone();
+                        pv.url = u.clone();
+                        let a = pv.active.min(pv.tabs.len().saturating_sub(1));
+                        if let Some(t) = pv.tabs.get_mut(a) {
+                            *t = u;
+                        }
+                    }
                 }
             }
         }
@@ -4053,6 +4066,9 @@ impl eframe::App for App {
                     (0.0, GAP)
                 };
                 let top = Rect::from_min_max(pos2(full.left() + if self.side_open && !side_right { 0.0 } else { GAP }, full.top()), pos2(full.right() - rpad, full.top() + TOP_H));
+                if p.layer[1].a() > 0 {
+                    ui.painter().rect_filled(top, 0.0, p.layer[1]);
+                }
                 self.top_bar(ui, top);
                 // jedna zaoblená karta: editor/stránka projektu, Výstup/Terminál, stavový riadok (#card)
                 let card_r = Rect::from_min_max(pos2(full.left() + lpad, top.bottom()), pos2(full.right() - rpad, full.bottom() - GAP));
@@ -4061,6 +4077,9 @@ impl eframe::App for App {
                 self.wall.paint_blurred(ui.painter(), card_r, radius);
                 ui.painter().rect_filled(card_r, CornerRadius::same(radius), p.card);
                 ui.painter().rect_stroke(card_r, CornerRadius::same(radius), Stroke::new(1.0, p.line), StrokeKind::Outside);
+                // miesta pre dofarbenie editora a Výstupu (nepriehľadnosť častí) – vyplnia sa, keď je známa poloha panela
+                let layer_slots: Vec<egui::layers::ShapeIdx> = (0..5).map(|_| ui.painter().add(egui::Shape::Noop)).collect();
+                let mut panel_rect: Option<Rect> = None;
                 let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
                 card_ui.set_clip_rect(card_r.shrink(1.0));
                 let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - 28.0), card_r.max);
@@ -4136,6 +4155,7 @@ impl eframe::App for App {
                             _ => self.panel_w = (panel.width() + d.x).max(220.0),
                         }
                     }
+                    panel_rect = Some(panel);
                     self.bottom_panel(&mut card_ui, panel, &pos);
                     match pos.as_str() {
                         "bottom" => main.max.y = panel.top(),
@@ -4171,6 +4191,35 @@ impl eframe::App for App {
                     self.editor(&mut card_ui, area);
                 } else {
                     self.project_page(&mut card_ui, area);
+                }
+                // editor (všetko na karte okrem Výstupu) a Výstup/Terminál podľa svojej nepriehľadnosti
+                let corners = |r: Rect| {
+                    let k = |a: bool| if a { radius } else { 0 };
+                    let (l, rt, tp, b) = ((r.left() - card_r.left()).abs() < 1.0, (r.right() - card_r.right()).abs() < 1.0, (r.top() - card_r.top()).abs() < 1.0, (r.bottom() - card_r.bottom()).abs() < 1.0);
+                    CornerRadius { nw: k(l && tp), ne: k(rt && tp), sw: k(l && b), se: k(rt && b) }
+                };
+                let mut shapes: Vec<(Rect, Color32)> = Vec::new();
+                match panel_rect {
+                    Some(pr) => {
+                        shapes.push((pr, p.layer[3]));
+                        let c = card_r;
+                        for r in [
+                            Rect::from_min_max(c.min, pos2(c.right(), pr.top())),
+                            Rect::from_min_max(pos2(c.left(), pr.bottom()), c.max),
+                            Rect::from_min_max(pos2(c.left(), pr.top()), pos2(pr.left(), pr.bottom())),
+                            Rect::from_min_max(pos2(pr.right(), pr.top()), pos2(c.right(), pr.bottom())),
+                        ] {
+                            if r.width() > 0.5 && r.height() > 0.5 {
+                                shapes.push((r, p.layer[2]));
+                            }
+                        }
+                    }
+                    None => shapes.push((card_r, p.layer[2])),
+                }
+                for (slot, (r, col)) in layer_slots.iter().zip(shapes) {
+                    if col.a() > 0 {
+                        ui.painter().set(*slot, egui::epaint::RectShape::filled(r, corners(r), col));
+                    }
                 }
                 if self.anim_on() {
                     let k = ((now - self.switched) / 0.24).clamp(0.0, 1.0) as f32;

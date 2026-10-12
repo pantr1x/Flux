@@ -74,6 +74,25 @@ pub fn want_transparent() -> bool {
     see_material(&s) && on("optFx", !lite) && !boot::safe()
 }
 
+// 0.9.53: nepriehľadnosť po častiach – vlastné „Stmavenie pozadia“ a „Priehľadnosť panelov“ sa raz prenesú
+fn alpha_migrate() {
+    let mut s = flux_core::settings::load();
+    let Some(o) = s.as_object_mut() else { return };
+    if o.get("alphaMigrated").is_some() {
+        return;
+    }
+    if let Some(g) = o.get("glassDim").and_then(|v| v.as_f64()) {
+        o.insert("alphaSide".into(), serde_json::json!(g.max(20.0)));
+        o.insert("alphaTop".into(), serde_json::json!(g.max(20.0)));
+    }
+    if let Some(c) = o.get("cardAlpha").and_then(|v| v.as_f64()) {
+        o.insert("alphaEditor".into(), serde_json::json!(c.max(30.0)));
+        o.insert("alphaPanel".into(), serde_json::json!(c.max(30.0)));
+    }
+    o.insert("alphaMigrated".into(), serde_json::json!(true));
+    flux_core::settings::save(&s);
+}
+
 // 0.9.12: priehľadné okno je nové predvolené – raz prepne tapetu (bez vlastného obrázka) a staré „sklo“ živej tapety
 fn see_migrate() {
     let mut s = flux_core::settings::load();
@@ -245,6 +264,7 @@ fn main() -> eframe::Result {
     }));
     perf::init();
     see_migrate();
+    alpha_migrate();
     let r = run();
     if let Err(e) = &r {
         if !update::rollback() {

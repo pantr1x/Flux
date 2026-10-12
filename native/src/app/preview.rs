@@ -9,8 +9,9 @@ use eframe::egui::{self, pos2, vec2, Align2, CornerRadius, Rect, Sense, Stroke};
 
 pub struct Preview {
     pub url: String,           // adresa aktívnej karty
-    tabs: Vec<String>,         // adresy kariet (tabs[active] == url)
-    active: usize,
+    pub follow: String,        // adresa otvoreného súboru, ktorú panel naposledy prevzal
+    pub tabs: Vec<String>,         // adresy kariet (tabs[active] == url)
+    pub active: usize,
     device: usize, // 0 = celá šírka, 1 = tablet, 2 = mobil
     pub width: f32,
     pub dragging: bool, // ťahá sa okraj panela (stránka sa pritom mení naživo)
@@ -39,9 +40,14 @@ pub struct Preview {
 // názov karty: súbor z adresy (index.html pre koreň)
 fn tab_title(url: &str) -> String {
     let path = url.split(['?', '#']).next().unwrap_or("").trim_start_matches("http://").trim_start_matches("https://");
+    let host = path.split('/').next().unwrap_or("");
     let rest = path.split_once('/').map(|x| x.1).unwrap_or("");
     let name = rest.rsplit('/').next().unwrap_or("");
-    if name.is_empty() {
+    let local = host.starts_with("127.0.0.1") || host.starts_with("localhost:5") || host == "localhost";
+    if name.is_empty() && !local && !host.is_empty() {
+        // iný web: názov domény
+        host.trim_start_matches("www.").into()
+    } else if name.is_empty() {
         "index.html".into()
     } else {
         name.replace("%20", " ")
@@ -58,6 +64,7 @@ impl Preview {
     pub fn new(url: String) -> Self {
         Preview {
             tabs: vec![url.clone()],
+            follow: url.clone(),
             active: 0,
             url,
             device: 0,

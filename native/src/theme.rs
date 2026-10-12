@@ -13,6 +13,7 @@ pub struct Pal {
     pub base: Color32,        // --base: okolie karty
     pub card: Color32,        // --card: editor a karta
     pub solid: Color32,       // --card-solid: okná nad všetkým (nastavenia, hľadanie)
+    pub layer: [Color32; 4],  // dofarbenie častí nad priesvitným pozadím: bočný panel, horná lišta, editor, Výstup/Terminál
     pub card2: Color32,       // --card-2: jemne odlíšené plochy na karte
     pub line: Color32,        // --line
     pub line_strong: Color32, // --line-strong
@@ -79,6 +80,7 @@ fn base_palette(dark: bool) -> Pal {
             base: Color32::from_rgb(0x1e, 0x1c, 0x19),
             card: Color32::from_rgb(0x0e, 0x0d, 0x0b),
             solid: Color32::from_rgb(0x13, 0x12, 0x0f),
+            layer: [Color32::TRANSPARENT; 4],
             card2: rgba(255, 245, 225, 0.04),
             line: rgba(255, 245, 225, 0.075),
             line_strong: rgba(255, 245, 225, 0.12),
@@ -98,6 +100,7 @@ fn base_palette(dark: bool) -> Pal {
             base: Color32::from_rgb(0xe7, 0xe5, 0xdf),
             card: Color32::from_rgb(0xf7, 0xf6, 0xf2),
             solid: Color32::from_rgb(0xf5, 0xf4, 0xf0),
+            layer: [Color32::TRANSPARENT; 4],
             card2: rgba(40, 30, 10, 0.035),
             line: rgba(40, 30, 10, 0.08),
             line_strong: rgba(40, 30, 10, 0.13),

@@ -25,6 +25,8 @@ pub fn default_of(key: &str) -> Value {
         "cornerRadius" => json!(14),
         "darkLift" => json!(0),
         "glassDim" => json!(45),
+        "alphaSide" | "alphaTop" => json!(78),
+        "alphaEditor" | "alphaPanel" => json!(96),
         "density" => json!("comfortable"),
         "terminalFontSize" => json!(13),
         "panelPos" => json!("bottom"),
@@ -311,7 +313,6 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     Row::Color("uiBase", "Background", "behind the panels"),
                     Row::Color("uiCard", "Panels", "editor, sidebar and windows"),
                     Row::Color("uiLine", "Borders", "lines between parts"),
-                    Row::Range("cardAlpha", "Panel transparency", "how much the background shines through the panels", 30.0, 100.0, 1.0),
                     Row::Button("colors-reset", "Reset all colors", "back to the colors of your theme", "Reset"),
                 ],
             ),
@@ -333,8 +334,19 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                     ),
                 ]
                 .into_iter()
+                // nepriehľadnosť každej časti okna (100 = plná farba, nič nepresvitá)
+                .chain(if app.get("material").as_str() != Some("none") {
+                    vec![
+                        Row::Range("alphaSide", "Sidebar opacity", "Projects and Files – 100 means nothing shines through", 20.0, 100.0, 1.0),
+                        Row::Range("alphaTop", "Top bar opacity", "the bar with the file tabs and Run", 20.0, 100.0, 1.0),
+                        Row::Range("alphaEditor", "Editor opacity", "the code, the project page and the Live Server panel", 30.0, 100.0, 1.0),
+                        Row::Range("alphaPanel", "Output and Terminal opacity", "the panel with program output and the terminal", 30.0, 100.0, 1.0),
+                    ]
+                } else {
+                    vec![]
+                })
                 .chain(if matches!(app.get("material").as_str(), Some("see" | "blur")) {
-                    vec![Row::Range("glassDim", "Background dimming", "how dark the background behind the panels is – more makes text easier to read", 0.0, 90.0, 1.0)]
+                    vec![]
                 } else {
                     vec![
                         Row::Button("bg-pick", "Background", "your own picture instead of the Windows wallpaper", "Image…"),

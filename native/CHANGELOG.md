@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.53
+
+**Live Server**
+- **Links in the preview work**: clicking a link opens the page (in the same tab, or a new tab for `target="_blank"`); before, the panel jumped back to the open file. Tabs of other websites show the site name.
+- The code line of the page is highlighted only when you **select text or click an element** in the page – moving the mouse no longer highlights anything.
+
+**Look**
+- **Less see-through by default**, and each part has its own slider: Settings → Appearance → Window → *Sidebar*, *Top bar*, *Editor* and *Output and Terminal opacity*. Your old background dimming and panel transparency carry over.
+
 ## 0.9.52
 
 **Linux**
