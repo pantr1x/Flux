@@ -1,0 +1,11 @@
+{
+  "size": 15820800,
+  "version": "0.9.54",
+  "sha256": "b085d7ae0ff06ea404d66bb73d68137805ff26adf180e2ba7087b6b60aea5261",
+  "patch": {
+    "size": 695157,
+    "sha256": "c173760ab18cf5e15c458c017a751a9a1ddda130043c659143a5af61c525d3f4",
+    "from": "ee5efbbe098364bbcfb2d87dde79967a2919ef7b"
+  },
+  "sha": "cfdaf818ff4c2903156f302d05ff9f4036c8fa73"
+}
