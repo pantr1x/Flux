@@ -1,6 +1,6 @@
 [package]
 name = "flux-native"
-version = "0.9.54"
+version = "0.9.55"
 edition = "2021"
 license = "MIT"
 description = "Flux – natívna verzia v Ruste (egui), bez Chromia"
@@ -20,7 +20,7 @@ dirs = "6"
 eframe = { version = "0.36", default-features = false, features = ["glow", "wgpu", "default_fonts", "x11", "wayland"] }
 egui_extras = { version = "0.36", features = ["syntect", "svg"] }
 syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp", "gif"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp", "gif", "ico"] }
 alacritty_terminal = "0.26"
 sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "unstable-locales"] }

@@ -413,7 +413,7 @@ impl App {
     }
 
     // vloženie / nahradenie výberu v aktívnom súbore
-    fn plug_edit(&mut self, text: &str, replace: bool) {
+    pub(super) fn plug_edit(&mut self, text: &str, replace: bool) {
         if self.start || self.home {
             return;
         }

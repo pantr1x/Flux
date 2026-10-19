@@ -40,7 +40,7 @@ pub struct Ask {
 }
 
 // (id, text, skratka, ikona)
-const COMMANDS: [(&str, &str, &str, &str); 17] = [
+const COMMANDS: [(&str, &str, &str, &str); 18] = [
     ("new-file", "New file…", "Ctrl+N", "filePlus"),
     ("new-project", "New project…", "Ctrl+Shift+N", "plus"),
     ("open-folder", "Open folder…", "Ctrl+O", "folderOpen"),
@@ -58,6 +58,7 @@ const COMMANDS: [(&str, &str, &str, &str); 17] = [
     ("theme", "Toggle light / dark theme", "Ctrl+Shift+L", "sun"),
     ("home", "Home", "", "template"),
     ("shortcuts", "Shortcuts", "", "command"),
+    ("lorem", "Insert lorem ipsum", "", "edit"),
 ];
 
 // jednoduché „fuzzy“ – všetky znaky v poradí; skóre = kratší rozptyl je lepší
@@ -185,6 +186,11 @@ impl App {
             "sidebar" => self.side_open = !self.side_open,
             "panel" => self.panel_open = !self.panel_open,
             "theme" => self.set_theme(!self.pal.dark, ctx),
+            // jeden odsek výplňového textu na kurzor (v HTML ako <p>)
+            "lorem" => {
+                let html = self.tabs.get(self.active).is_some_and(|t| matches!(t.ext().as_str(), "html" | "htm"));
+                self.plug_edit(&crate::lorem::text(1, 'p', html), true);
+            }
             "home" => self.open_start(ctx.input(|i| i.time)),
             "website" => flux_core::settings::open_external("https://pantr1x.github.io/Flux/"),
             "star" => flux_core::settings::open_external("https://github.com/pantr1x/Flux"),
@@ -195,6 +201,8 @@ impl App {
                     self.set("panelPos", json!(v), ctx);
                 } else if let Some(v) = id.strip_prefix("sidePos:") {
                     self.set("sidePos", json!(v), ctx);
+                } else if id == "img-refs" || id.starts_with("img-favicon:") {
+                    self.img_ask_done(id);
                 } else if let Some(p) = id.strip_prefix("trash:") {
                     match fsops::move_to_trash(p) {
                         Ok(_) => {
@@ -856,7 +864,9 @@ impl App {
                 .layout(egui::Layout::right_to_left(egui::Align::Center)),
         );
         b.spacing_mut().item_spacing.x = 8.0;
-        let yes = widgets::button(&mut b, Some("trash"), &ask.yes, p.red, Color32::WHITE, 32.0, &p).clicked();
+        // mazanie je červené s košom, ostatné otázky (oprava ciest, favikona) bežné tlačidlo
+        let danger = ask.action.starts_with("trash");
+        let yes = if danger { widgets::button(&mut b, Some("trash"), &ask.yes, p.red, Color32::WHITE, 32.0, &p) } else { widgets::button(&mut b, Some("check"), &ask.yes, p.accent, p.accent_fg, 32.0, &p) }.clicked();
         let no = widgets::button(&mut b, None, &t("Cancel"), p.card2, p.text, 32.0, &p).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape));
         if yes {
             let a = ask.action.clone();

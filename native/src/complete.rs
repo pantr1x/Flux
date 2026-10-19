@@ -915,6 +915,18 @@ pub fn suggest_at(
     let lang = cx.lang.unwrap_or(lang);
     let fam = family(lang);
     let d = db();
+    // „lorem“, „lorem10“, „lorem3s“, „lorem2p“ → výplňový text (v každom jazyku, mimo značky a atribútu)
+    if !cx.close && !cx.after_lt && cx.in_tag.is_none() && cx.attr_value.is_none() && cx.member.is_none() {
+        if let Some((n, unit)) = crate::lorem::parse(prefix) {
+            let what = match unit {
+                's' => crate::i18n::tf("{n} sentences", &[("n", &n.to_string())]),
+                'p' => crate::i18n::tf("{n} paragraphs", &[("n", &n.to_string())]),
+                _ => crate::i18n::tf("{n} words", &[("n", &n.to_string())]),
+            };
+            let body = crate::lorem::text(n, unit, matches!(lang, "html" | "htm"));
+            return vec![Item { label: prefix.to_string(), kind: Kind::Snippet, insert: Some(format!("{body}$0")), detail: Some(format!("Lorem ipsum · {what}")), doc: None }];
+        }
+    }
     // HTML: „</“ → neuzavreté značky (najvnútornejšia prvá)
     if cx.close {
         let mut v: Vec<(u8, Item)> = cx.open_tags.iter().rev().map(|t| (0, Item::snip(t, Kind::Tag, &format!("{t}>$0"), &format!("</{t}>")))).collect();

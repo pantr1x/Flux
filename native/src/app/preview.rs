@@ -38,6 +38,7 @@ pub struct Preview {
     away_since: Option<f64>, // od kedy je stránka zakrytá (nastavenia, hľadanie…)
     active_at: f64,          // kedy mal Flux naposledy fokus alebo vstup od používateľa
     asleep: bool,            // stránka je dočasne zavretá (šetrí pamäť), po návrate sa otvorí znova
+    pub info: std::collections::HashMap<String, (std::time::Instant, Option<String>, Option<String>)>, // adresa → (kedy, názov, favikona)
     #[cfg(windows)]
     low_mem: bool, // WebView2 je v režime nízkej pamäte (Flux bez fokusu)
 }
@@ -57,6 +58,62 @@ fn tab_title(url: &str) -> String {
     } else {
         name.replace("%20", " ")
     }
+}
+
+// Názov a favikona stránky z Live Servera (ako karta v prehliadači): HTML súbor na tej adrese,
+// jeho <title> a <link rel="icon">, inak favicon.ico v koreni. Len pre vlastné stránky (127.0.0.1).
+pub fn page_info(root: &std::path::Path, url: &str) -> (Option<String>, Option<String>) {
+    let path = url.split(['?', '#']).next().unwrap_or("").trim_start_matches("http://");
+    let (host, rest) = path.split_once('/').unwrap_or((path, ""));
+    if !(host.starts_with("127.0.0.1") || host.starts_with("localhost")) {
+        return (None, None);
+    }
+    let rest = rest.replace("%20", " ");
+    let mut file = root.join(&rest);
+    if rest.is_empty() || rest.ends_with('/') || file.is_dir() {
+        file = file.join("index.html");
+    }
+    let html = std::fs::read_to_string(&file).unwrap_or_default();
+    let low = html.to_lowercase();
+    let title = low.find("<title").and_then(|a| {
+        let s = a + low[a..].find('>')? + 1;
+        let e = s + low[s..].find("</title")?;
+        let t = html.get(s..e)?.trim().to_string();
+        (!t.is_empty()).then_some(t)
+    });
+    // <link … rel="icon" … href="…"> (aj „shortcut icon“), poradie atribútov ľubovoľné
+    let mut icon = None;
+    let mut from = 0;
+    while let Some(i) = low[from..].find("<link") {
+        let a = from + i;
+        let e = a + low[a..].find('>').unwrap_or(low.len() - a);
+        let tag = &html[a..e];
+        let tl = &low[a..e];
+        if tl.contains("icon") && !tl.contains("apple-touch") {
+            let href = ["href=\"", "href='"].iter().find_map(|k| {
+                let s = tl.find(k)? + k.len();
+                let q = k.chars().last()?;
+                let end = s + tag[s..].find(q)?;
+                Some(tag[s..end].to_string())
+            });
+            if let Some(h) = href.filter(|h| !h.contains("://") && !h.starts_with("data:")) {
+                let h = h.split(['?', '#']).next().unwrap_or("").to_string();
+                let f = if let Some(abs) = h.strip_prefix('/') { root.join(abs) } else { file.parent().unwrap_or(root).join(&h) };
+                if f.is_file() {
+                    icon = Some(f.to_string_lossy().to_string());
+                    break;
+                }
+            }
+        }
+        from = e.max(a + 5);
+    }
+    if icon.is_none() {
+        let f = root.join("favicon.ico");
+        if f.is_file() {
+            icon = Some(f.to_string_lossy().to_string());
+        }
+    }
+    (title, icon)
 }
 
 // (názov, šírka stránky v px; 0 = celý panel)
@@ -96,6 +153,7 @@ impl Preview {
             away_since: None,
             active_at: -1.0,
             asleep: false,
+            info: Default::default(),
             #[cfg(windows)]
             low_mem: false,
         }
@@ -150,8 +208,18 @@ impl App {
     // lišta panela + miesto pre stránku; rect = celý panel na karte
     pub(super) fn preview_ui(&mut self, ui: &mut egui::Ui, rect: Rect) {
         let p = self.pal;
+        let root = self.server.as_ref().map(|s| s.root.clone());
         let Some(pv) = self.preview.as_mut() else { return };
         ui.painter().vline(rect.left(), rect.y_range(), Stroke::new(1.0, p.line));
+        // názov a favikona kariet (zo súborov projektu, obnoví sa najviac raz za 2 s)
+        if let Some(root) = &root {
+            for u in &pv.tabs {
+                if pv.info.get(u).is_none_or(|x| x.0.elapsed() > std::time::Duration::from_secs(2)) {
+                    let (title, icon) = page_info(root, u);
+                    pv.info.insert(u.clone(), (std::time::Instant::now(), title, icon));
+                }
+            }
+        }
         // ---- karty stránok (odkaz s target=_blank sa otvorí v novej karte) ----
         const TABS_H: f32 = 32.0;
         let tabs_r = Rect::from_min_size(rect.min, vec2(rect.width(), TABS_H));
@@ -167,14 +235,22 @@ impl App {
                     break;
                 }
                 let on = i == pv.active;
-                let resp = ui.interact(r, ui.id().with(("pv-tab", i)), Sense::click()).on_hover_text(u);
+                let resp = ui.interact(r, ui.id().with(("pv-tab", i)), Sense::click()).on_hover_text(u.as_str());
                 if on || resp.hovered() {
                     ui.painter().rect_filled(r, CornerRadius::same(8), if on { p.active } else { p.hover });
                 }
                 let can_close = pv.tabs.len() > 1;
                 let xr = Rect::from_center_size(pos2(r.right() - 13.0, r.center().y), vec2(18.0, 18.0));
-                let tw_text = r.width() - 14.0 - if can_close { 22.0 } else { 0.0 };
-                widgets::text(ui, pos2(r.left() + 10.0, r.center().y), Align2::LEFT_CENTER, &tab_title(u), theme::ui(12.0), if on { p.text } else { p.text2 }, tw_text.max(10.0));
+                let (title, icon) = pv.info.get(u).map(|x| (x.1.clone(), x.2.clone())).unwrap_or_default();
+                let mut tx = r.left() + 10.0;
+                if let Some(ic) = icon {
+                    let ir = Rect::from_center_size(pos2(r.left() + 16.0, r.center().y), vec2(14.0, 14.0));
+                    if self.imgs.paint(ui, &ic, ir, true).is_ok() {
+                        tx = r.left() + 28.0;
+                    }
+                }
+                let tw_text = r.right() - tx - 4.0 - if can_close { 22.0 } else { 0.0 };
+                widgets::text(ui, pos2(tx, r.center().y), Align2::LEFT_CENTER, &title.unwrap_or_else(|| tab_title(u)), theme::ui(12.0), if on { p.text } else { p.text2 }, tw_text.max(10.0));
                 let mut x_clicked = false;
                 if can_close && (on || resp.hovered()) {
                     x_clicked = widgets::icon_button_at(ui, xr, "x", 11.0, &p, true).clicked();
@@ -536,5 +612,31 @@ impl App {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod page_info_tests {
+    use super::page_info;
+
+    #[test]
+    fn preview_page_info() {
+        let dir = std::env::temp_dir().join(format!("flux-pinfo-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("img")).unwrap();
+        std::fs::write(dir.join("img/logo.ico"), b"x").unwrap();
+        std::fs::write(dir.join("index.html"), "<head><title> Moja stránka </title><link href=\"img/logo.ico\" rel=\"icon\"></head>").unwrap();
+        std::fs::write(dir.join("b.html"), "<p>bez názvu</p>").unwrap();
+        let (t, i) = page_info(&dir, "http://127.0.0.1:5500/");
+        assert_eq!(t.as_deref(), Some("Moja stránka"));
+        assert!(i.unwrap().ends_with("logo.ico"));
+        // bez <link>: favicon.ico v koreni, inak nič
+        let (t, i) = page_info(&dir, "http://127.0.0.1:5500/b.html");
+        assert!(t.is_none() && i.is_none());
+        std::fs::write(dir.join("favicon.ico"), b"x").unwrap();
+        assert!(page_info(&dir, "http://127.0.0.1:5500/b.html").1.unwrap().ends_with("favicon.ico"));
+        // cudzí web: nič
+        assert_eq!(page_info(&dir, "https://example.com/"), (None, None));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

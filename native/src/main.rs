@@ -9,6 +9,7 @@ mod plugins;
 mod glass;
 mod lint;
 mod complete;
+mod lorem;
 mod colors;
 mod perf;
 #[cfg(target_os = "linux")]

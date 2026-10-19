@@ -2,6 +2,23 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.55
+
+**Images**
+- **Browse every picture in the folder**: ← / → (or the arrows on the sides) and a strip of small previews under the picture.
+- **Edit pictures right in Flux**: rotate (*R*, *Shift+R*), flip, **crop** (*C*; free or 1:1, 16:9, 4:3, 3:2 – drag the frame or its corners, *Enter* to crop), resize (width in pixels or %), *Ctrl+Z* to undo and *Ctrl+S* to save.
+- **Convert…** saves the picture as PNG, JPG, WebP or **ICO** (a favicon with all sizes from 16 to 256 px in one file). After converting, Flux offers to **update the paths in your code** (`logo.png` → `logo.webp` in HTML and CSS), so the page keeps working. A new `.ico` offers to add `<link rel="icon">` to `index.html`.
+- Fixed: *Ctrl+S* on an open picture could empty the file.
+
+**Writing**
+- **Lorem ipsum** placeholder text: type `lorem` and press Tab (30 words), `lorem10` (10 words), `lorem3s` (3 sentences) or `lorem2p` (2 paragraphs, in HTML as `<p>`). Works in every language. The command palette has *Insert lorem ipsum* too.
+
+**Live Server**
+- The preview tabs show the page's **favicon and title**, like a browser.
+
+**Shortcuts**
+- *Ctrl+Shift+P* opens the command palette again (it opened the file search), and *Ctrl+Shift+S* saves all files (it saved only one).
+
 ## 0.9.54
 
 **Less memory with Live Server**

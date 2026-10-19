@@ -16,6 +16,7 @@ mod tools;
 mod tour;
 mod plugins_ui;
 mod imageview;
+mod imageedit;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -1311,6 +1312,13 @@ impl App {
     }
 
     fn save(&mut self, i: usize) {
+        // obrázok: nikdy nezapisovať prázdny text (zmazal by súbor) – uložia sa len úpravy
+        if self.tabs.get(i).is_some_and(|t| t.image) {
+            if i == self.active {
+                self.img_save();
+            }
+            return;
+        }
         if let Some(t) = self.tabs.get_mut(i) {
             match fsops::write(&t.path, &t.text) {
                 Ok(_) => t.saved = t.text.clone(),
@@ -3600,6 +3608,22 @@ impl App {
     }
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
+        // ďalšie skratky z Electron Fluxu – najprv tie so Shiftom: consume_key(Ctrl, P) by inak zobral aj Ctrl+Shift+P
+        let more = ctx.input_mut(|i| {
+            let c = egui::Modifiers::COMMAND;
+            let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+            [
+                (i.consume_key(cs, egui::Key::A), "search"),
+                (i.consume_key(cs, egui::Key::P), "commands"),
+                (i.consume_key(cs, egui::Key::N), "new-project"),
+                (i.consume_key(cs, egui::Key::S), "save-all"),
+                (i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5), "stop"),
+                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::O), "open-file"),
+                (i.consume_key(c, egui::Key::P), "quick-open"),
+                (i.consume_key(c, egui::Key::I), "ai"),
+                (i.consume_key(c, egui::Key::N), "new-file"),
+            ]
+        });
         let (save, run, open, close) = ctx.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::COMMAND, egui::Key::S),
@@ -3615,22 +3639,6 @@ impl App {
                 i.consume_key(egui::Modifiers::COMMAND, egui::Key::B),
                 i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::L),
             )
-        });
-        // ďalšie skratky z Electron Fluxu
-        let more = ctx.input_mut(|i| {
-            let c = egui::Modifiers::COMMAND;
-            let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
-            [
-                (i.consume_key(c, egui::Key::P), "quick-open"),
-                (i.consume_key(c, egui::Key::I), "ai"),
-                (i.consume_key(cs, egui::Key::A), "search"),
-                (i.consume_key(cs, egui::Key::P), "commands"),
-                (i.consume_key(cs, egui::Key::N), "new-project"),
-                (i.consume_key(c, egui::Key::N), "new-file"),
-                (i.consume_key(cs, egui::Key::S), "save-all"),
-                (i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5), "stop"),
-                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::O), "open-file"),
-            ]
         });
         for (hit, id) in more {
             if hit {
