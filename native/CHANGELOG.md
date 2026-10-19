@@ -2,6 +2,18 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.61
+
+**Boards on the project page**
+- A project with an `.ino` sketch or a MicroPython / CircuitPython / Firmata script now has a **Board** card on its page: the connection state, what is still missing, the **board picture**, and the pins. Click a pin (say 13) and add LED, button, servo… to the main script, right from there.
+- The main button of such a project is **Upload to board**.
+
+**Custom code**
+- *Custom code…* now offers **Create a new file** (the new script gets the code, the setup/loop or imports around it, and opens at once) next to *Add to this file*.
+
+**Getting ready**
+- The checklist is easier to see and to follow: a framed card with numbered steps, a progress bar and a button for each missing step. If you press *Upload* too early, the panel opens, scrolls up and the card flashes, so you see what is missing.
+
 ## 0.9.60
 
 **A clearer Arduino panel**

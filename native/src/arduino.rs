@@ -927,6 +927,17 @@ pub fn add_custom(mode: &str, text: &str, pin: &str, code: &str, repeat: bool) -
     Some(if mode == "cpp" { place_cpp(text, vec![], once, each) } else { place_py(text, vec![], once, each) })
 }
 
+// nový skript s vlastným kódom pre pin: (prípona, obsah); hlavička podľa jazyka, potom kód (raz / opakovane)
+pub fn new_script(mode: &str, pin: &str, code: &str, repeat: bool, port: &str) -> Option<(&'static str, String)> {
+    let (ext, head) = match mode {
+        "cpp" => ("ino", String::new()),
+        "micropython" => ("py", "from machine import Pin\nfrom time import sleep\n".to_string()),
+        "circuitpython" => ("py", "import time\nimport board\nimport digitalio\n".to_string()),
+        _ => ("py", format!("import time\nfrom pyfirmata2 import Arduino\n\nboard = Arduino(\"{port}\")\n")),
+    };
+    add_custom(mode, &head, pin, code, repeat).map(|c| (ext, c))
+}
+
 // pin + druh súčiastky → upravený text súboru (None = nič nepridané / už tam je)
 pub fn add_snippet(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<String> {
     match mode {
@@ -1120,6 +1131,11 @@ mod tests {
         let c = super::add_custom("micropython", super::MICROPY_BLINK, "8", "x = {pin}", false).unwrap();
         assert!(c.lines().position(|l| l == "x = 8").unwrap() < c.lines().position(|l| l == "while True:").unwrap());
         assert!(super::add_custom("cpp", super::STARTER, "8", "  \n", true).is_none());
+        // nový skript s vlastným kódom
+        let (ext, c) = super::new_script("cpp", "13", "digitalWrite({pin}, HIGH);", true, "").unwrap();
+        assert!(ext == "ino" && c.contains("void setup()") && c.contains("  digitalWrite(13, HIGH);"));
+        let (ext, c) = super::new_script("firmata", "8", "board.digital[{pin}].write(1)", true, "/dev/ttyUSB0").unwrap();
+        assert!(ext == "py" && c.contains("Arduino(\"/dev/ttyUSB0\")") && c.contains("    board.digital[8].write(1)"));
         // pyFirmata
         assert!(super::add_snippet("firmata", &super::firmata_blink("/dev/ttyUSB0"), "9", "servo", false).unwrap().contains("get_pin('d:9:s')"));
     }

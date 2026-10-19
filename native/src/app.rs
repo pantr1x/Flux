@@ -3269,6 +3269,7 @@ impl App {
             }
             // akcie vpravo
             let main_file = main_file(&items);
+            let board = self.ard_project_board(&ws, &items);
             let mut acts = ui.new_child(
                 egui::UiBuilder::new()
                     .max_rect(Rect::from_min_max(pos2(left + inner_w - 520.0, head.top() + 6.0), pos2(left + inner_w, head.top() + 40.0)))
@@ -3284,7 +3285,17 @@ impl App {
             if widgets::button(&mut acts, Some("filePlus"), &t("New file"), nf_bg, nf_fg, 32.0, &p).clicked() {
                 self.open_new_file(None);
             }
-            if let Some((name, path)) = &main_file {
+            if let Some((bpath, _)) = &board {
+                // projekt s doskou: hlavná akcia je nahrať na dosku
+                let bname = widgets::file_name(bpath);
+                if widgets::button(&mut acts, Some("code"), &t("Open main file"), p.card2, p.text, 32.0, &p).on_hover_text(&bname).clicked() {
+                    self.open_file(bpath);
+                }
+                if widgets::button(&mut acts, Some("upload"), &t("Upload to board"), p.accent, p.accent_fg, 32.0, &p).on_hover_text(bname).clicked() {
+                    self.open_file(bpath);
+                    self.run();
+                }
+            } else if let Some((name, path)) = &main_file {
                 let web = name.ends_with(".html");
                 if web {
                     // Live preview = Live Server (stránka sa znova načíta pri uložení)
@@ -3338,6 +3349,15 @@ impl App {
                 ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, crate::i18n::t(label), theme::ui(12.5), p.text3);
             }
             ui.add_space(22.0);
+            // ---- doska (Arduino, ESP32, Pico…): stav, obrázok a pridávanie kódu k pinom ----
+            if let Some((bpath, bmode)) = board.clone() {
+                let top = ui.cursor().top();
+                let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(left, top), vec2(inner_w, 4000.0))));
+                self.ard_project_card(&mut cu, &bpath, &bmode);
+                let used = cu.min_rect().height();
+                ui.allocate_exact_size(vec2(full, used), Sense::hover());
+                ui.add_space(22.0);
+            }
             // ---- súbory (podľa druhu) a TO-DO ----
             let groups = file_groups(&items);
             let rows: usize = groups.iter().map(|g| g.1.len() + 2).sum();
