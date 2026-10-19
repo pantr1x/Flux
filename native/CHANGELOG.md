@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.60
+
+**A clearer Arduino panel**
+- The **connection state** (USB, Bluetooth or Offline) is a badge in the panel header.
+- A **Getting ready** checklist shows only what is still missing – the tools, the board, the port permission – each with its own button.
+- The main action is always at the bottom: **Upload to board**, with *Verify*, *Serial monitor*, *Run*, *REPL* or *Console* next to it, depending on the language.
+- Pins, language, boards and serial monitor are **collapsible sections**, and the used pins are a compact list (hover for the wiring hint, click to jump to the line).
+
 ## 0.9.59
 
 **Board panel**

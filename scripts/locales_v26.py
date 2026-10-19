@@ -1,0 +1,21 @@
+# Flux Native 0.9.60: prehľadnejší panel Arduino (stav v hlavičke, odškrtávací zoznam, spodná lišta, zbaliteľné sekcie).
+# Poradie: sk, de, es, fr, it, pl, pt, uk.
+_V26 = {
+    'Arduino tools': ('Nástroje Arduino', 'Arduino-Werkzeuge', 'Herramientas de Arduino', 'Outils Arduino', 'Strumenti Arduino', 'Narzędzia Arduino', 'Ferramentas Arduino', 'Інструменти Arduino'),
+    'CIRCUITPY drive': ('Disk CIRCUITPY', 'CIRCUITPY-Laufwerk', 'Unidad CIRCUITPY', 'Lecteur CIRCUITPY', 'Unità CIRCUITPY', 'Dysk CIRCUITPY', 'Unidade CIRCUITPY', 'Диск CIRCUITPY'),
+    'Connected boards': ('Pripojené dosky', 'Verbundene Boards', 'Placas conectadas', 'Cartes connectées', 'Schede collegate', 'Podłączone płytki', 'Placas conectadas', 'Підключені плати'),
+    'Copy to board': ('Skopírovať na dosku', 'Aufs Board kopieren', 'Copiar a la placa', 'Copier sur la carte', 'Copia sulla scheda', 'Kopiuj na płytkę', 'Copiar para a placa', 'Копіювати на плату'),
+    'GETTING READY': ('PRÍPRAVA', 'VORBEREITUNG', 'PREPARACIÓN', 'PRÉPARATION', 'PREPARAZIONE', 'PRZYGOTOWANIE', 'PREPARAÇÃO', 'ПІДГОТОВКА'),
+    'Offline': ('Offline', 'Offline', 'Sin conexión', 'Hors ligne', 'Offline', 'Offline', 'Offline', 'Офлайн'),
+    'Pins in your code': ('Piny v tvojom kóde', 'Pins in deinem Code', 'Pines en tu código', 'Broches dans ton code', 'Pin nel tuo codice', 'Piny w twoim kodzie', 'Pinos no seu código', 'Піни у твоєму коді'),
+    'Plug it in with a USB data cable (not a charge-only one).': ('Pripoj ju USB dátovým káblom (nie len nabíjacím).', 'Schließe es mit einem USB-Datenkabel an (nicht nur zum Laden).', 'Conéctala con un cable USB de datos (no solo de carga).', 'Branche-la avec un câble USB de données (pas seulement de charge).', 'Collegala con un cavo USB dati (non solo di ricarica).', 'Podłącz ją kablem USB do transmisji danych (nie tylko do ładowania).', 'Ligue-a com um cabo USB de dados (não só de carga).', 'Підключи її USB-кабелем для даних (не лише для зарядки).'),
+    'Port access': ('Prístup k portu', 'Zugriff auf den Port', 'Acceso al puerto', 'Accès au port', 'Accesso alla porta', 'Dostęp do portu', 'Acesso à porta', 'Доступ до порту'),
+    'Programming language': ('Programovací jazyk', 'Programmiersprache', 'Lenguaje de programación', 'Langage de programmation', 'Linguaggio di programmazione', 'Język programowania', 'Linguagem de programação', 'Мова програмування'),
+    'Run the script': ('Spustiť skript', 'Skript ausführen', 'Ejecutar el script', 'Lancer le script', 'Esegui lo script', 'Uruchom skrypt', 'Executar o script', 'Запустити скрипт'),
+    'Run without saving': ('Spustiť bez uloženia', 'Ohne Speichern ausführen', 'Ejecutar sin guardar', 'Exécuter sans enregistrer', 'Esegui senza salvare', 'Uruchom bez zapisu', 'Executar sem salvar', 'Запустити без збереження'),
+    'Serial monitor': ('Sériový monitor', 'Serieller Monitor', 'Monitor serie', 'Moniteur série', 'Monitor seriale', 'Monitor szeregowy', 'Monitor serial', 'Монітор порту'),
+    'The Python library that talks to StandardFirmata.': ('Knižnica Pythonu, ktorá komunikuje so StandardFirmata.', 'Die Python-Bibliothek, die mit StandardFirmata spricht.', 'La biblioteca de Python que habla con StandardFirmata.', 'La bibliothèque Python qui parle à StandardFirmata.', 'La libreria Python che parla con StandardFirmata.', 'Biblioteka Pythona, która komunikuje się ze StandardFirmata.', 'A biblioteca Python que fala com o StandardFirmata.', 'Бібліотека Python, що спілкується зі StandardFirmata.'),
+    'Upload StandardFirmata to the board': ('Nahrať StandardFirmata na dosku', 'StandardFirmata auf das Board hochladen', 'Subir StandardFirmata a la placa', 'Téléverser StandardFirmata sur la carte', 'Carica StandardFirmata sulla scheda', 'Wgraj StandardFirmata na płytkę', 'Enviar StandardFirmata para a placa', 'Завантажити StandardFirmata на плату'),
+    'Verify (compile only)': ('Skontrolovať (len skompilovať)', 'Prüfen (nur kompilieren)', 'Verificar (solo compilar)', 'Vérifier (compiler seulement)', 'Verifica (solo compilazione)', 'Sprawdź (tylko kompilacja)', 'Verificar (só compilar)', 'Перевірити (лише компіляція)'),
+}
+V26 = {code: {k: v[i] for k, v in _V26.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}
