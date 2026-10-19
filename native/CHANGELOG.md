@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.62
+
+**Getting started**
+- A **Getting started** window (like Settings) walks you through the steps once: install the Arduino tools (or `mpremote`), plug the board in, and the port permission – numbered, each with its own button. It opens by itself the first time something is missing, when you press *Upload* too early, or from the *Open the guide* button in the panel, and it tells you when everything is ready.
+
 ## 0.9.61
 
 **Boards on the project page**

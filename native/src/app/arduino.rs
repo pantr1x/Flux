@@ -33,9 +33,13 @@ pub struct ArdUi {
     pub open: bool,
     tools: Arc<Mutex<PyTools>>,
     last_tools: Option<Instant>,
-    esp: usize,                                                // čip pre nahratie MicroPythonu
-    flash: Option<Instant>,                                    // kedy sa mal zvýrazniť zoznam „Getting ready“ (niečo chýba)
-    scroll_top: bool,                                          // po zvýraznení odroluj hore
+    esp: usize,           // čip pre nahratie MicroPythonu
+    pub setup_open: bool, // okno „Getting started“
+    setup_mode: String,
+    setup_h: f32,
+    guide_due: Option<Instant>, // kedy sa po prvom otvorení panela posúdi, či ukázať sprievodcu
+    guide_checked: bool,
+    scroll_top: bool,
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
     custom: String,                                            // vlastný kód pre pin
@@ -66,7 +70,11 @@ impl Default for ArdUi {
             tools: Arc::new(Mutex::new(PyTools::default())),
             last_tools: None,
             esp: 0,
-            flash: None,
+            setup_open: false,
+            setup_mode: String::new(),
+            setup_h: 420.0,
+            guide_due: None,
+            guide_checked: false,
             scroll_top: false,
             proj: None,
             flipped: HashSet::new(),
@@ -91,6 +99,17 @@ impl Default for ArdUi {
             installed: Arc::new(Mutex::new(None)),
         }
     }
+}
+
+// jeden krok prípravy (nástroje, doska, práva k portu…)
+struct Row {
+    ok: bool,
+    title: String,
+    detail: String,
+    red: bool,
+    busy: bool,
+    act: Option<(&'static str, String)>,
+    copy: Option<String>,
 }
 
 // pin dosky na obrázku: popisok, kľúč pre kód (číslo GPIO; prázdny = nejde použiť), druh: 0 GPIO, 1 GND, 2 napájanie, 3 iné
@@ -546,8 +565,8 @@ impl App {
     fn ard_need_setup(&mut self) {
         self.ard.open = true;
         self.ard.section = 0;
-        self.ard.flash = Some(Instant::now());
-        self.ard.scroll_top = true;
+        let mode = self.ard_mode().unwrap_or_else(|| "cpp".into());
+        self.ard_open_setup(&mode);
     }
 
     // ako je doska pripojená: (0 offline, 1 USB, 2 Bluetooth, meno, port)
@@ -668,6 +687,18 @@ impl App {
         }
         self.ard_scan(&ctx);
         ctx.request_repaint_after(Duration::from_millis(1000));
+        // prvýkrát po otvorení panela: ak niečo chýba, ukáže sa okno Getting started (až keď sa zistia nástroje)
+        if !self.ard.guide_checked {
+            let due = *self.ard.guide_due.get_or_insert(Instant::now() + Duration::from_millis(1800));
+            if Instant::now() >= due {
+                self.ard.guide_checked = true;
+                if let Some(m) = self.ard_mode() {
+                    if self.get("arduinoGuideSeen").as_bool() != Some(true) && !self.ard_setup_rows(&m).iter().all(|r| r.ok) {
+                        self.ard_open_setup(&m);
+                    }
+                }
+            }
+        }
         ui.painter().vline(r.left(), r.y_range(), Stroke::new(1.0, p.line));
         let head = Rect::from_min_size(r.min, vec2(r.width(), 44.0));
         widgets::icon_at(ui, pos2(head.left() + 20.0, head.center().y), 15.0, "chip", p.accent);
@@ -828,17 +859,7 @@ impl App {
     }
 
     // čo ešte chýba, aby to fungovalo (nástroje, doska, práva k portu): odškrtávací zoznam; nič, keď je všetko hotové
-    fn ard_setup_ui(&mut self, ui: &mut egui::Ui, mode: &str) -> Option<&'static str> {
-        let p = self.pal;
-        struct Row {
-            ok: bool,
-            title: String,
-            detail: String,
-            red: bool,
-            busy: bool,
-            act: Option<(&'static str, String)>,
-            copy: Option<String>,
-        }
+    fn ard_setup_rows(&mut self, mode: &str) -> Vec<Row> {
         let tools = self.ard.tools.lock().unwrap().clone();
         let inst = self.ard.inst.lock().unwrap().clone();
         let port = self.ard_port();
@@ -913,80 +934,167 @@ impl App {
                 rows.push(r);
             }
         }
+        rows
+    }
+
+    // malý pruh v paneli: čo ešte chýba + tlačidlo na sprievodcu (okno „Getting started“); nič, keď je všetko hotové
+    fn ard_setup_ui(&mut self, ui: &mut egui::Ui, mode: &str) -> Option<&'static str> {
+        let p = self.pal;
+        let rows = self.ard_setup_rows(mode);
         if rows.iter().all(|r| r.ok) {
             return None;
         }
-        let mut act: Option<&'static str> = None;
-        let mut copy: Option<String> = None;
-        let total = rows.len();
-        let done = rows.iter().filter(|r| r.ok).count();
-        let first = rows.iter().position(|r| !r.ok);
-        // zvýraznenie (po kliknutí na akciu, ktorá ešte nejde): rámik krátko pulzuje
-        let pulse = match self.ard.flash.map(|t| t.elapsed().as_secs_f32()) {
-            Some(e) if e < 1.8 => {
-                ui.ctx().request_repaint();
-                (1.0 - e / 1.8) * (0.55 + 0.45 * (e * 9.0).sin().abs())
-            }
-            _ => 0.0,
-        };
+        let (done, total) = (rows.iter().filter(|r| r.ok).count(), rows.len());
+        let mut open = false;
         egui::Frame::NONE
-            .fill(p.hover.lerp_to_gamma(p.accent, 0.06 + 0.10 * pulse))
-            .stroke(Stroke::new(1.5 + 1.5 * pulse, p.accent.gamma_multiply(0.5 + 0.5 * pulse)))
-            .corner_radius(CornerRadius::same(14))
-            .inner_margin(egui::Margin::same(14))
+            .fill(p.hover.lerp_to_gamma(p.accent, 0.08))
+            .stroke(Stroke::new(1.5, p.accent.gamma_multiply(0.6)))
+            .corner_radius(CornerRadius::same(12))
+            .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.label(egui::RichText::new(t("Let's get your board ready")).font(theme::bold(14.5)).color(p.text));
+                ui.label(egui::RichText::new(t("Getting started")).font(theme::bold(13.5)).color(p.text));
                 ui.label(egui::RichText::new(tf("{done} of {total} steps done", &[("done", &done.to_string()), ("total", &total.to_string())])).font(theme::ui(12.0)).color(p.text2));
-                // ukazovateľ postupu
-                let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 5.0), Sense::hover());
-                ui.painter().rect_filled(bar, CornerRadius::same(3), p.card2);
-                ui.painter().rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * done as f32 / total.max(1) as f32, 5.0)), CornerRadius::same(3), p.accent);
-                ui.add_space(4.0);
-                for (i, r) in rows.iter().enumerate() {
-                    ui.add_space(3.0);
+                let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 4.0), Sense::hover());
+                ui.painter().rect_filled(bar, CornerRadius::same(2), p.card2);
+                ui.painter().rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * done as f32 / total.max(1) as f32, 4.0)), CornerRadius::same(2), p.accent);
+                ui.add_space(2.0);
+                open = widgets::button(ui, Some("rocket"), &t("Open the guide"), p.accent, p.accent_fg, 28.0, &p).clicked();
+            });
+        if open {
+            self.ard_open_setup(mode);
+        }
+        None
+    }
+
+    pub(super) fn ard_open_setup(&mut self, mode: &str) {
+        self.ard.setup_open = true;
+        self.ard.setup_mode = mode.to_string();
+    }
+
+    // okno „Getting started“ (ako Nastavenia): kroky, ktoré treba urobiť raz, aby nahrávanie na dosku fungovalo
+    pub(super) fn ard_setup_window(&mut self, ui: &mut egui::Ui, full: Rect) {
+        let p = self.pal;
+        let ctx = ui.ctx().clone();
+        let mode = self.ard.setup_mode.clone();
+        let rows = self.ard_setup_rows(&mode);
+        let all_ok = rows.iter().all(|r| r.ok);
+        ctx.request_repaint_after(Duration::from_millis(500));
+        let bg = ui.interact(full, ui.id().with("ards-dim"), Sense::click());
+        ui.painter().rect_filled(full, 0.0, Color32::from_black_alpha(80));
+        let w = (full.width() - 48.0).min(560.0);
+        let top = full.top() + ((full.height() - self.ard.setup_h) / 2.0).max(16.0);
+        let card = Rect::from_min_size(pos2(full.center().x - w / 2.0, top), vec2(w, self.ard.setup_h.min(full.bottom() - 16.0 - top)));
+        let mut close = ui.input(|i| i.key_pressed(egui::Key::Escape));
+        if bg.clicked() && !card.contains(bg.interact_pointer_pos().unwrap_or_default()) {
+            close = true;
+        }
+        ui.painter().add(egui::Shadow { offset: [0, 30], blur: 90, spread: 0, color: Color32::from_black_alpha(128) }.as_shape(card, CornerRadius::same(20)));
+        ui.painter().rect_filled(card, CornerRadius::same(20), p.solid);
+        ui.painter().rect_stroke(card, CornerRadius::same(20), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        let inner = card.shrink2(vec2(26.0, 22.0));
+        let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(inner.min, vec2(inner.width(), 2000.0))));
+        cu.set_clip_rect(card);
+        cu.spacing_mut().item_spacing.y = 8.0;
+        let mut act: Option<&'static str> = None;
+        let mut copy: Option<String> = None;
+        let head = match mode.as_str() {
+            "micropython" => "MicroPython",
+            "circuitpython" => "CircuitPython",
+            "firmata" => "Python + Firmata",
+            _ => "Arduino",
+        };
+        cu.horizontal(|ui| {
+            widgets::icon_at(ui, ui.cursor().min + vec2(10.0, 14.0), 18.0, "chip", p.accent);
+            ui.add_space(26.0);
+            ui.label(egui::RichText::new(tf("Getting started with {what}", &[("what", head)])).font(theme::bold(20.0)).color(p.text));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if widgets::icon_button(ui, "x", &p, true).on_hover_text(t("Close (Esc)")).clicked() {
+                    close = true;
+                }
+            });
+        });
+        cu.label(
+            egui::RichText::new(if all_ok { t("Everything is ready – you can upload to your board now.") } else { t("Do these steps once – after that Upload to board just works.") })
+                .font(theme::ui(13.0))
+                .color(if all_ok { p.green } else { p.text2 }),
+        );
+        cu.add_space(6.0);
+        let first = rows.iter().position(|r| !r.ok);
+        for (i, r) in rows.iter().enumerate() {
+            egui::Frame::NONE
+                .fill(p.card2)
+                .stroke(Stroke::new(1.0, if Some(i) == first { p.accent.gamma_multiply(0.7) } else { p.line }))
+                .corner_radius(CornerRadius::same(12))
+                .inner_margin(egui::Margin::same(14))
+                .show(&mut cu, |ui| {
+                    ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
-                        let (cr, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
+                        let (cr, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
                         if r.ok {
-                            ui.painter().circle_filled(cr.center(), 10.5, p.green);
-                            widgets::icon_at(ui, cr.center(), 12.0, "check", Color32::BLACK);
+                            ui.painter().circle_filled(cr.center(), 13.0, p.green);
+                            widgets::icon_at(ui, cr.center(), 15.0, "check", Color32::BLACK);
                         } else if Some(i) == first {
-                            ui.painter().circle_filled(cr.center(), 10.5, p.accent);
-                            ui.painter().text(cr.center(), Align2::CENTER_CENTER, (i + 1).to_string(), theme::bold(12.0), p.accent_fg);
+                            ui.painter().circle_filled(cr.center(), 13.0, p.accent);
+                            ui.painter().text(cr.center(), Align2::CENTER_CENTER, (i + 1).to_string(), theme::bold(14.0), p.accent_fg);
                         } else {
-                            ui.painter().circle_stroke(cr.center(), 10.0, Stroke::new(1.5, p.text3));
-                            ui.painter().text(cr.center(), Align2::CENTER_CENTER, (i + 1).to_string(), theme::bold(12.0), p.text3);
+                            ui.painter().circle_stroke(cr.center(), 12.5, Stroke::new(1.5, p.text3));
+                            ui.painter().text(cr.center(), Align2::CENTER_CENTER, (i + 1).to_string(), theme::bold(14.0), p.text3);
                         }
-                        ui.label(egui::RichText::new(&r.title).font(theme::bold(13.5)).color(if r.ok { p.text2 } else { p.text }));
+                        ui.label(egui::RichText::new(&r.title).font(theme::bold(15.0)).color(if r.ok { p.text2 } else { p.text }));
                         if r.busy {
                             ui.spinner();
                         }
+                        if r.ok {
+                            ui.label(egui::RichText::new(t("Done")).font(theme::ui(12.0)).color(p.green));
+                        }
                     });
                     if !r.detail.is_empty() {
-                        egui::Frame::NONE.inner_margin(egui::Margin { left: 32, right: 0, top: 0, bottom: 0 }).show(ui, |ui| {
+                        egui::Frame::NONE.inner_margin(egui::Margin { left: 38, right: 0, top: 0, bottom: 0 }).show(ui, |ui| {
                             ui.set_width(ui.available_width());
-                            ui.add(egui::Label::new(egui::RichText::new(&r.detail).font(theme::ui(12.0)).color(if r.red { p.red } else { p.text2 })).wrap());
+                            ui.add(egui::Label::new(egui::RichText::new(&r.detail).font(theme::ui(12.5)).color(if r.red { p.red } else { p.text2 })).wrap());
                             if let Some(c) = &r.copy {
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new(c).font(theme::mono(12.0)).color(p.text));
+                                    ui.label(egui::RichText::new(c).font(theme::mono(12.5)).color(p.text));
                                     if widgets::icon_button(ui, "copy", &p, true).on_hover_text(t("Copy")).clicked() {
                                         copy = Some(c.clone());
                                     }
                                 });
                             }
                             if let Some((a, label)) = &r.act {
-                                if widgets::button(ui, Some("download"), label, p.accent, p.accent_fg, 28.0, &p).clicked() {
+                                if widgets::button(ui, Some("download"), label, p.accent, p.accent_fg, 30.0, &p).clicked() {
                                     act = Some(*a);
                                 }
                             }
                         });
                     }
+                });
+        }
+        cu.add_space(6.0);
+        cu.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if all_ok {
+                    if widgets::button(ui, Some("check"), &t("Done"), p.accent, p.accent_fg, 32.0, &p).clicked() {
+                        close = true;
+                    }
+                } else if widgets::button(ui, None, &t("Close"), p.card2, p.text, 32.0, &p).clicked() {
+                    close = true;
                 }
             });
+        });
+        self.ard.setup_h = (cu.min_rect().height() + 44.0).max(220.0);
         if let Some(c) = copy {
-            ui.ctx().copy_text(c);
+            ctx.copy_text(c);
         }
-        act
+        if let Some(a) = act {
+            self.ard_act(a, &ctx);
+        }
+        if close {
+            self.ard.setup_open = false;
+            self.update_settings(|o| {
+                o.insert("arduinoGuideSeen".into(), json!(true));
+            });
+        }
     }
 
     // jedno telo karty Doska pre všetky jazyky

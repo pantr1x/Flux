@@ -1,0 +1,10 @@
+# Flux Native 0.9.61: okno „Getting started“ (príprava dosky) ako Nastavenia.
+# Poradie: sk, de, es, fr, it, pl, pt, uk.
+_V28 = {
+    'Do these steps once – after that Upload to board just works.': ('Urob tieto kroky raz – potom nahrávanie na dosku jednoducho funguje.', 'Erledige diese Schritte einmal – danach funktioniert „Auf das Board hochladen“ einfach.', 'Haz estos pasos una vez: después «Subir a la placa» funciona sin más.', 'Fais ces étapes une fois – ensuite « Téléverser sur la carte » marche tout seul.', 'Fai questi passaggi una volta: poi «Carica sulla scheda» funziona e basta.', 'Zrób te kroki raz – potem „Wgraj na płytkę” po prostu działa.', 'Faça estes passos uma vez – depois “Enviar para a placa” simplesmente funciona.', 'Зроби ці кроки один раз – після цього «Завантажити на плату» просто працює.'),
+    'Everything is ready – you can upload to your board now.': ('Všetko je pripravené – môžeš nahrávať na dosku.', 'Alles ist bereit – du kannst jetzt auf das Board hochladen.', 'Todo está listo: ya puedes subir a tu placa.', 'Tout est prêt – tu peux téléverser sur ta carte.', 'Tutto è pronto: puoi caricare sulla scheda.', 'Wszystko gotowe – możesz wgrywać na płytkę.', 'Tudo pronto – você já pode enviar para a placa.', 'Усе готово – можна завантажувати на плату.'),
+    'Getting started': ('Prvé kroky', 'Erste Schritte', 'Primeros pasos', 'Premiers pas', 'Primi passi', 'Pierwsze kroki', 'Primeiros passos', 'Перші кроки'),
+    'Getting started with {what}': ('Prvé kroky s {what}', 'Erste Schritte mit {what}', 'Primeros pasos con {what}', 'Premiers pas avec {what}', 'Primi passi con {what}', 'Pierwsze kroki z {what}', 'Primeiros passos com {what}', 'Перші кроки з {what}'),
+    'Open the guide': ('Otvoriť sprievodcu', 'Anleitung öffnen', 'Abrir la guía', 'Ouvrir le guide', 'Apri la guida', 'Otwórz przewodnik', 'Abrir o guia', 'Відкрити посібник'),
+}
+V28 = {code: {k: v[i] for k, v in _V28.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

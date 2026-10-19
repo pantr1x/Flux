@@ -4356,6 +4356,14 @@ impl eframe::App for App {
                 self.new_file_ui(ui, full);
             });
         }
+        // okno Getting started (príprava dosky)
+        if self.ard.setup_open {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("ard-setup-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.ard_setup_window(ui, full);
+            });
+        }
         // okno Nový projekt
         if self.new_project.is_some() {
             let full = ctx.content_rect();
