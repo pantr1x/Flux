@@ -11,6 +11,7 @@ mod lint;
 mod complete;
 mod lorem;
 mod arduino;
+mod pytoc;
 mod colors;
 mod perf;
 #[cfg(target_os = "linux")]

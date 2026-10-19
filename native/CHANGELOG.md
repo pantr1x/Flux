@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.73
+
+**Upload Python to the board, and test C++ without uploading**
+- **Python files can now be uploaded to Arduino boards** (Uno, Mega, Nano…): Flux converts the Python (pyFirmata2, MicroPython or CircuitPython style) to C++ on your computer, compiles it and uploads it – the board does not need MicroPython. It keeps running without the computer.
+- It handles pins (`Pin`, `PWM`, `ADC`, `digitalio`, `get_pin`), `sleep`, `print` and f-strings, numbers, `if / elif / else`, `while`, `for i in range()`, your own functions, number lists, and button callbacks. Anything else stops with the line number and says what it can't convert – nothing broken is uploaded.
+- New **Verify** button (top bar, project page and the board panel): it only compiles, nothing is uploaded – for C++ and for Python. The panel also has *Show the C++ that gets uploaded*.
+- With **Python + Firmata** you now have both: *Run on board* (live from the computer, no upload) and *Upload to board* (converted to C++).
+- All the pin-window presets (LED, button, PWM, sensor, servo, buzzer) convert.
+
 ## 0.9.72
 
 **Board and code stay in step**

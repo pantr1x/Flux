@@ -370,6 +370,79 @@ impl App {
         }
     }
 
+    // doska z arduino-cli (Uno, Mega, Nano…): Python sa tam nahráva ako preložené C++
+    pub(super) fn ard_cpp_board(&self) -> bool {
+        self.ard_board().starts_with("arduino:")
+    }
+
+    // je pre tento jazyk a dosku k dispozícii kompilácia (Verify) / nahratie cez C++?
+    pub(super) fn ard_can_build(&self, mode: &str) -> bool {
+        mode == "cpp" || mode == "firmata" || self.ard_cpp_board()
+    }
+
+    // nahrať (upload) alebo len skontrolovať (verify) program otvoreného súboru: C++ priamo, Python po preklade do C++
+    pub(super) fn ard_build(&mut self, upload: bool) {
+        match self.ard_mode().as_deref() {
+            Some("cpp") => self.ard_upload(upload),
+            Some(_) => self.ard_py_build(upload),
+            None => {}
+        }
+    }
+
+    // Python → C++ (src/pytoc.rs); chyba ukáže riadok v Pythone
+    fn ard_translate(&mut self) -> Option<(String, String)> {
+        let tab = self.tabs.get(self.active)?;
+        let (path, text) = (tab.path.clone(), tab.text.clone());
+        let name = widgets::file_name(&path);
+        match crate::pytoc::translate(&text, &name) {
+            Ok(cpp) => Some((path, cpp)),
+            Err(e) => {
+                let n = e.strip_prefix("line ").and_then(|r| r.split(':').next()).and_then(|n| n.trim().parse::<usize>().ok());
+                if let Some(n) = n {
+                    self.lint_jump = Some(n.saturating_sub(1));
+                }
+                let msg = tf("Can't convert {name} to C++ – {err}", &[("name", &name), ("err", &e)]);
+                if let Some(s) = self.sess_mut() {
+                    s.out.feed(&format!("\r\n\x1b[31m{msg}\x1b[0m\r\n"));
+                }
+                self.status = msg;
+                None
+            }
+        }
+    }
+
+    fn ard_py_build(&mut self, upload: bool) {
+        if !self.ard_cpp_board() && self.ard_mode().as_deref() != Some("firmata") {
+            self.status = t("Pick an Arduino board first (Board select).");
+            return;
+        }
+        let Some((path, cpp)) = self.ard_translate() else { return };
+        let stem = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "sketch".into());
+        let dir = flux_core::settings::user_data().join("arduino").join("sketches").join(&stem);
+        let _ = std::fs::remove_dir_all(&dir);
+        if let Err(e) = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(format!("{stem}.ino")), cpp)) {
+            self.status = e.to_string();
+            return;
+        }
+        let name = widgets::file_name(&path);
+        let label = if upload { tf("Converting {name} to C++ and uploading", &[("name", &name)]) } else { tf("Converting {name} to C++ and checking", &[("name", &name)]) };
+        self.ard_compile(&label, &dir, upload, vec![]);
+    }
+
+    // otvorí preložený C++ kód, aby bolo vidieť, čo sa nahrá
+    fn ard_show_cpp(&mut self) {
+        let Some((path, cpp)) = self.ard_translate() else { return };
+        let stem = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "sketch".into());
+        let dir = flux_core::settings::user_data().join("arduino").join("sketches").join(format!("{stem}-preview"));
+        let _ = std::fs::create_dir_all(&dir);
+        let f = dir.join(format!("{stem}.ino"));
+        if std::fs::write(&f, cpp).is_ok() {
+            let fp = f.to_string_lossy().to_string();
+            flux_core::fsops::allow_file(&self.core, &fp);
+            self.open_file(&fp);
+        }
+    }
+
     fn ard_monitor(&mut self) {
         let Some((cli, port, _)) = self.ard_ready() else { return };
         let baud = self.ard_baud().to_string();
@@ -1125,10 +1198,10 @@ impl App {
                 let ch = b.chip == Some("CH340");
                 let mut to_firmata = false;
                 self.ard_card(ui, |ui| {
-                    ui.label(egui::RichText::new(t("This board is too small for MicroPython")).font(theme::bold(13.0)).color(p.red));
+                    ui.label(egui::RichText::new(t("MicroPython can't run on this board – Flux converts it to C++")).font(theme::bold(13.0)).color(p.text));
                     ui.add(
                         egui::Label::new(
-                            egui::RichText::new(t("Arduino Uno, Nano, Mega and Elegoo boards have only 2–8 KB of memory – Python can't run on them. Use Python + Firmata (Python runs on your computer and controls the board) or C++."))
+                            egui::RichText::new(t("Arduino Uno, Nano, Mega and Elegoo boards have only 2–8 KB of memory, so Python can't run on them. When you upload, Flux converts your Python to C++ (simple programs: pins, delays, loops, if, print…). Use Python + Firmata to run any Python live from your computer."))
                                 .font(theme::ui(12.0))
                                 .color(p.text2),
                         )
@@ -1137,7 +1210,7 @@ impl App {
                     if ch {
                         ui.add(egui::Label::new(egui::RichText::new(t("If this is an ESP32 board with a CH340 chip, ignore this.")).font(theme::ui(11.5)).color(p.text3)).wrap());
                     }
-                    to_firmata = widgets::button(ui, None, &t("Switch to Python + Firmata"), p.accent, p.accent_fg, 28.0, &p).clicked();
+                    to_firmata = widgets::button(ui, None, &t("Switch to Python + Firmata"), p.card2, p.text, 28.0, &p).clicked();
                 });
                 if to_firmata {
                     self.ard_switch_lang("firmata");
@@ -1209,8 +1282,9 @@ impl App {
         let tools = self.ard.tools.lock().unwrap().clone();
         let port = self.ard_port();
         match act {
-            "upload" => self.ard_upload(true),
-            "verify" => self.ard_upload(false),
+            "upload" | "upload-cpp" => self.ard_build(true),
+            "verify" => self.ard_build(false),
+            "show-cpp" => self.ard_show_cpp(),
             "monitor" => self.ard_monitor(),
             "install-tools" => self.ard_install_tools(ctx),
             "install-mp" => self.ard_install_py(&t("Installing mpremote"), "mpremote", true),
@@ -1257,6 +1331,13 @@ impl App {
         ui.painter().hline(foot.x_range(), foot.top(), Stroke::new(1.0, p.line));
         // (ikona, text, akcia) hlavného tlačidla + vedľajšie (ikona, tip, akcia)
         let (main, side): ((&str, String, &str), Vec<(&str, String, &str)>) = match mode {
+            "micropython" | "circuitpython" if self.ard_cpp_board() && !cli => (("download", t("Install Arduino tools"), "install-tools"), vec![]),
+            "micropython" | "circuitpython" if self.ard_cpp_board() => {
+                (("upload", t("Upload to board"), "upload-cpp"), vec![("check", t("Verify (compile only)"), "verify"), ("file", t("Show the C++ that gets uploaded"), "show-cpp")])
+            }
+            "firmata" if cli => {
+                (("upload", t("Upload to board"), "upload-cpp"), vec![("play", t("Run on board without uploading (Firmata)"), "pyrun"), ("check", t("Verify (compile only)"), "verify")])
+            }
             "micropython" if tools.mp.is_none() => (("download", t("Install mpremote"), "install-mp"), vec![]),
             "micropython" => (("upload", t("Upload to board"), "save"), vec![("play", t("Run without saving"), "run"), ("terminal", t("REPL"), "repl")]),
             "circuitpython" => (("upload", t("Copy to board"), "run"), vec![("terminal", t("Serial console"), "console")]),
@@ -1559,7 +1640,7 @@ impl App {
         };
         let (dir, ctx_mode, target) = self.ard.ctx.clone();
         if self.ard.dlg_mode.is_empty() {
-            self.ard.dlg_mode = if self.ard_board().starts_with("arduino:avr") && matches!(ctx_mode.as_str(), "micropython" | "circuitpython") { "cpp".into() } else { ctx_mode.clone() };
+            self.ard.dlg_mode = ctx_mode.clone();
         }
         let layout = self.ard_layout(&ctx_mode);
         let bg = ui.interact(full, ui.id().with("ardp-dim"), Sense::click());
@@ -1611,27 +1692,20 @@ impl App {
         cu.add_space(4.0);
         cu.label(egui::RichText::new(t("LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
         let langs = [("cpp", "C++ (.ino)"), ("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Python + Firmata")];
-        // Uno / Mega / Nano… majú 2–8 KB pamäte: MicroPython ani CircuitPython na nich nebežia
-        let small = self.ard_board().starts_with("arduino:avr");
-        if small && matches!(self.ard.dlg_mode.as_str(), "micropython" | "circuitpython") {
-            self.ard.dlg_mode = "cpp".into();
-        }
         cu.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
             for (m, label) in langs {
                 let on = self.ard.dlg_mode == m;
-                let off = small && matches!(m, "micropython" | "circuitpython");
-                let fg = if off { p.text3 } else { p.text };
-                let r = widgets::button(ui, None, label, if on { p.active } else { p.card2 }, fg, 30.0, &p);
-                if off {
-                    r.on_hover_text(t("This board is too small for MicroPython")).clicked();
-                } else if r.clicked() {
+                if widgets::button(ui, None, label, if on { p.active } else { p.card2 }, p.text, 30.0, &p).clicked() {
                     self.ard.dlg_mode = m.to_string();
                 }
             }
         });
         let hint = match self.ard.dlg_mode.as_str() {
-            "firmata" => Some(t("Python runs on your computer and changes only this pin on the board – no upload. The board needs StandardFirmata once (Firmware tab).")),
+            "firmata" => Some(t(
+                "Python + Firmata: Run on board changes only this pin live (the board needs StandardFirmata once); Upload converts the program to C++ so it keeps running without the computer.",
+            )),
+            "micropython" | "circuitpython" if self.ard_cpp_board() => Some(t("On Arduino boards Flux converts the Python to C++ when you upload (simple programs only).")),
             "cpp" => Some(t("C++ replaces the whole program on the board when you upload.")),
             _ => None,
         };

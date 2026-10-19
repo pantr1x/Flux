@@ -1422,7 +1422,7 @@ impl App {
         }
         match self.ard_mode().as_deref() {
             Some("cpp") => return self.ard_upload(true),
-            Some("micropython" | "circuitpython") => return self.ard_py_run(true),
+            Some("micropython" | "circuitpython") => return if self.ard_cpp_board() { self.ard_build(true) } else { self.ard_py_run(true) },
             // Python + Firmata: skript beží na počítači a ovláda dosku; treba pyFirmata2 a nájdenú dosku
             Some("firmata") => {
                 if !self.ard_firmata_ready() {
@@ -2270,7 +2270,7 @@ impl App {
             }
         }
         // MicroPython: spustiť na doske bez uloženia
-        if can_run && self.ard_mode().as_deref() == Some("micropython") {
+        if can_run && self.ard_mode().as_deref() == Some("micropython") && !self.ard_cpp_board() {
             let rr = Rect::from_min_size(pos2(rx - 36.0, cy - 15.0), vec2(36.0, 30.0));
             let resp = ui.interact(rr, ui.id().with("ard-run"), Sense::click());
             ui.painter().rect_filled(rr, CornerRadius::same(10), if resp.hovered() { p.active } else { p.hover });
@@ -2280,6 +2280,26 @@ impl App {
                 self.ard_py_run(false);
             }
             rx -= 43.0;
+        }
+        // Verify (len skompilovať) a pri Firmata aj Upload ako C++: ikony vľavo od hlavného tlačidla
+        if can_run {
+            if let Some(m) = self.ard_mode().filter(|m| self.ard_can_build(m)) {
+                let mut extra: Vec<(&str, String, bool)> = vec![("check", t("Verify (compile only)"), false)];
+                if m == "firmata" {
+                    extra.insert(0, ("upload", t("Upload to board as C++"), true));
+                }
+                for (icon, tip, upload) in extra {
+                    let rr = Rect::from_min_size(pos2(rx - 36.0, cy - 15.0), vec2(36.0, 30.0));
+                    let resp = ui.interact(rr, ui.id().with(("ard-build", icon)), Sense::click());
+                    ui.painter().rect_filled(rr, CornerRadius::same(10), if resp.hovered() { p.active } else { p.hover });
+                    widgets::icon_at(ui, rr.center(), 15.0, icon, p.text2);
+                    if resp.on_hover_text(tip).clicked() {
+                        self.save(self.active);
+                        self.ard_build(upload);
+                    }
+                    rx -= 43.0;
+                }
+            }
         }
         // Arduino panel (len pri .ino): otvoriť / zavrieť
         if can_run && self.ard_mode().is_some() {
@@ -3330,10 +3350,29 @@ impl App {
                     self.open_file(bpath);
                 }
                 let firmata = bmode == "firmata";
-                let (bicon, blabel) = if firmata { ("play", t("Run on board")) } else { ("upload", t("Upload to board")) };
-                if widgets::button(&mut acts, Some(bicon), &blabel, p.accent, p.accent_fg, 32.0, &p).on_hover_text(bname).clicked() {
+                let can_build = self.ard_can_build(bmode);
+                if widgets::button(&mut acts, Some("upload"), &t("Upload to board"), p.accent, p.accent_fg, 32.0, &p)
+                    .on_hover_text(if firmata { t("Converts the Python to C++ and uploads it – it keeps running without the computer") } else { bname.clone() })
+                    .clicked()
+                {
+                    self.open_file(bpath);
+                    if firmata {
+                        self.ard_build(true)
+                    } else {
+                        self.run()
+                    }
+                }
+                if firmata
+                    && widgets::button(&mut acts, Some("play"), &t("Run on board"), p.card2, p.text, 32.0, &p)
+                        .on_hover_text(t("Runs the script on your computer and controls the board live (StandardFirmata)"))
+                        .clicked()
+                {
                     self.open_file(bpath);
                     self.run();
+                }
+                if can_build && widgets::button(&mut acts, Some("check"), &t("Verify"), p.card2, p.text, 32.0, &p).on_hover_text(t("Compile only – nothing is uploaded")).clicked() {
+                    self.open_file(bpath);
+                    self.ard_build(false);
                 }
             } else if let Some((name, path)) = &main_file {
                 let web = name.ends_with(".html");
