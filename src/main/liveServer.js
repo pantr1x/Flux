@@ -108,6 +108,34 @@ const CLIENT = `(() => {
     list.append(c);
   }
 
+  // Názov a favikona stránky → Flux ich ukáže v lište náhľadu (len keď stránka beží v náhľade Fluxu).
+  if (parent !== window) {
+    let last = '';
+    let timer = 0;
+    const toData = (b) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(''); fr.readAsDataURL(b); });
+    const report = async () => {
+      const link = [...document.querySelectorAll('link[rel~="icon" i]')].pop();
+      let icon = '';
+      try {
+        const r = await fetch(link ? link.href : '/favicon.ico', { cache: 'no-store' });
+        const type = r.headers.get('content-type') || '';
+        if (r.ok && type.startsWith('image/')) {
+          const b = await r.blob();
+          if (b.size < 512 * 1024) icon = await toData(b);
+        }
+      } catch {}
+      const msg = JSON.stringify([document.title, icon]);
+      if (msg === last) return;
+      last = msg;
+      parent.postMessage({ flux: 'page', title: document.title, icon }, '*');
+    };
+    const later = () => { clearTimeout(timer); timer = setTimeout(report, 250); };
+    addEventListener('load', report);
+    addEventListener('DOMContentLoaded', () => {
+      if (document.head) new MutationObserver(later).observe(document.head, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
+  }
+
   // Alt + klik na prvok stránky → Flux otvorí HTML na riadku, kde je prvok napísaný.
   let hl = null;
   let tip = null;

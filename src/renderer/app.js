@@ -16,6 +16,8 @@ import { t, setLocale, translateDom } from './i18n.js';
 import { createActivity } from './activity.js';
 import { createTools, TOOL_FILE } from './tools.js';
 import { setupEditorExtras } from './editorExtras.js';
+import { setupLorem } from './lorem.js';
+import { createImageViewer, IMAGES } from './imageViewer.js';
 import { createUserShortcuts } from './userShortcuts.js';
 import { createAIPanel, markdown } from './aiPanel.js';
 import { createGitHub } from './github.js';
@@ -583,6 +585,9 @@ function createEditor() {
     toast,
   }));
 
+  // Lorem ipsum: „lorem“, „lorem10“, „lorem3s“, „lorem2p“ + Tab vo všetkých jazykoch
+  insertLorem = setupLorem({ monaco, editor, confirmPalette });
+
   // HTML / CSS: Emmet (napr. „div.card>p*3“ + Tab).
   emmetHTML(monaco, ['html'], { tokenizer: 'standard' });
   emmetCSS(monaco, ['css', 'scss', 'less'], { tokenizer: 'standard' });
@@ -877,27 +882,37 @@ function fillEmptyHtml(tab) {
   tab.initialCursor = { lineNumber: before.length, column: before[before.length - 1].length + 1 };
 }
 
-const IMAGES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif']);
+// Prehliadač obrázkov (imageViewer.js): listovanie v priečinku, orezanie, otočenie, prevod do iného formátu.
+let viewer = null;
+function glanceImage(path) {
+  viewer ||= createImageViewer({ el: $('#glance'), flux, toast, errorText, confirmPalette, promptPalette, afterConvert: afterImageConvert });
+  return viewer.open(path);
+}
 
-// Náhľad obrázka v plávajúcom okne (ako „Glance“ v Zene) – Esc alebo klik mimo ho zavrie.
-async function glanceImage(path) {
-  let img;
-  try {
-    img = await flux.readImage(path);
-  } catch (err) {
-    return toast(errorText(err), 'error');
-  }
-  const el = $('#glance');
-  const kb = img.size < 1024 * 1024 ? `${Math.max(1, Math.round(img.size / 1024))} kB` : `${(img.size / 1024 / 1024).toFixed(1)} MB`;
-  el.innerHTML = `<div class="gl-card"><div class="gl-bar"><span class="gl-name"></span><span class="gl-meta"></span><div class="grow"></div><button class="icon-btn" data-close title="${t('Close (Esc)')}">${icon('x', 15)}</button></div><div class="gl-stage"><img alt=""></div></div>`;
-  el.querySelector('.gl-name').textContent = basename(path);
-  const image = el.querySelector('img');
-  image.onload = () => (el.querySelector('.gl-meta').textContent = `${image.naturalWidth} × ${image.naturalHeight} px · ${kb}`);
-  image.src = img.url;
-  el.hidden = false;
-  el.onclick = (e) => {
-    if (e.target === el || e.target.closest('[data-close]')) el.hidden = true;
-  };
+// Po prevode obrázka (logo.png → logo.webp): opraviť cesty v kóde; nová ikona .ico → ponúknuť <link rel="icon">.
+async function afterImageConvert(from, to) {
+  if (!state.workspace || !inside(to)) return;
+  // .ico je favikona navyše – <img src="logo.png"> ostane, cesty sa neprepisujú
+  if (!/\.ico$/i.test(to)) return offerPathRefs(from, to);
+  const index = join(state.workspace, 'index.html');
+  const model = monaco.editor.getModel(monaco.Uri.file(index));
+  let html = model?.getValue() ?? (await flux.read(index).catch(() => null));
+  if (typeof html !== 'string' || /<link[^>]+rel=["'][^"']*icon/i.test(html) || !/<\/head>/i.test(html)) return;
+  const href = relative(to).split(/[\\/]/).join('/');
+  toast(t('Use {name} as the favicon of index.html?', { name: basename(to) }), 'info', 20000, {
+    label: t('Add'),
+    run: async () => {
+      const tag = `  <link rel="icon" href="${escapeAttr(href)}">\n`;
+      if (model) {
+        const at = model.getPositionAt(html.search(/<\/head>/i));
+        model.pushEditOperations([], [{ range: new monaco.Range(at.lineNumber, 1, at.lineNumber, 1), text: tag }], () => null);
+      } else {
+        html = html.replace(/([ \t]*)<\/head>/i, (m) => tag + m);
+        await flux.write(index, html);
+      }
+      toast(t('Favicon added to index.html.'), 'ok');
+    },
+  });
 }
 
 async function openFile(path, { line, column, focus = true } = {}) {
@@ -1399,6 +1414,7 @@ async function newFolder(dir = targetDir()) {
 
 // Po premenovaní súboru/priečinka: ponúknuť opravu ciest, ktoré naň v kóde ukazujú (refactor.js).
 let refactor = null;
+let insertLorem = () => {};
 async function offerPathRefs(oldPath, newPath) {
   const refs = await refactor?.pathRefs(oldPath, newPath).catch(() => []);
   if (!refs?.length) return;
@@ -2320,6 +2336,7 @@ function followPreview(tab) {
 }
 
 function closePreview() {
+  $('#pv-favicon').hidden = $('#pv-title').hidden = true;
   $('#preview').hidden = true;
   $('#preview-resizer').hidden = true;
   $('#preview-frame').removeAttribute('src');
@@ -2659,6 +2676,7 @@ function commands() {
     c(t('Save'), () => saveTab(activeTab()), 'Ctrl+S', 'save'),
     c(t('Save all'), saveAll, '', 'save'),
     c(t('Close file'), () => state.active && closeTab(state.active), 'Ctrl+W', 'x'),
+    c(t('Insert lorem ipsum…'), () => insertLorem(), '', 'edit', 'lorem ipsum placeholder dummy filler text generator'),
     c(t('Format document'), () => editor.getAction('editor.action.formatDocument')?.run(), 'Shift+Alt+F', 'sparkle'),
     c(t('Toggle sidebar (compact mode)'), toggleCompact, 'Ctrl+B', 'sidebar'),
     c(t('Focus mode (only the code)'), toggleFocus, 'F11', 'monitor', 'zen fullscreen distraction free'),
@@ -4510,13 +4528,7 @@ function keybindings() {
         if (e.key === 'Escape') $('#tour').hidden = true;
         return;
       }
-      if (!$('#glance').hidden) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          $('#glance').hidden = true;
-        }
-        return;
-      }
+      if (!$('#glance').hidden) return viewer?.key(e);
       // Nastavenia môžu byť otvorené aj nad domovskou obrazovkou – Esc zavrie najprv ich.
       if (!$('#settings').hidden) {
         if (e.key === 'Escape') {
@@ -4824,6 +4836,19 @@ function layoutEvents() {
     if (f.src) f.src = f.src;
   };
   $('#btn-preview-external').onclick = () => flux.openExternal($('#preview-frame').src || state.live?.url);
+  // názov a favikona stránky z náhľadu (posiela ich skript Live Servera v stránke)
+  window.addEventListener('message', (e) => {
+    if (e.source !== $('#preview-frame').contentWindow || e.data?.flux !== 'page') return;
+    const { title, icon: fav } = e.data;
+    const img = $('#pv-favicon');
+    const ok = typeof fav === 'string' && fav.startsWith('data:image/');
+    img.hidden = !ok;
+    if (ok) img.src = fav;
+    else img.removeAttribute('src');
+    $('#pv-title').hidden = !title;
+    $('#pv-title').textContent = String(title || '');
+    $('#pv-title').title = String(title || '');
+  });
   $('#btn-preview-close').onclick = stopLive;
   $('#devices').onclick = (e) => {
     const b = e.target.closest('button');

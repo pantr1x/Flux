@@ -156,6 +156,16 @@ See `docs/PLUGINS.md`. The Flux team's plugins are in `plugins/flux.*`, listed i
 - Body classes from settings are set in `applyCustomization()`, which also runs once at start (after `layoutEvents()`).
 - The intro (`onboarding.js`, step *extras*) asks about `autoUpdate` (*Automatically* / *Ask me first*).
 
+## Images, lorem ipsum, Live Server page info
+
+- **Image viewer** (`src/renderer/imageViewer.js`, opened by `glanceImage()` in `app.js` for every file in `IMAGES`):
+  - ← → / Home / End and the thumbnail strip (`.gl-strip`, thumbnails from `fs:image-thumb`, lazy via `IntersectionObserver`) browse the images in the same folder.
+  - Edits run on a canvas: R / Shift+R rotate, flip, C = crop (aspect chips, Enter applies, Esc cancels), resize (width or %), Ctrl+Z undo. Ctrl+S overwrites PNG/JPG/WebP. Ctrl+Shift+S / *Convert / save as…* writes PNG, JPG (white background), WebP or ICO (`icoBlob()`: PNGs at 16–256 px in one file) through `fs:write-image`.
+  - After converting to a new file, `afterImageConvert()` offers `offerPathRefs(old, new)`, so `<img src="logo.png">` becomes `logo.webp`. An `.ico` instead offers to add `<link rel="icon">` to the root `index.html`.
+  - The global key handler passes keys to `viewer.key(e)` while `#glance` is open. `guardNear()` in `main.js` allows reading/listing/writing next to a file opened outside the project.
+- **Lorem ipsum** (`src/renderer/lorem.js`): `lorem` + Tab = 30 words, `lorem10` words, `lorem3s` sentences, `lorem2p` paragraphs (`<p>` in HTML), in every language. In HTML plain `lorem`/`loremN` stay with Emmet. Command palette: *Insert lorem ipsum…*.
+- **Live Server page info**: the injected client (`CLIENT` in `liveServer.js`) posts `{ flux: 'page', title, icon }` to the parent when it runs inside Flux's preview. The favicon comes from `link[rel~=icon]` or `/favicon.ico` as a data URL (the renderer CSP does not allow `http:` images). The preview bar shows it in `#pv-favicon` / `#pv-title`.
+
 ## Rename everywhere
 
 - **Editor offer**: `renameEverywhere()` in `editorExtras.js`.

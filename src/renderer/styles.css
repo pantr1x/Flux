@@ -831,6 +831,26 @@ kbd {
   display: none;
 }
 
+/* favikona a názov stránky z náhľadu (ako karta v prehliadači) */
+.pv-favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.pv-title {
+  max-width: 110px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 12.5px var(--ui-font);
+  color: var(--text);
+}
+
 .preview-url {
   flex: 1;
   min-width: 0;
@@ -2072,8 +2092,8 @@ body:not(.no-mica):not(.wallpaper) #start {
 }
 
 .gl-card {
-  max-width: 86vw;
-  max-height: 86vh;
+  width: min(1100px, 92vw);
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   background: var(--card-solid);
@@ -2088,32 +2108,219 @@ body:not(.no-mica):not(.wallpaper) #start {
   align-items: center;
   gap: 10px;
   padding: 8px 8px 8px 16px;
-  min-width: 320px;
+  min-width: 0;
 }
 
 .gl-name {
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gl-meta {
   color: var(--text-3);
   font-size: 12px;
+  white-space: nowrap;
+}
+
+.gl-tools,
+.gl-croptools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.gl-tools .s-btn,
+.gl-croptools .s-btn {
+  padding: 5px 10px;
+  font-size: 12.5px;
+}
+
+.gl-tools .s-btn .icon {
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+
+.gl-tools button:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.gl-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line-strong);
+}
+
+.gl-cropsize {
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 92px;
+  text-align: center;
 }
 
 .gl-stage {
+  position: relative;
   display: grid;
   place-items: center;
-  padding: 0 16px 16px;
+  padding: 0 56px 14px;
   min-height: 0;
-  overflow: auto;
+  flex: 1;
 }
 
-.gl-stage img {
-  max-width: calc(86vw - 32px);
-  max-height: calc(86vh - 70px);
+.gl-view {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+}
+
+.gl-img {
+  display: block;
+  max-width: calc(min(1100px, 92vw) - 112px);
+  max-height: calc(90vh - 190px);
   object-fit: contain;
   border-radius: 8px;
   background: repeating-conic-gradient(#8883 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+}
+
+.gl-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--hover);
+  cursor: pointer;
+}
+
+.gl-nav:hover {
+  background: var(--line-strong);
+}
+
+.gl-nav.prev {
+  left: 12px;
+}
+
+.gl-nav.next {
+  right: 12px;
+}
+
+.gl-strip {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px 12px;
+  overflow-x: auto;
+  border-top: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+
+.gl-thumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: repeating-conic-gradient(#8882 0% 25%, transparent 0% 50%) 50% / 10px 10px;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+  opacity: 0.65;
+  overflow: hidden;
+}
+
+.gl-thumb span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: center / cover no-repeat;
+  color: var(--text-3);
+  font: 600 10px var(--font-ui, inherit);
+}
+
+.gl-thumb:hover {
+  opacity: 1;
+}
+
+.gl-thumb.on {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.gl-croplayer {
+  position: absolute;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: 8px;
+}
+
+.gl-croprect {
+  position: absolute;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  outline: 1px solid rgba(255, 255, 255, 0.9);
+  cursor: move;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.35) 1px, transparent 1px);
+  background-size: 33.333% 33.333%;
+  background-position: -1px -1px;
+}
+
+.gl-croprect i {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 3px solid #fff;
+}
+
+.gl-croprect i[data-h='nw'] {
+  left: -3px;
+  top: -3px;
+  border-width: 3px 0 0 3px;
+  cursor: nwse-resize;
+}
+
+.gl-croprect i[data-h='ne'] {
+  right: -3px;
+  top: -3px;
+  border-width: 3px 3px 0 0;
+  cursor: nesw-resize;
+}
+
+.gl-croprect i[data-h='sw'] {
+  left: -3px;
+  bottom: -3px;
+  border-width: 0 0 3px 3px;
+  cursor: nesw-resize;
+}
+
+.gl-croprect i[data-h='se'] {
+  right: -3px;
+  bottom: -3px;
+  border-width: 0 3px 3px 0;
+  cursor: nwse-resize;
+}
+
+@media (max-width: 900px) {
+  .gl-meta {
+    display: none;
+  }
+  .gl-tools .s-btn.primary {
+    font-size: 0;
+  }
+  .gl-tools .s-btn.primary .icon {
+    margin: 0;
+  }
 }
 
 .preview-bar .grow {
@@ -8424,4 +8631,10 @@ body.fx-trans .fx-in {
 /* Bez animácií (Memory & speed) musí byť všetko, čo sa inak „nakreslí“ animáciou, hneď vidieť – napr. logo v úvode. */
 body.no-anim .ob-draw {
   stroke-dashoffset: 0;
+}
+
+.gl-aspect button {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
 }

@@ -426,6 +426,17 @@ function guard(p) {
   return abs;
 }
 
+// Ako guard(), ale povolí aj súbor vedľa otvoreného súboru mimo projektu (prevod obrázka do iného formátu).
+function guardNear(p) {
+  try {
+    return guard(p);
+  } catch (err) {
+    const dir = fileKey(path.dirname(path.resolve(p)));
+    if ([...openedFiles].some((f) => path.dirname(f) === dir)) return path.resolve(p);
+    throw err;
+  }
+}
+
 const SHORTCUTS_TEMPLATE = `{
   "//": [
     "Your own shortcuts. Save this file (Ctrl+S) and they work right away.",
@@ -722,12 +733,30 @@ function registerIpc() {
   });
   // Obrázok ako data: URL pre náhľad (Glance).
   ipcMain.handle('fs:read-image', async (_e, file) => {
-    const p = guard(file);
+    const p = guardNear(file);
     const stat = await fsp.stat(p);
     if (stat.size > 25 * 1024 * 1024) throw new Error(t('The image is too large.'));
     const ext = path.extname(p).slice(1).toLowerCase();
     const mime = { svg: 'image/svg+xml', jpg: 'image/jpeg', jpeg: 'image/jpeg', ico: 'image/x-icon' }[ext] || `image/${ext}`;
     return { url: `data:${mime};base64,${(await fsp.readFile(p)).toString('base64')}`, size: stat.size };
+  });
+  // Malý náhľad do pásu v prehliadači obrázkov (PNG/JPG cez nativeImage, ostatné celé, ak sú malé).
+  ipcMain.handle('fs:image-thumb', async (_e, file) => {
+    const p = guardNear(file);
+    const img = nativeImage.createFromPath(p);
+    if (!img.isEmpty()) return img.resize({ height: 96, quality: 'good' }).toDataURL();
+    const stat = await fsp.stat(p);
+    if (stat.size > 3 * 1024 * 1024) return null;
+    const ext = path.extname(p).slice(1).toLowerCase();
+    const mime = { svg: 'image/svg+xml', jpg: 'image/jpeg', ico: 'image/x-icon' }[ext] || `image/${ext}`;
+    return `data:${mime};base64,${(await fsp.readFile(p)).toString('base64')}`;
+  });
+  // Upravený / prevedený obrázok z prehliadača (base64 z canvasu).
+  ipcMain.handle('fs:write-image', async (_e, file, base64) => {
+    const p = guardNear(file);
+    if (!/\.(png|jpe?g|webp|ico)$/i.test(p)) throw new Error(t('This format cannot be saved here.'));
+    await fsp.writeFile(p, Buffer.from(base64, 'base64'));
+    return true;
   });
   ipcMain.handle('workspace:open', (_e, dir) => {
     if (!fs.existsSync(dir)) {
@@ -740,7 +769,9 @@ function registerIpc() {
   });
 
   ipcMain.handle('fs:list', async (_e, dir) => {
-    const entries = await fsp.readdir(guard(dir), { withFileTypes: true });
+    // priečinok otvoreného súboru mimo projektu sa dá prezrieť (obrázky v prehliadači)
+    const near = [...openedFiles].some((f) => path.dirname(f) === fileKey(path.resolve(dir)));
+    const entries = await fsp.readdir(near ? path.resolve(dir) : guard(dir), { withFileTypes: true });
     return entries
       .filter((e) => !IGNORED_DIRS.has(e.name))
       .map((e) => ({ name: e.name, path: path.join(dir, e.name), dir: e.isDirectory() }))
