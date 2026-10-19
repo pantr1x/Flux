@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.70
+
+**Pins and boards**
+- **Why a `pin_13.py` could not be uploaded:** Uno, Mega and Nano have only 2–8 KB of memory, so MicroPython and CircuitPython cannot run on them. The pin window now greys those two out for such boards and starts with **C++**.
+- To change **only one pin** without uploading, pick **Python + Firmata**: the script runs on your computer and sets just that pin (the board needs StandardFirmata once, in the Firmware tab). C++ replaces the whole program on the board.
+- The board select shows the model on the first line and *Board · Automatic · chip* below it, so the name is no longer cut off. The colour bar in the pin list is gone; each row starts with its number (`1.`, `2.` …), the same as on the board.
+
 ## 0.9.69
 
 **The whole Arduino project**

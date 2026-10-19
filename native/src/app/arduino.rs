@@ -1419,14 +1419,10 @@ impl App {
         let mut opts: Vec<String> = vec![t("Automatic (detected)")];
         opts.extend(BOARDS.iter().map(|b| t(b.1)));
         let cur_name = BOARDS.iter().find(|b| b.0 == fq).map(|b| t(b.1)).unwrap_or(fq.clone());
-        let cur_label = if auto { format!("{}: {} · {cur_name}", t("Board"), t("Automatic")) } else { format!("{}: {cur_name}", t("Board")) };
-        let picked = if self.ard.plain {
-            let chip = dash::chip_of(&fq);
-            let sub = if auto { format!("{chip} · {}", t("Automatic (detected)")) } else { format!("{chip} · {}", t("Custom")) };
-            dash_select(ui, egui::Id::new("ard-board"), &format!("{}: {cur_name}", t("Board")), &sub, &opts, w, &p)
-        } else {
-            widgets::select(ui, egui::Id::new("ard-board"), &cur_label, &opts, w, &p)
-        };
+        let chip = dash::chip_of(&fq);
+        let how = if auto { t("Automatic (detected)") } else { t("Custom") };
+        let sub = if chip.is_empty() { format!("{} · {how}", t("Board")) } else { format!("{} · {how} · {chip}", t("Board")) };
+        let picked = dash_select(ui, egui::Id::new("ard-board"), &cur_name, &sub, &opts, w, &p);
         if let Some(i) = picked {
             self.ard.sel = None;
             if i == 0 {
@@ -1489,7 +1485,7 @@ impl App {
         };
         let (dir, ctx_mode, target) = self.ard.ctx.clone();
         if self.ard.dlg_mode.is_empty() {
-            self.ard.dlg_mode = ctx_mode.clone();
+            self.ard.dlg_mode = if self.ard_board().starts_with("arduino:avr") && matches!(ctx_mode.as_str(), "micropython" | "circuitpython") { "cpp".into() } else { ctx_mode.clone() };
         }
         let layout = self.ard_layout(&ctx_mode);
         let bg = ui.interact(full, ui.id().with("ardp-dim"), Sense::click());
@@ -1539,15 +1535,33 @@ impl App {
         cu.add_space(4.0);
         cu.label(egui::RichText::new(t("LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
         let langs = [("cpp", "C++ (.ino)"), ("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Python + Firmata")];
+        // Uno / Mega / Nano… majú 2–8 KB pamäte: MicroPython ani CircuitPython na nich nebežia
+        let small = self.ard_board().starts_with("arduino:avr");
+        if small && matches!(self.ard.dlg_mode.as_str(), "micropython" | "circuitpython") {
+            self.ard.dlg_mode = "cpp".into();
+        }
         cu.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
             for (m, label) in langs {
                 let on = self.ard.dlg_mode == m;
-                if widgets::button(ui, None, label, if on { p.active } else { p.card2 }, p.text, 30.0, &p).clicked() {
+                let off = small && matches!(m, "micropython" | "circuitpython");
+                let fg = if off { p.text3 } else { p.text };
+                let r = widgets::button(ui, None, label, if on { p.active } else { p.card2 }, fg, 30.0, &p);
+                if off {
+                    r.on_hover_text(t("This board is too small for MicroPython")).clicked();
+                } else if r.clicked() {
                     self.ard.dlg_mode = m.to_string();
                 }
             }
         });
+        let hint = match self.ard.dlg_mode.as_str() {
+            "firmata" => Some(t("Python runs on your computer and changes only this pin on the board – no upload. The board needs StandardFirmata once (Firmware tab).")),
+            "cpp" => Some(t("C++ replaces the whole program on the board when you upload.")),
+            _ => None,
+        };
+        if let Some(h) = hint {
+            cu.add(egui::Label::new(egui::RichText::new(h).font(theme::ui(12.0)).color(p.text3)).wrap());
+        }
         cu.label(egui::RichText::new(t("START WITH")).font(theme::bold(11.0)).color(p.text3));
         let kinds: Vec<(&str, String)> =
             [("", "Empty file"), ("led", "Blink an LED"), ("button", "Read a button"), ("pwm", "Fade (PWM)"), ("analog", "Analog sensor"), ("servo", "Servo"), ("buzzer", "Buzzer")]
@@ -1682,9 +1696,7 @@ impl App {
             if resp.hovered() {
                 ui.painter().rect_filled(rr, CornerRadius::same(8), p.hover);
             }
-            let c = pos2(rr.left() + 16.0, rr.center().y);
-            // čiara v farbe pinu (rovnaká ako drôtik na doske)
-            ui.painter().rect_filled(Rect::from_min_size(pos2(rr.left(), rr.top() + 5.0), vec2(3.0, rr.height() - 10.0)), CornerRadius::same(2), col);
+            let c = pos2(rr.left() + 14.0, rr.center().y);
             boardart::bubble(ui.painter(), c, 10.0, col, pin, k + 1);
             let mut title = match &pin.name {
                 Some(nm) => format!("{} {}  ·  {nm}", t("Pin"), pin.pin),
@@ -1696,7 +1708,9 @@ impl App {
                     title += &format!("  ·  {}", widgets::file_name(&f.1));
                 }
             }
-            let tr = widgets::text(ui, pos2(rr.left() + 36.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 150.0);
+            // poradové číslo (rovnaké ako na doske) pred názvom
+            ui.painter().text(pos2(rr.left() + 34.0, rr.center().y), Align2::LEFT_CENTER, format!("{}.", k + 1), theme::bold(12.5), col);
+            let tr = widgets::text(ui, pos2(rr.left() + 50.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 164.0);
             // ďalšie súčiastky na tom istom pine: malé ikony, konflikt červený výkričník
             let mut x = tr.right() + 10.0;
             for extra in pin.parts.iter().skip(1) {
