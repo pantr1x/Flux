@@ -40,44 +40,57 @@ pub fn text3() -> Color32 {
 }
 
 // paleta pre widgety v paneli (tlačidlá, výber…): rovnaké polia ako Pal, ale podľa dizajnu
-// malé čiarkové ikony predvolieb (LED, tlačidlo, PWM, senzor, servo, bzučiak)
-fn glyph(ui: &egui::Ui, kind: &str, c: Pos2, col: Color32) {
-    let pa = ui.painter();
-    let st = Stroke::new(1.6, col);
+// malé čiarkové ikony (LED/žiarovka, tlačidlo, PWM, senzor, servo, bzučiak); k = mierka (1.0 ≈ 16 px)
+pub fn glyph(pa: &egui::Painter, kind: &str, c: Pos2, col: Color32, k: f32) {
+    let w = (1.6 * k).max(1.1);
+    let st = Stroke::new(w, col);
+    let v = |x: f32, y: f32| c + vec2(x, y) * k;
     match kind {
         "led" => {
-            pa.circle_stroke(c + vec2(0.0, 1.0), 4.5, st);
-            for k in 0..5 {
-                let a = -std::f32::consts::PI * (0.15 + 0.175 * k as f32 * 4.0 / 4.0) - 0.0;
-                let d = vec2(a.cos(), a.sin());
-                pa.line_segment([c + vec2(0.0, 1.0) + d * 7.0, c + vec2(0.0, 1.0) + d * 9.0], Stroke::new(1.4, col));
+            pa.circle_stroke(v(0.0, -1.0), 4.5 * k, st);
+            pa.line_segment([v(-2.0, 3.8), v(-2.0, 7.0)], st);
+            pa.line_segment([v(2.0, 3.8), v(2.0, 7.0)], st);
+            pa.line_segment([v(-2.0, 7.0), v(2.0, 7.0)], st);
+            for (x0, y0, x1, y1) in [(0.0, -8.0, 0.0, -10.0), (-6.0, -4.5, -8.0, -5.5), (6.0, -4.5, 8.0, -5.5)] {
+                pa.line_segment([v(x0, y0), v(x1, y1)], Stroke::new(w * 0.85, col));
             }
-            pa.line_segment([c + vec2(-2.0, 7.0), c + vec2(-2.0, 9.0)], st);
-            pa.line_segment([c + vec2(2.0, 7.0), c + vec2(2.0, 9.0)], st);
         }
         "button" => {
-            pa.rect_stroke(egui::Rect::from_center_size(c, vec2(15.0, 15.0)), CornerRadius::same(4), st, StrokeKind::Inside);
-            pa.circle_filled(c, 3.2, col);
+            pa.rect_stroke(egui::Rect::from_center_size(c, vec2(15.0, 15.0) * k), CornerRadius::same((4.0 * k) as u8), st, StrokeKind::Inside);
+            pa.circle_filled(c, 3.2 * k, col);
         }
         "pwm" => {
-            let pts: Vec<Pos2> = (0..=16).map(|i| c + vec2(-8.0 + i as f32, (i as f32 * 0.8).sin() * -4.5)).collect();
+            let pts: Vec<Pos2> = (0..=16).map(|i| v(-8.0 + i as f32, (i as f32 * 0.8).sin() * -4.5)).collect();
             pa.line(pts, st);
         }
         "analog" => {
-            pa.circle_stroke(c, 6.5, st);
-            pa.line_segment([c, c + vec2(3.5, -3.5)], st);
+            pa.circle_stroke(c, 6.5 * k, st);
+            pa.line_segment([c, v(3.5, -3.5)], st);
         }
         "servo" => {
-            pa.rect_stroke(egui::Rect::from_center_size(c + vec2(0.0, 2.5), vec2(15.0, 8.0)), CornerRadius::same(2), st, StrokeKind::Inside);
-            pa.circle_stroke(c + vec2(3.0, -3.5), 2.2, st);
-            pa.line_segment([c + vec2(3.0, -3.5), c + vec2(-3.0, -6.0)], st);
+            pa.rect_stroke(egui::Rect::from_center_size(v(0.0, 2.5), vec2(15.0, 8.0) * k), CornerRadius::same((2.0 * k) as u8), st, StrokeKind::Inside);
+            pa.circle_stroke(v(3.0, -3.5), 2.2 * k, st);
+            pa.line_segment([v(3.0, -3.5), v(-3.0, -6.0)], st);
         }
         "buzzer" => {
-            pa.add(egui::Shape::convex_polygon(vec![c + vec2(-7.0, -2.5), c + vec2(-3.5, -2.5), c + vec2(0.5, -6.0), c + vec2(0.5, 6.0), c + vec2(-3.5, 2.5), c + vec2(-7.0, 2.5)], col, Stroke::NONE));
-            pa.line(vec![c + vec2(3.0, -3.0), c + vec2(4.5, 0.0), c + vec2(3.0, 3.0)], Stroke::new(1.4, col));
-            pa.line(vec![c + vec2(5.5, -5.0), c + vec2(8.0, 0.0), c + vec2(5.5, 5.0)], Stroke::new(1.4, col));
+            pa.add(egui::Shape::convex_polygon(vec![v(-7.0, -2.5), v(-3.5, -2.5), v(0.5, -6.0), v(0.5, 6.0), v(-3.5, 2.5), v(-7.0, 2.5)], col, Stroke::NONE));
+            pa.line(vec![v(3.0, -3.0), v(4.5, 0.0), v(3.0, 3.0)], Stroke::new(w * 0.85, col));
+            pa.line(vec![v(5.5, -5.0), v(8.0, 0.0), v(5.5, 5.0)], Stroke::new(w * 0.85, col));
         }
         _ => {}
+    }
+}
+
+// režim pinu (out, pwm, in, pull, analog, servo, tone) → ikona súčiastky
+pub fn mode_glyph(mode: &str) -> &'static str {
+    match mode {
+        "out" => "led",
+        "pwm" => "pwm",
+        "in" | "pull" => "button",
+        "analog" => "analog",
+        "servo" => "servo",
+        "tone" => "buzzer",
+        _ => "",
     }
 }
 
@@ -96,7 +109,7 @@ pub fn preset(ui: &mut egui::Ui, kind: &str, label: &str, active: bool) -> egui:
         (1.0, if hk > 0.0 { border2() } else { border() })
     };
     ui.painter().rect_stroke(r, CornerRadius::same(9), Stroke::new(w, col), StrokeKind::Inside);
-    glyph(ui, kind, pos2(r.left() + 21.0, r.center().y), if active { cyan() } else { text2() });
+    glyph(ui.painter(), kind, pos2(r.left() + 21.0, r.center().y), if active { cyan() } else { text2() }, 1.0);
     ui.painter().text(pos2(r.left() + 38.0, r.center().y), egui::Align2::LEFT_CENTER, label, theme::ui(13.0), if active { text() } else { text2() });
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }

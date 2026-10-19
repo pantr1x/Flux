@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.67
+
+**Pins on the board**
+- The mark at a pin now shows **what it is**: a bulb for an LED, a button, a wave for PWM, a sensor, a servo or a buzzer, with the pin's number in the corner. It is guessed from how your code uses the pin, so very unusual code may not be recognised.
+- In the list of pins each row starts with a **line in the pin's colour**, the same as its wire on the board.
+- **Ctrl + mouse wheel** zooms the Uno / Mega picture; drag the bar under it to move.
+- Pin window: with a file already open the main button is **Add to <file>**; *New file instead* is the second choice. The *New file* button is gone from board projects that already have a file.
+
 ## 0.9.66
 
 **Board page**

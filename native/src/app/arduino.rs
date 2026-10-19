@@ -44,7 +44,10 @@ pub struct ArdUi {
     scroll_top: bool,
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
-    pub pin_dlg: bool,                                         // okno „nový súbor pre pin“
+    pub zoom: f32,                                             // priblíženie dosky (Ctrl + koleso)
+    pic_rect: Option<Rect>,
+    dlg_new: bool,     // v okne pinu: vytvoriť nový súbor namiesto pridania do otvoreného
+    pub pin_dlg: bool, // okno „nový súbor pre pin“
     dlg_mode: String,
     dlg_kind: String, // predvoľba (prázdne = prázdny súbor)
     dlg_h: f32,
@@ -84,6 +87,9 @@ impl Default for ArdUi {
             scroll_top: false,
             proj: None,
             flipped: HashSet::new(),
+            zoom: 1.0,
+            pic_rect: None,
+            dlg_new: false,
             pin_dlg: false,
             dlg_mode: String::new(),
             dlg_kind: String::new(),
@@ -1268,18 +1274,41 @@ impl App {
         let layout = self.ard_layout(mode);
         let w = ui.available_width();
         let sel = self.ard.sel.clone();
-        let clicked = match layout {
+        let avr = matches!(layout, 0 | 3);
+        // Ctrl + koleso nad doskou = priblíženie (Uno / Mega)
+        if avr {
+            let z = ui.input(|i| i.zoom_delta());
+            if (z - 1.0).abs() > 0.0001 && self.ard.pic_rect.is_some_and(|r| ui.input(|i| i.pointer.hover_pos()).is_some_and(|pt| r.contains(pt))) {
+                self.ard.zoom = (self.ard.zoom * z.powf(0.5)).clamp(1.0, 2.5);
+            }
+        } else {
+            self.ard.zoom = 1.0;
+        }
+        let zoom = if avr { self.ard.zoom } else { 1.0 };
+        let top = ui.cursor().top();
+        let draw = |ui: &mut egui::Ui, w: f32| match layout {
             1 => boardart::draw_vertical(ui, &p, w, "ESP32", &ESP_L, &ESP_R, false, Color32::from_rgb(0x23, 0x25, 0x2b), pins, &sel),
             2 => boardart::draw_vertical(ui, &p, w, "Pico", &PICO_L, &PICO_R, true, Color32::from_rgb(0x1c, 0x7a, 0x44), pins, &sel),
             4 => boardart::draw_vertical(ui, &p, w, "Nano", &NANO_L, &NANO_R, true, Color32::from_rgb(0x00, 0x87, 0x8f), pins, &sel),
             3 => boardart::draw_avr(ui, &p, w, true, pins, &sel),
             _ => boardart::draw_avr(ui, &p, w, false, pins, &sel),
         };
+        let clicked = if zoom > 1.001 { egui::ScrollArea::horizontal().id_salt("ard-zoom").auto_shrink([false, true]).show(ui, |ui| draw(ui, w * zoom)).inner } else { draw(ui, w) };
+        self.ard.pic_rect = Some(Rect::from_min_max(pos2(ui.min_rect().left(), top), pos2(ui.min_rect().left() + w, ui.cursor().top())));
+        if avr {
+            let hint = if zoom > 1.001 {
+                tf("Zoom {z} % – Ctrl + mouse wheel, drag the bar to move", &[("z", &((zoom * 100.0).round() as i32).to_string())])
+            } else {
+                t("Ctrl + mouse wheel zooms the board")
+            };
+            ui.label(egui::RichText::new(hint).font(theme::ui(11.0)).color(p.text3));
+        }
         if let Some(c) = clicked {
             self.ard.sel = Some(c);
             self.ard.pin_dlg = true;
             self.ard.dlg_mode = self.ard.ctx.1.clone();
             self.ard.dlg_kind.clear();
+            self.ard.dlg_new = false;
         }
     }
 
@@ -1447,21 +1476,34 @@ impl App {
             }
         });
         let ext = ard::base_text(&self.ard.dlg_mode, "").0;
-        cu.label(egui::RichText::new(t("FILE NAME")).font(theme::bold(11.0)).color(p.text3));
+        let can_add = !target.is_empty() && !self.ard.dlg_kind.is_empty() && ctx_mode == self.ard.dlg_mode;
+        let new_open = self.ard.dlg_new || !can_add;
         let mut new_name = std::mem::take(&mut self.ard.new_name);
-        cu.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 6.0;
-            let tw = (ui.available_width() - 60.0).max(90.0);
-            ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.5)).desired_width(tw).margin(egui::Margin::symmetric(10, 8)));
-            ui.label(egui::RichText::new(format!(".{ext}")).font(theme::mono(13.0)).color(p.text3));
-        });
+        if new_open {
+            cu.label(egui::RichText::new(t("FILE NAME")).font(theme::bold(11.0)).color(p.text3));
+            cu.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                let tw = (ui.available_width() - 60.0).max(90.0);
+                ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.5)).desired_width(tw).margin(egui::Margin::symmetric(10, 8)));
+                ui.label(egui::RichText::new(format!(".{ext}")).font(theme::mono(13.0)).color(p.text3));
+            });
+        } else {
+            cu.add(
+                egui::Label::new(egui::RichText::new(tf("The code goes into {name}, which you already have.", &[("name", &widgets::file_name(&target))])).font(theme::ui(12.5)).color(p.text2)).wrap(),
+            );
+        }
         self.ard.new_name = new_name.clone();
         let (mut create, mut add) = (false, false);
         cu.add_space(4.0);
         cu.horizontal(|ui| {
-            create = widgets::button(ui, Some("filePlus"), &t("Create file"), p.accent, p.accent_fg, 34.0, &p).clicked();
-            if !target.is_empty() && !self.ard.dlg_kind.is_empty() && ctx_mode == self.ard.dlg_mode {
-                add = widgets::button(ui, None, &tf("Add to {name}", &[("name", &widgets::file_name(&target))]), p.card2, p.text, 34.0, &p).clicked();
+            if can_add {
+                let add_label = tf("Add to {name}", &[("name", &widgets::file_name(&target))]);
+                add = widgets::button(ui, Some("plus"), &add_label, if new_open { p.card2 } else { p.accent }, if new_open { p.text } else { p.accent_fg }, 34.0, &p).clicked();
+            }
+            if new_open {
+                create = widgets::button(ui, Some("filePlus"), &t("Create file"), if can_add { p.card2 } else { p.accent }, if can_add { p.text } else { p.accent_fg }, 34.0, &p).clicked();
+            } else if widgets::button(ui, Some("filePlus"), &t("New file instead"), p.card2, p.text, 34.0, &p).clicked() {
+                self.ard.dlg_new = true;
             }
             if widgets::button(ui, None, &t("Cancel"), p.card2, p.text, 34.0, &p).clicked() {
                 close = true;
@@ -1508,6 +1550,7 @@ impl App {
             self.ard.pin_dlg = false;
             self.ard.sel = None;
             self.ard.dlg_mode.clear();
+            self.ard.dlg_new = false;
         }
     }
 
@@ -1545,14 +1588,15 @@ impl App {
             if resp.hovered() {
                 ui.painter().rect_filled(rr, CornerRadius::same(8), p.hover);
             }
-            let c = pos2(rr.left() + 14.0, rr.center().y);
-            ui.painter().circle_filled(c, 9.0, col);
-            ui.painter().text(c, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.5), Color32::BLACK);
+            let c = pos2(rr.left() + 16.0, rr.center().y);
+            // čiara v farbe pinu (rovnaká ako drôtik na doske)
+            ui.painter().rect_filled(Rect::from_min_size(pos2(rr.left(), rr.top() + 5.0), vec2(3.0, rr.height() - 10.0)), CornerRadius::same(2), col);
+            boardart::bubble(ui.painter(), c, 10.0, col, pin.mode, k + 1);
             let title = match &pin.name {
                 Some(nm) => format!("{} {}  ·  {nm}", t("Pin"), pin.pin),
                 None => format!("{} {}", t("Pin"), pin.pin),
             };
-            widgets::text(ui, pos2(rr.left() + 32.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 130.0);
+            widgets::text(ui, pos2(rr.left() + 36.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 130.0);
             ui.painter().text(pos2(rr.right() - 8.0, rr.center().y), Align2::RIGHT_CENTER, pmode, theme::mono(11.0), col);
             if resp.on_hover_text(t(part)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 jump = Some(pin.line);
@@ -1658,6 +1702,7 @@ impl App {
                         this.ard.pin_dlg = true;
                         this.ard.dlg_mode = this.ard.ctx.1.clone();
                         this.ard.dlg_kind = "led".into();
+                        this.ard.dlg_new = false;
                     }
                 });
             } else {

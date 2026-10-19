@@ -1,0 +1,9 @@
+# Flux Native 0.9.67: ikony pinov, zoom dosky, pridanie do existujúceho súboru.
+# Poradie: sk, de, es, fr, it, pl, pt, uk.
+_V33 = {
+    'Ctrl + mouse wheel zooms the board': ('Ctrl + koliesko myši približuje dosku', 'Strg + Mausrad zoomt das Board', 'Ctrl + rueda del ratón amplía la placa', 'Ctrl + molette zoome la carte', 'Ctrl + rotellina ingrandisce la scheda', 'Ctrl + kółko myszy powiększa płytkę', 'Ctrl + roda do mouse amplia a placa', 'Ctrl + колесо миші наближає плату'),
+    'New file instead': ('Radšej nový súbor', 'Stattdessen neue Datei', 'Mejor un archivo nuevo', 'Plutôt un nouveau fichier', 'Meglio un nuovo file', 'Zamiast tego nowy plik', 'Melhor um arquivo novo', 'Краще новий файл'),
+    'The code goes into {name}, which you already have.': ('Kód pôjde do súboru {name}, ktorý už máš.', 'Der Code kommt in {name}, die du schon hast.', 'El código va en {name}, que ya tienes.', 'Le code ira dans {name}, que tu as déjà.', 'Il codice va in {name}, che hai già.', 'Kod trafi do pliku {name}, który już masz.', 'O código vai para {name}, que você já tem.', 'Код піде у файл {name}, який у тебе вже є.'),
+    'Zoom {z} % – Ctrl + mouse wheel, drag the bar to move': ('Priblíženie {z} % – Ctrl + koliesko, posun ťahaním lišty', 'Zoom {z} % – Strg + Mausrad, Leiste ziehen zum Verschieben', 'Zoom {z} % – Ctrl + rueda, arrastra la barra para mover', 'Zoom {z} % – Ctrl + molette, fais glisser la barre pour déplacer', 'Zoom {z} % – Ctrl + rotellina, trascina la barra per spostare', 'Powiększenie {z} % – Ctrl + kółko, przeciągnij pasek, aby przesunąć', 'Zoom {z} % – Ctrl + roda, arraste a barra para mover', 'Масштаб {z} % – Ctrl + колесо, перетягни смугу для зсуву'),
+}
+V33 = {code: {k: v[i] for k, v in _V33.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

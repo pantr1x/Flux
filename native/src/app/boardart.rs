@@ -269,8 +269,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
                 let lift = (i % levels) as f32 * 19.0;
                 let out = pos2(x, if up { rect.top() + 11.0 + lift } else { rect.bottom() - 11.0 - lift });
                 pa.line_segment([c, out], Stroke::new(2.0, col));
-                pa.circle_filled(out, 9.0, col);
-                pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.5), Color32::BLACK);
+                bubble(&pa, out, 10.0, col, pins[k].mode, k + 1);
                 ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 1, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                 pa.circle_stroke(c, s * 1.0, Stroke::new(2.0, col));
             } else if pwr {
@@ -312,8 +311,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
                     let (mc, _, _) = mode_info(pins[k].mode);
                     let out = pos2(board.right() + 18.0 + ((r % 2) as f32) * 19.0, c.y);
                     pa.line_segment([c, out], Stroke::new(2.0, mc));
-                    pa.circle_filled(out, 8.5, mc);
-                    pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.0), Color32::BLACK);
+                    bubble(&pa, out, 9.5, mc, pins[k].mode, k + 1);
                     ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 2, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                     pa.circle_stroke(c, s * 1.0, Stroke::new(2.0, mc));
                 }
@@ -417,8 +415,7 @@ pub fn draw_vertical(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, title: &str, le
                     let ox = if side == 0 { board.left() - 16.0 - lift } else { board.right() + 16.0 + lift };
                     let out = Pos2::new(ox, y);
                     pa.line_segment([c, out], Stroke::new(2.0, mc));
-                    pa.circle_filled(out, 7.5, mc);
-                    pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(9.5), Color32::BLACK);
+                    bubble(&pa, out, 9.0, mc, pins[k].mode, k + 1);
                     ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 3, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                     pa.circle_stroke(c, 5.0, Stroke::new(2.0, mc));
                 }
@@ -436,4 +433,14 @@ fn bubble_tip(p: &ard::Pin) -> String {
         s += &format!(" ({n})");
     }
     s + "\n" + &t(h)
+}
+
+// značka pri doske: ikona súčiastky (žiarovka, tlačidlo…) v farbe pinu a malé číslo v rohu
+pub(super) fn bubble(pa: &egui::Painter, c: Pos2, r: f32, col: Color32, mode: &str, n: usize) {
+    pa.circle_filled(c, r, col);
+    pa.circle_stroke(c, r, Stroke::new(1.0, Color32::from_black_alpha(90)));
+    super::dash::glyph(pa, super::dash::mode_glyph(mode), c + vec2(-0.6, 0.8), Color32::from_black_alpha(235), r / 13.0);
+    let b = c + vec2(r * 0.75, -r * 0.75);
+    pa.circle_filled(b, r * 0.52, Color32::from_black_alpha(225));
+    pa.text(b, Align2::CENTER_CENTER, n.to_string(), theme::bold(r * 0.72), Color32::WHITE);
 }

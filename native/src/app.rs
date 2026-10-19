@@ -3314,7 +3314,7 @@ impl App {
             }
             let has_main = main_file.is_some();
             let (nf_bg, nf_fg) = if has_main { (p.card2, p.text) } else { (p.accent, p.accent_fg) };
-            if widgets::button(&mut acts, Some("filePlus"), &t("New file"), nf_bg, nf_fg, 32.0, &p).clicked() {
+            if board.is_none() && widgets::button(&mut acts, Some("filePlus"), &t("New file"), nf_bg, nf_fg, 32.0, &p).clicked() {
                 self.open_new_file(None);
             }
             if let Some((bpath, _)) = &board {
