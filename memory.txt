@@ -1,0 +1,17 @@
+tauri : 108.7 MB private (Task Manager), 387.5 MB working set, 7 processes
+       54.3 MB  msedgewebview2#5 (pid 8696)
+       30.6 MB  msedgewebview2 (pid 4756)
+        8.7 MB  msedgewebview2#3 (pid 5820)
+        6.3 MB  msedgewebview2#2 (pid 5492)
+        4.0 MB  flux (pid 1384)
+        2.7 MB  msedgewebview2#4 (pid 5180)
+        2.2 MB  msedgewebview2#1 (pid 6412)
+electron : 130.6 MB private (Task Manager), 402.3 MB working set, 6 processes
+       67.0 MB  Flux#2 (pid 4628)
+       39.8 MB  Flux (pid 3368)
+       11.5 MB  Flux#1 (pid 7964)
+        9.7 MB  winget (pid 8560)
+        1.7 MB  msiexec (pid 4852)
+        0.9 MB  conhost#3 (pid 7064)
+Installer sizes:
+  Tauri: 4.5 MB
