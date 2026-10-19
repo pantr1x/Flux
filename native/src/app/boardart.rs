@@ -151,7 +151,7 @@ fn pickable(l: &str) -> bool {
 }
 
 // Arduino Uno (mega = false) alebo Mega 2560 (mega = true): vráti kľúč kliknutého pinu
-pub fn draw_avr(ui: &mut egui::Ui, p: &theme::Pal, w: f32, mega: bool, pins: &[ard::Pin], sel: &Option<String>) -> Option<String> {
+pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[ard::Pin], sel: &Option<String>) -> Option<String> {
     let side = if mega { 40.0 } else { 6.0 };
     let bw = (w - 28.0 - side).max(120.0);
     let bh = bw * if mega { 0.52 } else { 0.64 };
@@ -261,7 +261,8 @@ pub fn draw_avr(ui: &mut egui::Ui, p: &theme::Pal, w: f32, mega: bool, pins: &[a
                 }
             }
             if sel.as_deref() == Some(*l) {
-                pa.circle_stroke(c, s * 1.8, Stroke::new(2.0, p.accent));
+                pa.circle_filled(c, s * 1.5, super::dash::ORANGE.gamma_multiply(0.28));
+                pa.circle_stroke(c, s * 1.5, Stroke::new(2.0, super::dash::ORANGE));
             }
             if let Some(k) = used(l) {
                 let (col, _, _) = mode_info(pins[k].mode);
@@ -303,7 +304,8 @@ pub fn draw_avr(ui: &mut egui::Ui, p: &theme::Pal, w: f32, mega: bool, pins: &[a
                     clicked.set(Some(label.clone()));
                 }
                 if sel.as_deref() == Some(label.as_str()) {
-                    pa.circle_stroke(c, s * 1.8, Stroke::new(2.0, p.accent));
+                    pa.circle_filled(c, s * 1.5, super::dash::ORANGE.gamma_multiply(0.28));
+                    pa.circle_stroke(c, s * 1.5, Stroke::new(2.0, super::dash::ORANGE));
                 }
                 if let Some(k) = used(&label) {
                     let (mc, _, _) = mode_info(pins[k].mode);
@@ -324,7 +326,7 @@ pub fn draw_avr(ui: &mut egui::Ui, p: &theme::Pal, w: f32, mega: bool, pins: &[a
 
 // dosky s dvoma stĺpcami pinov po stranách: ESP32, Pico, Nano; `title` určuje ozdoby modulu
 #[allow(clippy::too_many_arguments)]
-pub fn draw_vertical(ui: &mut egui::Ui, p: &theme::Pal, w: f32, title: &str, left: &[Pad], right: &[Pad], usb_top: bool, body: Color32, pins: &[ard::Pin], sel: &Option<String>) -> Option<String> {
+pub fn draw_vertical(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, title: &str, left: &[Pad], right: &[Pad], usb_top: bool, body: Color32, pins: &[ard::Pin], sel: &Option<String>) -> Option<String> {
     let n = left.len().max(right.len());
     let row_h = 15.0;
     let h = n as f32 * row_h + 76.0;
@@ -404,7 +406,8 @@ pub fn draw_vertical(ui: &mut egui::Ui, p: &theme::Pal, w: f32, title: &str, lef
                     clicked.set(Some(pad.key.to_string()));
                 }
                 if sel.as_deref() == Some(pad.key) {
-                    pa.circle_stroke(c, 7.5, Stroke::new(2.0, p.accent));
+                    pa.circle_filled(c, 7.5, super::dash::ORANGE.gamma_multiply(0.28));
+                    pa.circle_stroke(c, 7.5, Stroke::new(2.0, super::dash::ORANGE));
                 }
                 if let Some(k) = pins.iter().position(|x| x.pin == pad.key) {
                     let (mc, _, _) = mode_info(pins[k].mode);

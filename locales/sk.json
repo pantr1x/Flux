@@ -153,6 +153,7 @@
  "CIRCUITPY drive not found": "Disk CIRCUITPY sa nenašiel",
  "CONNECTED BOARDS": "PRIPOJENÉ DOSKY",
  "CSS styles": "CSS štýly",
+ "CUSTOM CODE": "VLASTNÝ KÓD",
  "Can you see what is behind Flux?": "Vidíš, čo je za Fluxom?",
  "Can't move a folder into itself.": "Priečinok sa nedá presunúť sám do seba.",
  "Can't run .{ext} files yet. Try .py, .js or .html.": "Súbory .{ext} zatiaľ neviem spustiť. Skús .py, .js alebo .html.",

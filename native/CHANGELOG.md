@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.64
+
+**Board dashboard (project page)**
+- The board part of a project page has a new look in your theme colours: one panel with the **board picture and its connection**, one panel with the **two-line board select** (model, chip, automatic or custom), the selected pin, the **LED / Button / Fade / Analog / Servo / Buzzer** buttons with icons and an active state, and the **custom code editor** with line numbers and colours.
+- Only the selected pin is orange; the stat tiles now come first, the board below them. With a narrow window the two panels stack.
+- Everything works as before: board choice, clicking pins, adding code, *Create the file* and *Add to …*, upload.
+
 ## 0.9.63
 
 **Your real board**

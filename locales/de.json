@@ -151,6 +151,7 @@
  "CIRCUITPY drive not found": "CIRCUITPY-Laufwerk nicht gefunden",
  "CONNECTED BOARDS": "VERBUNDENE BOARDS",
  "CSS styles": "CSS-Stile",
+ "CUSTOM CODE": "EIGENER CODE",
  "Can you see what is behind Flux?": "Siehst du, was hinter Flux ist?",
  "Can't move a folder into itself.": "Ein Ordner kann nicht in sich selbst verschoben werden.",
  "Can't run .{ext} files yet. Try .py, .js or .html.": ".{ext}-Dateien können noch nicht ausgeführt werden. Versuche .py, .js oder .html.",
