@@ -44,11 +44,15 @@ pub struct ArdUi {
     scroll_top: bool,
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
-    pub preset: String,                                        // naposledy zvolená predvoľba pinu (aktívne tlačidlo)
-    plain: bool,                                               // bez rámikov (hlavná stránka projektu)
-    new_name: String,                                          // meno nového súboru z vlastného kódu (prázdne = pin_<n>)
-    sel: Option<String>,                                       // pin vybraný kliknutím v schéme
-    bt: Arc<Mutex<Vec<(String, String, bool)>>>,               // spárované Bluetooth zariadenia (meno, MAC, pripojené)
+    pub pin_dlg: bool,                                         // okno „nový súbor pre pin“
+    dlg_mode: String,
+    dlg_kind: String, // predvoľba (prázdne = prázdny súbor)
+    dlg_h: f32,
+    ctx: (String, String, String),               // priečinok, jazyk a súbor, pre ktorý sa kreslí doska
+    plain: bool,                                 // bez rámikov (hlavná stránka projektu)
+    new_name: String,                            // meno nového súboru z vlastného kódu (prázdne = pin_<n>)
+    sel: Option<String>,                         // pin vybraný kliknutím v schéme
+    bt: Arc<Mutex<Vec<(String, String, bool)>>>, // spárované Bluetooth zariadenia (meno, MAC, pripojené)
     pub width: f32,
     pub seen: HashSet<String>, // .ino, pri ktorých sa panel už raz sám otvoril
     pub section: u8,           // 0 doska, 1 zapojenie, 2 knižnice, 3 firmvér
@@ -80,7 +84,11 @@ impl Default for ArdUi {
             scroll_top: false,
             proj: None,
             flipped: HashSet::new(),
-            preset: String::new(),
+            pin_dlg: false,
+            dlg_mode: String::new(),
+            dlg_kind: String::new(),
+            dlg_h: 400.0,
+            ctx: (String::new(), String::new(), String::new()),
             plain: false,
             new_name: String::new(),
             sel: None,
@@ -1268,8 +1276,10 @@ impl App {
             _ => boardart::draw_avr(ui, &p, w, false, pins, &sel),
         };
         if let Some(c) = clicked {
-            self.ard.sel = if sel.as_deref() == Some(c.as_str()) { None } else { Some(c) };
-            self.ard.preset.clear();
+            self.ard.sel = Some(c);
+            self.ard.pin_dlg = true;
+            self.ard.dlg_mode = self.ard.ctx.1.clone();
+            self.ard.dlg_kind.clear();
         }
     }
 
@@ -1346,9 +1356,7 @@ impl App {
     }
 
     // výber dosky, tipy a karta vybraného pinu: hotové ukážky alebo vlastný kód (do nového súboru)
-    fn ard_pin_panel(&mut self, ui: &mut egui::Ui, mode: &str, target: &str, pins: &[ard::Pin], with_select: bool) {
-        let plain = self.ard.plain;
-        let p = if plain { dash::pal(&self.pal) } else { self.pal };
+    fn ard_pin_panel(&mut self, ui: &mut egui::Ui, mode: &str, pins: &[ard::Pin], with_select: bool) {
         let layout = self.ard_layout(mode);
         if with_select {
             self.ard_board_select(ui);
@@ -1357,77 +1365,149 @@ impl App {
         if layout == 1 || layout == 2 {
             self.ard_hint(ui, &t("ESP32 and Pico pins work at 3.3 V – connect parts to 3V3, not 5V."));
         }
+        self.ard_hint(ui, &t("Click a pin on the board to add code for it."));
+    }
+
+    // okno po kliku na pin: jazyk, predvoľba, meno → vytvorí súbor v projekte
+    pub(super) fn ard_pin_window(&mut self, ui: &mut egui::Ui, full: Rect) {
+        dash::set(&self.pal);
+        let p = self.pal;
         let Some(sel) = self.ard.sel.clone() else {
-            self.ard_hint(ui, &t("Click a pin on the board to try it with a test or start a new file for it."));
+            self.ard.pin_dlg = false;
             return;
         };
+        let (dir, ctx_mode, target) = self.ard.ctx.clone();
+        if self.ard.dlg_mode.is_empty() {
+            self.ard.dlg_mode = ctx_mode.clone();
+        }
+        let layout = self.ard_layout(&ctx_mode);
+        let bg = ui.interact(full, ui.id().with("ardp-dim"), Sense::click());
+        ui.painter().rect_filled(full, 0.0, Color32::from_black_alpha(80));
+        let w = (full.width() - 48.0).min(520.0);
+        let top = full.top() + ((full.height() - self.ard.dlg_h) / 2.0).max(16.0);
+        let card = Rect::from_min_size(pos2(full.center().x - w / 2.0, top), vec2(w, self.ard.dlg_h.min(full.bottom() - 16.0 - top)));
+        let mut close = ui.input(|i| i.key_pressed(egui::Key::Escape));
+        if bg.clicked() && !card.contains(bg.interact_pointer_pos().unwrap_or_default()) {
+            close = true;
+        }
+        ui.painter().add(egui::Shadow { offset: [0, 30], blur: 90, spread: 0, color: Color32::from_black_alpha(128) }.as_shape(card, CornerRadius::same(20)));
+        ui.painter().rect_filled(card, CornerRadius::same(20), p.solid);
+        ui.painter().rect_stroke(card, CornerRadius::same(20), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+        let inner = card.shrink2(vec2(26.0, 22.0));
+        let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(inner.min, vec2(inner.width(), 2000.0))));
+        cu.set_clip_rect(card);
+        cu.spacing_mut().item_spacing.y = 10.0;
+        let text = if target.is_empty() { String::new() } else { self.ard_target_text(&target) };
+        let pins = ard::pins_for(&ctx_mode, &text);
         let used = pins.iter().position(|x| x.pin == sel);
-        let file_name = widgets::file_name(target);
-        let (mut test, mut create) = (false, false);
-        let mut new_name = std::mem::take(&mut self.ard.new_name);
-        self.ard_card(ui, |ui| {
-            ui.spacing_mut().item_spacing.y = 8.0;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(if plain { 20.0 } else { 14.0 })).color(p.text));
-                if let Some(k) = used {
-                    let (col, m, _) = mode_info(pins[k].mode);
-                    ui.label(egui::RichText::new(format!("#{} · {m}", k + 1)).font(theme::mono(11.5)).color(col));
+        cu.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(20.0)).color(p.text));
+            if let Some(k) = used {
+                let (col, m, _) = mode_info(pins[k].mode);
+                ui.label(egui::RichText::new(format!("#{} · {m}", k + 1)).font(theme::mono(12.0)).color(col));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if widgets::icon_button(ui, "x", &p, true).on_hover_text(t("Close (Esc)")).clicked() {
+                    close = true;
                 }
             });
-            if let Some(k) = used {
-                let (_, _, hint) = mode_info(pins[k].mode);
-                let who = pins[k].name.as_ref().map(|n| format!(" ({n})")).unwrap_or_default();
-                ui.add(
-                    egui::Label::new(egui::RichText::new(format!("{}{who}", tf("{n} in {name}", &[("n", &(k + 1).to_string()), ("name", &file_name)]))).font(theme::ui(12.0)).color(p.text2)).wrap(),
-                );
-                ui.add(egui::Label::new(egui::RichText::new(t(hint)).font(theme::ui(12.0)).color(p.text3)).wrap());
+        });
+        cu.label(egui::RichText::new(t("Pick a language and a starting point – Flux creates the file in your project.")).font(theme::ui(13.0)).color(p.text2));
+        cu.add_space(4.0);
+        cu.label(egui::RichText::new(t("LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
+        let langs = [("cpp", "C++ (.ino)"), ("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Python + Firmata")];
+        cu.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+            for (m, label) in langs {
+                let on = self.ard.dlg_mode == m;
+                if widgets::button(ui, None, label, if on { p.active } else { p.card2 }, p.text, 30.0, &p).clicked() {
+                    self.ard.dlg_mode = m.to_string();
+                }
             }
-            ui.label(egui::RichText::new(t("Quick test")).font(theme::bold(11.0)).color(p.text3));
-            let tip = tf("Adds a blinking LED on pin {n} to {name}", &[("n", &sel), ("name", &file_name)]);
-            let r = if plain { dash::preset(ui, "led", &t("Blink test"), false) } else { widgets::button(ui, Some("play"), &t("Blink test"), p.card2, p.text, 28.0, &p) };
-            test = r.on_hover_text(tip).clicked();
-            ui.add_space(2.0);
-            ui.label(egui::RichText::new(t("Your own code")).font(theme::bold(11.0)).color(p.text3));
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                let bw = widgets::text_w(ui, &t("Create"), theme::bold(13.0)) + 52.0;
-                let tw = (ui.available_width() - 6.0 - bw).max(90.0);
-                ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.0)).desired_width(tw).margin(egui::Margin::symmetric(10, 7)));
-                create = widgets::button(ui, Some("filePlus"), &t("Create"), p.accent, p.accent_fg, 30.0, &p).on_hover_text(t("Makes a new file for this pin and opens it in the editor")).clicked();
-            });
+        });
+        cu.label(egui::RichText::new(t("START WITH")).font(theme::bold(11.0)).color(p.text3));
+        let kinds: Vec<(&str, String)> =
+            [("", "Empty file"), ("led", "Blink an LED"), ("button", "Read a button"), ("pwm", "Fade (PWM)"), ("analog", "Analog sensor"), ("servo", "Servo"), ("buzzer", "Buzzer")]
+                .into_iter()
+                .filter(|(k, _)| match (layout, *k) {
+                    (0 | 3 | 4, "analog") => sel.starts_with('A'),
+                    (0 | 4, "pwm") => ["3", "5", "6", "9", "10", "11"].contains(&sel.as_str()),
+                    (3, "pwm") => sel.parse::<u32>().is_ok_and(|n| (2..=13).contains(&n) || (44..=46).contains(&n)),
+                    _ => true,
+                })
+                .map(|(k, l)| (k, t(l)))
+                .collect();
+        cu.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
+            for (k, label) in &kinds {
+                let glyph = if k.is_empty() { "file" } else { k };
+                if dash::preset(ui, glyph, label, self.ard.dlg_kind == *k).clicked() {
+                    self.ard.dlg_kind = k.to_string();
+                }
+            }
+        });
+        let ext = ard::base_text(&self.ard.dlg_mode, "").0;
+        cu.label(egui::RichText::new(t("FILE NAME")).font(theme::bold(11.0)).color(p.text3));
+        let mut new_name = std::mem::take(&mut self.ard.new_name);
+        cu.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let tw = (ui.available_width() - 60.0).max(90.0);
+            ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.5)).desired_width(tw).margin(egui::Margin::symmetric(10, 8)));
+            ui.label(egui::RichText::new(format!(".{ext}")).font(theme::mono(13.0)).color(p.text3));
         });
         self.ard.new_name = new_name.clone();
-        if target.is_empty() {
-            return;
+        let (mut create, mut add) = (false, false);
+        cu.add_space(4.0);
+        cu.horizontal(|ui| {
+            create = widgets::button(ui, Some("filePlus"), &t("Create file"), p.accent, p.accent_fg, 34.0, &p).clicked();
+            if !target.is_empty() && !self.ard.dlg_kind.is_empty() && ctx_mode == self.ard.dlg_mode {
+                add = widgets::button(ui, None, &tf("Add to {name}", &[("name", &widgets::file_name(&target))]), p.card2, p.text, 34.0, &p).clicked();
+            }
+            if widgets::button(ui, None, &t("Cancel"), p.card2, p.text, 34.0, &p).clicked() {
+                close = true;
+            }
+        });
+        let h = cu.min_rect().height() + 44.0;
+        if (h - self.ard.dlg_h).abs() > 0.5 {
+            self.ard.dlg_h = h;
+            ui.ctx().request_repaint();
         }
-        if test {
-            self.status = match self.ard_edit_target(target, |txt| ard::add_snippet(mode, txt, &sel, "led", layout == 2)) {
+        let mode = self.ard.dlg_mode.clone();
+        let kind = self.ard.dlg_kind.clone();
+        if add {
+            self.status = match self.ard_edit_target(&target, |txt| ard::add_snippet(&mode, txt, &sel, &kind, layout == 2)) {
                 Some(name) => tf("Added to {name} – the code is in the editor", &[("name", &name)]),
                 None => t("That is already in the code."),
             };
+            close = true;
         } else if create {
             let port = self.ard_port().unwrap_or_else(|| "/dev/ttyUSB0".into());
-            let starter = if mode == "cpp" { format!("// Pin {sel}: write your code here") } else { format!("# Pin {sel}: write your code here") };
-            if let Some((ext, content)) = ard::new_script(mode, &sel, &starter, true, &port) {
-                let dir = std::path::Path::new(target).parent().map(|d| d.to_path_buf()).unwrap_or_default();
-                let typed = new_name.trim().trim_end_matches(&format!(".{ext}")).to_string();
-                let clean: String = typed.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '.') { c } else { '_' }).collect();
-                let base = if clean.trim().is_empty() { format!("pin_{}", sel.to_lowercase()) } else { clean.trim().to_string() };
-                let mut path = dir.join(format!("{base}.{ext}"));
-                let mut n = 2;
-                while path.exists() {
-                    path = dir.join(format!("{base}-{n}.{ext}"));
-                    n += 1;
-                }
-                match std::fs::write(&path, content) {
-                    Ok(()) => {
-                        self.open_file(&path.to_string_lossy());
-                        self.ard.new_name.clear();
-                        self.status = tf("Created {name}", &[("name", &widgets::file_name(&path.to_string_lossy()))]);
-                    }
-                    Err(e) => self.status = e.to_string(),
-                }
+            let (ext, content) = ard::new_for_pin(&mode, &sel, &kind, &port, layout == 2);
+            let typed = new_name.trim().trim_end_matches(&format!(".{ext}")).to_string();
+            let clean: String = typed.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '.') { c } else { '_' }).collect();
+            let base = if clean.trim().is_empty() { format!("pin_{}", sel.to_lowercase()) } else { clean.trim().to_string() };
+            let dir = std::path::PathBuf::from(dir);
+            let mut path = dir.join(format!("{base}.{ext}"));
+            let mut n = 2;
+            while path.exists() {
+                path = dir.join(format!("{base}-{n}.{ext}"));
+                n += 1;
             }
+            match std::fs::write(&path, content) {
+                Ok(()) => {
+                    self.reload_projects();
+                    self.open_file(&path.to_string_lossy());
+                    self.ard.new_name.clear();
+                    self.status = tf("Created {name}", &[("name", &widgets::file_name(&path.to_string_lossy()))]);
+                    close = true;
+                }
+                Err(e) => self.status = e.to_string(),
+            }
+        }
+        if close {
+            self.ard.pin_dlg = false;
+            self.ard.sel = None;
+            self.ard.dlg_mode.clear();
         }
     }
 
@@ -1435,8 +1515,10 @@ impl App {
         let target = self.tabs.get(self.active).map(|t| t.path.clone()).unwrap_or_default();
         let code = self.tabs.get(self.active).map(|t| t.text.clone()).unwrap_or_default();
         let pins = ard::pins_for(mode, &code);
+        let dir = std::path::Path::new(&target).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+        self.ard.ctx = (dir, mode.to_string(), target.clone());
         self.ard_picture(ui, mode, &pins);
-        self.ard_pin_panel(ui, mode, &target, &pins, true);
+        self.ard_pin_panel(ui, mode, &pins, true);
         // použité piny: kompaktný zoznam
         let n = pins.len();
         let open = self.ard_sec(ui, "pins", &t("Pins in your code"), true, (n > 0).then(|| n.to_string()));
@@ -1510,92 +1592,100 @@ impl App {
         BOARDS.iter().find(|b| b.0 == fq).map(|b| t(b.1)).unwrap_or(fq)
     }
 
-    // Doska na stránke projektu (dizajn: tmavý dashboard): vľavo panel s doskou, vpravo výber dosky, pin, predvoľby a vlastný kód
-    pub(super) fn ard_project_card(&mut self, ui: &mut egui::Ui, path: &str, mode: &str) {
+    // Doska na stránke projektu bez rámikov: meno a pripojenie hore, veľká doska, vpravo výber dosky a použité piny.
+    // Bez súboru (`path` prázdna) ukáže „Board is empty“ s tlačidlom na prvý program.
+    pub(super) fn ard_project_card(&mut self, ui: &mut egui::Ui, path: &str, mode: &str, ws: &str) {
         dash::set(&self.pal);
-        let p = dash::pal(&self.pal);
+        let p = self.pal;
         let ctx = ui.ctx().clone();
         self.ard_scan(&ctx);
         ctx.request_repaint_after(Duration::from_millis(1000));
-        let text = self.ard_target_text(path);
+        let text = if path.is_empty() { String::new() } else { self.ard_target_text(path) };
         let pins = ard::pins_for(mode, &text);
+        let dir = if path.is_empty() { ws.to_string() } else { std::path::Path::new(path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default() };
+        self.ard.ctx = (dir, mode.to_string(), path.to_string());
         let name = self.ard_model_name();
         let (kind, _, lport) = self.ard_link();
+        ui.set_width(ui.available_width());
+        let (tr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::hover());
         let boards_empty = self.ard.boards.lock().unwrap().is_empty();
         let model = if mode == "cpp" { name } else { self.ard_model_name_py(mode) };
+        ui.painter().text(pos2(tr.left(), tr.top() + 16.0), Align2::LEFT_CENTER, &model, theme::bold(26.0), p.text);
         let (col, status) = match kind {
             1 => (p.green, tf("Connected via USB · {port}", &[("port", &lport)])),
             2 => (Color32::from_rgb(0x4d, 0xa3, 0xff), tf("Connected via Bluetooth · {port}", &[("port", &lport)])),
-            _ => (dash::text3(), if boards_empty { t("Offline – plug the board in with a USB cable") } else { t("Offline") }),
+            _ => (p.text3, if boards_empty { t("Offline – plug the board in with a USB cable") } else { t("Offline") }),
         };
-        self.ard.plain = true;
+        ui.painter().circle_filled(pos2(tr.left() + 5.0, tr.top() + 42.0), 4.0, col);
+        ui.painter().text(pos2(tr.left() + 16.0, tr.top() + 42.0), Align2::LEFT_CENTER, status, theme::ui(13.0), p.text2);
         let rows = self.ard_setup_rows(mode);
-        let total = ui.available_width();
-        let narrow = total < 780.0;
-        egui::Frame::NONE.fill(dash::bg()).stroke(Stroke::new(1.0, dash::border())).corner_radius(CornerRadius::same(16)).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
-            let inner = total - 30.0;
-            ui.set_width(inner);
-            ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
-            let lw = if narrow { inner } else { (inner * 0.58).min(660.0) };
-            let rw = if narrow { inner } else { inner - lw - 14.0 };
-            let left = |this: &mut Self, ui: &mut egui::Ui| {
-                dash::panel(ui, 16, |ui| {
-                    ui.horizontal(|ui| {
-                        dash::caption(ui, &t("BOARD"));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(egui::RichText::new(&status).font(theme::ui(12.0)).color(dash::text2()));
-                            let (dr, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
-                            ui.painter().circle_filled(dr.center(), 4.0, col);
-                        });
-                    });
-                    ui.label(egui::RichText::new(&model).font(theme::bold(20.0)).color(dash::text()));
-                    ui.add_space(4.0);
-                    this.ard_picture(ui, mode, &pins);
-                    if !pins.is_empty() {
-                        ui.add_space(6.0);
-                        dash::caption(ui, &tf("PINS IN {name}", &[("name", &widgets::file_name(path).to_uppercase())]));
-                        this.ard_pins_rows(ui, mode, &pins);
-                    }
-                });
-            };
-            let right = |this: &mut Self, ui: &mut egui::Ui| {
-                dash::panel(ui, 16, |ui| {
-                    ui.spacing_mut().item_spacing.y = 10.0;
-                    if !rows.iter().all(|r| r.ok) {
-                        let (done, total) = (rows.iter().filter(|r| r.ok).count(), rows.len());
-                        let mut open = false;
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(egui::RichText::new(t("Getting started")).font(theme::bold(13.0)).color(dash::cyan()));
-                            ui.label(egui::RichText::new(tf("{done} of {total} steps done", &[("done", &done.to_string()), ("total", &total.to_string())])).font(theme::ui(12.5)).color(dash::text2()));
-                            open = widgets::button(ui, Some("rocket"), &t("Open the guide"), dash::cyan(), dash::cyan_fg(), 28.0, &p).clicked();
-                        });
-                        if open {
-                            this.ard_open_setup(mode);
-                        }
-                    }
-                    this.ard_board_select(ui);
-                    ui.add_space(6.0);
-                    this.ard_pin_panel(ui, mode, path, &pins, false);
-                });
-            };
-            if narrow {
-                left(self, ui);
-                right(self, ui);
-            } else {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = 14.0;
-                    ui.allocate_ui_with_layout(vec2(lw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.set_width(lw);
-                        left(self, ui);
-                    });
-                    ui.allocate_ui_with_layout(vec2(rw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                        ui.set_width(rw);
-                        right(self, ui);
-                    });
-                });
+        if !rows.iter().all(|r| r.ok) {
+            let (done, total) = (rows.iter().filter(|r| r.ok).count(), rows.len());
+            let mut open = false;
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(t("Getting started")).font(theme::bold(13.0)).color(p.accent));
+                ui.label(egui::RichText::new(tf("{done} of {total} steps done", &[("done", &done.to_string()), ("total", &total.to_string())])).font(theme::ui(12.5)).color(p.text2));
+                open = widgets::button(ui, Some("rocket"), &t("Open the guide"), p.accent, p.accent_fg, 28.0, &p).clicked();
+            });
+            if open {
+                self.ard_open_setup(mode);
             }
-        });
-        self.ard.plain = false;
+            ui.add_space(6.0);
+        }
+        let total = ui.available_width();
+        let narrow = total < 760.0;
+        let lw = if narrow { total } else { (total * 0.64).min(700.0) };
+        let rw = if narrow { total } else { total - lw - 28.0 };
+        let empty = path.is_empty();
+        let layout = self.ard_layout(mode);
+        let right = |this: &mut Self, ui: &mut egui::Ui| {
+            ui.spacing_mut().item_spacing.y = 8.0;
+            this.ard_board_select(ui);
+            if empty {
+                egui::Frame::NONE.fill(p.hover).corner_radius(CornerRadius::same(12)).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(egui::RichText::new(t("Board is empty")).font(theme::bold(15.0)).color(p.text));
+                    ui.add(egui::Label::new(egui::RichText::new(t("Add your first program: click a pin on the board, or start with the button.")).font(theme::ui(12.5)).color(p.text2)).wrap());
+                    if widgets::button(ui, Some("plus"), &t("Add something"), p.accent, p.accent_fg, 32.0, &p).clicked() {
+                        this.ard.sel = Some(
+                            match layout {
+                                1 => "2",
+                                2 => "25",
+                                _ => "13",
+                            }
+                            .to_string(),
+                        );
+                        this.ard.pin_dlg = true;
+                        this.ard.dlg_mode = this.ard.ctx.1.clone();
+                        this.ard.dlg_kind = "led".into();
+                    }
+                });
+            } else {
+                this.ard_pin_panel(ui, mode, &pins, false);
+                if !pins.is_empty() {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(tf("PINS IN {name}", &[("name", &widgets::file_name(path).to_uppercase())])).font(theme::bold(10.5)).color(p.text3));
+                    this.ard_pins_rows(ui, mode, &pins);
+                }
+            }
+        };
+        if narrow {
+            self.ard_picture(ui, mode, &pins);
+            ui.add_space(8.0);
+            right(self, ui);
+        } else {
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 28.0;
+                ui.allocate_ui_with_layout(vec2(lw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    ui.set_width(lw);
+                    self.ard_picture(ui, mode, &pins);
+                });
+                ui.allocate_ui_with_layout(vec2(rw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    ui.set_width(rw);
+                    right(self, ui);
+                });
+            });
+        }
     }
 
     // názov pre Python na doske (model dosky je tu menej dôležitý ako jazyk)

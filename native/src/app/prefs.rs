@@ -16,7 +16,9 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => json!(true),
+        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" => {
+            json!(true)
+        }
         "wordWrap" | "autoReload" | "lite" | "searchWide" => json!(false),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
@@ -87,7 +89,18 @@ pub struct SettingsUi {
 
 impl SettingsUi {
     pub fn new(tab: &str, now: f64) -> Self {
-        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), notes_all: false, spy: None, spy_hold: 0.0, hist: vec![tab.to_string()], hist_i: 0 }
+        SettingsUi {
+            tab: tab.to_string(),
+            find: String::new(),
+            jump: None,
+            opened: now,
+            notes_open: Default::default(),
+            notes_all: false,
+            spy: None,
+            spy_hold: 0.0,
+            hist: vec![tab.to_string()],
+            hist_i: 0,
+        }
     }
 
     // nová karta → do histórie (karty sa menia z viacerých miest, preto raz za snímku)
@@ -187,7 +200,13 @@ pub fn note_lines(ui: &mut egui::Ui, note: &Note, w: f32, p: &theme::Pal) {
         job.wrap.max_width = (w - indent - 28.0).max(60.0);
         for (part, k) in spans(text) {
             // všetky úseky v jednom riadku na jednej stredovej čiare (inak `kód` v inom písme „pláva“ nad textom)
-            let base = egui::TextFormat { font_id: if head { theme::bold(size) } else { theme::ui(size) }, color: if head { p.text } else { p.text2 }, line_height: Some(lh), valign: egui::Align::Center, ..Default::default() };
+            let base = egui::TextFormat {
+                font_id: if head { theme::bold(size) } else { theme::ui(size) },
+                color: if head { p.text } else { p.text2 },
+                line_height: Some(lh),
+                valign: egui::Align::Center,
+                ..Default::default()
+            };
             let f = match k {
                 Span::Plain => base,
                 Span::Bold => egui::TextFormat { font_id: theme::bold(size), color: p.text, ..base },
@@ -1218,9 +1237,16 @@ impl App {
             }
             "themes" => {
                 let cur = self.get("codeTheme").as_str().unwrap_or("").to_string();
-                let mut ids: Vec<String> = ["vscode-dark", "flux", "one-dark", "dracula", "tokyo-night", "catppuccin", "nord", "github-dark", "monokai", "vscode-light", "github-light", "catppuccin-latte"].iter().map(|s| s.to_string()).collect();
+                let mut ids: Vec<String> =
+                    ["vscode-dark", "flux", "one-dark", "dracula", "tokyo-night", "catppuccin", "nord", "github-dark", "monokai", "vscode-light", "github-light", "catppuccin-latte"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
                 let mut names: Vec<String> =
-                    ["VS Code Dark", "Flux", "One Dark Pro", "Dracula", "Tokyo Night", "Catppuccin Mocha", "Nord", "GitHub Dark", "Monokai", "VS Code Light", "GitHub Light", "Catppuccin Latte"].iter().map(|s| s.to_string()).collect();
+                    ["VS Code Dark", "Flux", "One Dark Pro", "Dracula", "Tokyo Night", "Catppuccin Mocha", "Nord", "GitHub Dark", "Monokai", "VS Code Light", "GitHub Light", "Catppuccin Latte"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
                 // témy z pluginov (flux.themes.add)
                 for th in crate::plugins::THEMES.lock().unwrap().iter() {
                     ids.push(th.1.clone());
@@ -1314,11 +1340,7 @@ impl App {
                     ui.painter().rect_filled(ir, CornerRadius::same(10), p.card2);
                     widgets::icon_at(ui, ir.center(), 17.0, ic, p.text);
                     ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 9.0), Align2::LEFT_CENTER, *name, theme::bold(13.5), p.text);
-                    let status = if gh {
-                        t("Installed")
-                    } else {
-                        t("Not installed")
-                    };
+                    let status = if gh { t("Installed") } else { t("Not installed") };
                     ui.painter().text(pos2(ir.right() + 12.0, ir.top() + 26.0), Align2::LEFT_CENTER, status, theme::ui(11.0), if gh { p.green } else { p.text3 });
                     if i == 0 {
                         let label = if gh { t("Remove") } else { t("Install") };

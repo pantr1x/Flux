@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.66
+
+**Board page**
+- The board is big again and has **no boxes**: the name and connection on top, the board, and on the right the board select and the pins your file uses. The clock / runs / lines tiles are gone from board projects.
+- A board project **without files** now says **Board is empty** with an *Add something* button, instead of showing nothing.
+- **Click a pin** and a window opens: pick the language, a starting point (empty, blink an LED, button, fade, analog, servo, buzzer) and a name – *Create file* adds it to the project's files and opens it. With a file open, *Add to <file>* puts the code into it instead.
+
 ## 0.9.65
 
 **Pins**

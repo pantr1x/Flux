@@ -14,12 +14,6 @@ pub fn set(p: &Pal) {
 fn cur() -> Pal {
     CUR.with(|c| c.get()).unwrap_or_else(|| crate::theme::palette_for(true, "mono", 0.0))
 }
-pub fn bg() -> Color32 {
-    cur().card
-}
-pub fn panel_fill() -> Color32 {
-    cur().card2
-}
 pub fn field() -> Color32 {
     cur().card
 }
@@ -35,9 +29,6 @@ pub fn hover() -> Color32 {
 pub fn cyan() -> Color32 {
     cur().accent
 }
-pub fn cyan_fg() -> Color32 {
-    cur().accent_fg
-}
 pub fn text() -> Color32 {
     cur().text
 }
@@ -49,24 +40,6 @@ pub fn text3() -> Color32 {
 }
 
 // paleta pre widgety v paneli (tlačidlá, výber…): rovnaké polia ako Pal, ale podľa dizajnu
-pub fn pal(base: &Pal) -> Pal {
-    *base
-}
-
-// panel s rámikom
-pub fn panel(ui: &mut egui::Ui, margin: i8, add: impl FnOnce(&mut egui::Ui)) -> egui::Rect {
-    let w = ui.available_width();
-    let r = egui::Frame::NONE.fill(panel_fill()).stroke(Stroke::new(1.0, border())).corner_radius(CornerRadius::same(12)).inner_margin(egui::Margin::same(margin)).show(ui, |ui| {
-        ui.set_width(w - 2.0 * margin as f32 - 2.0);
-        add(ui);
-    });
-    r.response.rect
-}
-
-pub fn caption(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).font(theme::bold(11.0)).color(text3()));
-}
-
 // malé čiarkové ikony predvolieb (LED, tlačidlo, PWM, senzor, servo, bzučiak)
 fn glyph(ui: &egui::Ui, kind: &str, c: Pos2, col: Color32) {
     let pa = ui.painter();

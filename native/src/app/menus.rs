@@ -258,7 +258,7 @@ impl App {
         let has_file = !self.tabs.is_empty() && !self.home;
         egui::Popup::menu(resp).show(|ui| {
             ui.set_min_width(250.0);
-                ui.set_max_width(250.0);
+            ui.set_max_width(250.0);
             if item(ui, Some("template"), &t("Home"), "", false, true, &p).clicked() {
                 picked = Some("home".into());
             }
@@ -530,11 +530,7 @@ impl App {
             Ok(done) if !done.is_empty() => {
                 self.tree.clear();
                 self.open_dirs.insert(dir.to_string());
-                let msg = if done.len() == 1 {
-                    tf("Added {name}.", &[("name", &widgets::file_name(&done[0]))])
-                } else {
-                    tf("Added {n} files.", &[("n", &done.len().to_string())])
-                };
+                let msg = if done.len() == 1 { tf("Added {name}.", &[("name", &widgets::file_name(&done[0]))]) } else { tf("Added {n} files.", &[("n", &done.len().to_string())]) };
                 // jediný obrázok / text sa rovno otvorí
                 if done.len() == 1 && Path::new(&done[0]).is_file() {
                     self.open_file(&done[0]);
@@ -866,7 +862,9 @@ impl App {
         b.spacing_mut().item_spacing.x = 8.0;
         // mazanie je červené s košom, ostatné otázky (oprava ciest, favikona) bežné tlačidlo
         let danger = ask.action.starts_with("trash");
-        let yes = if danger { widgets::button(&mut b, Some("trash"), &ask.yes, p.red, Color32::WHITE, 32.0, &p) } else { widgets::button(&mut b, Some("check"), &ask.yes, p.accent, p.accent_fg, 32.0, &p) }.clicked();
+        let yes =
+            if danger { widgets::button(&mut b, Some("trash"), &ask.yes, p.red, Color32::WHITE, 32.0, &p) } else { widgets::button(&mut b, Some("check"), &ask.yes, p.accent, p.accent_fg, 32.0, &p) }
+                .clicked();
         let no = widgets::button(&mut b, None, &t("Cancel"), p.card2, p.text, 32.0, &p).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape));
         if yes {
             let a = ask.action.clone();

@@ -202,7 +202,9 @@ impl App {
         }
         let mut list: Vec<Entry> = vec![];
         {
-            let hit = |app: &App, pr: &Value| q.is_empty() || format!("{} {} {}", pr["name"].as_str().unwrap_or(""), pr["dir"].as_str().unwrap_or(""), desc(app, pr["dir"].as_str().unwrap_or(""))).to_lowercase().contains(&q);
+            let hit = |app: &App, pr: &Value| {
+                q.is_empty() || format!("{} {} {}", pr["name"].as_str().unwrap_or(""), pr["dir"].as_str().unwrap_or(""), desc(app, pr["dir"].as_str().unwrap_or(""))).to_lowercase().contains(&q)
+            };
             let mut pinned: Vec<Value> = shown.iter().filter(|pr| pr["pinned"].as_bool() == Some(true) && hit(self, pr)).cloned().collect();
             let mut recent: Vec<Value> = shown.iter().filter(|pr| pr["pinned"].as_bool() != Some(true) && hit(self, pr)).cloned().collect();
             recent.sort_by_key(|pr| pr["recent"].as_i64().filter(|r| *r >= 0).unwrap_or(999));

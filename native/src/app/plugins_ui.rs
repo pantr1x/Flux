@@ -31,7 +31,7 @@ pub struct PlugState {
     pub host: Option<plugins::Host>,
     pub cmds: Vec<PlugCmd>,
     pub status: Vec<PlugStatus>,
-    pub snips: Vec<(String, String, crate::complete::Item)>, // plugin, jazyk, úryvok
+    pub snips: Vec<(String, String, crate::complete::Item)>,                        // plugin, jazyk, úryvok
     pub marks: std::collections::HashMap<String, (String, Vec<crate::lint::Diag>)>, // plugin → (cesta, značky)
     pub changed: Option<(String, u64, Instant)>,
     pub sent: Option<(String, u64)>,
@@ -41,9 +41,9 @@ pub struct PlugState {
     pub installing: Option<String>,
     pub query: String,
     pub tab_store: bool,
-    pub detail: Option<String>,        // otvorená stránka pluginu
-    pub detail_card: Option<PlugCard>, // jej posledný stav
-    pub icons: std::collections::HashMap<String, Arc<Mutex<Option<Option<String>>>>>, // id → SVG ikony
+    pub detail: Option<String>,                                                         // otvorená stránka pluginu
+    pub detail_card: Option<PlugCard>,                                                  // jej posledný stav
+    pub icons: std::collections::HashMap<String, Arc<Mutex<Option<Option<String>>>>>,   // id → SVG ikony
     pub readmes: std::collections::HashMap<String, Arc<Mutex<Option<Option<String>>>>>, // id → README.md
 }
 
@@ -144,7 +144,7 @@ fn markdown(ui: &mut egui::Ui, md: &str, w: f32, p: &theme::Pal) {
         // tabuľka: riadky „| a | b |“ sa zbierajú a nakreslia naraz
         if !code && line.trim_start().starts_with('|') {
             let cells: Vec<String> = line.trim().trim_matches('|').split('|').map(|c| c.trim().to_string()).collect();
-            if !cells.iter().all(|c| c.chars().all(|ch| matches!(ch, '-' | ':' | ' ')) ) {
+            if !cells.iter().all(|c| c.chars().all(|ch| matches!(ch, '-' | ':' | ' '))) {
                 table.push(cells);
             }
             continue;
@@ -248,16 +248,19 @@ impl App {
         let file = if self.start || self.home {
             Value::Null
         } else {
-            self.tabs.get(self.active).map(|tab| {
-                let ext = tab.ext();
-                let (a, b) = self.sel_chars.unwrap_or((0, 0));
-                let (a, b) = (a.min(b), a.max(b));
-                let sel: String = tab.text.chars().skip(a).take(b - a).collect();
-                json!({
-                    "path": tab.path, "name": widgets::file_name(&tab.path), "language": plugins::lang_id(&ext), "text": tab.text,
-                    "selection": { "start": a, "end": b, "text": sel }, "cursor": { "line": self.cursor.0, "column": self.cursor.1 }
+            self.tabs
+                .get(self.active)
+                .map(|tab| {
+                    let ext = tab.ext();
+                    let (a, b) = self.sel_chars.unwrap_or((0, 0));
+                    let (a, b) = (a.min(b), a.max(b));
+                    let sel: String = tab.text.chars().skip(a).take(b - a).collect();
+                    json!({
+                        "path": tab.path, "name": widgets::file_name(&tab.path), "language": plugins::lang_id(&ext), "text": tab.text,
+                        "selection": { "start": a, "end": b, "text": sel }, "cursor": { "line": self.cursor.0, "column": self.cursor.1 }
+                    })
                 })
-            }).unwrap_or(Value::Null)
+                .unwrap_or(Value::Null)
         };
         json!({ "file": file, "folder": self.workspace(), "storage": self.get("pluginData")[id].clone() })
     }
@@ -653,11 +656,7 @@ impl App {
         ui.painter().rect_filled(r, CornerRadius::same(16), p.hover);
         ui.painter().rect_stroke(r, CornerRadius::same(16), Stroke::new(1.0, p.line), StrokeKind::Inside);
         widgets::icon_at(ui, pos2(r.center().x, r.top() + 34.0), 24.0, if store { "search" } else { "puzzle" }, p.text3);
-        let (a, b) = if self.plug.query.is_empty() {
-            (t("No plugins yet."), t("Open the Store, or create your own plugin."))
-        } else {
-            (t("Nothing found."), t("Try another word."))
-        };
+        let (a, b) = if self.plug.query.is_empty() { (t("No plugins yet."), t("Open the Store, or create your own plugin.")) } else { (t("Nothing found."), t("Try another word.")) };
         ui.painter().text(pos2(r.center().x, r.top() + 66.0), Align2::CENTER_CENTER, a, theme::bold(14.0), p.text);
         ui.painter().text(pos2(r.center().x, r.top() + 88.0), Align2::CENTER_CENTER, b, theme::ui(12.5), p.text3);
         if !store && self.plug.query.is_empty() {
@@ -686,11 +685,7 @@ impl App {
                 let s: Arc<Mutex<Option<Option<String>>>> = Arc::default();
                 let (s2, id, file, dir) = (s.clone(), c.id.clone(), c.icon.clone(), c.dir.clone());
                 std::thread::spawn(move || {
-                    let svg = if file.ends_with(".svg") {
-                        dir.and_then(|d| std::fs::read_to_string(d.join(&file)).ok()).or_else(|| fetch_text(&format!("{id}/{file}")).ok())
-                    } else {
-                        None
-                    };
+                    let svg = if file.ends_with(".svg") { dir.and_then(|d| std::fs::read_to_string(d.join(&file)).ok()).or_else(|| fetch_text(&format!("{id}/{file}")).ok()) } else { None };
                     *s2.lock().unwrap() = Some(svg.filter(|s| s.contains("<svg")));
                 });
                 s
@@ -700,9 +695,7 @@ impl App {
         match svg {
             Some(Some(svg)) => {
                 ui.painter().rect_filled(r, CornerRadius::same((r.width() * 0.28) as u8), p.card2);
-                egui::Image::from_bytes(format!("bytes://plugicon-{}.svg", c.id), svg.clone().into_bytes())
-                    .corner_radius(CornerRadius::same((r.width() * 0.28) as u8))
-                    .paint_at(ui, r);
+                egui::Image::from_bytes(format!("bytes://plugicon-{}.svg", c.id), svg.clone().into_bytes()).corner_radius(CornerRadius::same((r.width() * 0.28) as u8)).paint_at(ui, r);
                 // <text> v SVG resvg nekreslí – nakreslí ho egui (napr. „123“ vo Word Count)
                 if let Some((txt, fill, size, x, y, vb)) = svg_text(&svg) {
                     let k = r.width() / vb;
@@ -797,7 +790,9 @@ impl App {
         }
         if c.id == "github" {
             let on = c.on;
-            return widgets::button(b, None, &if on { t("Remove") } else { t("Install") }, if on { p.card2 } else { p.accent }, if on { p.text } else { p.accent_fg }, 30.0, &p).clicked().then_some("github");
+            return widgets::button(b, None, &if on { t("Remove") } else { t("Install") }, if on { p.card2 } else { p.accent }, if on { p.text } else { p.accent_fg }, 30.0, &p)
+                .clicked()
+                .then_some("github");
         }
         if store || c.installed.is_none() {
             return match (&c.installed, c.update) {
@@ -981,11 +976,7 @@ impl App {
                 let s: Arc<Mutex<Option<Option<String>>>> = Arc::default();
                 let (s2, id, dir, builtin) = (s.clone(), c.id.clone(), c.dir.clone(), c.id == "github");
                 std::thread::spawn(move || {
-                    let r = if builtin {
-                        None
-                    } else {
-                        dir.and_then(|d| std::fs::read_to_string(d.join("README.md")).ok()).or_else(|| fetch_text(&format!("{id}/README.md")).ok())
-                    };
+                    let r = if builtin { None } else { dir.and_then(|d| std::fs::read_to_string(d.join("README.md")).ok()).or_else(|| fetch_text(&format!("{id}/README.md")).ok()) };
                     *s2.lock().unwrap() = Some(r);
                 });
                 s

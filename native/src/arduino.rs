@@ -928,13 +928,32 @@ pub fn add_custom(mode: &str, text: &str, pin: &str, code: &str, repeat: bool) -
 }
 
 // nový skript s vlastným kódom pre pin: (prípona, obsah); hlavička podľa jazyka, potom kód (raz / opakovane)
-pub fn new_script(mode: &str, pin: &str, code: &str, repeat: bool, port: &str) -> Option<(&'static str, String)> {
-    let (ext, head) = match mode {
-        "cpp" => ("ino", String::new()),
+// základ nového súboru pre pin: (prípona, text) – prázdny program (C++) alebo importy a pripojenie (Python)
+pub fn base_text(mode: &str, port: &str) -> (&'static str, String) {
+    match mode {
+        "cpp" => ("ino", "void setup() {\n}\n\nvoid loop() {\n}\n".to_string()),
         "micropython" => ("py", "from machine import Pin\nfrom time import sleep\n".to_string()),
         "circuitpython" => ("py", "import time\nimport board\nimport digitalio\n".to_string()),
         _ => ("py", format!("import time\nfrom pyfirmata2 import Arduino\n\nboard = Arduino(\"{port}\")\n")),
-    };
+    }
+}
+
+// nový súbor pre pin: prázdny (kód = komentár) alebo z predvoľby (`kind` = led, button, pwm, analog, servo, buzzer)
+pub fn new_for_pin(mode: &str, pin: &str, kind: &str, port: &str, pico: bool) -> (&'static str, String) {
+    let (ext, base) = base_text(mode, port);
+    if kind.is_empty() {
+        let c = if mode == "cpp" { "//" } else { "#" };
+        let code = format!("{c} Pin {pin}: write your code here");
+        let txt = add_custom(mode, &base, pin, &code, true).unwrap_or(base);
+        return (ext, txt);
+    }
+    let txt = add_snippet(mode, &base, pin, kind, pico).unwrap_or(base);
+    (ext, txt)
+}
+
+#[cfg(test)]
+pub fn new_script(mode: &str, pin: &str, code: &str, repeat: bool, port: &str) -> Option<(&'static str, String)> {
+    let (ext, head) = base_text(mode, port);
     add_custom(mode, &head, pin, code, repeat).map(|c| (ext, c))
 }
 
@@ -1199,5 +1218,18 @@ mod tests {
         let c = core_of("arduino:avr:nano:cpu=atmega328old");
         assert_eq!(c, "arduino:avr");
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn arduino_new_for_pin() {
+        for mode in ["cpp", "micropython", "circuitpython", "firmata"] {
+            for kind in ["", "led", "button", "servo", "buzzer"] {
+                let (_, t) = new_for_pin(mode, "13", kind, "/dev/ttyUSB0", false);
+                assert!(t.contains("13"), "{mode} {kind}: {t}");
+            }
+        }
+        let (ext, t) = new_for_pin("cpp", "13", "led", "", false);
+        assert_eq!(ext, "ino");
+        assert!(t.contains("pinMode(13, OUTPUT);") && t.contains("void loop()"), "{t}");
     }
 }

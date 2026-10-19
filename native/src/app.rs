@@ -15,16 +15,16 @@ mod newproj;
 pub fn paint_project_img(ui: &egui::Ui, r: egui::Rect, path: &str) -> bool {
     newproj::paint_img(ui, r, path)
 }
+mod arduino;
+mod boardart;
+mod dash;
+mod imageedit;
+mod imageview;
+mod plugins_ui;
 mod prefs;
 mod preview;
 mod tools;
 mod tour;
-mod plugins_ui;
-mod imageview;
-mod imageedit;
-mod arduino;
-mod dash;
-mod boardart;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -50,10 +50,10 @@ struct Tab {
     path: String,
     text: String,
     saved: String,
-    seen: Instant,  // naposledy na obrazovke
-    unloaded: bool, // dlho nevidený neupravený súbor: text je preč z pamäte, načíta sa pri otvorení
-    stale: bool,    // súbor sa zmenil na disku, kým karta nebola aktívna → načítať pri otvorení
-    image: bool,    // obrázok: karta ukazuje náhľad (imageview.rs), text je prázdny
+    seen: Instant,           // naposledy na obrazovke
+    unloaded: bool,          // dlho nevidený neupravený súbor: text je preč z pamäte, načíta sa pri otvorení
+    stale: bool,             // súbor sa zmenil na disku, kým karta nebola aktívna → načítať pri otvorení
+    image: bool,             // obrázok: karta ukazuje náhľad (imageview.rs), text je prázdny
     sess: Option<Box<Sess>>, // vlastný Výstup + Terminál tohto súboru (vzniká až pri prvom použití)
 }
 
@@ -140,7 +140,7 @@ enum Bottom {
 pub struct Sug {
     items: Vec<crate::complete::Item>,
     sel: usize,
-    top: usize, // prvý viditeľný riadok (zoznam sa posúva)
+    top: usize,   // prvý viditeľný riadok (zoznam sa posúva)
     picked: bool, // užívateľ si vybral šípkami → až vtedy Enter prijme návrh (inak je to nový riadok)
     start: usize,
     end: usize,
@@ -214,7 +214,7 @@ fn drag_ghost(ctx: &egui::Context, name: &str) {
 }
 
 const SUG_ROWS: usize = 10; // naraz viditeľné návrhy (ďalšie sa posúvajú)
-// pás aktuálneho / zvýrazneného riadka sedí o chlp vyššie, aby bol text (podľa x-výšky) v jeho strede
+                            // pás aktuálneho / zvýrazneného riadka sedí o chlp vyššie, aby bol text (podľa x-výšky) v jeho strede
 const BAND_UP: f32 = 2.0;
 
 // ikonky návrhov (kreslené, 14 px) vo farbách VS Code
@@ -329,15 +329,15 @@ pub struct App {
     switched: f64, // čas poslednej zmeny obsahu karty (animácia prechodu)
     nav_dir: f32,
     tree_sel: Option<Rect>,
-    undo_capped: HashSet<String>,  // veľké súbory s menšou históriou krokov späť
+    undo_capped: HashSet<String>, // veľké súbory s menšou históriou krokov späť
     glass_apply: bool,
     focus_out: bool, // po ▶ Run: písanie ide programu (input()), nie do kódu
     whats_new: Option<Vec<usize>>,
     lint_res: Arc<std::sync::Mutex<HashMap<String, (u64, Vec<crate::lint::Diag>)>>>, // vysvetlivky chýb: cesta → (verzia textu, nálezy)
-    lint_seen: HashMap<String, (u64, Instant)>, // kedy sa text naposledy zmenil (kontrola až 600 ms po písaní)
+    lint_seen: HashMap<String, (u64, Instant)>,                                      // kedy sa text naposledy zmenil (kontrola až 600 ms po písaní)
     lint_asked: HashMap<String, u64>,
-    lint_jump: Option<usize>, // klik na „N problémov“ → riadok
-    sug: Option<Sug>,         // otvorené návrhy pri písaní
+    lint_jump: Option<usize>,                                                                                                       // klik na „N problémov“ → riadok
+    sug: Option<Sug>,                                                                                                               // otvorené návrhy pri písaní
     sug_words: Option<(String, u64, HashMap<String, usize>, std::collections::HashSet<String>, std::collections::HashSet<String>)>, // slová súboru pre návrhy (cesta, verzia textu) // „Čo je nové“ po aktualizácii: indexy verzií v release_notes()             // čisté ↔ rozmazané priehľadné okno: nastaviť v najbližšej snímke (treba okno)
     unfocused_at: Option<Instant>, // od kedy je okno v pozadí (tichá aktualizácia)     // riadok otvoreného súboru v strome (kĺzavé zvýraznenie)
     live_push: Option<Instant>,    // posledné poslanie neuloženého textu Live Serveru  // späť (-1) / dopredu (+1): obsah sa vysunie z tej strany
@@ -375,11 +375,11 @@ pub struct App {
     link_hover: Option<(String, Instant)>, // cesta/odkaz pod myšou a odkedy (náhľad po 350 ms)
     color_pick: Option<ColorPick>,         // otvorený výber farby pri štvorčeku v kóde // kde je okno návrhov (klik doň vezme editoru fokus skôr, než sa spracuje)
     plug: plugins_ui::PlugState,
-    imgs: imageview::Images, // obrázky (karty a náhľady ciest)
-    plug_run: Vec<String>,          // flux.commands.run z pluginu (vykoná sa v ďalšej snímke)
-    plug_cursor: Option<usize>,     // kurzor po vložení textu pluginom
-    sel_chars: Option<(usize, usize)>, // výber v editore (znaky) pre pluginy
-    snip_sel: Option<(usize, usize)>, // výber po vložení úryvku (predvolený text miesta)
+    imgs: imageview::Images,                 // obrázky (karty a náhľady ciest)
+    plug_run: Vec<String>,                   // flux.commands.run z pluginu (vykoná sa v ďalšej snímke)
+    plug_cursor: Option<usize>,              // kurzor po vložení textu pluginom
+    sel_chars: Option<(usize, usize)>,       // výber v editore (znaky) pre pluginy
+    snip_sel: Option<(usize, usize)>,        // výber po vložení úryvku (predvolený text miesta)
     preview: Option<preview::Preview>,       // Live Server vedľa kódu
     tour: Option<usize>,                     // krok prehliadky funkcií
     tour_rects: HashMap<&'static str, Rect>, // kde sú časti okna (pre prehliadku)
@@ -966,7 +966,11 @@ impl App {
     }
 
     fn base_fill(&self) -> Color32 {
-        if self.rounded { Color32::TRANSPARENT } else { self.pal.base }
+        if self.rounded {
+            Color32::TRANSPARENT
+        } else {
+            self.pal.base
+        }
     }
 
     // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
@@ -2583,7 +2587,13 @@ impl App {
         let tab = &mut self.tabs[self.active];
         let hlc = self.hls.entry(tab.path.clone()).or_default();
         let ext = tab.ext();
-        let lang = if ext.is_empty() { "txt".to_string() } else if ext == "ino" { "cpp".to_string() } else { ext };
+        let lang = if ext.is_empty() {
+            "txt".to_string()
+        } else if ext == "ino" {
+            "cpp".to_string()
+        } else {
+            ext
+        };
         let cur_line = self.cursor.0;
         let hover_ln = self.hover_src.as_ref().filter(|h| h.0 == crate::server::key(Path::new(&tab.path))).map(|h| h.1).unwrap_or(0);
         let mut edited = false;
@@ -2604,7 +2614,7 @@ impl App {
                 let hov = ui.painter().add(egui::Shape::Noop);
                 let found_shapes = ui.painter().add(egui::Shape::Noop);
                 let text_shapes = ui.painter().add(egui::Shape::Noop); // farebný text: pod kurzorom a výberom
-                // TextEdit rozloží text bez farieb (neviditeľný); farby sa kreslia nižšie len pre viditeľné riadky
+                                                                       // TextEdit rozloží text bez farieb (neviditeľný); farby sa kreslia nižšie len pre viditeľné riadky
                 let fmt = egui::TextFormat { font_id: font.clone(), color: Color32::TRANSPARENT, line_height: Some(lh), valign: egui::Align::Center, ..Default::default() };
                 let wrap_at = std::cell::Cell::new(f32::INFINITY);
                 let built: std::cell::RefCell<Option<std::sync::Arc<egui::Galley>>> = Default::default();
@@ -2668,7 +2678,10 @@ impl App {
                                 plen = e.chars().count();
                             }
                             // HTML: „!“ na začiatku riadka = celá stránka (ako Emmet)
-                            let bang = matches!(lang.as_str(), "html" | "htm") && before.last() == Some(&'!') && before.len() >= 1 && before[..before.len() - 1].iter().rev().take_while(|ch| **ch != '\n').all(|ch| ch.is_whitespace());
+                            let bang = matches!(lang.as_str(), "html" | "htm")
+                                && before.last() == Some(&'!')
+                                && before.len() >= 1
+                                && before[..before.len() - 1].iter().rev().take_while(|ch| **ch != '\n').all(|ch| ch.is_whitespace());
                             if bang {
                                 plen = 1;
                             }
@@ -2678,7 +2691,13 @@ impl App {
                             if (typed_ident && (plen >= 2 || (cx.rich() && plen >= 1))) || trig || bang || force_sug {
                                 let prefix: String = before[c - plen..].iter().collect();
                                 if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), hlc.gen)) {
-                                    *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang), crate::complete::members(&tab.text, &lang)));
+                                    *sug_words = Some((
+                                        tab.path.clone(),
+                                        hlc.gen,
+                                        crate::complete::words(&tab.text, &lang),
+                                        crate::complete::calls(&tab.text, &lang),
+                                        crate::complete::members(&tab.text, &lang),
+                                    ));
                                 }
                                 let w = sug_words.as_ref().unwrap();
                                 let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &w.4, &plug_snips, 60);
@@ -2777,7 +2796,8 @@ impl App {
                     }
                     // vysvetlivky chýb: vlnovka pod miestom, bodka pri čísle riadku, text za koncom riadku
                     // na riadku, kde sa práve píše s návrhmi, chyby nie (napr. „<fo> is never closed“ pri písaní značky)
-                    let lint_ds: Vec<crate::lint::Diag> = lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.iter().filter(|d| Some(d.line) != sug_line).cloned().collect()).unwrap_or_default();
+                    let lint_ds: Vec<crate::lint::Diag> =
+                        lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.iter().filter(|d| Some(d.line) != sug_line).cloned().collect()).unwrap_or_default();
                     let all_ds: Vec<crate::lint::Diag> = lint_ds.into_iter().chain(plug_marks.iter().cloned()).collect();
                     if !all_ds.is_empty() {
                         let ds = &all_ds;
@@ -2872,7 +2892,9 @@ impl App {
                                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                                 }
                                 // Ctrl podľa samotného kliknutia (kláves môže byť pustený v tej istej snímke)
-                                let ctrl_click = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::PointerButton { button: egui::PointerButton::Primary, pressed: true, modifiers, .. } if modifiers.command)));
+                                let ctrl_click = ui.input(|i| {
+                                    i.events.iter().any(|e| matches!(e, egui::Event::PointerButton { button: egui::PointerButton::Primary, pressed: true, modifiers, .. } if modifiers.command))
+                                });
                                 link_req = Some((target, pos, ctrl_click));
                             }
                         }
@@ -3109,7 +3131,11 @@ impl App {
                     if ch == '\n' || ch == ' ' || ch == '\t' {
                         if let Some(st) = run.take() {
                             if st < max_cols {
-                                painter.rect_filled(Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((col.min(max_cols) - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))), 0.0, color);
+                                painter.rect_filled(
+                                    Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((col.min(max_cols) - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))),
+                                    0.0,
+                                    color,
+                                );
                             }
                         }
                         col += if ch == '\t' { 4 } else { 1 };
@@ -3122,7 +3148,11 @@ impl App {
                 }
                 if let Some(st) = run {
                     if st < max_cols {
-                        painter.rect_filled(Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((col.min(max_cols) - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))), 0.0, color);
+                        painter.rect_filled(
+                            Rect::from_min_size(pos2(snap(x0 + st as f32), y), vec2(snap((col.min(max_cols) - st) as f32).max(1.0 / ppp), (1.0f32).max(1.0 / ppp).max(snap(1.3)))),
+                            0.0,
+                            color,
+                        );
                     }
                 }
                 b0 = end;
@@ -3322,43 +3352,46 @@ impl App {
                 }
             }
             ui.add_space(8.0);
-            ui.add_space(8.0);
-            // ---- dlaždice so štatistikami ----
-            let runs = self.core.setting("activity")[&ws]["runs"].as_u64().unwrap_or(0);
-            let secs = self.core.setting("projectTime")[&ws].as_u64().unwrap_or(0);
-            let tiles = [
-                ("clock", if secs >= 60 { format_time(secs) } else { "0 min".into() }, "coding time"),
-                ("play", runs.to_string(), "runs"),
-                ("code", summary["lines"].as_u64().map(|n| n.to_string()).unwrap_or("\u{2013}".into()), "lines of code"),
-                ("file", summary["files"].as_u64().map(|n| n.to_string()).unwrap_or("\u{2013}".into()), "files"),
-                ("refresh", summary["last"].as_u64().filter(|l| *l > 0).map(ago).unwrap_or("\u{2013}".into()), "last change"),
-            ];
-            let (row, _) = ui.allocate_exact_size(vec2(full, 84.0), Sense::hover());
-            let tw = (inner_w - 4.0 * 11.0) / 5.0;
-            for (i, (ic, val, label)) in tiles.iter().enumerate() {
-                let t = Rect::from_min_size(pos2(left + i as f32 * (tw + 11.0), row.top()), vec2(tw, 83.0));
-                // dlaždica sa pri prejdení myšou jemne nadvihne
-                let tresp = ui.interact(t, ui.id().with(("tile", i)), Sense::hover());
-                let hk = ui.ctx().animate_bool_with_time(tresp.id, tresp.hovered(), 0.15);
-                let t = t.translate(vec2(0.0, -2.0 * hk));
-                if hk > 0.0 {
-                    ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha((60.0 * hk) as u8) }.as_shape(t, CornerRadius::same(12)));
-                }
-                card(ui, t, 12, &p);
-                let ib = Rect::from_min_size(pos2(t.right() - 40.0, t.top() + 12.0), vec2(28.0, 28.0));
-                ui.painter().rect_filled(ib, CornerRadius::same(8), p.active);
-                widgets::icon_at(ui, ib.center(), 14.0, ic, p.text);
-                widgets::text(ui, pos2(t.left() + 16.0, t.top() + 31.0), Align2::LEFT_CENTER, val, widgets::fit_bold(ui, val, tw - 64.0, 24.0, 13.0), p.text, tw - 64.0);
-                ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, crate::i18n::t(label), theme::ui(12.5), p.text3);
-            }
-            ui.add_space(22.0);
-            // ---- doska (Arduino, ESP32, Pico…): stav, obrázok a pridávanie kódu k pinom ----
-            if let Some((bpath, bmode)) = board.clone() {
+            // ---- doska (Arduino, ESP32, Pico…): stav, veľký obrázok a pridávanie kódu k pinom; bez súboru „Board is empty“ ----
+            let icon_ino = meta["icon"].as_str() == Some("file:a.ino");
+            let board_view = board.clone().or_else(|| icon_ino.then(|| (String::new(), "cpp".to_string())));
+            if let Some((bpath, bmode)) = board_view.clone() {
                 let top = ui.cursor().top();
                 let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(left, top), vec2(inner_w, 4000.0))));
-                self.ard_project_card(&mut cu, &bpath, &bmode);
+                self.ard_project_card(&mut cu, &bpath, &bmode, &ws);
                 let used = cu.min_rect().height();
                 ui.allocate_exact_size(vec2(full, used), Sense::hover());
+                ui.add_space(22.0);
+            }
+            if board_view.is_none() {
+                // ---- dlaždice so štatistikami ----
+                let runs = self.core.setting("activity")[&ws]["runs"].as_u64().unwrap_or(0);
+                let secs = self.core.setting("projectTime")[&ws].as_u64().unwrap_or(0);
+                let tiles = [
+                    ("clock", if secs >= 60 { format_time(secs) } else { "0 min".into() }, "coding time"),
+                    ("play", runs.to_string(), "runs"),
+                    ("code", summary["lines"].as_u64().map(|n| n.to_string()).unwrap_or("\u{2013}".into()), "lines of code"),
+                    ("file", summary["files"].as_u64().map(|n| n.to_string()).unwrap_or("\u{2013}".into()), "files"),
+                    ("refresh", summary["last"].as_u64().filter(|l| *l > 0).map(ago).unwrap_or("\u{2013}".into()), "last change"),
+                ];
+                let (row, _) = ui.allocate_exact_size(vec2(full, 84.0), Sense::hover());
+                let tw = (inner_w - 4.0 * 11.0) / 5.0;
+                for (i, (ic, val, label)) in tiles.iter().enumerate() {
+                    let t = Rect::from_min_size(pos2(left + i as f32 * (tw + 11.0), row.top()), vec2(tw, 83.0));
+                    // dlaždica sa pri prejdení myšou jemne nadvihne
+                    let tresp = ui.interact(t, ui.id().with(("tile", i)), Sense::hover());
+                    let hk = ui.ctx().animate_bool_with_time(tresp.id, tresp.hovered(), 0.15);
+                    let t = t.translate(vec2(0.0, -2.0 * hk));
+                    if hk > 0.0 {
+                        ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha((60.0 * hk) as u8) }.as_shape(t, CornerRadius::same(12)));
+                    }
+                    card(ui, t, 12, &p);
+                    let ib = Rect::from_min_size(pos2(t.right() - 40.0, t.top() + 12.0), vec2(28.0, 28.0));
+                    ui.painter().rect_filled(ib, CornerRadius::same(8), p.active);
+                    widgets::icon_at(ui, ib.center(), 14.0, ic, p.text);
+                    widgets::text(ui, pos2(t.left() + 16.0, t.top() + 31.0), Align2::LEFT_CENTER, val, widgets::fit_bold(ui, val, tw - 64.0, 24.0, 13.0), p.text, tw - 64.0);
+                    ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, crate::i18n::t(label), theme::ui(12.5), p.text3);
+                }
                 ui.add_space(22.0);
             }
             // ---- súbory (podľa druhu) a TO-DO ----
@@ -4294,7 +4327,8 @@ impl eframe::App for App {
                 // editor (všetko na karte okrem Výstupu) a Výstup/Terminál podľa svojej nepriehľadnosti
                 let corners = |r: Rect| {
                     let k = |a: bool| if a { radius } else { 0 };
-                    let (l, rt, tp, b) = ((r.left() - card_r.left()).abs() < 1.0, (r.right() - card_r.right()).abs() < 1.0, (r.top() - card_r.top()).abs() < 1.0, (r.bottom() - card_r.bottom()).abs() < 1.0);
+                    let (l, rt, tp, b) =
+                        ((r.left() - card_r.left()).abs() < 1.0, (r.right() - card_r.right()).abs() < 1.0, (r.top() - card_r.top()).abs() < 1.0, (r.bottom() - card_r.bottom()).abs() < 1.0);
                     CornerRadius { nw: k(l && tp), ne: k(rt && tp), sw: k(l && b), se: k(rt && b) }
                 };
                 let mut shapes: Vec<(Rect, Color32)> = Vec::new();
@@ -4365,6 +4399,14 @@ impl eframe::App for App {
             egui::Area::new(egui::Id::new("ard-setup-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
                 ui.set_min_size(full.size());
                 self.ard_setup_window(ui, full);
+            });
+        }
+        // okno „nový súbor pre pin“
+        if self.ard.pin_dlg {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("ard-pin-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.ard_pin_window(ui, full);
             });
         }
         // okno Nový projekt
