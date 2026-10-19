@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.71
+
+**Python + Firmata**
+- On a board that already has StandardFirmata, the Python file now runs from the project page with **Run on board** (and F5): the script runs on your computer and only the pins it uses change – nothing is uploaded.
+- Before running, Flux checks that pyFirmata2 is installed and the board is found, and opens *Getting started* with what is missing.
+- A button script made from the pin window now has its loop, so it keeps listening instead of ending at once.
+
 ## 0.9.70
 
 **Pins and boards**

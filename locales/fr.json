@@ -553,6 +553,7 @@
  "Install mpremote": "Installer mpremote",
  "Install mpremote first (board panel → Install).": "Installe d’abord mpremote (panneau de la carte → Installer).",
  "Install pyFirmata2": "Installer pyFirmata2",
+ "Install pyFirmata2 first (board panel → Install).": "Installe d’abord pyFirmata2 (panneau de la carte → Install).",
  "Install pyserial (console)": "Installer pyserial (console)",
  "Install the Arduino tools first (Arduino panel → Install).": "Installe d’abord les outils Arduino (panneau Arduino → Install).",
  "Install the Arduino tools first (Board tab).": "Installe d’abord les outils Arduino (onglet Carte).",

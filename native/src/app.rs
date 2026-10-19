@@ -1423,6 +1423,12 @@ impl App {
         match self.ard_mode().as_deref() {
             Some("cpp") => return self.ard_upload(true),
             Some("micropython" | "circuitpython") => return self.ard_py_run(true),
+            // Python + Firmata: skript beží na počítači a ovláda dosku; treba pyFirmata2 a nájdenú dosku
+            Some("firmata") => {
+                if !self.ard_firmata_ready() {
+                    return;
+                }
+            }
             _ => {}
         }
         if let Some(why) = self.run_block() {
@@ -3317,13 +3323,15 @@ impl App {
             if board.is_none() && widgets::button(&mut acts, Some("filePlus"), &t("New file"), nf_bg, nf_fg, 32.0, &p).clicked() {
                 self.open_new_file(None);
             }
-            if let Some((bpath, _)) = &board {
+            if let Some((bpath, bmode)) = &board {
                 // projekt s doskou: hlavná akcia je nahrať na dosku
                 let bname = widgets::file_name(bpath);
                 if widgets::button(&mut acts, Some("code"), &t("Open main file"), p.card2, p.text, 32.0, &p).on_hover_text(&bname).clicked() {
                     self.open_file(bpath);
                 }
-                if widgets::button(&mut acts, Some("upload"), &t("Upload to board"), p.accent, p.accent_fg, 32.0, &p).on_hover_text(bname).clicked() {
+                let firmata = bmode == "firmata";
+                let (bicon, blabel) = if firmata { ("play", t("Run on board")) } else { ("upload", t("Upload to board")) };
+                if widgets::button(&mut acts, Some(bicon), &blabel, p.accent, p.accent_fg, 32.0, &p).on_hover_text(bname).clicked() {
                     self.open_file(bpath);
                     self.run();
                 }

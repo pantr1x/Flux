@@ -426,6 +426,21 @@ impl App {
         }
     }
 
+    // Python + Firmata: je nainštalovaný pyFirmata2 a nájdená doska? Inak otvorí Getting started a povie, čo chýba
+    pub(super) fn ard_firmata_ready(&mut self) -> bool {
+        if !self.ard.tools.lock().unwrap().firmata {
+            self.ard_need_setup();
+            self.status = t("Install pyFirmata2 first (board panel → Install).");
+            return false;
+        }
+        if self.ard_port().is_none() {
+            self.ard_need_setup();
+            self.status = t("No board found – plug it in with a USB cable.");
+            return false;
+        }
+        true
+    }
+
     fn ard_cp_copy(&mut self, path: &str) {
         self.status = match ard::circuitpy_drive() {
             Some(d) => match std::fs::copy(path, d.join("code.py")) {

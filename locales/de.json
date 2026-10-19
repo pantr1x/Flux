@@ -573,6 +573,7 @@
  "Install mpremote": "mpremote installieren",
  "Install mpremote first (board panel → Install).": "Installiere zuerst mpremote (Board-Panel → Installieren).",
  "Install pyFirmata2": "pyFirmata2 installieren",
+ "Install pyFirmata2 first (board panel → Install).": "Installiere zuerst pyFirmata2 (Board-Panel → Install).",
  "Install pyserial (console)": "pyserial installieren (Konsole)",
  "Install the Arduino tools first (Arduino panel → Install).": "Installiere zuerst die Arduino-Werkzeuge (Arduino-Bereich → Install).",
  "Install the Arduino tools first (Board tab).": "Installiere zuerst die Arduino-Werkzeuge (Reiter Board).",

@@ -1133,12 +1133,16 @@ fn add_py(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<S
                     defs.push(format!("led_{id} = board.get_pin('d:{num}:o')"));
                     body.extend([format!("led_{id}.write(1)"), "time.sleep(0.5)".into(), format!("led_{id}.write(0)"), "time.sleep(0.5)".into()]);
                 }
-                "button" => defs.extend([
-                    format!("button_{id} = board.get_pin('d:{num}:i')"),
-                    format!("button_{id}.register_callback(lambda v: print(\"Pin {pin}:\", v))"),
-                    format!("button_{id}.enable_reporting()"),
-                    sampling,
-                ]),
+                "button" => {
+                    defs.extend([
+                        format!("button_{id} = board.get_pin('d:{num}:i')"),
+                        format!("button_{id}.register_callback(lambda v: print(\"Pin {pin}:\", v))"),
+                        format!("button_{id}.enable_reporting()"),
+                        sampling,
+                    ]);
+                    // bez slučky by skript hneď skončil a callback by sa nikdy nezavolal
+                    body.push("time.sleep(0.1)".into());
+                }
                 "pwm" | "buzzer" => {
                     defs.push(format!("pwm_{id} = board.get_pin('d:{num}:p')"));
                     body.extend([format!("pwm_{id}.write(0.5)"), "time.sleep(0.5)".into()]);
@@ -1520,6 +1524,12 @@ mod tests {
                 let (_, t) = new_for_pin(mode, "13", kind, "/dev/ttyUSB0", false);
                 assert!(t.contains("13"), "{mode} {kind}: {t}");
             }
+        }
+        // Firmata: aj tlačidlo má slučku, inak skript hneď skončí a callback sa nezavolá
+        for kind in ["led", "button", "analog", "servo"] {
+            let (ext, t) = new_for_pin("firmata", "13", kind, "/dev/ttyACM0", false);
+            assert_eq!(ext, "py");
+            assert!(t.contains("Arduino(\"/dev/ttyACM0\")") && t.contains("while True:"), "{kind}: {t}");
         }
         let (ext, t) = new_for_pin("cpp", "13", "led", "", false);
         assert_eq!(ext, "ino");

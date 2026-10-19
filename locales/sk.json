@@ -576,6 +576,7 @@
  "Install mpremote": "Nainštalovať mpremote",
  "Install mpremote first (board panel → Install).": "Najprv nainštaluj mpremote (panel dosky → Inštalovať).",
  "Install pyFirmata2": "Nainštalovať pyFirmata2",
+ "Install pyFirmata2 first (board panel → Install).": "Najprv nainštaluj pyFirmata2 (panel dosky → Install).",
  "Install pyserial (console)": "Nainštalovať pyserial (konzola)",
  "Install the Arduino tools first (Arduino panel → Install).": "Najprv nainštaluj nástroje Arduino (panel Arduino → Install).",
  "Install the Arduino tools first (Board tab).": "Najprv nainštaluj nástroje Arduino (karta Doska).",
