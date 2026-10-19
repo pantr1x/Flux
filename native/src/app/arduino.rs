@@ -44,15 +44,11 @@ pub struct ArdUi {
     scroll_top: bool,
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
-    custom: String,                                            // vlastný kód pre pin
-    custom_open: bool,
-    pub preset: String,                          // naposledy zvolená predvoľba pinu (aktívne tlačidlo)
-    plain: bool,                                 // bez rámikov (hlavná stránka projektu)
-    new_name: String,                            // meno nového súboru z vlastného kódu (prázdne = pin_<n>)
-    new_mode: Option<String>,                    // jazyk nového súboru (None = ako aktuálny)
-    custom_repeat: bool,                         // do loop() / slučky (inak raz, do setup())
-    sel: Option<String>,                         // pin vybraný kliknutím v schéme
-    bt: Arc<Mutex<Vec<(String, String, bool)>>>, // spárované Bluetooth zariadenia (meno, MAC, pripojené)
+    pub preset: String,                                        // naposledy zvolená predvoľba pinu (aktívne tlačidlo)
+    plain: bool,                                               // bez rámikov (hlavná stránka projektu)
+    new_name: String,                                          // meno nového súboru z vlastného kódu (prázdne = pin_<n>)
+    sel: Option<String>,                                       // pin vybraný kliknutím v schéme
+    bt: Arc<Mutex<Vec<(String, String, bool)>>>,               // spárované Bluetooth zariadenia (meno, MAC, pripojené)
     pub width: f32,
     pub seen: HashSet<String>, // .ino, pri ktorých sa panel už raz sám otvoril
     pub section: u8,           // 0 doska, 1 zapojenie, 2 knižnice, 3 firmvér
@@ -84,13 +80,9 @@ impl Default for ArdUi {
             scroll_top: false,
             proj: None,
             flipped: HashSet::new(),
-            custom: String::new(),
-            custom_open: false,
             preset: String::new(),
             plain: false,
             new_name: String::new(),
-            new_mode: None,
-            custom_repeat: true,
             sel: None,
             bt: Arc::new(Mutex::new(vec![])),
             width: 0.0,
@@ -1366,169 +1358,75 @@ impl App {
             self.ard_hint(ui, &t("ESP32 and Pico pins work at 3.3 V – connect parts to 3V3, not 5V."));
         }
         let Some(sel) = self.ard.sel.clone() else {
-            self.ard_hint(ui, &t("Click a pin on the board to add LED, button, servo… code for it."));
+            self.ard_hint(ui, &t("Click a pin on the board to try it with a test or start a new file for it."));
             return;
         };
-        let used = pins.iter().find(|x| x.pin == sel).map(|x| mode_info(x.mode).1);
-        let kinds: Vec<(&str, String)> = [("led", "LED"), ("button", "Button"), ("pwm", "Fade (PWM)"), ("analog", "Analog sensor"), ("servo", "Servo"), ("buzzer", "Buzzer")]
-            .into_iter()
-            .filter(|(k, _)| match (layout, *k) {
-                (0 | 3 | 4, "analog") => sel.starts_with('A'),
-                (0 | 4, "pwm") => ["3", "5", "6", "9", "10", "11"].contains(&sel.as_str()),
-                (3, "pwm") => sel.parse::<u32>().is_ok_and(|n| (2..=13).contains(&n) || (44..=46).contains(&n)),
-                _ => true,
-            })
-            .map(|(k, l)| (k, t(l)))
-            .collect();
-        let mut add: Option<&str> = None;
-        let mut custom = std::mem::take(&mut self.ard.custom);
-        let (mut open, mut repeat, mut ins) = (self.ard.custom_open, self.ard.custom_repeat, 0u8);
-        let mut new_name = std::mem::take(&mut self.ard.new_name);
-        let mut new_mode = self.ard.new_mode.clone().unwrap_or_else(|| mode.to_string());
+        let used = pins.iter().position(|x| x.pin == sel);
         let file_name = widgets::file_name(target);
-        let cur_preset = self.ard.preset.clone();
-        if plain {
-            open = true;
-        }
+        let (mut test, mut create) = (false, false);
+        let mut new_name = std::mem::take(&mut self.ard.new_name);
         self.ard_card(ui, |ui| {
-            if plain {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(20.0)).color(dash::text()));
-                    if let Some(u) = used {
-                        ui.label(egui::RichText::new(u).font(theme::mono(11.5)).color(dash::cyan()));
-                    }
-                });
-                ui.label(egui::RichText::new(tf("Add to {name}:", &[("name", &file_name)])).font(theme::ui(12.5)).color(dash::text2()));
-                ui.add_space(2.0);
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
-                    for (k, label) in &kinds {
-                        if dash::preset(ui, k, label, cur_preset == *k).clicked() {
-                            add = Some(k);
-                        }
-                    }
-                });
-                ui.add_space(8.0);
-                dash::caption(ui, &t("CUSTOM CODE"));
-            } else {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(13.5)).color(p.text));
-                    if let Some(u) = used {
-                        ui.label(egui::RichText::new(u).font(theme::mono(11.0)).color(p.text3));
-                    }
-                });
-                ui.label(egui::RichText::new(tf("Add to {name}:", &[("name", &file_name)])).font(theme::ui(12.0)).color(p.text2));
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-                    for (k, label) in &kinds {
-                        if widgets::button(ui, None, label, p.card2, p.text, 28.0, &p).clicked() {
-                            add = Some(k);
-                        }
-                    }
-                });
-                ui.add_space(2.0);
-                if widgets::button(ui, Some("code"), &t("Custom code…"), if open { p.active } else { p.card2 }, p.text, 28.0, &p)
-                    .on_hover_text(t("Write your own code for this pin – it goes into a new file"))
-                    .clicked()
-                {
-                    open = !open;
+            ui.spacing_mut().item_spacing.y = 8.0;
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(if plain { 20.0 } else { 14.0 })).color(p.text));
+                if let Some(k) = used {
+                    let (col, m, _) = mode_info(pins[k].mode);
+                    ui.label(egui::RichText::new(format!("#{} · {m}", k + 1)).font(theme::mono(11.5)).color(col));
                 }
+            });
+            if let Some(k) = used {
+                let (_, _, hint) = mode_info(pins[k].mode);
+                let who = pins[k].name.as_ref().map(|n| format!(" ({n})")).unwrap_or_default();
+                ui.add(
+                    egui::Label::new(egui::RichText::new(format!("{}{who}", tf("{n} in {name}", &[("n", &(k + 1).to_string()), ("name", &file_name)]))).font(theme::ui(12.0)).color(p.text2)).wrap(),
+                );
+                ui.add(egui::Label::new(egui::RichText::new(t(hint)).font(theme::ui(12.0)).color(p.text3)).wrap());
             }
-            if open {
-                let hint = if mode == "cpp" { "digitalWrite({pin}, HIGH);" } else { "pin = {pin}" };
-                if plain {
-                    dash::code_edit(ui, &mut custom, hint, mode == "cpp", 6);
-                } else {
-                    ui.add(egui::TextEdit::multiline(&mut custom).hint_text(hint).font(theme::mono(12.0)).desired_rows(5).desired_width(f32::INFINITY).margin(egui::Margin::symmetric(10, 8)));
-                }
-                ui.add(egui::Label::new(egui::RichText::new(tf("{pin} becomes the pin number (here {n}).", &[("n", &sel)])).font(theme::ui(11.5)).color(p.text3)).wrap());
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-                    let (once_t, rep_t) = if mode == "cpp" { (t("Once (setup)"), t("Repeat (loop)")) } else { (t("Once (before the loop)"), t("Repeat (in the loop)")) };
-                    if plain {
-                        if let Some(r) = dash::segmented(ui, &once_t, &rep_t, repeat) {
-                            repeat = r;
-                        }
-                    } else {
-                        if widgets::button(ui, None, &once_t, if !repeat { p.active } else { p.card2 }, p.text, 26.0, &p).clicked() {
-                            repeat = false;
-                        }
-                        if widgets::button(ui, None, &rep_t, if repeat { p.active } else { p.card2 }, p.text, 26.0, &p).clicked() {
-                            repeat = true;
-                        }
-                    }
-                });
-                // nový súbor: meno a jazyk (prípona) sa dajú zmeniť
-                ui.add_space(2.0);
-                ui.label(egui::RichText::new(t("New file")).font(theme::bold(12.0)).color(p.text2));
-                let langs = [("cpp", "C++ (.ino)"), ("micropython", "MicroPython (.py)"), ("circuitpython", "CircuitPython (.py)"), ("firmata", "Python + Firmata (.py)")];
-                let lang_labels: Vec<String> = langs.iter().map(|l| l.1.to_string()).collect();
-                let cur_lang = langs.iter().find(|l| l.0 == new_mode).map(|l| l.1).unwrap_or("C++ (.ino)");
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    let tw = (ui.available_width() - 6.0 - 170.0).max(90.0);
-                    ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.0)).desired_width(tw).margin(egui::Margin::symmetric(10, 7)));
-                    if let Some(i) = widgets::select(ui, egui::Id::new("ard-newlang"), cur_lang, &lang_labels, 170.0, &p) {
-                        new_mode = langs[i].0.to_string();
-                    }
-                });
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-                    if widgets::button(ui, Some("filePlus"), &t("Create the file"), p.accent, p.accent_fg, 28.0, &p).clicked() {
-                        ins = 1;
-                    }
-                    if widgets::button(ui, None, &tf("Add to {name}", &[("name", &file_name)]), p.card2, p.text, 28.0, &p).clicked() {
-                        ins = 2;
-                    }
-                });
-            }
+            ui.label(egui::RichText::new(t("Quick test")).font(theme::bold(11.0)).color(p.text3));
+            let tip = tf("Adds a blinking LED on pin {n} to {name}", &[("n", &sel), ("name", &file_name)]);
+            let r = if plain { dash::preset(ui, "led", &t("Blink test"), false) } else { widgets::button(ui, Some("play"), &t("Blink test"), p.card2, p.text, 28.0, &p) };
+            test = r.on_hover_text(tip).clicked();
+            ui.add_space(2.0);
+            ui.label(egui::RichText::new(t("Your own code")).font(theme::bold(11.0)).color(p.text3));
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                let bw = widgets::text_w(ui, &t("Create"), theme::bold(13.0)) + 52.0;
+                let tw = (ui.available_width() - 6.0 - bw).max(90.0);
+                ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.0)).desired_width(tw).margin(egui::Margin::symmetric(10, 7)));
+                create = widgets::button(ui, Some("filePlus"), &t("Create"), p.accent, p.accent_fg, 30.0, &p).on_hover_text(t("Makes a new file for this pin and opens it in the editor")).clicked();
+            });
         });
-        if let Some(k) = add {
-            self.ard.preset = k.to_string();
-        }
-        self.ard.custom = custom.clone();
-        self.ard.custom_open = open;
-        self.ard.custom_repeat = repeat;
         self.ard.new_name = new_name.clone();
-        self.ard.new_mode = Some(new_mode.clone());
         if target.is_empty() {
             return;
         }
-        if let Some(kind) = add {
-            self.status = match self.ard_edit_target(target, |txt| ard::add_snippet(mode, txt, &sel, kind, layout == 2)) {
+        if test {
+            self.status = match self.ard_edit_target(target, |txt| ard::add_snippet(mode, txt, &sel, "led", layout == 2)) {
                 Some(name) => tf("Added to {name} – the code is in the editor", &[("name", &name)]),
                 None => t("That is already in the code."),
             };
-        } else if ins == 2 {
-            self.status = match self.ard_edit_target(target, |txt| ard::add_custom(mode, txt, &sel, &custom, repeat)) {
-                Some(name) => tf("Added to {name} – the code is in the editor", &[("name", &name)]),
-                None => t("Nothing to add – write some code first."),
-            };
-        } else if ins == 1 {
+        } else if create {
             let port = self.ard_port().unwrap_or_else(|| "/dev/ttyUSB0".into());
-            match ard::new_script(&new_mode, &sel, &custom, repeat, &port) {
-                Some((ext, content)) => {
-                    let dir = std::path::Path::new(target).parent().map(|d| d.to_path_buf()).unwrap_or_default();
-                    // meno: čo si napísal (bez prípony a nepovolených znakov), inak pin_<n>
-                    let typed = new_name.trim().trim_end_matches(&format!(".{ext}")).to_string();
-                    let clean: String = typed.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '.') { c } else { '_' }).collect();
-                    let base = if clean.trim().is_empty() { format!("pin_{}", sel.to_lowercase()) } else { clean.trim().to_string() };
-                    let mut path = dir.join(format!("{base}.{ext}"));
-                    let mut n = 2;
-                    while path.exists() {
-                        path = dir.join(format!("{base}-{n}.{ext}"));
-                        n += 1;
-                    }
-                    match std::fs::write(&path, content) {
-                        Ok(()) => {
-                            self.open_file(&path.to_string_lossy());
-                            self.ard.new_name.clear();
-                            self.status = tf("Created {name}", &[("name", &widgets::file_name(&path.to_string_lossy()))]);
-                        }
-                        Err(e) => self.status = e.to_string(),
-                    }
+            let starter = if mode == "cpp" { format!("// Pin {sel}: write your code here") } else { format!("# Pin {sel}: write your code here") };
+            if let Some((ext, content)) = ard::new_script(mode, &sel, &starter, true, &port) {
+                let dir = std::path::Path::new(target).parent().map(|d| d.to_path_buf()).unwrap_or_default();
+                let typed = new_name.trim().trim_end_matches(&format!(".{ext}")).to_string();
+                let clean: String = typed.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '.') { c } else { '_' }).collect();
+                let base = if clean.trim().is_empty() { format!("pin_{}", sel.to_lowercase()) } else { clean.trim().to_string() };
+                let mut path = dir.join(format!("{base}.{ext}"));
+                let mut n = 2;
+                while path.exists() {
+                    path = dir.join(format!("{base}-{n}.{ext}"));
+                    n += 1;
                 }
-                None => self.status = t("Nothing to add – write some code first."),
+                match std::fs::write(&path, content) {
+                    Ok(()) => {
+                        self.open_file(&path.to_string_lossy());
+                        self.ard.new_name.clear();
+                        self.status = tf("Created {name}", &[("name", &widgets::file_name(&path.to_string_lossy()))]);
+                    }
+                    Err(e) => self.status = e.to_string(),
+                }
             }
         }
     }

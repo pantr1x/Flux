@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.65
+
+**Pins**
+- Click a pin on the board: you now get a **Blink test** (adds a blinking LED to your file) and **Create**, which makes a new file named for the pin and opens it in the editor, so you write your code there and not in a small box.
+- The numbers on the board (1, 2, 3 … by the pins your file uses) now show what they are when you hover them: pin, mode, and what to connect.
+
 ## 0.9.64
 
 **Board dashboard (project page)**

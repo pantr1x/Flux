@@ -271,6 +271,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
                 pa.line_segment([c, out], Stroke::new(2.0, col));
                 pa.circle_filled(out, 9.0, col);
                 pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.5), Color32::BLACK);
+                ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 1, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                 pa.circle_stroke(c, s * 1.0, Stroke::new(2.0, col));
             } else if pwr {
                 pa.circle_stroke(c, s * 1.0, Stroke::new(1.5, if *l == "5V" { Color32::from_rgb(0xff, 0x5c, 0x5c) } else { gray(235) }));
@@ -313,6 +314,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
                     pa.line_segment([c, out], Stroke::new(2.0, mc));
                     pa.circle_filled(out, 8.5, mc);
                     pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.0), Color32::BLACK);
+                    ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 2, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                     pa.circle_stroke(c, s * 1.0, Stroke::new(2.0, mc));
                 }
             }
@@ -417,10 +419,21 @@ pub fn draw_vertical(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, title: &str, le
                     pa.line_segment([c, out], Stroke::new(2.0, mc));
                     pa.circle_filled(out, 7.5, mc);
                     pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(9.5), Color32::BLACK);
+                    ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 3, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                     pa.circle_stroke(c, 5.0, Stroke::new(2.0, mc));
                 }
             }
         }
     }
     clicked.take()
+}
+
+// text nad číslom pri doske: pin, režim, čo doň zapojiť
+fn bubble_tip(p: &ard::Pin) -> String {
+    let (_, m, h) = mode_info(p.mode);
+    let mut s = format!("{} {} · {m}", t("Pin"), p.pin);
+    if let Some(n) = &p.name {
+        s += &format!(" ({n})");
+    }
+    s + "\n" + &t(h)
 }
