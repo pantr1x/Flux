@@ -2,6 +2,21 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.57
+
+**Boards in Python**
+- Choose your language: **C++ (Arduino)**, **MicroPython**, **CircuitPython** or **Python + Firmata**. *New file* has a starter for each, and the board panel opens by itself for `.ino` files and for Python files that use `machine`, `board` or `pyfirmata2`.
+- **MicroPython**: *Run on board* (F5), *Save as main.py*, *REPL* and *Files on board* with `mpremote` (Flux installs it for you). The Firmware tab flashes MicroPython to ESP32 / ESP8266 (`esptool`) or a Raspberry Pi Pico (.uf2).
+- **CircuitPython**: F5 copies your file to the CIRCUITPY drive as `code.py`; a serial console shows `print()` output.
+- **Python + Firmata**: upload StandardFirmata once, then run your Python script from the computer (`pyFirmata2`).
+- More boards for C++: ESP32, ESP32-S3, ESP8266 NodeMCU, Raspberry Pi Pico, UNO R4 and Nano Every (Flux adds their package sources by itself).
+
+**Projects**
+- Use **your own picture** as a project icon (New project and the project page): the first picture button in the icon list.
+
+**Live Server**
+- The preview tab finds the favicon next to the page (`favicon.ico`, `favicon.png`, `icon.svg`…), also without a `<link>` tag and when `href` has no quotes, and reads pictures by their real format.
+
 ## 0.9.56
 
 **Arduino** (Linux first, Windows too)

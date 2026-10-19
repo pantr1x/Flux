@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // typy dosiek na výber (fqbn, názov); Elegoo Uno R3 / Mega 2560 / Nano sú klony týchto
-pub const BOARDS: [(&str, &str); 7] = [
+pub const BOARDS: [(&str, &str); 14] = [
     ("arduino:avr:uno", "Arduino Uno (Elegoo Uno R3)"),
     ("arduino:avr:mega", "Arduino Mega 2560 (Elegoo Mega)"),
     ("arduino:avr:nano:cpu=atmega328old", "Arduino Nano – old bootloader (most clones)"),
@@ -15,7 +15,24 @@ pub const BOARDS: [(&str, &str); 7] = [
     ("arduino:avr:leonardo", "Arduino Leonardo"),
     ("arduino:avr:micro", "Arduino Micro"),
     ("arduino:avr:pro:cpu=16MHzatmega328", "Arduino Pro Mini 5V"),
+    ("arduino:renesas_uno:unor4wifi", "Arduino UNO R4 WiFi"),
+    ("arduino:renesas_uno:minima", "Arduino UNO R4 Minima"),
+    ("arduino:megaavr:nona4809", "Arduino Nano Every"),
+    ("esp32:esp32:esp32", "ESP32 Dev Module"),
+    ("esp32:esp32:esp32s3", "ESP32-S3 Dev Module"),
+    ("esp8266:esp8266:nodemcuv2", "ESP8266 NodeMCU"),
+    ("rp2040:rp2040:rpipico", "Raspberry Pi Pico (Arduino-Pico)"),
 ];
+
+// dosky mimo Arduina potrebujú pridať adresu zoznamu balíčkov (arduino-cli --additional-urls)
+pub fn extra_url(fqbn: &str) -> Option<&'static str> {
+    match fqbn.split(':').next()? {
+        "esp32" => Some("https://espressif.github.io/arduino-esp32/package_esp32_index.json"),
+        "esp8266" => Some("https://arduino.esp8266.com/stable/package_esp8266com_index.json"),
+        "rp2040" => Some("https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"),
+        _ => None,
+    }
+}
 
 pub const BAUDS: [u32; 6] = [9600, 19200, 38400, 57600, 115200, 250000];
 
@@ -485,8 +502,159 @@ pub fn pins_in(code: &str) -> Vec<Pin> {
     out
 }
 
+// ---------- Python na doske (MicroPython, CircuitPython, Python + Firmata) ----------
+pub const PY_MODES: [(&str, &str); 3] = [("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Firmata")];
+
+// podľa importov v .py súbore: ide o kód pre dosku?
+pub fn guess_py(text: &str) -> Option<&'static str> {
+    let has = |k: &str| {
+        text.lines().take(300).any(|l| {
+            let l = l.trim_start();
+            l.strip_prefix("import ").or_else(|| l.strip_prefix("from ")).is_some_and(|r| r.split(|c: char| !c.is_alphanumeric() && c != '_').next() == Some(k))
+        })
+    };
+    if has("pyfirmata") || has("pyfirmata2") {
+        Some("firmata")
+    } else if has("machine") || has("utime") || has("micropython") || has("network") && text.contains("WLAN") {
+        Some("micropython")
+    } else if has("board") || has("digitalio") || has("analogio") || has("busio") || has("neopixel") || has("adafruit_hid") {
+        Some("circuitpython")
+    } else {
+        None
+    }
+}
+
+pub fn py() -> &'static str {
+    if cfg!(windows) {
+        "python"
+    } else {
+        "python3"
+    }
+}
+
+fn works(cmd: &[String]) -> bool {
+    let mut c = Command::new(&cmd[0]);
+    c.args(&cmd[1..]).arg("--version").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000);
+    }
+    c.status().map(|s| s.success()).unwrap_or(false)
+}
+
+// nástroj z pip/pipx (mpremote, esptool): na PATH, v ~/.local/bin, alebo ako `python -m <modul>`
+pub fn find_tool(name: &str) -> Option<Vec<String>> {
+    let direct = vec![name.to_string()];
+    if works(&direct) {
+        return Some(direct);
+    }
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        for sub in [".local/bin", "Scripts"] {
+            let f = Path::new(&home).join(sub).join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
+            if f.is_file() {
+                return Some(vec![f.to_string_lossy().to_string()]);
+            }
+        }
+    }
+    let m = vec![py().to_string(), "-m".to_string(), name.to_string()];
+    works(&m).then_some(m)
+}
+
+// inštalácia balíčka: aplikácie (mpremote, esptool) cez pipx, knižnice (pyserial, pyfirmata2) cez pip --user;
+// novšie Ubuntu/Debian chránia systémový Python, preto posledný pokus s --break-system-packages
+pub fn pip_install(pkg: &str, app: bool) -> Vec<String> {
+    if cfg!(windows) {
+        return vec![py().into(), "-m".into(), "pip".into(), "install".into(), "--user".into(), pkg.into()];
+    }
+    let p = py();
+    let pip = format!("{p} -m pip install --user {pkg} || {p} -m pip install --user --break-system-packages {pkg}");
+    let line = if app { format!("pipx install {pkg} || {pip}") } else { pip };
+    vec!["sh".into(), "-c".into(), line]
+}
+
+// CircuitPython sa po pripojení ukáže ako disk CIRCUITPY
+pub fn circuitpy_drive() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        for l in 'D'..='Z' {
+            let d = PathBuf::from(format!("{l}:\\"));
+            if d.join("boot_out.txt").is_file() {
+                return Some(d);
+            }
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let user = std::env::var("USER").unwrap_or_default();
+        for base in [format!("/media/{user}"), format!("/run/media/{user}"), "/media".into(), "/mnt".into(), "/Volumes".into()] {
+            let d = Path::new(&base).join("CIRCUITPY");
+            if d.is_dir() {
+                return Some(d);
+            }
+        }
+        None
+    }
+}
+
+// disk bootloadera UF2 (Raspberry Pi Pico RPI-RP2, dosky Adafruit…): obsahuje INFO_UF2.TXT
+pub fn uf2_drive() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        for l in 'D'..='Z' {
+            let d = PathBuf::from(format!("{l}:\\"));
+            if d.join("INFO_UF2.TXT").is_file() {
+                return Some(d);
+            }
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let user = std::env::var("USER").unwrap_or_default();
+        for base in [format!("/media/{user}"), format!("/run/media/{user}"), "/media".into(), "/mnt".into(), "/Volumes".into()] {
+            let Ok(rd) = std::fs::read_dir(&base) else { continue };
+            for e in rd.flatten() {
+                if e.path().join("INFO_UF2.TXT").is_file() {
+                    return Some(e.path());
+                }
+            }
+        }
+        None
+    }
+}
+
+// je Python modul nainštalovaný (pyserial = serial, pyfirmata2)?
+pub fn py_has(module: &str) -> bool {
+    let mut c = Command::new(py());
+    c.args(["-c", &format!("import {module}")]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000);
+    }
+    c.status().map(|s| s.success()).unwrap_or(false)
+}
+
+pub const MICROPY_BLINK: &str = "# MicroPython: blikanie LED na doske\nfrom machine import Pin\nfrom time import sleep\n\nled = Pin(2, Pin.OUT)  # ESP32: 2, Raspberry Pi Pico: \"LED\"\n\nwhile True:\n    led.toggle()\n    sleep(0.5)\n";
+pub const CIRCUITPY_BLINK: &str = "# CircuitPython: blikanie LED na doske\nimport time\nimport board\nimport digitalio\n\nled = digitalio.DigitalInOut(board.LED)\nled.direction = digitalio.Direction.OUTPUT\n\nwhile True:\n    led.value = not led.value\n    time.sleep(0.5)\n";
+pub fn firmata_blink(port: &str) -> String {
+    format!("# Python + Firmata: na dosku sa raz nahrá StandardFirmata, program beží v počítači\nimport time\nfrom pyfirmata2 import Arduino\n\nboard = Arduino(\"{port}\")\n\nwhile True:\n    board.digital[13].write(1)\n    time.sleep(0.5)\n    board.digital[13].write(0)\n    time.sleep(0.5)\n")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn arduino_py_modes() {
+        assert_eq!(super::guess_py("from machine import Pin\n"), Some("micropython"));
+        assert_eq!(super::guess_py("import board\nimport digitalio"), Some("circuitpython"));
+        assert_eq!(super::guess_py("from pyfirmata2 import Arduino"), Some("firmata"));
+        assert_eq!(super::guess_py("import os\nprint(1)"), None);
+        assert!(super::extra_url("esp32:esp32:esp32").is_some() && super::extra_url("arduino:avr:uno").is_none());
+        assert!(super::firmata_blink("/dev/ttyUSB0").contains("/dev/ttyUSB0"));
+    }
+
     use super::*;
 
     #[test]

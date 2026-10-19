@@ -60,7 +60,9 @@ impl Images {
                 let r = if p.to_lowercase().ends_with(".svg") {
                     std::fs::read(&p).map(|b| Slot::Svg(b.into())).unwrap_or_else(|e| Slot::Failed(e.to_string()))
                 } else {
-                    match image::open(&p) {
+                    // formát podľa obsahu (favicon.ico môže byť v skutočnosti PNG), inak podľa prípony
+                    let opened = image::ImageReader::open(&p).and_then(|r| r.with_guessed_format()).map_err(image::ImageError::IoError).and_then(|r| r.decode());
+                    match opened.or_else(|_| image::open(&p)) {
                         Ok(im) => {
                             // veľké obrázky zmenšiť na 4096 px (textúra GPU)
                             let im = if im.width().max(im.height()) > 4096 { im.thumbnail(4096, 4096) } else { im };

@@ -40,9 +40,65 @@ impl NewProj {
     }
 }
 
-// ikona projektu: „line:…“, „emoji:…“ alebo „file:a.py“ (ikona jazyka); prázdne = priečinok
+thread_local! {
+    // vlastné obrázky projektov (img:<súbor>) → textúra; None = nejde načítať
+    static IMG_TEX: std::cell::RefCell<std::collections::HashMap<String, Option<egui::TextureHandle>>> = Default::default();
+}
+
+// vlastný obrázok ako ikona projektu: PNG/JPG/… sa raz načíta a zmenší, SVG sa kreslí z bajtov
+pub fn paint_img(ui: &egui::Ui, r: Rect, path: &str) -> bool {
+    if path.to_lowercase().ends_with(".svg") {
+        if let Ok(b) = std::fs::read(path) {
+            egui::Image::from_bytes(format!("bytes://projicon/{path}"), b).fit_to_exact_size(r.size()).paint_at(ui, r);
+            return true;
+        }
+        return false;
+    }
+    let tex = IMG_TEX.with(|m| {
+        m.borrow_mut()
+            .entry(path.to_string())
+            .or_insert_with(|| {
+                let im = image::open(path).ok()?.thumbnail(128, 128).to_rgba8();
+                let ci = egui::ColorImage::from_rgba_unmultiplied([im.width() as usize, im.height() as usize], &im);
+                Some(ui.ctx().load_texture(format!("projicon:{path}"), ci, egui::TextureOptions::LINEAR))
+            })
+            .clone()
+    });
+    match tex {
+        Some(t) => {
+            let s = t.size_vec2();
+            let k = (r.width() / s.x).min(r.height() / s.y);
+            let fr = Rect::from_center_size(r.center(), s * k);
+            ui.painter().image(t.id(), fr, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+            true
+        }
+        None => false,
+    }
+}
+
+// vybraný obrázok sa skopíruje do userData/project-icons (zmenšený na 128 px), aby ikona prežila zmazanie originálu
+fn import_img(src: &Path) -> Option<String> {
+    let dir = flux_core::settings::user_data().join("project-icons");
+    std::fs::create_dir_all(&dir).ok()?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    if src.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("svg")) {
+        let out = dir.join(format!("{stamp}.svg"));
+        std::fs::copy(src, &out).ok()?;
+        return Some(format!("img:{}", out.to_string_lossy()));
+    }
+    let im = image::open(src).ok()?.thumbnail(128, 128);
+    let out = dir.join(format!("{stamp}.png"));
+    im.save(&out).ok()?;
+    Some(format!("img:{}", out.to_string_lossy()))
+}
+
+// ikona projektu: „line:…“, „emoji:…“, „img:<súbor>“ (vlastný obrázok) alebo „file:a.py“ (ikona jazyka); prázdne = priečinok
 pub fn paint_icon(ui: &egui::Ui, r: Rect, spec: &str, p: &theme::Pal) {
-    if let Some(n) = spec.strip_prefix("line:") {
+    if let Some(f) = spec.strip_prefix("img:") {
+        if !paint_img(ui, r, f) {
+            widgets::icon(ui, r.shrink(r.width() * 0.08), "imageEdit", p.text2);
+        }
+    } else if let Some(n) = spec.strip_prefix("line:") {
         widgets::icon(ui, r, n, p.text);
     } else if let Some(e) = spec.strip_prefix("emoji:") {
         ui.painter().text(r.center(), Align2::CENTER_CENTER, e, egui::FontId::proportional(r.height() * 0.86), p.text);
@@ -55,7 +111,10 @@ pub fn paint_icon(ui: &egui::Ui, r: Rect, spec: &str, p: &theme::Pal) {
 
 // výber ikony: vráti novú hodnotu (prázdna = ikona jazyka)
 pub fn icon_picker(ui: &mut egui::Ui, cur: &str, lang_file: &str, w: f32, p: &theme::Pal) -> Option<String> {
-    let mut all: Vec<String> = vec![String::new()];
+    let mut all: Vec<String> = vec![String::new(), "pick-image".into()];
+    if cur.starts_with("img:") {
+        all.push(cur.to_string());
+    }
     all.extend(LINE_ICONS.iter().map(|n| format!("line:{n}")));
     all.extend(EMOJI.iter().map(|e| format!("emoji:{e}")));
     let s = 34.0;
@@ -74,12 +133,29 @@ pub fn icon_picker(ui: &mut egui::Ui, cur: &str, lang_file: &str, w: f32, p: &th
         let inner = Rect::from_center_size(r.center(), vec2(18.0, 18.0));
         if spec.is_empty() {
             paint_icon(ui, inner, &format!("file:{lang_file}"), p);
+        } else if spec == "pick-image" {
+            widgets::icon(ui, inner, "imageEdit", p.text2);
+            ui.painter().circle_filled(inner.right_top() + vec2(1.0, 0.0), 5.0, p.accent);
+            ui.painter().text(inner.right_top() + vec2(1.0, 0.0), Align2::CENTER_CENTER, "+", egui::FontId::proportional(9.0), p.accent_fg);
         } else {
             paint_icon(ui, inner, spec, p);
         }
-        let resp = if spec.is_empty() { resp.on_hover_text(t("Automatic: the icon of the main language")) } else { resp };
+        let resp = if spec.is_empty() {
+            resp.on_hover_text(t("Automatic: the icon of the main language"))
+        } else if spec == "pick-image" {
+            resp.on_hover_text(t("Use your own picture…"))
+        } else {
+            resp
+        };
         if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-            pick = Some(spec.clone());
+            if spec == "pick-image" {
+                let f = rfd::FileDialog::new().set_title(t("Choose a picture")).add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif", "bmp", "ico", "svg"]).pick_file();
+                if let Some(ic) = f.and_then(|f| import_img(&f)) {
+                    pick = Some(ic);
+                }
+            } else {
+                pick = Some(spec.clone());
+            }
         }
     }
     pick

@@ -200,7 +200,11 @@ pub fn row_ex(ui: &mut egui::Ui, selected: bool, fill: bool, indent: f32, lead: 
         }
         Lead::Project(spec) => {
             let r = Rect::from_min_size(pos2(x, cy - 8.0), vec2(16.0, 16.0));
-            if let Some(n) = spec.strip_prefix("line:") {
+            if let Some(f) = spec.strip_prefix("img:") {
+                if !crate::app::paint_project_img(ui, r, f) {
+                    icon(ui, r, "imageEdit", p.text3);
+                }
+            } else if let Some(n) = spec.strip_prefix("line:") {
                 icon(ui, r, n, p.text2);
             } else if let Some(e) = spec.strip_prefix("emoji:") {
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, e, egui::FontId::proportional(14.0), p.text);

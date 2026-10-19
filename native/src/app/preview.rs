@@ -8,9 +8,9 @@ use crate::widgets;
 use eframe::egui::{self, pos2, vec2, Align2, CornerRadius, Rect, Sense, Stroke};
 
 pub struct Preview {
-    pub url: String,           // adresa aktívnej karty
-    pub follow: String,        // adresa otvoreného súboru, ktorú panel naposledy prevzal
-    pub tabs: Vec<String>,         // adresy kariet (tabs[active] == url)
+    pub url: String,       // adresa aktívnej karty
+    pub follow: String,    // adresa otvoreného súboru, ktorú panel naposledy prevzal
+    pub tabs: Vec<String>, // adresy kariet (tabs[active] == url)
     pub active: usize,
     device: usize, // 0 = celá šírka, 1 = tablet, 2 = mobil
     pub width: f32,
@@ -36,8 +36,8 @@ pub struct Preview {
     #[allow(dead_code)]
     covered: bool, // minulý snímok bola stránka zakrytá
     away_since: Option<f64>, // od kedy je stránka zakrytá (nastavenia, hľadanie…)
-    active_at: f64,          // kedy mal Flux naposledy fokus alebo vstup od používateľa
-    asleep: bool,            // stránka je dočasne zavretá (šetrí pamäť), po návrate sa otvorí znova
+    active_at: f64,         // kedy mal Flux naposledy fokus alebo vstup od používateľa
+    asleep: bool,           // stránka je dočasne zavretá (šetrí pamäť), po návrate sa otvorí znova
     pub info: std::collections::HashMap<String, (std::time::Instant, Option<String>, Option<String>)>, // adresa → (kedy, názov, favikona)
     #[cfg(windows)]
     low_mem: bool, // WebView2 je v režime nízkej pamäte (Flux bez fokusu)
@@ -90,12 +90,21 @@ pub fn page_info(root: &std::path::Path, url: &str) -> (Option<String>, Option<S
         let tag = &html[a..e];
         let tl = &low[a..e];
         if tl.contains("icon") && !tl.contains("apple-touch") {
-            let href = ["href=\"", "href='"].iter().find_map(|k| {
-                let s = tl.find(k)? + k.len();
-                let q = k.chars().last()?;
-                let end = s + tag[s..].find(q)?;
-                Some(tag[s..end].to_string())
-            });
+            let href = ["href=\"", "href='"]
+                .iter()
+                .find_map(|k| {
+                    let s = tl.find(k)? + k.len();
+                    let q = k.chars().last()?;
+                    let end = s + tag.get(s..)?.find(q)?;
+                    Some(tag.get(s..end)?.to_string())
+                })
+                .or_else(|| {
+                    // href=icon.png (bez úvodzoviek)
+                    let s = tl.find("href=")? + 5;
+                    let rest = tag.get(s..)?;
+                    let end = rest.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(rest.len());
+                    Some(rest[..end].trim_end_matches('/').to_string())
+                });
             if let Some(h) = href.filter(|h| !h.contains("://") && !h.starts_with("data:")) {
                 let h = h.split(['?', '#']).next().unwrap_or("").to_string();
                 let f = if let Some(abs) = h.strip_prefix('/') { root.join(abs) } else { file.parent().unwrap_or(root).join(&h) };
@@ -108,9 +117,20 @@ pub fn page_info(root: &std::path::Path, url: &str) -> (Option<String>, Option<S
         from = e.max(a + 5);
     }
     if icon.is_none() {
-        let f = root.join("favicon.ico");
-        if f.is_file() {
-            icon = Some(f.to_string_lossy().to_string());
+        // bez <link>: favicon.* vedľa stránky, v nadradených priečinkoch až po koreň
+        let mut dir = file.parent().map(|d| d.to_path_buf());
+        while let Some(d) = dir {
+            for n in ["favicon.ico", "favicon.png", "favicon.svg", "favicon.jpg", "favicon.webp", "icon.ico", "icon.png", "icon.svg"] {
+                let f = d.join(n);
+                if f.is_file() {
+                    icon = Some(f.to_string_lossy().to_string());
+                    break;
+                }
+            }
+            if icon.is_some() || d == root || !d.starts_with(root) {
+                break;
+            }
+            dir = d.parent().map(|d| d.to_path_buf());
         }
     }
     (title, icon)
@@ -325,7 +345,11 @@ impl App {
             let m = area.shrink(8.0);
             let w = m.width().min(m.height() * 16.0 / 9.0).max(40.0);
             Rect::from_center_size(m.center(), vec2(w, w * 9.0 / 16.0))
-        } else if dw > 0.0 && dw < area.width() { Rect::from_center_size(pos2(area.center().x, area.center().y), vec2(dw, area.height())) } else { area };
+        } else if dw > 0.0 && dw < area.width() {
+            Rect::from_center_size(pos2(area.center().x, area.center().y), vec2(dw, area.height()))
+        } else {
+            area
+        };
         if dw != 0.0 {
             ui.painter().rect_filled(area, 0.0, p.card2);
         }
@@ -342,7 +366,13 @@ impl App {
                     ui.painter().text(pos2(c.x, c.y + 90.0), Align2::CENTER_CENTER, t("To see the page here, install webkit2gtk (libwebkit2gtk-4.1)"), theme::ui(11.5), p.text3);
                 }
                 Some("helper") => {
-                    ui.painter().text(pos2(c.x, c.y + 90.0), Align2::CENTER_CENTER, t("The preview could not start – details are in flux-preview.log in the settings folder"), theme::ui(11.5), p.text3);
+                    ui.painter().text(
+                        pos2(c.x, c.y + 90.0),
+                        Align2::CENTER_CENTER,
+                        t("The preview could not start – details are in flux-preview.log in the settings folder"),
+                        theme::ui(11.5),
+                        p.text3,
+                    );
                 }
                 _ => {}
             }
@@ -359,7 +389,17 @@ impl App {
     // vložený WebView2: vytvorí ho, drží ho na mieste panela a skryje, keď je nad ním niečo z egui
     #[allow(unused_variables)]
     pub(super) fn sync_preview(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let covered = self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
+        let covered = self.new_file.is_some()
+            || self.new_project.is_some()
+            || self.whats_new.is_some()
+            || self.color_pick.is_some()
+            || self.settings.is_some()
+            || self.palette.is_some()
+            || self.ask.is_some()
+            || self.tour.is_some()
+            || self.intro.is_some()
+            || self.start
+            || egui::Popup::is_any_open(ctx);
         // stránka (WebView2 / WebKit) berie desiatky až stovky MB: keď ju nevidno, zavrie sa a po návrate sa otvorí znova –
         // zbalené okno hneď, Flux bez fokusu po 45 s, zakrytá stránka (nastavenia…) po 20 s; karty a adresy ostanú
         let (now, focused, minimized, input) = ctx.input(|i| (i.time, i.viewport().focused.unwrap_or(true), i.viewport().minimized.unwrap_or(false), !i.events.is_empty() || i.pointer.is_moving()));
@@ -630,6 +670,14 @@ mod page_info_tests {
         let (t, i) = page_info(&dir, "http://127.0.0.1:5500/");
         assert_eq!(t.as_deref(), Some("Moja stránka"));
         assert!(i.unwrap().ends_with("logo.ico"));
+        // stránka v podpriečinku, favicon vedľa nej a href bez úvodzoviek
+        std::fs::create_dir_all(dir.join("fav")).unwrap();
+        std::fs::write(dir.join("fav/favicon.png"), b"x").unwrap();
+        std::fs::write(dir.join("fav/index.html"), "<title>x</title>").unwrap();
+        assert!(page_info(&dir, "http://127.0.0.1:5500/fav/index.html").1.unwrap().ends_with("fav/favicon.png"));
+        std::fs::write(dir.join("fav/u.html"), "<link rel=icon href=favicon.png>").unwrap();
+        assert!(page_info(&dir, "http://127.0.0.1:5500/fav/u.html").1.unwrap().ends_with("favicon.png"));
+        std::fs::remove_dir_all(dir.join("fav")).unwrap();
         // bez <link>: favicon.ico v koreni, inak nič
         let (t, i) = page_info(&dir, "http://127.0.0.1:5500/b.html");
         assert!(t.is_none() && i.is_none());

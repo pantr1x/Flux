@@ -7,7 +7,7 @@ use flux_core::fsops;
 use std::path::Path;
 
 // (id, názov, prípona, predvolené meno, začiatok súboru; {name} = meno bez prípony)
-const LANGS: [(&str, &str, &str, &str, &str); 22] = [
+const LANGS: [(&str, &str, &str, &str, &str); 25] = [
     ("python", "Python", "py", "main", "print(\"Hello!\")\n"),
     ("html", "HTML", "html", "index", "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>{name}</title>\n</head>\n<body>\n    <h1>{name}</h1>\n</body>\n</html>\n"),
     ("css", "CSS", "css", "style", "body {\n    font-family: system-ui, sans-serif;\n}\n"),
@@ -27,6 +27,9 @@ const LANGS: [(&str, &str, &str, &str, &str); 22] = [
     ("julia", "Julia", "jl", "main", "println(\"Hello from Julia!\")\n"),
     ("perl", "Perl", "pl", "main", "print \"Hello from Perl!\\n\";\n"),
     ("arduino", "Arduino", "ino", "sketch", crate::arduino::STARTER),
+    ("micropython", "MicroPython (board)", "py", "main", crate::arduino::MICROPY_BLINK),
+    ("circuitpython", "CircuitPython (board)", "py", "code", crate::arduino::CIRCUITPY_BLINK),
+    ("firmata", "Python + Firmata", "py", "firmata_blink", "# Python + Firmata: na dosku sa raz nahrá StandardFirmata, program beží v počítači\nimport time\nfrom pyfirmata2 import Arduino\n\nboard = Arduino(\"/dev/ttyUSB0\")  # port nájdeš v paneli Arduino\n\nwhile True:\n    board.digital[13].write(1)\n    time.sleep(0.5)\n    board.digital[13].write(0)\n    time.sleep(0.5)\n"),
     ("md", "Markdown", "md", "README", "# {name}\n\n"),
     ("json", "JSON", "json", "data", "{\n}\n"),
     ("txt", "Text", "txt", "notes", ""),

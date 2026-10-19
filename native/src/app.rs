@@ -10,6 +10,11 @@ mod intro;
 mod menus;
 mod newfile;
 mod newproj;
+
+// vlastný obrázok ako ikona projektu (pre widgets::row)
+pub fn paint_project_img(ui: &egui::Ui, r: egui::Rect, path: &str) -> bool {
+    newproj::paint_img(ui, r, path)
+}
 mod prefs;
 mod preview;
 mod tools;
@@ -1409,8 +1414,10 @@ impl App {
         if self.is_web_file() {
             return self.live_server();
         }
-        if self.is_ino() {
-            return self.ard_upload(true);
+        match self.ard_mode().as_deref() {
+            Some("cpp") => return self.ard_upload(true),
+            Some("micropython" | "circuitpython") => return self.ard_py_run(false),
+            _ => {}
         }
         if let Some(why) = self.run_block() {
             self.status = why;
@@ -2194,6 +2201,8 @@ impl App {
                 ("globe", t("Live Server"), t("Open the page in the browser – it reloads when you save (F5)"))
             } else if self.is_ino() {
                 ("upload", t("Upload"), t("Compile and upload to the board (F5)"))
+            } else if matches!(self.ard_mode().as_deref(), Some("micropython" | "circuitpython")) {
+                ("upload", t("Run on board"), t("Run the file on the board (F5)"))
             } else {
                 ("play", t("Run"), t("Run (F5)"))
             };
@@ -2249,12 +2258,12 @@ impl App {
             }
         }
         // Arduino panel (len pri .ino): otvoriť / zavrieť
-        if can_run && self.is_ino() {
+        if can_run && self.ard_mode().is_some() {
             let ar = Rect::from_min_size(pos2(rx - 36.0, cy - 15.0), vec2(36.0, 30.0));
             let resp = ui.interact(ar, ui.id().with("ard-btn"), Sense::click());
             ui.painter().rect_filled(ar, CornerRadius::same(10), if resp.hovered() || self.ard.open { p.active } else { p.hover });
             widgets::icon_at(ui, ar.center(), 15.0, "chip", if self.ard.open { p.accent } else { p.text2 });
-            if resp.on_hover_text(t("Arduino: board, wiring, libraries")).clicked() {
+            if resp.on_hover_text(t("Board: connect, upload, wiring, libraries")).clicked() {
                 self.ard.open = !self.ard.open;
             }
             rx -= 43.0;
@@ -4157,7 +4166,7 @@ impl eframe::App for App {
                     main.max.x = ar.left();
                 }
                 // Arduino vpravo na karte pri .ino (prvýkrát sa otvorí sám)
-                let ino = !self.home && self.is_ino();
+                let ino = !self.home && self.ard_mode().is_some();
                 if ino {
                     let path = self.tabs[self.active].path.clone();
                     if self.ard.seen.insert(path) {

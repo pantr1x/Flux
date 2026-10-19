@@ -20,8 +20,21 @@ pub enum Inst {
     Done(String), // cesta k arduino-cli → v ďalšej snímke sa vo Výstupe nainštaluje jadro dosiek
 }
 
+// nástroje pre Python na doske (zisťujú sa na pozadí každých 10 s)
+#[derive(Clone, Default)]
+pub struct PyTools {
+    mp: Option<Vec<String>>, // mpremote
+    es: Option<Vec<String>>, // esptool
+    serial: bool,            // pyserial (konzola CircuitPython)
+    firmata: bool,           // pyfirmata2
+}
+
 pub struct ArdUi {
     pub open: bool,
+    pub over: std::collections::HashMap<String, String>, // súbor → ručne zvolený jazyk
+    tools: Arc<Mutex<PyTools>>,
+    last_tools: Option<Instant>,
+    esp: usize, // čip pre nahratie MicroPythonu
     pub width: f32,
     pub seen: HashSet<String>, // .ino, pri ktorých sa panel už raz sám otvoril
     pub section: u8,           // 0 doska, 1 zapojenie, 2 knižnice, 3 firmvér
@@ -42,6 +55,10 @@ impl Default for ArdUi {
     fn default() -> Self {
         ArdUi {
             open: false,
+            over: Default::default(),
+            tools: Arc::new(Mutex::new(PyTools::default())),
+            last_tools: None,
+            esp: 0,
             width: 0.0,
             seen: HashSet::new(),
             section: 0,
@@ -98,8 +115,17 @@ impl App {
         }
         self.ard.last_scan = Some(Instant::now());
         self.ard.scanning.store(true, Ordering::Relaxed);
+        let do_tools = self.ard.last_tools.is_none_or(|at| at.elapsed() > Duration::from_secs(10));
+        if do_tools {
+            self.ard.last_tools = Some(Instant::now());
+        }
+        let tools = self.ard.tools.clone();
         let (slot, flag, cli, ctx) = (self.ard.boards.clone(), self.ard.scanning.clone(), self.ard_cli(), ctx.clone());
         std::thread::spawn(move || {
+            if do_tools {
+                let t = PyTools { mp: ard::find_tool("mpremote"), es: ard::find_tool("esptool"), serial: ard::py_has("serial"), firmata: ard::py_has("pyfirmata2") };
+                *tools.lock().unwrap() = t;
+            }
             let mut list = cli.as_deref().and_then(ard::list_boards).unwrap_or_default();
             // arduino-cli niekedy klon nevypíše – doplniť porty zo systému
             for b in ard::scan_ports() {
@@ -174,8 +200,12 @@ impl App {
         let (data, _) = ard::dirs(&cli);
         let mut cmds = pre;
         if !ard::core_installed(&data, &fqbn) {
-            cmds.push(ard::v(&cli, &["core", "update-index"]));
-            cmds.push(ard::v(&cli, &["core", "install", &ard::core_of(&fqbn)]));
+            let extra: Vec<&str> = ard::extra_url(&fqbn).map(|u| vec!["--additional-urls", u]).unwrap_or_default();
+            let (mut upd, mut inst) = (ard::v(&cli, &["core", "update-index"]), ard::v(&cli, &["core", "install", &ard::core_of(&fqbn)]));
+            upd.extend(extra.iter().map(|s| s.to_string()));
+            inst.extend(extra.iter().map(|s| s.to_string()));
+            cmds.push(upd);
+            cmds.push(inst);
         }
         let d = dir.to_string_lossy().to_string();
         match &port {
@@ -237,6 +267,316 @@ impl App {
         }
     }
 
+    // jazyk aktívneho súboru: .ino = C++, .py podľa importov (alebo ručne zvolený); inak žiadna doska
+    pub(super) fn ard_mode(&self) -> Option<String> {
+        let tab = self.tabs.get(self.active)?;
+        match tab.ext().as_str() {
+            "ino" => Some("cpp".into()),
+            "py" => self.ard.over.get(&tab.path).cloned().or_else(|| ard::guess_py(&tab.text).map(String::from)),
+            _ => None,
+        }
+    }
+
+    fn ard_cp_copy(&mut self, path: &str) {
+        self.status = match ard::circuitpy_drive() {
+            Some(d) => match std::fs::copy(path, d.join("code.py")) {
+                Ok(_) => tf("Copied to {drive} as code.py – the board restarts by itself", &[("drive", &d.to_string_lossy())]),
+                Err(e) => e.to_string(),
+            },
+            None => t("The CIRCUITPY drive was not found – plug the board in and wait a moment."),
+        };
+    }
+
+    // ▶ (F5) pri Pythone na doske: MicroPython `mpremote run` (save = uložiť ako main.py), CircuitPython skopíruje súbor ako code.py
+    pub(super) fn ard_py_run(&mut self, save: bool) {
+        let Some(path) = self.tabs.get(self.active).map(|t| t.path.clone()) else { return };
+        if self.ard_mode().as_deref() == Some("circuitpython") {
+            return self.ard_cp_copy(&path);
+        }
+        let Some(mp) = self.ard.tools.lock().unwrap().mp.clone() else {
+            self.ard.open = true;
+            self.ard.section = 0;
+            self.status = t("Install mpremote first (board panel → Install).");
+            return;
+        };
+        let Some(port) = self.ard_port() else {
+            self.ard.open = true;
+            self.status = t("No board found – plug it in with a USB cable.");
+            return;
+        };
+        let name = widgets::file_name(&path);
+        let mut cmd = mp;
+        cmd.extend(["connect".to_string(), port]);
+        if save {
+            cmd.extend(["cp".into(), path, ":main.py".into(), "+".into(), "reset".into()]);
+            self.ard_run(&tf("Saving {name} on the board as main.py", &[("name", &name)]), vec![cmd]);
+        } else {
+            cmd.extend(["run".into(), path]);
+            self.ard_run(&tf("Running {name} on the board (Stop = Ctrl+C)", &[("name", &name)]), vec![cmd]);
+        }
+    }
+
+    fn ard_install_py(&mut self, label: &str, pkg: &str, app: bool) {
+        self.ard.last_tools = None;
+        self.ard_run(label, vec![ard::pip_install(pkg, app)]);
+    }
+
+    // jazyk: výber MicroPython / CircuitPython / Python + Firmata
+    fn ard_mode_picker(&mut self, ui: &mut egui::Ui, mode: &str) {
+        let p = self.pal;
+        let w = ui.available_width();
+        let n = ard::PY_MODES.len() as f32;
+        let (area, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
+        ui.painter().rect_filled(area, CornerRadius::same(10), p.hover);
+        let bw = (w - 6.0) / n;
+        for (i, (id, name)) in ard::PY_MODES.iter().enumerate() {
+            let r = Rect::from_min_size(area.min + vec2(3.0 + i as f32 * bw, 3.0), vec2(bw, 26.0));
+            let resp = ui.interact(r, ui.id().with(("ard-mode", i)), Sense::click());
+            let on = *id == mode;
+            if on {
+                ui.painter().rect_filled(r, CornerRadius::same(8), p.active);
+            }
+            widgets::text(ui, r.center(), Align2::CENTER_CENTER, name, if on { theme::bold(12.0) } else { theme::ui(12.0) }, if on { p.text } else { p.text2 }, bw - 6.0);
+            if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() && !on {
+                if let Some(path) = self.tabs.get(self.active).map(|t| t.path.clone()) {
+                    self.ard.over.insert(path, id.to_string());
+                }
+            }
+        }
+    }
+
+    // Board tab pri Pythone na doske
+    fn ard_py_ui(&mut self, ui: &mut egui::Ui, mode: &str) {
+        let p = self.pal;
+        let tools = self.ard.tools.lock().unwrap().clone();
+        ui.label(egui::RichText::new(t("PROGRAMMING LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
+        self.ard_mode_picker(ui, mode);
+        let desc = match mode {
+            "micropython" => "Python runs on the board itself (ESP32, ESP8266, Raspberry Pi Pico…). Flux sends your file with mpremote.",
+            "circuitpython" => "Python runs on the board itself (Pico, Adafruit, Seeed…). The board shows up as a CIRCUITPY drive – Flux copies your file there as code.py.",
+            _ => "The board runs StandardFirmata and your Python program runs on the computer (pyFirmata2) – works with Uno, Mega, Nano and Elegoo boards.",
+        };
+        self.ard_hint(ui, &t(desc));
+        ui.add_space(2.0);
+        let boards = self.ard_ports_ui(ui);
+        let _ = boards;
+        ui.add_space(4.0);
+        let mut act: Option<&str> = None;
+        match mode {
+            "micropython" => {
+                if tools.mp.is_none() {
+                    self.ard_card(ui, |ui| {
+                        ui.label(egui::RichText::new(t("mpremote is not installed")).font(theme::bold(13.0)).color(p.text));
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(t("The official MicroPython tool for sending files to the board and opening its REPL (a small Python package)."))
+                                    .font(theme::ui(12.0))
+                                    .color(p.text2),
+                            )
+                            .wrap(),
+                        );
+                        if widgets::button(ui, Some("download"), &t("Install mpremote"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                            act = Some("install-mp");
+                        }
+                    });
+                } else {
+                    ui.label(egui::RichText::new(t("ACTIONS")).font(theme::bold(11.0)).color(p.text3));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                        if widgets::button(ui, Some("play"), &t("Run on board"), p.accent, p.accent_fg, 30.0, &p).on_hover_text(t("Run the file on the board without saving it (F5)")).clicked() {
+                            act = Some("run");
+                        }
+                        if widgets::button(ui, Some("upload"), &t("Save as main.py"), p.card2, p.text, 30.0, &p)
+                            .on_hover_text(t("Store it on the board so it starts by itself after power-up"))
+                            .clicked()
+                        {
+                            act = Some("save");
+                        }
+                        if widgets::button(ui, Some("terminal"), &t("REPL"), p.card2, p.text, 30.0, &p)
+                            .on_hover_text(t("Type Python on the board directly (Ctrl+D = restart, Stop to close)"))
+                            .clicked()
+                        {
+                            act = Some("repl");
+                        }
+                        if widgets::button(ui, Some("folder"), &t("Files on board"), p.card2, p.text, 30.0, &p).clicked() {
+                            act = Some("ls");
+                        }
+                    });
+                }
+            }
+            "circuitpython" => {
+                let drive = ard::circuitpy_drive();
+                self.ard_card(ui, |ui| match &drive {
+                    Some(d) => {
+                        ui.label(egui::RichText::new(t("CIRCUITPY drive found")).font(theme::bold(13.0)).color(p.green));
+                        ui.label(egui::RichText::new(d.to_string_lossy()).font(theme::mono(11.5)).color(p.text3));
+                    }
+                    None => {
+                        ui.label(egui::RichText::new(t("CIRCUITPY drive not found")).font(theme::bold(13.0)).color(p.text));
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(t("Plug the board in. If it never shows up, CircuitPython is not on it yet – see the Firmware tab.")).font(theme::ui(12.0)).color(p.text2),
+                            )
+                            .wrap(),
+                        );
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                    if widgets::button(ui, Some("upload"), &t("Copy to board as code.py"), p.accent, p.accent_fg, 30.0, &p).on_hover_text(t("The board restarts and runs it at once (F5)")).clicked() {
+                        act = Some("run");
+                    }
+                    if tools.serial {
+                        if widgets::button(ui, Some("terminal"), &t("Serial console"), p.card2, p.text, 30.0, &p).on_hover_text(t("See print() output (Stop to close)")).clicked() {
+                            act = Some("console");
+                        }
+                    } else if widgets::button(ui, Some("download"), &t("Install pyserial (console)"), p.card2, p.text, 30.0, &p).clicked() {
+                        act = Some("install-serial");
+                    }
+                });
+            }
+            _ => {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                    if widgets::button(ui, Some("upload"), &t("1. Upload StandardFirmata"), p.card2, p.text, 30.0, &p).on_hover_text(t("Once per board – needs the Arduino tools")).clicked() {
+                        act = Some("firmata");
+                    }
+                    if tools.firmata {
+                        if widgets::button(ui, Some("play"), &t("2. Run the script"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                            act = Some("pyrun");
+                        }
+                    } else if widgets::button(ui, Some("download"), &t("Install pyFirmata2"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                        act = Some("install-firmata");
+                    }
+                });
+                if widgets::button(ui, Some("copy"), &t("Copy example with this port"), p.card2, p.text, 28.0, &p).clicked() {
+                    act = Some("example");
+                }
+            }
+        }
+        ui.add_space(4.0);
+        self.ard_hint(ui, &t("Close the REPL or console (Stop) before running a file – only one program can use the port."));
+        let port = self.ard_port();
+        let mp_line = |this: &mut Self, extra: Vec<&str>, label: String| {
+            let (Some(mp), Some(port)) = (tools.mp.clone(), port.clone()) else {
+                this.status = t("No board found – plug it in with a USB cable.");
+                return;
+            };
+            let mut cmd = mp;
+            cmd.extend(["connect".to_string(), port]);
+            cmd.extend(extra.iter().map(|s| s.to_string()));
+            this.ard_run(&label, vec![cmd]);
+        };
+        match act {
+            Some("install-mp") => self.ard_install_py(&t("Installing mpremote"), "mpremote", true),
+            Some("install-serial") => self.ard_install_py(&t("Installing pyserial"), "pyserial", false),
+            Some("install-firmata") => self.ard_install_py(&t("Installing pyFirmata2"), "pyfirmata2", false),
+            Some("run") => self.ard_py_run(false),
+            Some("save") => self.ard_py_run(true),
+            Some("repl") => mp_line(self, vec!["repl"], t("MicroPython REPL (Stop to close)")),
+            Some("ls") => mp_line(self, vec!["fs", "ls"], t("Files on the board")),
+            Some("console") => {
+                if let Some(port) = port {
+                    self.ard_run(&t("CircuitPython console (Stop to close)"), vec![vec![ard::py().into(), "-m".into(), "serial.tools.miniterm".into(), port, "115200".into()]]);
+                } else {
+                    self.status = t("No board found – plug it in with a USB cable.");
+                }
+            }
+            Some("firmata") => self.ard_firmware("firmata"),
+            Some("pyrun") => self.run(),
+            Some("example") => ui.ctx().copy_text(ard::firmata_blink(&port.unwrap_or_else(|| "/dev/ttyUSB0".into()))),
+            _ => {}
+        }
+    }
+
+    // Firmware tab pri MicroPythone / CircuitPythone: nahratie interpretera na dosku
+    fn ard_py_fw_ui(&mut self, ui: &mut egui::Ui, mode: &str) {
+        let p = self.pal;
+        let tools = self.ard.tools.lock().unwrap().clone();
+        let mut act: Option<&str> = None;
+        let name = if mode == "micropython" { "MicroPython" } else { "CircuitPython" };
+        self.ard_card(ui, |ui| {
+            ui.label(egui::RichText::new(tf("Get {name} for your board", &[("name", name)])).font(theme::bold(13.0)).color(p.text));
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(tf("Download the firmware file for your exact board (.uf2 for Raspberry Pi Pico and Adafruit boards, .bin for ESP32 / ESP8266), then install it below.", &[]))
+                        .font(theme::ui(12.0))
+                        .color(p.text2),
+                )
+                .wrap(),
+            );
+            if widgets::button(ui, Some("external"), &tf("Open the {name} downloads", &[("name", name)]), p.card2, p.text, 28.0, &p).clicked() {
+                act = Some("get");
+            }
+        });
+        // .uf2 (Pico a spol.): bootloader sa ukáže ako disk
+        let uf2 = ard::uf2_drive();
+        self.ard_card(ui, |ui| {
+            ui.label(egui::RichText::new(t("Raspberry Pi Pico and UF2 boards")).font(theme::bold(13.0)).color(p.text));
+            let hint = match &uf2 {
+                Some(d) => tf("Bootloader drive found: {d}", &[("d", &d.to_string_lossy())]),
+                None => t("Hold the BOOTSEL button while plugging the board in (or double-tap reset). A drive like RPI-RP2 appears."),
+            };
+            ui.add(egui::Label::new(egui::RichText::new(hint).font(theme::ui(12.0)).color(if uf2.is_some() { p.green } else { p.text2 })).wrap());
+            if widgets::button(ui, Some("upload"), &t("Choose .uf2 and install"), if uf2.is_some() { p.accent } else { p.card2 }, if uf2.is_some() { p.accent_fg } else { p.text }, 28.0, &p).clicked()
+            {
+                act = Some("uf2");
+            }
+        });
+        if mode == "micropython" {
+            let chips = [("ESP32", "0x1000"), ("ESP32-S3 / C3 / C6", "0x0"), ("ESP8266", "0x0")];
+            let mut esp = self.ard.esp.min(2);
+            self.ard_card(ui, |ui| {
+                ui.label(egui::RichText::new(t("ESP32 / ESP8266")).font(theme::bold(13.0)).color(p.text));
+                let opts: Vec<String> = chips.iter().map(|c| c.0.to_string()).collect();
+                if let Some(i) = widgets::select(ui, egui::Id::new("ard-esp"), chips[esp].0, &opts, ui.available_width(), &p) {
+                    esp = i;
+                }
+                if tools.es.is_none() {
+                    ui.add(egui::Label::new(egui::RichText::new(t("esptool is the official tool for flashing ESP chips.")).font(theme::ui(12.0)).color(p.text2)).wrap());
+                    if widgets::button(ui, Some("download"), &t("Install esptool"), p.accent, p.accent_fg, 28.0, &p).clicked() {
+                        act = Some("install-es");
+                    }
+                } else if widgets::button(ui, Some("upload"), &t("Choose .bin and flash (erases the board)"), p.accent, p.accent_fg, 28.0, &p).clicked() {
+                    act = Some("bin");
+                }
+            });
+            self.ard.esp = esp;
+        }
+        match act {
+            Some("get") => flux_core::settings::open_external(if mode == "micropython" { "https://micropython.org/download/" } else { "https://circuitpython.org/downloads" }),
+            Some("install-es") => self.ard_install_py(&t("Installing esptool"), "esptool", true),
+            Some("uf2") => {
+                let Some(dir) = ard::uf2_drive() else {
+                    self.status = t("Bootloader drive not found – hold BOOTSEL while plugging the board in.");
+                    return;
+                };
+                if let Some(f) = rfd::FileDialog::new().set_title(t("Choose a .uf2 file")).add_filter("UF2", &["uf2"]).pick_file() {
+                    let to = dir.join(f.file_name().unwrap_or_default());
+                    self.status = match std::fs::copy(&f, to) {
+                        Ok(_) => t("Installed – the board restarts by itself."),
+                        Err(e) => e.to_string(),
+                    };
+                }
+            }
+            Some("bin") => {
+                let (Some(es), Some(port)) = (tools.es.clone(), self.ard_port()) else {
+                    self.status = t("No board found – plug it in with a USB cable.");
+                    return;
+                };
+                if let Some(f) = rfd::FileDialog::new().set_title(t("Choose a .bin file")).add_filter("Firmware", &["bin"]).pick_file() {
+                    let off = ["0x1000", "0x0", "0x0"][self.ard.esp.min(2)];
+                    let mut erase = es.clone();
+                    erase.extend(["--port".to_string(), port.clone(), "erase_flash".into()]);
+                    let mut write = es;
+                    write.extend(["--port".to_string(), port, "--baud".into(), "460800".into(), "write_flash".into(), "-z".into(), off.into(), f.to_string_lossy().to_string()]);
+                    self.ard_run(&t("Flashing MicroPython (hold BOOT if it waits at “Connecting…”)"), vec![erase, write]);
+                }
+            }
+            _ => {}
+        }
+    }
+
     // ---------- panel ----------
     pub(super) fn ard_panel(&mut self, ui: &mut egui::Ui, r: Rect) {
         let p = self.pal;
@@ -257,25 +597,35 @@ impl App {
         ui.painter().vline(r.left(), r.y_range(), Stroke::new(1.0, p.line));
         let head = Rect::from_min_size(r.min, vec2(r.width(), 44.0));
         widgets::icon_at(ui, pos2(head.left() + 20.0, head.center().y), 15.0, "chip", p.accent);
-        ui.painter().text(pos2(head.left() + 34.0, head.center().y), Align2::LEFT_CENTER, "Arduino", theme::bold(14.0), p.text);
+        ui.painter().text(
+            pos2(head.left() + 34.0, head.center().y),
+            Align2::LEFT_CENTER,
+            if self.ard_mode().as_deref().is_some_and(|m| m != "cpp") { "Board" } else { "Arduino" },
+            theme::bold(14.0),
+            p.text,
+        );
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(head.right() - 22.0, head.center().y), vec2(28.0, 28.0)), "x", 14.0, &p, true).on_hover_text(t("Close")).clicked() {
             self.ard.open = false;
         }
         ui.painter().hline(r.x_range(), head.bottom(), Stroke::new(1.0, p.line));
-        // sekcie
+        // sekcie (pri Pythone na doske len Doska a Firmvér)
+        let mode = self.ard_mode().unwrap_or_else(|| "cpp".into());
+        let sections: Vec<(u8, String)> = if mode == "cpp" { vec![(0, t("Board")), (1, t("Wiring")), (2, t("Libraries")), (3, t("Firmware"))] } else { vec![(0, t("Board")), (3, t("Firmware"))] };
+        if !sections.iter().any(|x| x.0 == self.ard.section) {
+            self.ard.section = 0;
+        }
         let tabs_r = Rect::from_min_size(pos2(r.left() + 12.0, head.bottom() + 8.0), vec2(r.width() - 24.0, 30.0));
-        let names = [t("Board"), t("Wiring"), t("Libraries"), t("Firmware")];
-        let tw = tabs_r.width() / 4.0;
-        for (i, n) in names.iter().enumerate() {
+        let tw = tabs_r.width() / sections.len() as f32;
+        for (i, (id, n)) in sections.iter().enumerate() {
             let tr = Rect::from_min_size(pos2(tabs_r.left() + i as f32 * tw, tabs_r.top()), vec2(tw - 4.0, 28.0));
             let resp = ui.interact(tr, ui.id().with(("ard-tab", i)), Sense::click());
-            let on = self.ard.section == i as u8;
+            let on = self.ard.section == *id;
             if on || resp.hovered() {
                 ui.painter().rect_filled(tr, CornerRadius::same(8), if on { p.active } else { p.hover });
             }
             widgets::text(ui, tr.center(), Align2::CENTER_CENTER, n, if on { theme::bold(12.5) } else { theme::ui(12.5) }, if on { p.text } else { p.text2 }, tw - 8.0);
             if resp.clicked() {
-                self.ard.section = i as u8;
+                self.ard.section = *id;
             }
         }
         let body = Rect::from_min_max(pos2(r.left(), tabs_r.bottom() + 6.0), r.max);
@@ -283,10 +633,12 @@ impl App {
         bui.set_clip_rect(body);
         egui::ScrollArea::vertical().id_salt("ard-body").auto_shrink(false).show(&mut bui, |ui| {
             ui.spacing_mut().item_spacing.y = 8.0;
-            match self.ard.section {
-                0 => self.ard_board_ui(ui, &ctx),
-                1 => self.ard_wiring_ui(ui),
-                2 => self.ard_libs_ui(ui, &ctx),
+            match (self.ard.section, mode.as_str()) {
+                (0, "cpp") => self.ard_board_ui(ui, &ctx),
+                (0, m) => self.ard_py_ui(ui, m),
+                (1, _) => self.ard_wiring_ui(ui),
+                (2, _) => self.ard_libs_ui(ui, &ctx),
+                (_, "micropython" | "circuitpython") => self.ard_py_fw_ui(ui, &mode),
                 _ => self.ard_firmware_ui(ui),
             }
             ui.add_space(12.0);
@@ -306,45 +658,10 @@ impl App {
         });
     }
 
-    fn ard_board_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    // zoznam pripojených dosiek (výber portu) + chýbajúce práva k portu na Linuxe; vráti nájdené dosky
+    fn ard_ports_ui(&mut self, ui: &mut egui::Ui) -> Vec<Board> {
         let p = self.pal;
         let w = ui.available_width();
-        // nástroje
-        let cli = self.ard_cli();
-        let inst = self.ard.inst.lock().unwrap().clone();
-        if cli.is_none() {
-            let mut go = false;
-            self.ard_card(ui, |ui| {
-                ui.label(egui::RichText::new(t("Arduino tools are not installed")).font(theme::bold(13.5)).color(p.text));
-                ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(t(
-                            "Flux downloads the official arduino-cli (about 25 MB) and the board package for Uno, Mega, Nano and Elegoo boards (about 150 MB). Nothing else is needed.",
-                        ))
-                        .font(theme::ui(12.0))
-                        .color(p.text2),
-                    )
-                    .wrap(),
-                );
-                match &inst {
-                    Inst::Downloading => {
-                        ui.horizontal(|ui| {
-                            ui.spinner();
-                            ui.label(egui::RichText::new(t("Downloading arduino-cli…")).font(theme::ui(12.5)).color(p.text2));
-                        });
-                    }
-                    _ => {
-                        if let Inst::Failed(e) = &inst {
-                            ui.label(egui::RichText::new(e).font(theme::ui(12.0)).color(p.red));
-                        }
-                        go = widgets::button(ui, Some("download"), &t("Install Arduino tools"), p.accent, p.accent_fg, 30.0, &p).clicked();
-                    }
-                }
-            });
-            if go {
-                self.ard_install_tools(ctx);
-            }
-        }
         // dosky
         ui.label(egui::RichText::new(t("CONNECTED BOARDS")).font(theme::bold(11.0)).color(p.text3));
         let boards = self.ard.boards.lock().unwrap().clone();
@@ -419,6 +736,49 @@ impl App {
                 }
             }
         }
+        boards
+    }
+
+    fn ard_board_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let p = self.pal;
+        let w = ui.available_width();
+        // nástroje
+        let cli = self.ard_cli();
+        let inst = self.ard.inst.lock().unwrap().clone();
+        if cli.is_none() {
+            let mut go = false;
+            self.ard_card(ui, |ui| {
+                ui.label(egui::RichText::new(t("Arduino tools are not installed")).font(theme::bold(13.5)).color(p.text));
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(t(
+                            "Flux downloads the official arduino-cli (about 25 MB) and the board package for Uno, Mega, Nano and Elegoo boards (about 150 MB). Nothing else is needed.",
+                        ))
+                        .font(theme::ui(12.0))
+                        .color(p.text2),
+                    )
+                    .wrap(),
+                );
+                match &inst {
+                    Inst::Downloading => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(egui::RichText::new(t("Downloading arduino-cli…")).font(theme::ui(12.5)).color(p.text2));
+                        });
+                    }
+                    _ => {
+                        if let Inst::Failed(e) = &inst {
+                            ui.label(egui::RichText::new(e).font(theme::ui(12.0)).color(p.red));
+                        }
+                        go = widgets::button(ui, Some("download"), &t("Install Arduino tools"), p.accent, p.accent_fg, 30.0, &p).clicked();
+                    }
+                }
+            });
+            if go {
+                self.ard_install_tools(ctx);
+            }
+        }
+        let boards = self.ard_ports_ui(ui);
         // typ dosky
         ui.add_space(4.0);
         ui.label(egui::RichText::new(t("BOARD TYPE")).font(theme::bold(11.0)).color(p.text3));
@@ -462,6 +822,24 @@ impl App {
             }
         });
         self.ard_hint(ui, &t("Use the same speed as Serial.begin() in your code. Close the monitor (Stop) before uploading."));
+        // Python namiesto C++
+        ui.add_space(4.0);
+        let mut new_py = false;
+        self.ard_card(ui, |ui| {
+            ui.label(egui::RichText::new(t("Prefer Python?")).font(theme::bold(13.0)).color(p.text));
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(t("MicroPython and CircuitPython run Python on the board, or use Python + Firmata from the computer. Pick one in New file."))
+                        .font(theme::ui(12.0))
+                        .color(p.text2),
+                )
+                .wrap(),
+            );
+            new_py = widgets::button(ui, Some("plus"), &t("New Python file for a board…"), p.card2, p.text, 28.0, &p).clicked();
+        });
+        if new_py {
+            self.open_new_file(None);
+        }
         match act {
             Some("upload") => self.ard_upload(true),
             Some("verify") => self.ard_upload(false),
