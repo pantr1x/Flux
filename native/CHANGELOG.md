@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.72
+
+**Board and code stay in step**
+- What you write in the code shows on the board (as before), and now the other way round too: **remove a pin from the board and its lines disappear from the code.**
+- Hover a row in the pin list and press **×**, or open the pin and press **Remove from code**. Flux deletes that pin's `pinMode`, `digitalWrite`, `analogWrite`, `digitalRead`, `analogRead`, `tone`, the Servo object and its calls, library objects (DHT, NeoPixel…), the button block `if (digitalRead(…)) { … }`, and constants nobody uses any more – in every `.ino` of the sketch. For Python it removes the variable of the pin and the lines that use it.
+- **Undo** appears above the list. A pin made by a loop or an array is not deleted – Flux tells you to remove it by hand.
+
 ## 0.9.71
 
 **Python + Firmata**

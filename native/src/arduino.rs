@@ -818,6 +818,313 @@ pub fn pins_for(mode: &str, code: &str) -> Vec<Pin> {
     }
 }
 
+// ---------- odobratie pinu z kódu (opak „pridať do kódu“) ----------
+// mená, pod ktorými kód pin volá: číslo, LED_BUILTIN, konštanty a #define
+fn pin_names(code: &str, pin: &str) -> Vec<String> {
+    let mut names = vec![pin.to_string()];
+    if pin == "13" {
+        names.push("LED_BUILTIN".into());
+    }
+    for l in code.lines() {
+        let t = l.split("//").next().unwrap_or("").trim();
+        if let Some(rest) = t.strip_prefix("#define ") {
+            let mut it = rest.split_whitespace();
+            if let (Some(n), Some(v)) = (it.next(), it.next()) {
+                if norm_pin(v).as_deref() == Some(pin) {
+                    names.push(n.to_string());
+                }
+            }
+        } else if let Some(eq) = t.find('=') {
+            let left: Vec<&str> = t[..eq].split_whitespace().collect();
+            let val = t[eq + 1..].trim().trim_end_matches(';').trim();
+            let is_decl = left.len() >= 2 && left.iter().any(|w| matches!(*w, "int" | "byte" | "uint8_t" | "short" | "long" | "char" | "unsigned"));
+            if let (true, Some(n)) = (is_decl, left.last()) {
+                if !n.contains('[') && norm_pin(val).as_deref() == Some(pin) {
+                    names.push(n.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
+fn has_word(line: &str, w: &str) -> bool {
+    let b = line.as_bytes();
+    let mut from = 0;
+    while let Some(k) = line[from..].find(w) {
+        let s = from + k;
+        let e = s + w.len();
+        let ok_l = s == 0 || !(b[s - 1].is_ascii_alphanumeric() || b[s - 1] == b'_');
+        let ok_r = e >= b.len() || !(b[e].is_ascii_alphanumeric() || b[e] == b'_');
+        if ok_l && ok_r {
+            return true;
+        }
+        from = e;
+    }
+    false
+}
+
+// vystrihne z riadku príkaz `začiatok…;` (začiatok = text pred zátvorkou); vráti true, ak niečo vystrihol
+fn cut_stmt(line: &mut String, start: usize) -> bool {
+    let rest = &line[start..];
+    let Some(end) = rest.find(';') else { return false };
+    let mut e = start + end + 1;
+    while line[e..].starts_with(' ') {
+        e += 1;
+    }
+    line.replace_range(start..e, "");
+    true
+}
+
+// C++: odstráni príkazy pre `pin` (pinMode, digitalWrite…, objekt Servo a jeho volania, knižnice) a konštanty, ktoré nikto nepoužíva.
+// Err = pin vzniká v cykle alebo poli – to sa nedá bezpečne vymazať.
+pub fn remove_pin_cpp(text: &str, pin: &str) -> Result<Option<String>, &'static str> {
+    let names = pin_names(text, pin);
+    let mut lines: Vec<String> = text.lines().map(String::from).collect();
+    let code = |l: &str| l.split("//").next().unwrap_or("").to_string();
+    let funcs = ["pinMode(", "digitalWrite(", "analogWrite(", "digitalRead(", "analogRead(", "tone(", "noTone("];
+    let is_arg = |args: &str| names.iter().any(|n| args.trim() == n);
+    // piny z poľa / cyklu: pozná ich len pins_in
+    if let Some(p) = pins_in(text).iter().find(|p| p.pin == pin) {
+        if p.name.as_deref().is_some_and(|n| text.contains(&format!("{n}[")) || lines.iter().any(|l| l.contains(&format!("{n}[")))) {
+            return Err("array");
+        }
+    }
+    let mut servos: Vec<String> = vec![];
+    let mut libs: Vec<String> = vec![];
+    let mut changed = false;
+    let mut i = 0;
+    while i < lines.len() {
+        let c = code(&lines[i]);
+        let t = c.trim();
+        // if (digitalRead(PIN) == LOW) { … } – celý blok, ak je krátky
+        if (t.starts_with("if (") || t.starts_with("if(")) && t.ends_with('{') {
+            if let Some(k) = t.find("digitalRead(") {
+                let args = &t[k + 12..];
+                let arg = args.split(')').next().unwrap_or("");
+                if is_arg(arg) {
+                    let mut depth = 0i32;
+                    let mut end = i;
+                    for (j, l) in lines.iter().enumerate().skip(i) {
+                        let cl = code(l);
+                        depth += cl.matches('{').count() as i32 - cl.matches('}').count() as i32;
+                        end = j;
+                        if depth <= 0 {
+                            break;
+                        }
+                    }
+                    if end - i <= 10 && depth <= 0 {
+                        lines.drain(i..=end);
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+        }
+        // jednotlivé príkazy v riadku
+        let mut line = lines[i].clone();
+        let mut local = false;
+        loop {
+            let cur = code(&line);
+            let mut hit: Option<usize> = None;
+            for f in funcs {
+                let mut from = 0;
+                while let Some(k) = cur[from..].find(f) {
+                    let st = from + k;
+                    from = st + f.len();
+                    if st > 0 && (cur.as_bytes()[st - 1].is_ascii_alphanumeric() || cur.as_bytes()[st - 1] == b'_') {
+                        continue;
+                    }
+                    let args = &cur[st + f.len()..];
+                    let first = args.split([',', ')']).next().unwrap_or("");
+                    if is_arg(first) && cur[st..].contains(';') {
+                        hit = Some(st);
+                        break;
+                    }
+                }
+                if hit.is_some() {
+                    break;
+                }
+            }
+            // servo.attach(PIN)
+            if hit.is_none() {
+                if let Some(k) = cur.find(".attach(") {
+                    let args = &cur[k + 8..];
+                    if is_arg(args.split([',', ')']).next().unwrap_or("")) {
+                        let mut st = k;
+                        while st > 0 && (cur.as_bytes()[st - 1].is_ascii_alphanumeric() || cur.as_bytes()[st - 1] == b'_') {
+                            st -= 1;
+                        }
+                        servos.push(cur[st..k].to_string());
+                        hit = Some(st);
+                    }
+                }
+            }
+            match hit {
+                Some(st) if cut_stmt(&mut line, st) => local = true,
+                _ => break,
+            }
+        }
+        // konštruktor knižnice s týmto pinom: DHT dht(7, DHT11);
+        if !local {
+            for (ty, _, which) in LIBS {
+                if let Some((var, args)) = lib_ctor(&c, ty) {
+                    if args.iter().enumerate().any(|(k, a)| which.is_none_or(|w| w == k) && is_arg(a)) {
+                        libs.push(var);
+                        line.clear();
+                        local = true;
+                    }
+                }
+            }
+        }
+        if local {
+            changed = true;
+            if line.trim().is_empty() {
+                lines.remove(i);
+                continue;
+            }
+            lines[i] = line;
+        }
+        i += 1;
+    }
+    // objekty Servo a knižníc, ktoré k pinu patrili: deklarácia a volania
+    for v in servos.iter().chain(libs.iter()) {
+        let mut i = 0;
+        while i < lines.len() {
+            let c = code(&lines[i]);
+            let t = c.trim();
+            let decl = (t.starts_with("Servo ")
+                || t.starts_with("DHT ")
+                || t.starts_with("OneWire ")
+                || t.starts_with("Adafruit_NeoPixel ")
+                || t.starts_with("LiquidCrystal ")
+                || t.starts_with("SoftwareSerial "))
+                && has_word(t, v)
+                && t.ends_with(';')
+                && !t.contains(".");
+            if decl {
+                lines.remove(i);
+                changed = true;
+                continue;
+            }
+            let mut line = lines[i].clone();
+            let mut local = false;
+            let key = format!("{v}.");
+            loop {
+                let cur = code(&line);
+                let Some(k) = cur.find(&key) else { break };
+                if k > 0 && (cur.as_bytes()[k - 1].is_ascii_alphanumeric() || cur.as_bytes()[k - 1] == b'_') || !cut_stmt(&mut line, k) {
+                    break;
+                }
+                local = true;
+            }
+            if local {
+                changed = true;
+                if line.trim().is_empty() {
+                    lines.remove(i);
+                    continue;
+                }
+                lines[i] = line;
+            }
+            i += 1;
+        }
+    }
+    // konštanty, ktoré už nikto nepoužíva
+    for n in names.iter().filter(|n| *n != pin && *n != "LED_BUILTIN") {
+        let uses = lines.iter().filter(|l| has_word(&code(l), n)).count();
+        if uses == 1 {
+            if let Some(i) = lines.iter().position(|l| has_word(&code(l), n)) {
+                let t = code(&lines[i]);
+                let t = t.trim();
+                if t.starts_with("#define ") || (t.contains('=') && t.ends_with(';') && !t.contains('(')) {
+                    lines.remove(i);
+                    changed = true;
+                }
+            }
+        }
+    }
+    // prázdne riadky po sebe
+    let mut out: Vec<String> = vec![];
+    for l in lines {
+        if l.trim().is_empty() && out.last().is_some_and(|p| p.trim().is_empty()) {
+            continue;
+        }
+        out.push(l);
+    }
+    let mut res = out.join("\n");
+    if text.ends_with('\n') {
+        res.push('\n');
+    }
+    Ok(changed.then_some(res))
+}
+
+// Python: nájde premenné, ktoré pin vytvárajú (`led = Pin(13, …)`, `get_pin('d:13:o')`, `board.GP13`), a odstráni ich definíciu aj riadky s ich použitím
+pub fn remove_pin_py(text: &str, pin: &str) -> Option<String> {
+    let num = pin.trim_start_matches('A');
+    let analog = pin.starts_with('A');
+    let mut lines: Vec<String> = text.lines().map(String::from).collect();
+    let consts: Vec<String> = lines
+        .iter()
+        .filter_map(|l| {
+            let (n, v) = l.split_once('=')?;
+            (v.trim() == num && !analog && is_ident(n.trim())).then(|| n.trim().to_string())
+        })
+        .collect();
+    let defines = |l: &str| -> Option<String> {
+        let l = l.split('#').next().unwrap_or("");
+        let (n, rest) = l.split_once('=')?;
+        let n = n.trim();
+        if !is_ident(n) {
+            return None;
+        }
+        let r = rest.replace(' ', "");
+        let hit = ["Pin(", "PWM(Pin(", "ADC(Pin(", "DigitalInOut(", "PWMOut(", "AnalogIn("].iter().any(|f| {
+            r.find(f).is_some_and(|k| {
+                let a = &r[k + f.len()..];
+                let arg = a.split([',', ')']).next().unwrap_or("");
+                arg == num || arg == format!("board.GP{num}") || arg == format!("board.D{num}") || arg == format!("board.{pin}") || consts.iter().any(|c| c == arg)
+            })
+        }) || r.contains(&format!("get_pin('d:{num}:"))
+            || r.contains(&format!("get_pin(\"d:{num}:"))
+            || (analog && r.contains(&format!("get_pin('a:{num}:")));
+        hit.then(|| n.to_string())
+    };
+    let vars: Vec<String> = lines.iter().filter_map(|l| defines(l)).collect();
+    if vars.is_empty() {
+        return None;
+    }
+    let indent = |l: &str| l.len() - l.trim_start().len();
+    let mut i = 0;
+    while i < lines.len() {
+        let uses = vars.iter().any(|v| has_word(lines[i].split('#').next().unwrap_or(""), v));
+        if uses {
+            let head = lines[i].split('#').next().unwrap_or("").trim_end().ends_with(':');
+            let ind = indent(&lines[i]);
+            let mut end = i;
+            if head {
+                while end + 1 < lines.len() && (lines[end + 1].trim().is_empty() || indent(&lines[end + 1]) > ind) {
+                    end += 1;
+                }
+            }
+            lines.drain(i..=end);
+            continue;
+        }
+        i += 1;
+    }
+    // while True: bez tela by bol chybný Python
+    if let Some(k) = lines.iter().position(|l| l.trim_end() == "while True:") {
+        let has_body = lines.iter().skip(k + 1).any(|l| !l.trim().is_empty() && indent(l) > 0);
+        if !has_body {
+            lines.insert(k + 1, "    pass".into());
+        }
+    }
+    let mut res = lines.join("\n");
+    if text.ends_with('\n') {
+        res.push('\n');
+    }
+    Some(res)
+}
+
 // ---------- kontrola projektu podľa dosky ----------
 // čo doska vie: najvyšší digitálny pin, počet analógových, PWM piny, piny len na čítanie (Nano A6/A7)
 pub struct Caps {
@@ -1590,5 +1897,34 @@ mod tests {
         assert_eq!(inc, vec![("Servo.h".to_string(), None), ("DHT.h".to_string(), Some("DHT sensor library".to_string()))]);
         let parts = parts_list(&pins_in("void setup(){ pinMode(2, OUTPUT); pinMode(3, OUTPUT); pinMode(4, INPUT_PULLUP); }"));
         assert_eq!(parts, vec![("led", 2), ("button", 1)]);
+    }
+
+    #[test]
+    fn arduino_remove_pin() {
+        let code = "#include <Servo.h>\n#define BUTTON 2\nconst int led = 13;\nServo s;\nvoid setup() {\n  pinMode(led, OUTPUT);\n  pinMode(BUTTON, INPUT_PULLUP);\n  s.attach(9);\n}\nvoid loop() {\n  digitalWrite(led, HIGH);\n  delay(500);\n  digitalWrite(led, LOW);\n  if (digitalRead(BUTTON) == LOW) {\n    Serial.println(\"x\");\n  }\n  s.write(90);\n}\n";
+        let r = remove_pin_cpp(code, "13").unwrap().unwrap();
+        assert!(!r.contains("led") && r.contains("delay(500);") && r.contains("BUTTON"), "{r}");
+        let r = remove_pin_cpp(code, "2").unwrap().unwrap();
+        assert!(!r.contains("BUTTON") && !r.contains("Serial.println") && r.contains("pinMode(led"), "{r}");
+        let r = remove_pin_cpp(code, "9").unwrap().unwrap();
+        assert!(!r.contains("Servo s;") && !r.contains("s.write") && !r.contains("s.attach") && r.contains("#include <Servo.h>"), "{r}");
+        // všetko v jednom riadku
+        let one = "void setup(){ pinMode(7, OUTPUT); pinMode(8, OUTPUT); }\n";
+        assert_eq!(remove_pin_cpp(one, "7").unwrap().unwrap(), "void setup(){ pinMode(8, OUTPUT); }\n");
+        // pin v poli sa nemaže
+        assert!(remove_pin_cpp("int l[] = {2, 3};\nvoid setup(){ pinMode(l[0], OUTPUT); }", "2").is_err());
+        // po odobratí už pin nie je v kóde
+        let back = remove_pin_cpp(code, "13").unwrap().unwrap();
+        assert!(pins_in(&back).iter().all(|p| p.pin != "13"));
+    }
+
+    #[test]
+    fn arduino_remove_pin_py() {
+        let code = "import time\nfrom pyfirmata2 import Arduino\n\nboard = Arduino(\"/dev/ttyUSB0\")\nled_13 = board.get_pin('d:13:o')\nbtn = board.get_pin('d:2:i')\n\nwhile True:\n    led_13.write(1)\n    time.sleep(0.5)\n    if btn.read():\n        print(1)\n    led_13.write(0)\n";
+        let r = remove_pin_py(code, "13").unwrap();
+        assert!(!r.contains("led_13") && r.contains("btn") && r.contains("time.sleep"), "{r}");
+        let r = remove_pin_py(code, "2").unwrap();
+        assert!(!r.contains("btn") && !r.contains("print(1)") && r.contains("led_13.write(0)"), "{r}");
+        assert!(remove_pin_py(code, "5").is_none());
     }
 }

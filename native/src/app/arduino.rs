@@ -45,10 +45,12 @@ pub struct ArdUi {
     sketch: Option<(String, Instant, Sketch)>,                 // piny celého sketchu (kľúč, kedy)
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
-    pub zoom: f32,                                             // priblíženie dosky (Ctrl + koleso)
-    pan: egui::Vec2,                                           // posun priblíženej dosky (px)
-    dlg_new: bool,                                             // v okne pinu: vytvoriť nový súbor namiesto pridania do otvoreného
-    pub pin_dlg: bool,                                         // okno „nový súbor pre pin“
+    undo: Vec<(String, String)>,                               // naposledy odobraný pin: (súbor, pôvodný text)
+    undo_pin: String,
+    pub zoom: f32,     // priblíženie dosky (Ctrl + koleso)
+    pan: egui::Vec2,   // posun priblíženej dosky (px)
+    dlg_new: bool,     // v okne pinu: vytvoriť nový súbor namiesto pridania do otvoreného
+    pub pin_dlg: bool, // okno „nový súbor pre pin“
     dlg_mode: String,
     dlg_kind: String, // predvoľba (prázdne = prázdny súbor)
     dlg_h: f32,
@@ -89,6 +91,8 @@ impl Default for ArdUi {
             sketch: None,
             proj: None,
             flipped: HashSet::new(),
+            undo: vec![],
+            undo_pin: String::new(),
             zoom: 1.0,
             pan: egui::Vec2::ZERO,
             dlg_new: false,
@@ -1425,6 +1429,61 @@ impl App {
         Some(self.tabs[i].name())
     }
 
+    // prepíše súbor: ak je otvorený, jeho kartu, inak súbor na disku; vráti pôvodný text
+    fn ard_rewrite(&mut self, path: &str, new: &str) -> Option<String> {
+        if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
+            let old = std::mem::replace(&mut self.tabs[i].text, new.to_string());
+            return Some(old);
+        }
+        let old = std::fs::read_to_string(path).ok()?;
+        std::fs::write(path, new).ok()?;
+        Some(old)
+    }
+
+    // odoberie pin z kódu všetkých súborov sketchu (opak „pridať do kódu“); jeho odobratie sa dá vrátiť
+    pub(super) fn ard_remove_pin(&mut self, pin: &str, mode: &str, files: &[String]) {
+        let mut undo: Vec<(String, String)> = vec![];
+        let mut hard = false;
+        for f in files {
+            let text = self.ard_target_text(f);
+            let new = if mode == "cpp" {
+                match ard::remove_pin_cpp(&text, pin) {
+                    Ok(n) => n,
+                    Err(_) => {
+                        hard = true;
+                        None
+                    }
+                }
+            } else {
+                ard::remove_pin_py(&text, pin)
+            };
+            if let Some(n) = new {
+                if let Some(old) = self.ard_rewrite(f, &n) {
+                    undo.push((f.clone(), old));
+                }
+            }
+        }
+        self.status = if !undo.is_empty() {
+            let n = undo.len();
+            self.ard.undo = undo;
+            self.ard.undo_pin = pin.to_string();
+            self.ard.sketch = None;
+            tf("Removed pin {pin} from the code ({n} file(s))", &[("pin", pin), ("n", &n.to_string())])
+        } else if hard {
+            t("This pin comes from a loop or an array – remove it by hand in the code.")
+        } else {
+            t("Nothing to remove for this pin.")
+        };
+    }
+
+    fn ard_undo_remove(&mut self) {
+        for (path, old) in std::mem::take(&mut self.ard.undo) {
+            self.ard_rewrite(&path, &old);
+        }
+        self.ard.sketch = None;
+        self.status = tf("Pin {pin} is back in the code", &[("pin", &std::mem::take(&mut self.ard.undo_pin))]);
+    }
+
     // výber dosky: automaticky podľa pripojenej, alebo vlastná zo zoznamu
     fn ard_board_select(&mut self, ui: &mut egui::Ui) {
         let p = self.pal;
@@ -1519,7 +1578,9 @@ impl App {
         let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(inner.min, vec2(inner.width(), 2000.0))));
         cu.set_clip_rect(card);
         cu.spacing_mut().item_spacing.y = 10.0;
-        let pins = self.ard_sketch(&target, &ctx_mode).pins;
+        let sk0 = self.ard_sketch(&target, &ctx_mode);
+        let pins = sk0.pins.clone();
+        let sk_files = sk0.files.clone();
         let used = pins.iter().position(|x| x.pin == sel);
         cu.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(20.0)).color(p.text));
@@ -1616,7 +1677,7 @@ impl App {
             );
         }
         self.ard.new_name = new_name.clone();
-        let (mut create, mut add) = (false, false);
+        let (mut create, mut add, mut remove) = (false, false, false);
         cu.add_space(4.0);
         cu.horizontal(|ui| {
             if can_add {
@@ -1631,6 +1692,16 @@ impl App {
             if widgets::button(ui, None, &t("Cancel"), p.card2, p.text, 34.0, &p).clicked() {
                 close = true;
             }
+            if used.is_some() {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::button(ui, Some("trash"), &t("Remove from code"), p.red.gamma_multiply(0.18), p.red, 34.0, &p)
+                        .on_hover_text(t("Deletes the lines of this pin from your code (you can undo it)"))
+                        .clicked()
+                    {
+                        remove = true;
+                    }
+                });
+            }
         });
         let h = cu.min_rect().height() + 44.0;
         if (h - self.ard.dlg_h).abs() > 0.5 {
@@ -1639,7 +1710,11 @@ impl App {
         }
         let mode = self.ard.dlg_mode.clone();
         let kind = self.ard.dlg_kind.clone();
-        if add {
+        if remove {
+            let fs: Vec<String> = sk_files.iter().map(|f| f.1.clone()).collect();
+            self.ard_remove_pin(&sel, &ctx_mode, &fs);
+            close = true;
+        } else if add {
             self.status = match self.ard_edit_target(&target, |txt| ard::add_snippet(&mode, txt, &sel, &kind, layout == 2)) {
                 Some(name) => tf("Added to {name} – the code is in the editor", &[("name", &name)]),
                 None => t("That is already in the code."),
@@ -1704,7 +1779,18 @@ impl App {
             };
             self.ard_hint(ui, &t(hint));
         }
+        if !self.ard.undo.is_empty() {
+            let mut undo = false;
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(tf("Pin {pin} removed from the code", &[("pin", &self.ard.undo_pin)])).font(theme::ui(12.0)).color(p.text2));
+                undo = widgets::button(ui, Some("undo"), &t("Undo"), p.card2, p.text, 24.0, &p).clicked();
+            });
+            if undo {
+                self.ard_undo_remove();
+            }
+        }
         let mut jump: Option<usize> = None;
+        let mut remove: Option<String> = None;
         for (k, pin) in pins.iter().enumerate() {
             let (col, pmode, part) = mode_info(pin.mode);
             let (rr, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
@@ -1738,9 +1824,25 @@ impl App {
             }
             let _ = part;
             ui.painter().text(pos2(rr.right() - 8.0, rr.center().y), Align2::RIGHT_CENTER, pmode, theme::mono(11.0), col);
-            if resp.on_hover_text(boardart::bubble_tip(pin)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+            // × = odobrať pin z kódu (zobrazí sa pri prejdení myšou)
+            let xr = Rect::from_center_size(pos2(rr.right() - 112.0, rr.center().y), vec2(22.0, 22.0));
+            let xh = ui.interact(xr, resp.id.with("x"), Sense::click());
+            let shown = resp.hovered() || xh.hovered();
+            if shown {
+                if xh.hovered() {
+                    ui.painter().rect_filled(xr, CornerRadius::same(6), p.red.gamma_multiply(0.2));
+                }
+                widgets::icon_at(ui, xr.center(), 12.0, "x", if xh.hovered() { p.red } else { p.text3 });
+            }
+            if xh.on_hover_text(tf("Remove pin {pin} from the code", &[("pin", &pin.pin)])).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                remove = Some(pin.pin.clone());
+            } else if resp.on_hover_text(boardart::bubble_tip(pin)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 jump = Some(pin.line);
             }
+        }
+        if let Some(pn) = remove {
+            let fs: Vec<String> = if files.is_empty() { self.tabs.get(self.active).map(|t| vec![t.path.clone()]).unwrap_or_default() } else { files.iter().map(|f| f.1.clone()).collect() };
+            self.ard_remove_pin(&pn, mode, &fs);
         }
         if let Some(l) = jump {
             // riadok v spojenom sketchi → súbor a riadok v ňom
