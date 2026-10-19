@@ -168,6 +168,12 @@ pub(super) fn mode_info(mode: &str) -> (Color32, &'static str, &'static str) {
         "analog" => (Color32::from_rgb(0x3d, 0xd6, 0x8c), "ANALOG", "Potentiometer or sensor: middle leg here, outer legs → 5V and GND"),
         "servo" => (Color32::from_rgb(0xc0, 0x7b, 0xff), "SERVO", "Servo signal wire (orange / yellow); red → 5V, brown → GND"),
         "tone" => (Color32::from_rgb(0xff, 0x5c, 0x8a), "TONE", "Buzzer (+) here, (−) → GND"),
+        "read" => (Color32::from_rgb(0x4d, 0xa3, 0xff), "READ", "Button: one leg here and through 10 kΩ to GND, the other leg → 5V"),
+        "neo" => (Color32::from_rgb(0xff, 0x7a, 0xd9), "NEOPIXEL", "LED strip data (DIN) here through 330 Ω; + → 5V, − → GND"),
+        "dht" => (Color32::from_rgb(0x5e, 0xd4, 0xc8), "DHT", "DHT sensor data pin here (10 kΩ to 5V); + → 5V, − → GND"),
+        "onewire" => (Color32::from_rgb(0x5e, 0xd4, 0xc8), "1-WIRE", "DS18B20 data pin here with 4.7 kΩ to 5V; + → 5V, − → GND"),
+        "lcd" => (Color32::from_rgb(0x9d, 0xb4, 0xff), "LCD", "One of the LCD wires (RS, E, D4–D7) – follow the order in your code"),
+        "serial" => (Color32::from_rgb(0xff, 0xb8, 0x6b), "SERIAL", "RX / TX of a module (Bluetooth, GPS…) – cross them: module TX → this RX"),
         _ => (Color32::GRAY, "", ""),
     }
 }
@@ -1432,8 +1438,12 @@ impl App {
         cu.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(20.0)).color(p.text));
             if let Some(k) = used {
-                let (col, m, _) = mode_info(pins[k].mode);
-                ui.label(egui::RichText::new(format!("#{} · {m}", k + 1)).font(theme::mono(12.0)).color(col));
+                for (i, pt) in pins[k].parts.iter().enumerate() {
+                    let m = pins[k].uses.iter().find(|u| ard::part_of(u.0) == *pt).map(|u| u.0).unwrap_or(pins[k].mode);
+                    let (col, label, _) = mode_info(m);
+                    let txt = if i == 0 { format!("#{} · {label}", k + 1) } else { format!("+ {label}") };
+                    ui.label(egui::RichText::new(txt).font(theme::mono(12.0)).color(col));
+                }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::icon_button(ui, "x", &p, true).on_hover_text(t("Close (Esc)")).clicked() {
@@ -1441,6 +1451,15 @@ impl App {
                 }
             });
         });
+        if let Some(k) = used.filter(|k| pins[*k].conflict()) {
+            let _ = k;
+            cu.add(
+                egui::Label::new(
+                    egui::RichText::new(t("Two different parts use this pin in your code – they would get in each other's way. Pick a free pin for the new one.")).font(theme::ui(12.5)).color(p.red),
+                )
+                .wrap(),
+            );
+        }
         cu.label(egui::RichText::new(t("Pick a language and a starting point – Flux creates the file in your project.")).font(theme::ui(13.0)).color(p.text2));
         cu.add_space(4.0);
         cu.label(egui::RichText::new(t("LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
@@ -1591,14 +1610,25 @@ impl App {
             let c = pos2(rr.left() + 16.0, rr.center().y);
             // čiara v farbe pinu (rovnaká ako drôtik na doske)
             ui.painter().rect_filled(Rect::from_min_size(pos2(rr.left(), rr.top() + 5.0), vec2(3.0, rr.height() - 10.0)), CornerRadius::same(2), col);
-            boardart::bubble(ui.painter(), c, 10.0, col, pin.mode, k + 1);
+            boardart::bubble(ui.painter(), c, 10.0, col, pin, k + 1);
             let title = match &pin.name {
                 Some(nm) => format!("{} {}  ·  {nm}", t("Pin"), pin.pin),
                 None => format!("{} {}", t("Pin"), pin.pin),
             };
-            widgets::text(ui, pos2(rr.left() + 36.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 130.0);
+            let tr = widgets::text(ui, pos2(rr.left() + 36.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 150.0);
+            // ďalšie súčiastky na tom istom pine: malé ikony, konflikt červený výkričník
+            let mut x = tr.right() + 10.0;
+            for extra in pin.parts.iter().skip(1) {
+                let m = pin.uses.iter().find(|u| ard::part_of(u.0) == *extra).map(|u| u.0).unwrap_or("");
+                dash::glyph(ui.painter(), dash::mode_glyph(m), pos2(x + 6.0, rr.center().y), mode_info(m).0, 0.62);
+                x += 16.0;
+            }
+            if pin.conflict() {
+                ui.painter().text(pos2(x + 2.0, rr.center().y), Align2::LEFT_CENTER, "!", theme::bold(13.0), p.red);
+            }
+            let _ = part;
             ui.painter().text(pos2(rr.right() - 8.0, rr.center().y), Align2::RIGHT_CENTER, pmode, theme::mono(11.0), col);
-            if resp.on_hover_text(t(part)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+            if resp.on_hover_text(boardart::bubble_tip(pin)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 jump = Some(pin.line);
             }
         }

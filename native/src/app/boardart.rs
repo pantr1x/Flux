@@ -224,7 +224,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
         vec!["", "IOREF", "RST", "3V3", "5V", "GND", "GND", "VIN", "", "A0", "A1", "A2", "A3", "A4", "A5"]
     };
     let used = |name: &str| pins.iter().position(|x| x.pin == name);
-    let power = pins.iter().any(|x| matches!(x.mode, "in" | "analog" | "servo"));
+    let power = pins.iter().any(|x| matches!(x.mode, "in" | "read" | "analog" | "servo" | "neo" | "dht" | "onewire" | "lcd" | "serial"));
     let clicked = std::cell::Cell::new(None::<String>);
     let levels = if mega { 3 } else { 2 };
     let s = (bw / if mega { 120.0 } else { 52.0 }).clamp(3.0, 8.0);
@@ -269,7 +269,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
                 let lift = (i % levels) as f32 * 19.0;
                 let out = pos2(x, if up { rect.top() + 11.0 + lift } else { rect.bottom() - 11.0 - lift });
                 pa.line_segment([c, out], Stroke::new(2.0, col));
-                bubble(&pa, out, 10.0, col, pins[k].mode, k + 1);
+                bubble(&pa, out, 10.0, col, &pins[k], k + 1);
                 ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 1, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                 pa.circle_stroke(c, s * 1.0, Stroke::new(2.0, col));
             } else if pwr {
@@ -311,7 +311,7 @@ pub fn draw_avr(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, mega: bool, pins: &[
                     let (mc, _, _) = mode_info(pins[k].mode);
                     let out = pos2(board.right() + 18.0 + ((r % 2) as f32) * 19.0, c.y);
                     pa.line_segment([c, out], Stroke::new(2.0, mc));
-                    bubble(&pa, out, 9.5, mc, pins[k].mode, k + 1);
+                    bubble(&pa, out, 9.5, mc, &pins[k], k + 1);
                     ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 2, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                     pa.circle_stroke(c, s * 1.0, Stroke::new(2.0, mc));
                 }
@@ -415,7 +415,7 @@ pub fn draw_vertical(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, title: &str, le
                     let ox = if side == 0 { board.left() - 16.0 - lift } else { board.right() + 16.0 + lift };
                     let out = Pos2::new(ox, y);
                     pa.line_segment([c, out], Stroke::new(2.0, mc));
-                    bubble(&pa, out, 9.0, mc, pins[k].mode, k + 1);
+                    bubble(&pa, out, 9.0, mc, &pins[k], k + 1);
                     ui.interact(Rect::from_center_size(out, vec2(20.0, 20.0)), ui.id().with(("ard-bub", 3, k)), Sense::hover()).on_hover_text(bubble_tip(&pins[k]));
                     pa.circle_stroke(c, 5.0, Stroke::new(2.0, mc));
                 }
@@ -425,22 +425,41 @@ pub fn draw_vertical(ui: &mut egui::Ui, _p: &theme::Pal, w: f32, title: &str, le
     clicked.take()
 }
 
-// text nad číslom pri doske: pin, režim, čo doň zapojiť
-fn bubble_tip(p: &ard::Pin) -> String {
-    let (_, m, h) = mode_info(p.mode);
-    let mut s = format!("{} {} · {m}", t("Pin"), p.pin);
+// text pri značke: pin, každá súčiastka s tým, čo zapojiť, a varovanie pri konflikte
+pub(super) fn bubble_tip(p: &ard::Pin) -> String {
+    let mut s = format!("{} {}", t("Pin"), p.pin);
     if let Some(n) = &p.name {
         s += &format!(" ({n})");
     }
-    s + "\n" + &t(h)
+    for pt in &p.parts {
+        let m = p.uses.iter().find(|u| ard::part_of(u.0) == *pt).map(|u| u.0).unwrap_or(p.mode);
+        let (_, label, h) = mode_info(m);
+        s += &format!("\n• {label} – {}", t(h));
+    }
+    // digitalRead na výstupe (prepínanie): len poznámka
+    if p.parts.first() == Some(&"led") && p.uses.iter().any(|u| u.0 == "read") {
+        s += &format!("\n• {}", t("Also read with digitalRead() – that only checks its state, no extra part."));
+    }
+    if p.conflict() {
+        s += &format!("\n⚠ {}", t("Two different parts use this pin in your code – they would get in each other's way. Pick a free pin for the new one."));
+    }
+    s
 }
 
-// značka pri doske: ikona súčiastky (žiarovka, tlačidlo…) v farbe pinu a malé číslo v rohu
-pub(super) fn bubble(pa: &egui::Painter, c: Pos2, r: f32, col: Color32, mode: &str, n: usize) {
+// značka pri doske: ikona hlavnej súčiastky v farbe pinu, číslo v rohu; viac súčiastok = „+N“, konflikt = červený krúžok
+pub(super) fn bubble(pa: &egui::Painter, c: Pos2, r: f32, col: Color32, pin: &ard::Pin, n: usize) {
+    if pin.conflict() {
+        pa.circle_stroke(c, r + 2.5, Stroke::new(2.0, Color32::from_rgb(0xff, 0x55, 0x55)));
+    }
     pa.circle_filled(c, r, col);
     pa.circle_stroke(c, r, Stroke::new(1.0, Color32::from_black_alpha(90)));
-    super::dash::glyph(pa, super::dash::mode_glyph(mode), c + vec2(-0.6, 0.8), Color32::from_black_alpha(235), r / 13.0);
+    super::dash::glyph(pa, super::dash::mode_glyph(pin.mode), c + vec2(-0.6, 0.8), Color32::from_black_alpha(235), r / 13.0);
     let b = c + vec2(r * 0.75, -r * 0.75);
     pa.circle_filled(b, r * 0.52, Color32::from_black_alpha(225));
     pa.text(b, Align2::CENTER_CENTER, n.to_string(), theme::bold(r * 0.72), Color32::WHITE);
+    if pin.parts.len() > 1 {
+        let e = c + vec2(r * 0.75, r * 0.75);
+        pa.circle_filled(e, r * 0.55, Color32::from_rgb(0xff, 0x55, 0x55));
+        pa.text(e, Align2::CENTER_CENTER, format!("+{}", pin.parts.len() - 1), theme::bold(r * 0.62), Color32::WHITE);
+    }
 }

@@ -77,6 +77,25 @@ pub fn glyph(pa: &egui::Painter, kind: &str, c: Pos2, col: Color32, k: f32) {
             pa.line(vec![v(3.0, -3.0), v(4.5, 0.0), v(3.0, 3.0)], Stroke::new(w * 0.85, col));
             pa.line(vec![v(5.5, -5.0), v(8.0, 0.0), v(5.5, 5.0)], Stroke::new(w * 0.85, col));
         }
+        "neo" => {
+            for x in [-6.0, 0.0, 6.0] {
+                pa.circle_stroke(v(x, 0.0), 2.4 * k, st);
+            }
+            pa.line_segment([v(-9.0, 4.5), v(9.0, 4.5)], Stroke::new(w * 0.85, col));
+        }
+        "thermo" => {
+            pa.rect_stroke(egui::Rect::from_center_size(v(0.0, -2.5), vec2(5.0, 11.0) * k), CornerRadius::same((2.5 * k) as u8), st, StrokeKind::Inside);
+            pa.circle_filled(v(0.0, 5.0), 3.6 * k, col);
+        }
+        "lcd" => {
+            pa.rect_stroke(egui::Rect::from_center_size(c, vec2(17.0, 11.0) * k), CornerRadius::same((2.0 * k) as u8), st, StrokeKind::Inside);
+            pa.line_segment([v(-5.0, -1.5), v(5.0, -1.5)], Stroke::new(w * 0.85, col));
+            pa.line_segment([v(-5.0, 2.0), v(2.0, 2.0)], Stroke::new(w * 0.85, col));
+        }
+        "serial" => {
+            pa.line(vec![v(-7.0, -3.0), v(7.0, -3.0), v(4.0, -6.0)], st);
+            pa.line(vec![v(7.0, 3.0), v(-7.0, 3.0), v(-4.0, 6.0)], st);
+        }
         _ => {}
     }
 }
@@ -86,7 +105,11 @@ pub fn mode_glyph(mode: &str) -> &'static str {
     match mode {
         "out" => "led",
         "pwm" => "pwm",
-        "in" | "pull" => "button",
+        "in" | "pull" | "read" => "button",
+        "neo" => "neo",
+        "dht" | "onewire" => "thermo",
+        "lcd" => "lcd",
+        "serial" => "serial",
         "analog" => "analog",
         "servo" => "servo",
         "tone" => "buzzer",

@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.68
+
+**Smarter pin detection**
+- A pin used several times in your code is now understood as a whole: `pinMode` + `digitalWrite` is one LED, `pinMode(OUTPUT)` + `tone` is one buzzer, and `digitalRead` on an LED pin (toggling) adds no extra part.
+- When **two different parts** share a pin (e.g. a button with `INPUT_PULLUP` and a servo), the mark gets a **red ring and +1**, the list shows a red **!**, and hovering explains it. The pin window warns too.
+- Flux now also finds pins in **arrays** (`int leds[] = {2, 3, 4}`), simple **for loops** (`for (int i = 2; i <= 6; i++)`) and in **NeoPixel, DHT, OneWire, LiquidCrystal and SoftwareSerial**, each with its own icon and wiring tip.
+
 ## 0.9.67
 
 **Pins on the board**

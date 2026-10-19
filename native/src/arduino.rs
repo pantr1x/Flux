@@ -392,24 +392,119 @@ pub fn port_access(_port: &str) -> Option<String> {
 }
 
 // ---------- piny v kóde (schéma zapojenia) ----------
+// Jeden pin môže kód použiť viackrát (pinMode + digitalWrite, alebo digitalRead na výstupe).
+// `uses` = všetky režimy, `parts` = súčiastky, ktoré z nich naozaj vyplývajú (hlavná prvá);
+// viac ako jedna súčiastka na jednom pine = konflikt.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pin {
-    pub pin: String,          // "13", "A0"
-    pub mode: &'static str,   // out, pwm, in, pull, analog, servo, tone
-    pub name: Option<String>, // meno premennej v kóde
-    pub line: usize,          // riadok (od 0) prvého použitia
+    pub pin: String,                      // "13", "A0"
+    pub mode: &'static str,               // hlavný režim: out, pwm, in, pull, read, analog, servo, tone, neo, dht, onewire, lcd, serial
+    pub uses: Vec<(&'static str, usize)>, // všetky režimy (bez opakovaní) a riadok prvého výskytu
+    pub parts: Vec<&'static str>,         // led, button, sensor, servo, buzzer, neo, dht, onewire, lcd, serial
+    pub name: Option<String>,             // meno premennej v kóde
+    pub line: usize,                      // riadok (od 0) prvého použitia
+}
+
+impl Pin {
+    pub fn conflict(&self) -> bool {
+        self.parts.len() > 1
+    }
+}
+
+// súčiastka, na ktorú režim ukazuje
+pub fn part_of(mode: &str) -> &'static str {
+    match mode {
+        "out" | "pwm" => "led",
+        "in" | "pull" | "read" => "button",
+        "analog" => "sensor",
+        "servo" => "servo",
+        "tone" => "buzzer",
+        "neo" => "neo",
+        "dht" => "dht",
+        "onewire" => "onewire",
+        "lcd" => "lcd",
+        "serial" => "serial",
+        _ => "",
+    }
 }
 
 fn rank(m: &str) -> u8 {
     match m {
+        "neo" | "dht" | "onewire" | "lcd" | "serial" => 9,
         "servo" => 6,
         "tone" => 5,
         "pwm" => 4,
         "out" => 3,
         "pull" => 2,
         "in" => 1,
-        _ => 0, // analog
+        _ => 0, // read, analog
     }
+}
+
+fn part_rank(p: &str) -> u8 {
+    match p {
+        "neo" | "dht" | "onewire" | "lcd" | "serial" => 9,
+        "servo" => 8,
+        "buzzer" => 7,
+        "sensor" => 6,
+        "led" => 5,
+        _ => 4, // button
+    }
+}
+
+// z režimov vyvodí súčiastky a hlavný režim
+fn finish(p: &mut Pin) {
+    let has = |m: &str| p.uses.iter().any(|u| u.0 == m);
+    let mut parts: Vec<&'static str> = vec![];
+    for (m, _) in &p.uses {
+        let pt = part_of(m);
+        if !pt.is_empty() && !parts.contains(&pt) {
+            parts.push(pt);
+        }
+    }
+    // knižnica si pin nastaví sama: pinMode navyše nie je ďalšia súčiastka
+    if parts.iter().any(|x| matches!(*x, "neo" | "dht" | "onewire" | "lcd" | "serial")) {
+        parts.retain(|x| !matches!(*x, "led" | "button"));
+    }
+    // servo / bzučiak + pinMode(OUTPUT) je stále jedna súčiastka (vstup s pull-upom už nie)
+    if parts.iter().any(|x| matches!(*x, "servo" | "buzzer")) {
+        parts.retain(|x| *x != "led");
+    }
+    // pinMode(A0, INPUT) + analogRead(A0) = jeden senzor
+    if parts.contains(&"sensor") {
+        parts.retain(|x| *x != "button");
+    }
+    // digitalRead na výstupe len zisťuje jeho stav (prepínanie LED)
+    if parts.contains(&"led") && !has("in") && !has("pull") {
+        parts.retain(|x| *x != "button");
+    }
+    parts.sort_by_key(|x| std::cmp::Reverse(part_rank(x)));
+    if let Some(main) = parts.first() {
+        if let Some(m) = p.uses.iter().filter(|u| part_of(u.0) == *main).max_by_key(|u| rank(u.0)) {
+            p.mode = m.0;
+        }
+    }
+    p.parts = parts;
+}
+
+fn merge_pin(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<String>, line: usize) {
+    if let Some(x) = out.iter_mut().find(|x| x.pin == pin) {
+        if !x.uses.iter().any(|u| u.0 == mode) {
+            x.uses.push((mode, line));
+        }
+        if x.name.is_none() {
+            x.name = name;
+        }
+    } else {
+        out.push(Pin { pin, mode, uses: vec![(mode, line)], parts: vec![], name, line });
+    }
+}
+
+fn sort_pins(out: &mut [Pin]) {
+    for p in out.iter_mut() {
+        finish(p);
+    }
+    out.sort_by_key(|p| if let Some(a) = p.pin.strip_prefix('A') { 100 + a.parse::<u32>().unwrap_or(0) } else { p.pin.parse::<u32>().unwrap_or(0) });
 }
 
 fn norm_pin(v: &str) -> Option<String> {
@@ -427,10 +522,76 @@ fn norm_pin(v: &str) -> Option<String> {
     None
 }
 
+fn is_ident(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_') && !s.starts_with(|c: char| c.is_ascii_digit())
+}
+
+// `for (int i = 2; i <= 6; i++)` → ("i", [2, 3, 4, 5, 6])
+fn for_range(l: &str, consts: &[(String, String)]) -> Option<(String, Vec<String>)> {
+    let k = l.find("for")?;
+    if l[..k].chars().last().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
+    let inner = &l[k + 3..];
+    let inner = &inner[inner.find('(')? + 1..];
+    let mut f = inner.splitn(3, ';');
+    let (init, cond) = (f.next()?, f.next()?);
+    let (var, start) = init.split_once('=')?;
+    let var = var.split_whitespace().last()?.to_string();
+    let num = |v: &str| -> Option<u32> {
+        let v = v.trim();
+        v.parse().ok().or_else(|| consts.iter().rev().find(|c| c.0 == v).and_then(|c| c.1.parse().ok()))
+    };
+    let start = num(start)?;
+    let cond = cond.trim();
+    let (end, incl) = if let Some(r) = cond.strip_prefix(&format!("{var} <=")) {
+        (num(r)?, true)
+    } else if let Some(r) = cond.strip_prefix(&format!("{var}<=")) {
+        (num(r)?, true)
+    } else if let Some(r) = cond.strip_prefix(&format!("{var} <")) {
+        (num(r)?, false)
+    } else if let Some(r) = cond.strip_prefix(&format!("{var}<")) {
+        (num(r)?, false)
+    } else {
+        return None;
+    };
+    let end = if incl { end + 1 } else { end };
+    (end > start && end - start <= 54).then(|| (var, (start..end).map(|n| n.to_string()).collect()))
+}
+
+// knižnice, ktoré si pin berú v konštruktore: (typ, režim, ktoré argumenty sú piny; None = všetky)
+const LIBS: [(&str, &str, Option<usize>); 5] =
+    [("Adafruit_NeoPixel", "neo", Some(1)), ("DHT", "dht", Some(0)), ("OneWire", "onewire", Some(0)), ("LiquidCrystal", "lcd", None), ("SoftwareSerial", "serial", None)];
+
+// `DHT dht(2, DHT11);` / `Adafruit_NeoPixel strip = Adafruit_NeoPixel(8, 6, …);` → (premenná, argumenty)
+fn lib_ctor<'a>(l: &'a str, ty: &str) -> Option<(String, Vec<&'a str>)> {
+    let k = l.find(ty)?;
+    if l[..k].chars().last().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '<' || c == '.') {
+        return None;
+    }
+    let rest = &l[k + ty.len()..];
+    if !rest.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let rest = rest.trim_start();
+    let var: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+    if !is_ident(&var) {
+        return None;
+    }
+    let mut after = rest[var.len()..].trim_start();
+    if let Some(r) = after.strip_prefix('=') {
+        after = r.trim_start().strip_prefix(ty)?.trim_start();
+    }
+    let args = after.strip_prefix('(')?;
+    let args = &args[..args.find(')')?];
+    Some((var, args.split(',').map(str::trim).collect()))
+}
+
 pub fn pins_in(code: &str) -> Vec<Pin> {
     let lines: Vec<&str> = code.lines().map(|l| l.split("//").next().unwrap_or("")).collect();
-    // konštanty: #define LED 13 / const int led = 13; / int pot = A0;
+    // konštanty: #define LED 13 / const int led = 13; / int pot = A0; a polia: int leds[] = {2, 3, 4};
     let mut consts: Vec<(String, String)> = vec![];
+    let mut arrays: Vec<(String, Vec<String>)> = vec![];
     for l in &lines {
         let t = l.trim();
         if let Some(rest) = t.strip_prefix("#define ") {
@@ -444,38 +605,46 @@ pub fn pins_in(code: &str) -> Vec<Pin> {
             let left: Vec<&str> = t[..eq].split_whitespace().collect();
             let val = t[eq + 1..].trim().trim_end_matches(';').trim();
             let is_decl = left.len() >= 2 && left.iter().any(|w| matches!(*w, "int" | "byte" | "uint8_t" | "short" | "long" | "char" | "unsigned"));
-            if let (true, Some(n), Some(p)) = (is_decl, left.last(), norm_pin(val)) {
-                if !n.contains('[') {
-                    consts.push((n.to_string(), p));
+            let Some(n) = left.last().filter(|_| is_decl) else { continue };
+            if let Some(arr) = n.split('[').next().filter(|_| n.contains('[')) {
+                if let Some(body) = val.strip_prefix('{').and_then(|v| v.strip_suffix('}')) {
+                    let items: Vec<String> = body.split(',').filter_map(|v| norm_pin(v).or_else(|| consts.iter().rev().find(|c| c.0 == v.trim()).map(|c| c.1.clone()))).collect();
+                    if !items.is_empty() {
+                        arrays.push((arr.to_string(), items));
+                    }
                 }
+            } else if let Some(p) = norm_pin(val) {
+                consts.push((n.to_string(), p));
             }
         }
     }
-    let resolve = |arg: &str| -> (Option<String>, Option<String>) {
-        let a = arg.trim();
-        if let Some(p) = norm_pin(a) {
-            return (Some(p), None);
-        }
-        match consts.iter().rev().find(|c| c.0 == a) {
-            Some(c) => (Some(c.1.clone()), Some(a.to_string())),
-            None => (None, None),
-        }
-    };
     let mut out: Vec<Pin> = vec![];
-    let mut add = |pin: String, mode: &'static str, name: Option<String>, line: usize| {
-        if let Some(x) = out.iter_mut().find(|x| x.pin == pin) {
-            if rank(mode) > rank(x.mode) {
-                x.mode = mode;
-            }
-            if x.name.is_none() {
-                x.name = name;
-            }
-        } else {
-            out.push(Pin { pin, mode, name, line });
-        }
-    };
+    // cykly `for (int i = 2; i <= 6; i++)`: (premenná, hodnoty, hĺbka zátvoriek pred cyklom, riadok)
+    let mut loops: Vec<(String, Vec<String>, i32, usize)> = vec![];
+    let mut depth = 0i32;
     for (i, l) in lines.iter().enumerate() {
-        for (func, mode) in [("pinMode(", ""), ("digitalWrite(", "out"), ("analogWrite(", "pwm"), ("digitalRead(", "in"), ("analogRead(", "analog"), ("tone(", "tone"), (".attach(", "servo")] {
+        if let Some((v, vals)) = for_range(l, &consts) {
+            loops.push((v, vals, depth, i));
+        }
+        let resolve = |arg: &str| -> Vec<(String, Option<String>)> {
+            let a = arg.trim();
+            if let Some(p) = norm_pin(a) {
+                return vec![(p, None)];
+            }
+            if let Some(arr) = a.split('[').next().filter(|_| a.contains('[')) {
+                if let Some((_, items)) = arrays.iter().rev().find(|x| x.0 == arr.trim()) {
+                    return items.iter().map(|p| (p.clone(), Some(arr.trim().to_string()))).collect();
+                }
+            }
+            if let Some(lp) = loops.iter().rev().find(|x| x.0 == a) {
+                return lp.1.iter().map(|p| (p.clone(), None)).collect();
+            }
+            match consts.iter().rev().find(|c| c.0 == a) {
+                Some(c) => vec![(c.1.clone(), Some(a.to_string()))],
+                None => vec![],
+            }
+        };
+        for (func, mode) in [("pinMode(", ""), ("digitalWrite(", "out"), ("analogWrite(", "pwm"), ("digitalRead(", "read"), ("analogRead(", "analog"), ("tone(", "tone"), (".attach(", "servo")] {
             let mut from = 0;
             while let Some(k) = l[from..].find(func) {
                 let s = from + k + func.len();
@@ -489,7 +658,6 @@ pub fn pins_in(code: &str) -> Vec<Pin> {
                 let end = args.find(')').unwrap_or(args.len());
                 let mut parts = args[..end].split(',');
                 let first = parts.next().unwrap_or("");
-                let (Some(pin), name) = resolve(first) else { continue };
                 let m = if func == "pinMode(" {
                     match parts.next().map(|x| x.trim()) {
                         Some("OUTPUT") => "out",
@@ -499,12 +667,27 @@ pub fn pins_in(code: &str) -> Vec<Pin> {
                 } else {
                     mode
                 };
-                add(pin, m, name, i);
+                for (pin, name) in resolve(first) {
+                    merge_pin(&mut out, pin, m, name, i);
+                }
             }
         }
+        for (ty, m, which) in LIBS {
+            if let Some((var, args)) = lib_ctor(l, ty) {
+                for (k, a) in args.iter().enumerate() {
+                    if which.is_none_or(|w| w == k) {
+                        for (pin, _) in resolve(a) {
+                            merge_pin(&mut out, pin, m, Some(var.clone()), i);
+                        }
+                    }
+                }
+            }
+        }
+        // hĺbka zátvoriek; cyklus bez `{` platí len pre nasledujúci riadok
+        depth += l.matches('{').count() as i32 - l.matches('}').count() as i32;
+        loops.retain(|(_, _, d, at)| depth > *d || (*at == i && !l.contains('{')));
     }
-    // analogové piny na Uno sú aj digitálne 14–19; zoradiť: digitálne podľa čísla, potom A0…
-    out.sort_by_key(|p| if let Some(a) = p.pin.strip_prefix('A') { 100 + a.parse::<u32>().unwrap_or(0) } else { p.pin.parse::<u32>().unwrap_or(0) });
+    sort_pins(&mut out);
     out
 }
 
@@ -525,23 +708,6 @@ pub fn bt_devices() -> Vec<(String, String, bool)> {
 }
 
 // ---------- piny v Pythone (MicroPython, CircuitPython, pyFirmata) ----------
-fn merge_pin(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<String>, line: usize) {
-    if let Some(x) = out.iter_mut().find(|x| x.pin == pin) {
-        if rank(mode) > rank(x.mode) {
-            x.mode = mode;
-        }
-        if x.name.is_none() {
-            x.name = name;
-        }
-    } else {
-        out.push(Pin { pin, mode, name, line });
-    }
-}
-
-fn sort_pins(out: &mut [Pin]) {
-    out.sort_by_key(|p| if let Some(a) = p.pin.strip_prefix('A') { 100 + a.parse::<u32>().unwrap_or(0) } else { p.pin.parse::<u32>().unwrap_or(0) });
-}
-
 // prvý argument volania `Pin(` / `PWMOut(` …: číslo, názov konštanty alebo board.GP15 / board.D5 / board.A0
 fn py_pin_arg(a: &str, consts: &[(String, String)]) -> Option<String> {
     let a = a.trim().trim_matches(|c| c == '\'' || c == '"');
@@ -632,7 +798,7 @@ pub fn py_pins(code: &str) -> Vec<Pin> {
                     if analog {
                         merge_pin(&mut out, format!("A{n}"), "analog", None, i);
                     } else {
-                        merge_pin(&mut out, n.to_string(), if l.contains(".read(") { "in" } else { "out" }, None, i);
+                        merge_pin(&mut out, n.to_string(), if l.contains(".read(") { "read" } else { "out" }, None, i);
                     }
                 }
             }
@@ -1231,5 +1397,38 @@ mod tests {
         let (ext, t) = new_for_pin("cpp", "13", "led", "", false);
         assert_eq!(ext, "ino");
         assert!(t.contains("pinMode(13, OUTPUT);") && t.contains("void loop()"), "{t}");
+    }
+
+    #[test]
+    fn arduino_pin_uses_and_conflicts() {
+        let get = |code: &str, n: &str| pins_in(code).into_iter().find(|x| x.pin == n);
+        // prepínanie LED: digitalRead na výstupe nie je tlačidlo
+        let p = get("void setup(){ pinMode(13, OUTPUT); }\nvoid loop(){ digitalWrite(13, !digitalRead(13)); }", "13").unwrap();
+        assert_eq!((p.mode, p.parts.clone(), p.conflict()), ("out", vec!["led"], false));
+        assert_eq!(p.uses.len(), 2);
+        // bzučiak s pinMode OUTPUT = jedna súčiastka
+        let p = get("void setup(){ pinMode(8, OUTPUT); }\nvoid loop(){ tone(8, 440); }", "8").unwrap();
+        assert_eq!((p.mode, p.conflict()), ("tone", false));
+        // tlačidlo aj servo na tom istom pine = konflikt
+        let p = get("Servo s;\nvoid setup(){ pinMode(9, INPUT_PULLUP); s.attach(9); }\nvoid loop(){ tone(9, 300); }", "9").unwrap();
+        assert!(p.conflict(), "{p:?}");
+        assert_eq!(p.parts[0], "servo");
+        // tlačidlo s pull-upom a servo na jednom pine = konflikt aj bez tone()
+        assert!(get("Servo s;\nvoid setup(){ pinMode(9, INPUT_PULLUP); s.attach(9); }", "9").unwrap().conflict());
+        // potenciometer s pinMode INPUT
+        let p = get("void setup(){ pinMode(A0, INPUT); }\nvoid loop(){ int v = analogRead(A0); }", "A0").unwrap();
+        assert_eq!((p.mode, p.conflict()), ("analog", false));
+    }
+
+    #[test]
+    fn arduino_pins_arrays_loops_libs() {
+        let code = "int leds[] = {2, 3, 4};\nDHT dht(7, DHT11);\nAdafruit_NeoPixel strip(8, 6, NEO_GRB + NEO_KHZ800);\nLiquidCrystal lcd(12, 11, 5, A1, A2, A3);\nvoid setup() {\n  for (int i = 0; i < 3; i++) {\n    pinMode(leds[i], OUTPUT);\n  }\n  for (int p = 9; p <= 10; p++)\n    pinMode(p, INPUT_PULLUP);\n  digitalWrite(p, HIGH);\n}";
+        let p = pins_in(code);
+        let mode = |n: &str| p.iter().find(|x| x.pin == n).map(|x| x.mode);
+        assert_eq!((mode("2"), mode("3"), mode("4")), (Some("out"), Some("out"), Some("out")));
+        assert_eq!((mode("9"), mode("10")), (Some("pull"), Some("pull")));
+        assert_eq!((mode("7"), mode("6"), mode("12"), mode("A3")), (Some("dht"), Some("neo"), Some("lcd"), Some("lcd")));
+        assert!(mode("8").is_none(), "NeoPixel count is not a pin");
+        assert_eq!(p.iter().find(|x| x.pin == "2").unwrap().name.as_deref(), Some("leds"));
     }
 }
