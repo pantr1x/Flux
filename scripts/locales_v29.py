@@ -1,0 +1,12 @@
+# Flux Native 0.9.63: obrázky Mega 2560 a Nano, doska na stránke projektu bez rámikov, nový súbor s vlastným menom.
+# Poradie: sk, de, es, fr, it, pl, pt, uk.
+_V29 = {
+    'Connected via Bluetooth · {port}': ('Pripojené cez Bluetooth · {port}', 'Verbunden über Bluetooth · {port}', 'Conectada por Bluetooth · {port}', 'Connectée en Bluetooth · {port}', 'Connessa via Bluetooth · {port}', 'Połączono przez Bluetooth · {port}', 'Conectada por Bluetooth · {port}', 'Підключено через Bluetooth · {port}'),
+    'Connected via USB · {port}': ('Pripojené cez USB · {port}', 'Verbunden über USB · {port}', 'Conectada por USB · {port}', 'Connectée en USB · {port}', 'Connessa via USB · {port}', 'Połączono przez USB · {port}', 'Conectada por USB · {port}', 'Підключено через USB · {port}'),
+    'Create the file': ('Vytvoriť súbor', 'Datei erstellen', 'Crear el archivo', 'Créer le fichier', 'Crea il file', 'Utwórz plik', 'Criar o arquivo', 'Створити файл'),
+    'Offline – plug the board in with a USB cable': ('Offline – pripoj dosku USB káblom', 'Offline – schließe das Board per USB-Kabel an', 'Sin conexión: conecta la placa con un cable USB', 'Hors ligne – branche la carte avec un câble USB', 'Offline – collega la scheda con un cavo USB', 'Offline – podłącz płytkę kablem USB', 'Offline – ligue a placa com um cabo USB', 'Офлайн – підключи плату USB-кабелем'),
+    'PINS IN {name}': ('PINY V {name}', 'PINS IN {name}', 'PINES EN {name}', 'BROCHES DANS {name}', 'PIN IN {name}', 'PINY W {name}', 'PINOS EM {name}', 'ПІНИ В {name}'),
+    'Use Arduino Mega 2560': ('Použiť Arduino Mega 2560', 'Arduino Mega 2560 verwenden', 'Usar Arduino Mega 2560', 'Utiliser Arduino Mega 2560', 'Usa Arduino Mega 2560', 'Użyj Arduino Mega 2560', 'Usar Arduino Mega 2560', 'Використати Arduino Mega 2560'),
+    'Your code uses pins that only exist on the Mega 2560.': ('Tvoj kód používa piny, ktoré má len Mega 2560.', 'Dein Code nutzt Pins, die es nur beim Mega 2560 gibt.', 'Tu código usa pines que solo existen en la Mega 2560.', 'Ton code utilise des broches qui n’existent que sur la Mega 2560.', 'Il tuo codice usa pin che esistono solo sulla Mega 2560.', 'Twój kod używa pinów, które istnieją tylko w Mega 2560.', 'Seu código usa pinos que só existem na Mega 2560.', 'Твій код використовує піни, які є лише в Mega 2560.'),
+}
+V29 = {code: {k: v[i] for k, v in _V29.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

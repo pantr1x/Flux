@@ -23,6 +23,7 @@ mod plugins_ui;
 mod imageview;
 mod imageedit;
 mod arduino;
+mod boardart;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -3319,7 +3320,17 @@ impl App {
                     }
                 }
             }
-            ui.add_space(24.0);
+            ui.add_space(8.0);
+            // ---- doska (Arduino, ESP32, Pico…): stav, obrázok a pridávanie kódu k pinom ----
+            if let Some((bpath, bmode)) = board.clone() {
+                let top = ui.cursor().top();
+                let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(left, top), vec2(inner_w, 4000.0))));
+                self.ard_project_card(&mut cu, &bpath, &bmode);
+                let used = cu.min_rect().height();
+                ui.allocate_exact_size(vec2(full, used), Sense::hover());
+                ui.add_space(22.0);
+            }
+            ui.add_space(8.0);
             // ---- dlaždice so štatistikami ----
             let runs = self.core.setting("activity")[&ws]["runs"].as_u64().unwrap_or(0);
             let secs = self.core.setting("projectTime")[&ws].as_u64().unwrap_or(0);
@@ -3349,15 +3360,6 @@ impl App {
                 ui.painter().text(pos2(t.left() + 16.0, t.top() + 60.0), Align2::LEFT_CENTER, crate::i18n::t(label), theme::ui(12.5), p.text3);
             }
             ui.add_space(22.0);
-            // ---- doska (Arduino, ESP32, Pico…): stav, obrázok a pridávanie kódu k pinom ----
-            if let Some((bpath, bmode)) = board.clone() {
-                let top = ui.cursor().top();
-                let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(left, top), vec2(inner_w, 4000.0))));
-                self.ard_project_card(&mut cu, &bpath, &bmode);
-                let used = cu.min_rect().height();
-                ui.allocate_exact_size(vec2(full, used), Sense::hover());
-                ui.add_space(22.0);
-            }
             // ---- súbory (podľa druhu) a TO-DO ----
             let groups = file_groups(&items);
             let rows: usize = groups.iter().map(|g| g.1.len() + 2).sum();

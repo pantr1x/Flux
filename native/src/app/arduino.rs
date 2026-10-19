@@ -1,5 +1,6 @@
 // Arduino panel vpravo na karte (pre .ino súbory): doska na USB (aj Elegoo / klony s CH340), nahratie, sériový monitor,
 // schéma zapojenia podľa pinov v kóde, knižnice a firmvér. Logika je v crate::arduino, príkazy bežia vo Výstupe.
+use super::boardart::{self, ESP_L, ESP_R, NANO_L, NANO_R, PICO_L, PICO_R};
 use super::App;
 use crate::arduino::{self as ard, Board, BAUDS, BOARDS};
 use crate::i18n::{t, tf};
@@ -44,6 +45,9 @@ pub struct ArdUi {
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
     custom: String,                                            // vlastný kód pre pin
     custom_open: bool,
+    plain: bool,                                 // bez rámikov (hlavná stránka projektu)
+    new_name: String,                            // meno nového súboru z vlastného kódu (prázdne = pin_<n>)
+    new_mode: Option<String>,                    // jazyk nového súboru (None = ako aktuálny)
     custom_repeat: bool,                         // do loop() / slučky (inak raz, do setup())
     sel: Option<String>,                         // pin vybraný kliknutím v schéme
     bt: Arc<Mutex<Vec<(String, String, bool)>>>, // spárované Bluetooth zariadenia (meno, MAC, pripojené)
@@ -80,6 +84,9 @@ impl Default for ArdUi {
             flipped: HashSet::new(),
             custom: String::new(),
             custom_open: false,
+            plain: false,
+            new_name: String::new(),
+            new_mode: None,
             custom_repeat: true,
             sel: None,
             bt: Arc::new(Mutex::new(vec![])),
@@ -112,109 +119,8 @@ struct Row {
     copy: Option<String>,
 }
 
-// pin dosky na obrázku: popisok, kľúč pre kód (číslo GPIO; prázdny = nejde použiť), druh: 0 GPIO, 1 GND, 2 napájanie, 3 iné
-#[derive(Clone, Copy)]
-struct Pad {
-    label: &'static str,
-    key: &'static str,
-    kind: u8,
-}
-
-const fn pd(label: &'static str, key: &'static str, kind: u8) -> Pad {
-    Pad { label, key, kind }
-}
-
-// ESP32 DevKitC (38 pinov), USB dole
-const ESP_L: [Pad; 19] = [
-    pd("3V3", "", 2),
-    pd("EN", "", 3),
-    pd("VP", "36", 0),
-    pd("VN", "39", 0),
-    pd("34", "34", 0),
-    pd("35", "35", 0),
-    pd("32", "32", 0),
-    pd("33", "33", 0),
-    pd("25", "25", 0),
-    pd("26", "26", 0),
-    pd("27", "27", 0),
-    pd("14", "14", 0),
-    pd("12", "12", 0),
-    pd("GND", "", 1),
-    pd("13", "13", 0),
-    pd("SD2", "", 3),
-    pd("SD3", "", 3),
-    pd("CMD", "", 3),
-    pd("5V", "", 2),
-];
-const ESP_R: [Pad; 19] = [
-    pd("GND", "", 1),
-    pd("23", "23", 0),
-    pd("22", "22", 0),
-    pd("TX0", "1", 0),
-    pd("RX0", "3", 0),
-    pd("21", "21", 0),
-    pd("GND", "", 1),
-    pd("19", "19", 0),
-    pd("18", "18", 0),
-    pd("5", "5", 0),
-    pd("17", "17", 0),
-    pd("16", "16", 0),
-    pd("4", "4", 0),
-    pd("0", "0", 0),
-    pd("2", "2", 0),
-    pd("15", "15", 0),
-    pd("SD1", "", 3),
-    pd("SD0", "", 3),
-    pd("CLK", "", 3),
-];
-// Raspberry Pi Pico, USB hore
-const PICO_L: [Pad; 20] = [
-    pd("GP0", "0", 0),
-    pd("GP1", "1", 0),
-    pd("GND", "", 1),
-    pd("GP2", "2", 0),
-    pd("GP3", "3", 0),
-    pd("GP4", "4", 0),
-    pd("GP5", "5", 0),
-    pd("GND", "", 1),
-    pd("GP6", "6", 0),
-    pd("GP7", "7", 0),
-    pd("GP8", "8", 0),
-    pd("GP9", "9", 0),
-    pd("GND", "", 1),
-    pd("GP10", "10", 0),
-    pd("GP11", "11", 0),
-    pd("GP12", "12", 0),
-    pd("GP13", "13", 0),
-    pd("GND", "", 1),
-    pd("GP14", "14", 0),
-    pd("GP15", "15", 0),
-];
-const PICO_R: [Pad; 20] = [
-    pd("VBUS", "", 2),
-    pd("VSYS", "", 2),
-    pd("GND", "", 1),
-    pd("3V3_EN", "", 3),
-    pd("3V3", "", 2),
-    pd("VREF", "", 3),
-    pd("GP28", "28", 0),
-    pd("GND", "", 1),
-    pd("GP27", "27", 0),
-    pd("GP26", "26", 0),
-    pd("RUN", "", 3),
-    pd("GP22", "22", 0),
-    pd("GND", "", 1),
-    pd("GP21", "21", 0),
-    pd("GP20", "20", 0),
-    pd("GP19", "19", 0),
-    pd("GP18", "18", 0),
-    pd("GND", "", 1),
-    pd("GP17", "17", 0),
-    pd("GP16", "16", 0),
-];
-
 // farba a text súčiastky pre režim pinu
-fn mode_info(mode: &str) -> (Color32, &'static str, &'static str) {
+pub(super) fn mode_info(mode: &str) -> (Color32, &'static str, &'static str) {
     match mode {
         "out" => (Color32::from_rgb(0xff, 0x8a, 0x3d), "OUTPUT", "LED (long leg) here through a 220 Ω resistor; short leg → GND"),
         "pwm" => (Color32::from_rgb(0xf5, 0xc2, 0x42), "PWM", "LED or motor driver – brightness / speed with analogWrite()"),
@@ -768,7 +674,8 @@ impl App {
 
     fn ard_card(&self, ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
         let p = self.pal;
-        egui::Frame::NONE.fill(p.hover).corner_radius(CornerRadius::same(12)).inner_margin(egui::Margin::same(12)).show(ui, |ui| {
+        let (fill, m) = if self.ard.plain { (Color32::TRANSPARENT, 0) } else { (p.hover, 12) };
+        egui::Frame::NONE.fill(fill).corner_radius(CornerRadius::same(12)).inner_margin(egui::Margin::same(m)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             add(ui);
         });
@@ -1284,9 +1191,11 @@ impl App {
 
     // obrázok dosky: 0 = Uno / Nano / Mega, 1 = ESP32 DevKit, 2 = Raspberry Pi Pico (zvolená alebo pripojená doska)
     fn ard_layout(&self, mode: &str) -> u8 {
-        let by_fqbn = |f: &str| match f.split(':').next() {
-            Some("esp32" | "esp8266") => Some(1),
-            Some("rp2040") => Some(2),
+        let by_fqbn = |f: &str| match f.split(':').nth(1) {
+            _ if f.starts_with("esp32:") || f.starts_with("esp8266:") => Some(1),
+            _ if f.starts_with("rp2040:") => Some(2),
+            Some("avr") if f.contains(":mega") => Some(3),
+            Some("avr") if f.contains(":nano") => Some(4),
             Some(_) => Some(0),
             None => None,
         };
@@ -1305,6 +1214,11 @@ impl App {
                     1
                 } else if n.contains("pico") || n.contains("rp2") {
                     2
+                } else if n.contains("mega") {
+                    3
+                } else if b.chip == Some("CH340") {
+                    // klon bez rozpoznania: podľa uloženej voľby (Uno, Mega, Nano…)
+                    by_fqbn(&fq).unwrap_or(0)
                 } else {
                     0
                 }
@@ -1315,16 +1229,18 @@ impl App {
         }
     }
 
-    // hlavička panela: obrázok dosky so stavom pripojenia, výber dosky (automaticky / vlastná), piny, vlastný kód a jazyk
     // obrázok dosky (klik na pin ho vyberie)
     fn ard_picture(&mut self, ui: &mut egui::Ui, mode: &str, pins: &[ard::Pin]) {
+        let p = self.pal;
         let layout = self.ard_layout(mode);
         let w = ui.available_width();
         let sel = self.ard.sel.clone();
         let clicked = match layout {
-            1 => self.ard_draw_vertical(ui, w, "ESP32", &ESP_L, &ESP_R, false, Color32::from_rgb(0x23, 0x25, 0x2b), pins, &sel),
-            2 => self.ard_draw_vertical(ui, w, "Pico", &PICO_L, &PICO_R, true, Color32::from_rgb(0x1c, 0x7a, 0x44), pins, &sel),
-            _ => self.ard_draw_uno(ui, w, pins, &sel),
+            1 => boardart::draw_vertical(ui, &p, w, "ESP32", &ESP_L, &ESP_R, false, Color32::from_rgb(0x23, 0x25, 0x2b), pins, &sel),
+            2 => boardart::draw_vertical(ui, &p, w, "Pico", &PICO_L, &PICO_R, true, Color32::from_rgb(0x1c, 0x7a, 0x44), pins, &sel),
+            4 => boardart::draw_vertical(ui, &p, w, "Nano", &NANO_L, &NANO_R, true, Color32::from_rgb(0x00, 0x87, 0x8f), pins, &sel),
+            3 => boardart::draw_avr(ui, &p, w, true, pins, &sel),
+            _ => boardart::draw_avr(ui, &p, w, false, pins, &sel),
         };
         if let Some(c) = clicked {
             self.ard.sel = if sel.as_deref() == Some(c.as_str()) { None } else { Some(c) };
@@ -1347,12 +1263,10 @@ impl App {
         Some(self.tabs[i].name())
     }
 
-    // výber dosky, tipy a karta vybraného pinu: hotové ukážky alebo vlastný kód (do nového súboru)
-    fn ard_pin_panel(&mut self, ui: &mut egui::Ui, mode: &str, target: &str, pins: &[ard::Pin]) {
+    // výber dosky: automaticky podľa pripojenej, alebo vlastná zo zoznamu
+    fn ard_board_select(&mut self, ui: &mut egui::Ui) {
         let p = self.pal;
-        let layout = self.ard_layout(mode);
         let w = ui.available_width();
-        // doska: automaticky podľa pripojenej, alebo vlastná
         let auto = self.get("arduinoBoardAuto").as_bool() != Some(false);
         let fq = self.ard_board();
         let mut opts: Vec<String> = vec![t("Automatic (detected)")];
@@ -1373,12 +1287,41 @@ impl App {
                 });
             }
         }
-        if layout != 0 {
+    }
+
+    // kód používa piny, ktoré má len Mega (22–53, A8+), ale doska je Uno/Nano: ponúkni Megu
+    fn ard_mega_hint(&mut self, ui: &mut egui::Ui, mode: &str, pins: &[ard::Pin]) {
+        if mode != "cpp" || self.ard_layout(mode) == 3 {
+            return;
+        }
+        let mega_only = pins.iter().any(|x| x.pin.parse::<u32>().is_ok_and(|n| n >= 20) || x.pin.strip_prefix('A').and_then(|a| a.parse::<u32>().ok()).is_some_and(|a| a >= 8));
+        if !mega_only {
+            return;
+        }
+        let p = self.pal;
+        let mut go = false;
+        self.ard_card(ui, |ui| {
+            ui.label(egui::RichText::new(t("Your code uses pins that only exist on the Mega 2560.")).font(theme::ui(12.0)).color(p.text2));
+            go = widgets::button(ui, None, &t("Use Arduino Mega 2560"), p.accent, p.accent_fg, 28.0, &p).clicked();
+        });
+        if go {
+            self.update_settings(|o| {
+                o.insert("arduinoBoardAuto".into(), json!(false));
+                o.insert("arduinoBoard".into(), json!("arduino:avr:mega"));
+            });
+        }
+    }
+
+    // výber dosky, tipy a karta vybraného pinu: hotové ukážky alebo vlastný kód (do nového súboru)
+    fn ard_pin_panel(&mut self, ui: &mut egui::Ui, mode: &str, target: &str, pins: &[ard::Pin], with_select: bool) {
+        let p = self.pal;
+        let layout = self.ard_layout(mode);
+        if with_select {
+            self.ard_board_select(ui);
+        }
+        self.ard_mega_hint(ui, mode, pins);
+        if layout == 1 || layout == 2 {
             self.ard_hint(ui, &t("ESP32 and Pico pins work at 3.3 V – connect parts to 3V3, not 5V."));
-        } else if mode == "cpp" && fq.contains("mega") {
-            self.ard_hint(ui, &t("The picture shows the Uno layout – pins 0–13 and A0–A5 are in the same places on the Mega; other pins are listed below."));
-        } else if mode == "cpp" && (fq.contains("nano") || fq.contains("pro")) {
-            self.ard_hint(ui, &t("The picture shows the Uno layout – the Nano and Pro Mini have the same pin numbers, printed next to each pin."));
         }
         let Some(sel) = self.ard.sel.clone() else {
             self.ard_hint(ui, &t("Click a pin on the board to add LED, button, servo… code for it."));
@@ -1388,8 +1331,9 @@ impl App {
         let kinds: Vec<(&str, String)> = [("led", "LED"), ("button", "Button"), ("pwm", "Fade (PWM)"), ("analog", "Analog sensor"), ("servo", "Servo"), ("buzzer", "Buzzer")]
             .into_iter()
             .filter(|(k, _)| match (layout, *k) {
-                (0, "analog") => sel.starts_with('A'),
-                (0, "pwm") => ["3", "5", "6", "9", "10", "11"].contains(&sel.as_str()),
+                (0 | 3 | 4, "analog") => sel.starts_with('A'),
+                (0 | 4, "pwm") => ["3", "5", "6", "9", "10", "11"].contains(&sel.as_str()),
+                (3, "pwm") => sel.parse::<u32>().is_ok_and(|n| (2..=13).contains(&n) || (44..=46).contains(&n)),
                 _ => true,
             })
             .map(|(k, l)| (k, t(l)))
@@ -1397,6 +1341,8 @@ impl App {
         let mut add: Option<&str> = None;
         let mut custom = std::mem::take(&mut self.ard.custom);
         let (mut open, mut repeat, mut ins) = (self.ard.custom_open, self.ard.custom_repeat, 0u8);
+        let mut new_name = std::mem::take(&mut self.ard.new_name);
+        let mut new_mode = self.ard.new_mode.clone().unwrap_or_else(|| mode.to_string());
         let file_name = widgets::file_name(target);
         self.ard_card(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1441,9 +1387,23 @@ impl App {
                         repeat = true;
                     }
                 });
+                // nový súbor: meno a jazyk (prípona) sa dajú zmeniť
+                ui.add_space(2.0);
+                ui.label(egui::RichText::new(t("New file")).font(theme::bold(12.0)).color(p.text2));
+                let langs = [("cpp", "C++ (.ino)"), ("micropython", "MicroPython (.py)"), ("circuitpython", "CircuitPython (.py)"), ("firmata", "Python + Firmata (.py)")];
+                let lang_labels: Vec<String> = langs.iter().map(|l| l.1.to_string()).collect();
+                let cur_lang = langs.iter().find(|l| l.0 == new_mode).map(|l| l.1).unwrap_or("C++ (.ino)");
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    let tw = (ui.available_width() - 6.0 - 170.0).max(90.0);
+                    ui.add(egui::TextEdit::singleline(&mut new_name).hint_text(format!("pin_{}", sel.to_lowercase())).font(theme::ui(13.0)).desired_width(tw).margin(egui::Margin::symmetric(10, 7)));
+                    if let Some(i) = widgets::select(ui, egui::Id::new("ard-newlang"), cur_lang, &lang_labels, 170.0, &p) {
+                        new_mode = langs[i].0.to_string();
+                    }
+                });
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-                    if widgets::button(ui, Some("filePlus"), &t("Create a new file"), p.accent, p.accent_fg, 28.0, &p).clicked() {
+                    if widgets::button(ui, Some("filePlus"), &t("Create the file"), p.accent, p.accent_fg, 28.0, &p).clicked() {
                         ins = 1;
                     }
                     if widgets::button(ui, None, &tf("Add to {name}", &[("name", &file_name)]), p.card2, p.text, 28.0, &p).clicked() {
@@ -1455,6 +1415,8 @@ impl App {
         self.ard.custom = custom.clone();
         self.ard.custom_open = open;
         self.ard.custom_repeat = repeat;
+        self.ard.new_name = new_name.clone();
+        self.ard.new_mode = Some(new_mode.clone());
         if target.is_empty() {
             return;
         }
@@ -1470,10 +1432,13 @@ impl App {
             };
         } else if ins == 1 {
             let port = self.ard_port().unwrap_or_else(|| "/dev/ttyUSB0".into());
-            match ard::new_script(mode, &sel, &custom, repeat, &port) {
+            match ard::new_script(&new_mode, &sel, &custom, repeat, &port) {
                 Some((ext, content)) => {
                     let dir = std::path::Path::new(target).parent().map(|d| d.to_path_buf()).unwrap_or_default();
-                    let base = format!("pin_{}", sel.to_lowercase());
+                    // meno: čo si napísal (bez prípony a nepovolených znakov), inak pin_<n>
+                    let typed = new_name.trim().trim_end_matches(&format!(".{ext}")).to_string();
+                    let clean: String = typed.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | ' ' | '.') { c } else { '_' }).collect();
+                    let base = if clean.trim().is_empty() { format!("pin_{}", sel.to_lowercase()) } else { clean.trim().to_string() };
                     let mut path = dir.join(format!("{base}.{ext}"));
                     let mut n = 2;
                     while path.exists() {
@@ -1483,6 +1448,7 @@ impl App {
                     match std::fs::write(&path, content) {
                         Ok(()) => {
                             self.open_file(&path.to_string_lossy());
+                            self.ard.new_name.clear();
                             self.status = tf("Created {name}", &[("name", &widgets::file_name(&path.to_string_lossy()))]);
                         }
                         Err(e) => self.status = e.to_string(),
@@ -1494,47 +1460,52 @@ impl App {
     }
 
     fn ard_head_ui(&mut self, ui: &mut egui::Ui, mode: &str) {
-        let p = self.pal;
         let target = self.tabs.get(self.active).map(|t| t.path.clone()).unwrap_or_default();
         let code = self.tabs.get(self.active).map(|t| t.text.clone()).unwrap_or_default();
         let pins = ard::pins_for(mode, &code);
         self.ard_picture(ui, mode, &pins);
-        self.ard_pin_panel(ui, mode, &target, &pins);
+        self.ard_pin_panel(ui, mode, &target, &pins, true);
         // použité piny: kompaktný zoznam
         let n = pins.len();
         let open = self.ard_sec(ui, "pins", &t("Pins in your code"), true, (n > 0).then(|| n.to_string()));
         if open {
-            if pins.is_empty() {
-                let hint = if mode == "cpp" {
-                    "Use pinMode(), digitalWrite(), analogRead()… in your code and the wiring appears here."
-                } else {
-                    "Use Pin(), PWM(), ADC() (or digitalio, get_pin…) in your code and the wiring appears here."
-                };
-                self.ard_hint(ui, &t(hint));
+            self.ard_pins_rows(ui, mode, &pins);
+        }
+    }
+
+    // riadky použitých pinov (hover = čo k nemu pripojiť, klik = skok na riadok v kóde)
+    fn ard_pins_rows(&mut self, ui: &mut egui::Ui, mode: &str, pins: &[ard::Pin]) {
+        let p = self.pal;
+        if pins.is_empty() {
+            let hint = if mode == "cpp" {
+                "Use pinMode(), digitalWrite(), analogRead()… in your code and the wiring appears here."
+            } else {
+                "Use Pin(), PWM(), ADC() (or digitalio, get_pin…) in your code and the wiring appears here."
+            };
+            self.ard_hint(ui, &t(hint));
+        }
+        let mut jump: Option<usize> = None;
+        for (k, pin) in pins.iter().enumerate() {
+            let (col, pmode, part) = mode_info(pin.mode);
+            let (rr, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
+            if resp.hovered() {
+                ui.painter().rect_filled(rr, CornerRadius::same(8), p.hover);
             }
-            let mut jump: Option<usize> = None;
-            for (k, pin) in pins.iter().enumerate() {
-                let (col, pmode, part) = mode_info(pin.mode);
-                let (rr, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
-                if resp.hovered() {
-                    ui.painter().rect_filled(rr, CornerRadius::same(8), p.hover);
-                }
-                let c = pos2(rr.left() + 14.0, rr.center().y);
-                ui.painter().circle_filled(c, 9.0, col);
-                ui.painter().text(c, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.5), Color32::BLACK);
-                let title = match &pin.name {
-                    Some(nm) => format!("{} {}  ·  {nm}", t("Pin"), pin.pin),
-                    None => format!("{} {}", t("Pin"), pin.pin),
-                };
-                widgets::text(ui, pos2(rr.left() + 32.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 130.0);
-                ui.painter().text(pos2(rr.right() - 8.0, rr.center().y), Align2::RIGHT_CENTER, pmode, theme::mono(11.0), col);
-                if resp.on_hover_text(t(part)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                    jump = Some(pin.line);
-                }
+            let c = pos2(rr.left() + 14.0, rr.center().y);
+            ui.painter().circle_filled(c, 9.0, col);
+            ui.painter().text(c, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.5), Color32::BLACK);
+            let title = match &pin.name {
+                Some(nm) => format!("{} {}  ·  {nm}", t("Pin"), pin.pin),
+                None => format!("{} {}", t("Pin"), pin.pin),
+            };
+            widgets::text(ui, pos2(rr.left() + 32.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 130.0);
+            ui.painter().text(pos2(rr.right() - 8.0, rr.center().y), Align2::RIGHT_CENTER, pmode, theme::mono(11.0), col);
+            if resp.on_hover_text(t(part)).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                jump = Some(pin.line);
             }
-            if let Some(l) = jump {
-                self.lint_jump = Some(l);
-            }
+        }
+        if let Some(l) = jump {
+            self.lint_jump = Some(l);
         }
     }
 
@@ -1561,7 +1532,13 @@ impl App {
         found
     }
 
-    // karta Doska na stránke projektu: stav, čo chýba, obrázok dosky a pridávanie kódu k pinom do skriptu projektu
+    // názov modelu dosky (zvolenej alebo rozpoznanej)
+    fn ard_model_name(&self) -> String {
+        let fq = self.ard_board();
+        BOARDS.iter().find(|b| b.0 == fq).map(|b| t(b.1)).unwrap_or(fq)
+    }
+
+    // Doska na stránke projektu – bez rámikov: veľká doska s modelom, vpravo stav, výber dosky, piny a pridávanie kódu
     pub(super) fn ard_project_card(&mut self, ui: &mut egui::Ui, path: &str, mode: &str) {
         let p = self.pal;
         let ctx = ui.ctx().clone();
@@ -1569,37 +1546,73 @@ impl App {
         ctx.request_repaint_after(Duration::from_millis(1000));
         let text = self.ard_target_text(path);
         let pins = ard::pins_for(mode, &text);
-        let mut act: Option<&'static str> = None;
-        egui::Frame::NONE.fill(p.card2).stroke(Stroke::new(1.0, p.line_strong)).corner_radius(CornerRadius::same(14)).inner_margin(egui::Margin::same(16)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            let (tr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
-            widgets::icon_at(ui, pos2(tr.left() + 9.0, tr.center().y), 14.0, "chip", p.accent);
-            ui.painter().text(pos2(tr.left() + 24.0, tr.center().y), Align2::LEFT_CENTER, t("BOARD"), theme::bold(11.0), p.text3);
-            self.ard_pill(ui, tr.right(), tr.center().y);
-            act = self.ard_setup_ui(ui, mode);
+        let name = self.ard_model_name();
+        let (kind, _, lport) = self.ard_link();
+        ui.set_width(ui.available_width());
+        // nadpis: model a stav
+        let (tr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::hover());
+        let boards_empty = self.ard.boards.lock().unwrap().is_empty();
+        let model = if mode == "cpp" { name } else { self.ard_model_name_py(mode) };
+        ui.painter().text(pos2(tr.left(), tr.top() + 16.0), Align2::LEFT_CENTER, &model, theme::bold(26.0), p.text);
+        let (col, status) = match kind {
+            1 => (p.green, tf("Connected via USB · {port}", &[("port", &lport)])),
+            2 => (Color32::from_rgb(0x4d, 0xa3, 0xff), tf("Connected via Bluetooth · {port}", &[("port", &lport)])),
+            _ => (p.text3, if boards_empty { t("Offline – plug the board in with a USB cable") } else { t("Offline") }),
+        };
+        ui.painter().circle_filled(pos2(tr.left() + 5.0, tr.top() + 42.0), 4.0, col);
+        ui.painter().text(pos2(tr.left() + 16.0, tr.top() + 42.0), Align2::LEFT_CENTER, status, theme::ui(13.0), p.text2);
+        // čo ešte chýba
+        self.ard.plain = true;
+        let rows = self.ard_setup_rows(mode);
+        if !rows.iter().all(|r| r.ok) {
+            let (done, total) = (rows.iter().filter(|r| r.ok).count(), rows.len());
+            let mut open = false;
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(t("Getting started")).font(theme::bold(13.0)).color(p.accent));
+                ui.label(egui::RichText::new(tf("{done} of {total} steps done", &[("done", &done.to_string()), ("total", &total.to_string())])).font(theme::ui(12.5)).color(p.text2));
+                open = widgets::button(ui, Some("rocket"), &t("Open the guide"), p.accent, p.accent_fg, 28.0, &p).clicked();
+            });
+            if open {
+                self.ard_open_setup(mode);
+            }
             ui.add_space(6.0);
-            let total = ui.available_width();
-            let lw = (total * 0.48).min(400.0);
-            let rw = total - lw - 18.0;
-            ui.horizontal_top(|ui| {
-                ui.spacing_mut().item_spacing.x = 18.0;
-                ui.allocate_ui_with_layout(vec2(lw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                    ui.set_width(lw);
-                    self.ard_picture(ui, mode, &pins);
-                });
-                ui.allocate_ui_with_layout(vec2(rw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                    ui.set_width(rw);
-                    ui.spacing_mut().item_spacing.y = 8.0;
-                    self.ard_pin_panel(ui, mode, path, &pins);
-                    if !pins.is_empty() {
-                        ui.add_space(2.0);
-                        ui.label(egui::RichText::new(tf("{n} pins used in {name}", &[("n", &pins.len().to_string()), ("name", &widgets::file_name(path))])).font(theme::ui(12.0)).color(p.text3));
-                    }
-                });
+        }
+        let total = ui.available_width();
+        let lw = (total * 0.62).min(640.0);
+        let rw = total - lw - 28.0;
+        ui.horizontal_top(|ui| {
+            ui.spacing_mut().item_spacing.x = 28.0;
+            ui.allocate_ui_with_layout(vec2(lw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_width(lw);
+                self.ard_picture(ui, mode, &pins);
+            });
+            ui.allocate_ui_with_layout(vec2(rw, 10.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_width(rw);
+                ui.spacing_mut().item_spacing.y = 8.0;
+                self.ard_board_select(ui);
+                self.ard_pin_panel(ui, mode, path, &pins, false);
+                if !pins.is_empty() {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(tf("PINS IN {name}", &[("name", &widgets::file_name(path).to_uppercase())])).font(theme::bold(10.5)).color(p.text3));
+                    self.ard_pins_rows(ui, mode, &pins);
+                }
             });
         });
-        if let Some(a) = act {
-            self.ard_act(a, &ctx);
+        self.ard.plain = false;
+    }
+
+    // názov pre Python na doske (model dosky je tu menej dôležitý ako jazyk)
+    fn ard_model_name_py(&self, mode: &str) -> String {
+        let lang = match mode {
+            "micropython" => "MicroPython",
+            "circuitpython" => "CircuitPython",
+            _ => "Python + Firmata",
+        };
+        let n = self.ard_model_name();
+        if self.ard_layout(mode) == 0 && mode != "firmata" {
+            lang.to_string()
+        } else {
+            format!("{lang} · {n}")
         }
     }
 
@@ -1628,151 +1641,6 @@ impl App {
             self.ard.flipped.insert(id);
         }
         open
-    }
-
-    // Uno / Nano / Mega: hore digitálne piny, dole napájanie a analógové
-    fn ard_draw_uno(&self, ui: &mut egui::Ui, w: f32, pins: &[ard::Pin], sel: &Option<String>) -> Option<String> {
-        let p = self.pal;
-        let h = w * 0.74 + 24.0;
-        let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
-        let pa = ui.painter_at(rect);
-        let board = Rect::from_min_size(rect.min + vec2(4.0, 44.0), vec2(w - 8.0, h - 88.0));
-        let teal = Color32::from_rgb(0x00, 0x87, 0x8f);
-        pa.rect_filled(board, CornerRadius::same(10), teal);
-        pa.rect_stroke(board, CornerRadius::same(10), Stroke::new(1.0, Color32::from_black_alpha(80)), StrokeKind::Inside);
-        // USB, napájanie, čip, nápis
-        let bw = board.width();
-        let bh = board.height();
-        let at = |fx: f32, fy: f32| pos2(board.left() + bw * fx, board.top() + bh * fy);
-        pa.rect_filled(Rect::from_min_max(at(-0.03, 0.12), at(0.13, 0.36)), CornerRadius::same(3), Color32::from_gray(190));
-        pa.rect_filled(Rect::from_min_max(at(-0.02, 0.66), at(0.12, 0.86)), CornerRadius::same(3), Color32::from_gray(30));
-        pa.rect_filled(Rect::from_min_max(at(0.40, 0.58), at(0.80, 0.74)), CornerRadius::same(2), Color32::from_gray(25));
-        pa.text(at(0.30, 0.42), Align2::CENTER_CENTER, "UNO", theme::bold((bh * 0.11).clamp(10.0, 22.0)), Color32::from_white_alpha(220));
-        pa.circle_filled(at(0.205, 0.22), 4.0, Color32::from_rgb(0xff, 0xb3, 0x47)); // vstavaná LED (pin 13)
-        let top: Vec<&str> = vec!["SCL", "SDA", "AREF", "GND", "13", "12", "11", "10", "9", "8", "", "7", "6", "5", "4", "3", "2", "1", "0"];
-        let bottom: Vec<&str> = vec!["", "IOREF", "RST", "3V3", "5V", "GND", "GND", "VIN", "", "A0", "A1", "A2", "A3", "A4", "A5"];
-        let used = |name: &str| pins.iter().position(|x| x.pin == name);
-        let power = pins.iter().any(|x| matches!(x.mode, "in" | "analog" | "servo"));
-        let clicked = std::cell::Cell::new(None::<String>);
-        let draw_row = |labels: &[&str], y: f32, x0: f32, x1: f32, up: bool, row: u8| {
-            let n = labels.len() as f32;
-            for (i, l) in labels.iter().enumerate() {
-                if l.is_empty() {
-                    continue;
-                }
-                let x = board.left() + bw * (x0 + (x1 - x0) * i as f32 / (n - 1.0));
-                let c = pos2(x, board.top() + bh * y);
-                let s = (bw / 48.0).clamp(4.0, 8.0);
-                pa.rect_filled(Rect::from_center_size(c, vec2(s, s)), 1.0, Color32::from_gray(20));
-                let ty = if up { c.y + s + 6.0 } else { c.y - s - 6.0 };
-                // úzky panel: dlhé popisy skrátiť (GND → G), nech sa neprekrývajú
-                let step = bw * (x1 - x0) / (n - 1.0);
-                let short = match *l {
-                    "SCL" | "SDA" | "AREF" | "IOREF" | "RST" | "VIN" if step < 22.0 => "",
-                    "GND" if step < 22.0 => "G",
-                    "3V3" if step < 22.0 => "3V",
-                    other => other,
-                };
-                pa.text(pos2(x, ty), Align2::CENTER_CENTER, short, theme::ui((step * 0.62).clamp(7.0, 10.0)), Color32::from_white_alpha(200));
-                let idx = used(l);
-                let pwr = power && (*l == "5V" || *l == "GND");
-                let pickable = l.chars().all(|c| c.is_ascii_digit()) || (l.starts_with('A') && l.len() == 2);
-                if pickable {
-                    let hit = Rect::from_center_size(pos2(x, c.y + if up { 7.0 } else { -7.0 }), vec2(step.max(10.0), 26.0));
-                    let resp = ui.interact(hit, ui.id().with(("ard-pad", row, i)), Sense::click());
-                    if resp.hovered() {
-                        pa.circle_stroke(c, s * 1.5, Stroke::new(1.5, Color32::from_white_alpha(160)));
-                    }
-                    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(format!("{} {l}", t("Pin"))).clicked() {
-                        clicked.set(Some(l.to_string()));
-                    }
-                }
-                if sel.as_deref() == Some(*l) {
-                    pa.circle_stroke(c, s * 1.7, Stroke::new(2.0, p.accent));
-                }
-                if let Some(k) = idx {
-                    let (col, _, _) = mode_info(pins[k].mode);
-                    // čiara von z dosky a krúžok s číslom
-                    // susedné piny: krúžky striedavo vyššie/nižšie, nech sa neprekrývajú
-                    let lift = if i % 2 == 1 { 20.0 } else { 0.0 };
-                    let out = pos2(x, if up { rect.top() + 10.0 + lift } else { rect.bottom() - 10.0 - lift });
-                    pa.line_segment([c, out], Stroke::new(2.0, col));
-                    pa.circle_filled(out, 9.0, col);
-                    pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(10.5), Color32::BLACK);
-                    pa.circle_stroke(c, s * 0.9, Stroke::new(2.0, col));
-                } else if pwr {
-                    pa.circle_stroke(c, s * 0.9, Stroke::new(1.5, if *l == "5V" { Color32::from_rgb(0xff, 0x5c, 0x5c) } else { Color32::from_gray(230) }));
-                }
-            }
-        };
-        draw_row(&top, 0.07, 0.30, 0.97, true, 0);
-        draw_row(&bottom, 0.93, 0.40, 0.97, false, 1);
-        clicked.take()
-    }
-
-    // ESP32 / Pico: dva stĺpce pinov po stranách dosky
-    #[allow(clippy::too_many_arguments)]
-    fn ard_draw_vertical(&self, ui: &mut egui::Ui, w: f32, title: &str, left: &[Pad], right: &[Pad], usb_top: bool, body: Color32, pins: &[ard::Pin], sel: &Option<String>) -> Option<String> {
-        let p = self.pal;
-        let n = left.len().max(right.len());
-        let row_h = 15.0;
-        let h = n as f32 * row_h + 70.0;
-        let (rect, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
-        let pa = ui.painter_at(rect);
-        let bw = 128.0f32.min(w * 0.5);
-        let bx = rect.center().x;
-        let board = Rect::from_min_max(pos2(bx - bw / 2.0, rect.top() + 8.0), pos2(bx + bw / 2.0, rect.bottom() - 8.0));
-        pa.rect_filled(board, CornerRadius::same(8), body);
-        pa.rect_stroke(board, CornerRadius::same(8), Stroke::new(1.0, Color32::from_black_alpha(90)), StrokeKind::Inside);
-        let usb = Rect::from_center_size(pos2(bx, if usb_top { board.top() + 4.0 } else { board.bottom() - 4.0 }), vec2(34.0, 14.0));
-        pa.rect_filled(usb, CornerRadius::same(3), Color32::from_gray(190));
-        pa.text(board.center(), Align2::CENTER_CENTER, title, theme::bold(15.0), Color32::from_white_alpha(70));
-        let y0 = if usb_top { board.top() + 30.0 } else { board.top() + 14.0 };
-        let clicked = std::cell::Cell::new(None::<String>);
-        for (side, pads) in [(0u8, left), (1u8, right)] {
-            for (i, pad) in pads.iter().enumerate() {
-                let y = y0 + i as f32 * row_h + row_h / 2.0;
-                let px = if side == 0 { board.left() + 9.0 } else { board.right() - 9.0 };
-                let c = pos2(px, y);
-                let col = match pad.kind {
-                    0 => Color32::from_gray(25),
-                    1 => Color32::from_gray(150),
-                    2 => Color32::from_rgb(0xc0, 0x40, 0x40),
-                    _ => Color32::from_gray(70),
-                };
-                pa.rect_filled(Rect::from_center_size(c, vec2(7.0, 7.0)), 1.0, col);
-                let (anchor, tx) = if side == 0 { (Align2::LEFT_CENTER, px + 8.0) } else { (Align2::RIGHT_CENTER, px - 8.0) };
-                pa.text(pos2(tx, y), anchor, pad.label, theme::ui(8.5), Color32::from_white_alpha(if pad.kind == 0 { 215 } else { 130 }));
-                if pad.kind == 0 && !pad.key.is_empty() {
-                    let hit = if side == 0 {
-                        Rect::from_min_max(pos2(board.left() - 4.0, y - row_h / 2.0), pos2(board.center().x, y + row_h / 2.0))
-                    } else {
-                        Rect::from_min_max(pos2(board.center().x, y - row_h / 2.0), pos2(board.right() + 4.0, y + row_h / 2.0))
-                    };
-                    let resp = ui.interact(hit, ui.id().with(("ard-vpad", side, i)), Sense::click());
-                    if resp.hovered() {
-                        pa.circle_stroke(c, 6.0, Stroke::new(1.5, Color32::from_white_alpha(160)));
-                    }
-                    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(format!("{} {}", t("Pin"), pad.key)).clicked() {
-                        clicked.set(Some(pad.key.to_string()));
-                    }
-                    if sel.as_deref() == Some(pad.key) {
-                        pa.circle_stroke(c, 7.5, Stroke::new(2.0, p.accent));
-                    }
-                    if let Some(k) = pins.iter().position(|x| x.pin == pad.key) {
-                        let (mc, _, _) = mode_info(pins[k].mode);
-                        let lift = if i % 2 == 1 { 22.0 } else { 0.0 };
-                        let ox = if side == 0 { board.left() - 16.0 - lift } else { board.right() + 16.0 + lift };
-                        let out = pos2(ox, y);
-                        pa.line_segment([c, out], Stroke::new(2.0, mc));
-                        pa.circle_filled(out, 7.5, mc);
-                        pa.text(out, Align2::CENTER_CENTER, (k + 1).to_string(), theme::bold(9.5), Color32::BLACK);
-                        pa.circle_stroke(c, 5.0, Stroke::new(2.0, mc));
-                    }
-                }
-            }
-        }
-        clicked.take()
     }
 
     fn ard_libs_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {

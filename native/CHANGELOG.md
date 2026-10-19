@@ -2,6 +2,18 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.63
+
+**Your real board**
+- New pictures for the **Arduino Mega 2560** (with its extra 22–53 header and A0–A15) and the **Arduino Nano**; the Uno, ESP32 and Pico pictures got more detail (USB, chips, LEDs, antenna, buttons). The picture follows the board that is plugged in or the one you chose.
+- If your code uses pins that only a Mega has, Flux offers *Use Arduino Mega 2560*.
+
+**Project page**
+- A board project now starts with a **big picture of the board**, without boxes: the model and the connection on top, the board in the middle, and on the right the board select, the pins used and the buttons for adding code. The stat tiles moved below it.
+
+**Custom code**
+- *Custom code…* creates a **new file** you can **name** and give a **language** (C++, MicroPython, CircuitPython, Python + Firmata) before pressing *Create the file*.
+
 ## 0.9.62
 
 **Getting started**
