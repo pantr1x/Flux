@@ -2,6 +2,19 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.59
+
+**Board panel**
+- The board picture is now at the **top of the Board tab** (the Wiring tab is gone), with the connection state above it: **connected via USB**, **connected via Bluetooth** or **offline**.
+- Under the picture you choose the board: **Automatic** (the connected one) or a custom board from the list.
+- Click a pin and pick a **preset** (LED, button, fade, sensor, servo, buzzer) or write **Custom code** – `{pin}` becomes the pin number, and you choose *once* (setup) or *repeat* (loop).
+- The language switch (C++, MicroPython, CircuitPython, Firmata) is clearer: clicking another language **opens or creates a file** in it next to the current one.
+- **Upload to board** is now the main button for board files (F5): it stores MicroPython code as `main.py`, copies CircuitPython code as `code.py` and uploads C++ sketches. MicroPython also has a small ▶ button to just run the file without saving.
+- Installing `mpremote`, `esptool`, `pyserial` or `pyFirmata2` works on Ubuntu without pip: Flux downloads `get-pip.py` by itself (no sudo).
+
+**First start**
+- The intro's *Set up extras* step can **download the Arduino tools right away**.
+
 ## 0.9.58
 
 **Wiring**

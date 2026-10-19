@@ -31,11 +31,12 @@ pub struct PyTools {
 
 pub struct ArdUi {
     pub open: bool,
-    pub over: std::collections::HashMap<String, String>, // súbor → ručne zvolený jazyk
     tools: Arc<Mutex<PyTools>>,
     last_tools: Option<Instant>,
-    esp: usize,                                  // čip pre nahratie MicroPythonu
-    layout: Option<u8>,                          // ručne zvolený obrázok dosky (None = podľa pripojenej dosky)
+    esp: usize,     // čip pre nahratie MicroPythonu
+    custom: String, // vlastný kód pre pin
+    custom_open: bool,
+    custom_repeat: bool,                         // do loop() / slučky (inak raz, do setup())
     sel: Option<String>,                         // pin vybraný kliknutím v schéme
     bt: Arc<Mutex<Vec<(String, String, bool)>>>, // spárované Bluetooth zariadenia (meno, MAC, pripojené)
     pub width: f32,
@@ -58,11 +59,12 @@ impl Default for ArdUi {
     fn default() -> Self {
         ArdUi {
             open: false,
-            over: Default::default(),
             tools: Arc::new(Mutex::new(PyTools::default())),
             last_tools: None,
             esp: 0,
-            layout: None,
+            custom: String::new(),
+            custom_open: false,
+            custom_repeat: true,
             sel: None,
             bt: Arc::new(Mutex::new(vec![])),
             width: 0.0,
@@ -199,8 +201,15 @@ fn mode_info(mode: &str) -> (Color32, &'static str, &'static str) {
 }
 
 impl App {
+    // typ dosky: ručne zvolený, alebo (automaticky) pripojená doska; klon s CH340 sa nedá rozpoznať → uložená voľba
     pub(super) fn ard_board(&self) -> String {
-        self.get("arduinoBoard").as_str().map(String::from).unwrap_or_else(|| BOARDS[0].0.to_string())
+        let saved = self.get("arduinoBoard").as_str().map(String::from).unwrap_or_else(|| BOARDS[0].0.to_string());
+        if self.get("arduinoBoardAuto").as_bool() == Some(false) {
+            return saved;
+        }
+        let port = self.ard_port();
+        let boards = self.ard.boards.lock().unwrap();
+        boards.iter().find(|b| Some(&b.port) == port.as_ref()).filter(|b| b.chip != Some("CH340")).and_then(|b| b.fqbn.clone()).unwrap_or(saved)
     }
 
     fn ard_baud(&self) -> u32 {
@@ -346,7 +355,18 @@ impl App {
         );
     }
 
-    fn ard_install_tools(&mut self, ctx: &egui::Context) {
+    // stav nástrojov pre intro: 0 nie sú, 1 sťahujú sa, 2 pripravené
+    pub(super) fn ard_tools_state(&mut self) -> u8 {
+        if self.ard_cli().is_some() {
+            2
+        } else if matches!(*self.ard.inst.lock().unwrap(), Inst::Downloading) {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub(super) fn ard_install_tools(&mut self, ctx: &egui::Context) {
         let slot = self.ard.inst.clone();
         *slot.lock().unwrap() = Inst::Downloading;
         let ctx = ctx.clone();
@@ -381,7 +401,7 @@ impl App {
         let tab = self.tabs.get(self.active)?;
         match tab.ext().as_str() {
             "ino" => Some("cpp".into()),
-            "py" => self.ard.over.get(&tab.path).cloned().or_else(|| ard::guess_py(&tab.text).map(String::from)),
+            "py" => ard::guess_py(&tab.text).map(String::from),
             _ => None,
         }
     }
@@ -430,27 +450,80 @@ impl App {
         self.ard_run(label, vec![ard::pip_install(pkg, app)]);
     }
 
-    // jazyk: výber MicroPython / CircuitPython / Python + Firmata
-    fn ard_mode_picker(&mut self, ui: &mut egui::Ui, mode: &str) {
+    // prepnutie jazyka: otvorí (alebo vytvorí) súbor v tom jazyku vedľa aktuálneho
+    fn ard_switch_lang(&mut self, lang: &str) {
+        let Some(path) = self.tabs.get(self.active).map(|t| t.path.clone()) else { return };
+        let pp = std::path::Path::new(&path);
+        let Some(dir) = pp.parent() else { return };
+        let stem = pp.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "sketch".into());
+        let port = self.ard_port().unwrap_or_else(|| "/dev/ttyUSB0".into());
+        let (name, content): (String, String) = match lang {
+            "cpp" => {
+                // už existujúci .ino v priečinku, inak nový
+                let found = std::fs::read_dir(dir).ok().and_then(|rd| rd.flatten().map(|e| e.path()).find(|f| f.extension().is_some_and(|x| x == "ino")));
+                match found {
+                    Some(f) => (f.file_name().unwrap_or_default().to_string_lossy().to_string(), String::new()),
+                    None => (format!("{stem}.ino"), ard::STARTER.to_string()),
+                }
+            }
+            "micropython" => ("main.py".into(), ard::MICROPY_BLINK.to_string()),
+            "circuitpython" => ("code.py".into(), ard::CIRCUITPY_BLINK.to_string()),
+            _ => ("firmata.py".into(), ard::firmata_blink(&port)),
+        };
+        let target = dir.join(&name);
+        if !target.exists() {
+            if let Err(e) = std::fs::write(&target, content) {
+                self.status = e.to_string();
+                return;
+            }
+        }
+        self.open_file(&target.to_string_lossy());
+    }
+
+    // jazyk programu: C++ alebo Python na doske; kliknutie na iný otvorí (alebo vytvorí) súbor v ňom
+    fn ard_lang_picker(&mut self, ui: &mut egui::Ui, mode: &str) {
         let p = self.pal;
         let w = ui.available_width();
-        let n = ard::PY_MODES.len() as f32;
+        let opts: [(&str, &str); 4] = [("cpp", "C++"), ("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Firmata")];
         let (area, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
         ui.painter().rect_filled(area, CornerRadius::same(10), p.hover);
-        let bw = (w - 6.0) / n;
-        for (i, (id, name)) in ard::PY_MODES.iter().enumerate() {
-            let r = Rect::from_min_size(area.min + vec2(3.0 + i as f32 * bw, 3.0), vec2(bw, 26.0));
-            let resp = ui.interact(r, ui.id().with(("ard-mode", i)), Sense::click());
+        // šírka podľa dĺžky názvu, nech sa „MicroPython“ nezreže
+        let weights: Vec<f32> = opts.iter().map(|o| (o.1.len().max(5) + 2) as f32).collect();
+        let total: f32 = weights.iter().sum();
+        let mut x = 3.0;
+        let mut go = None;
+        for (i, (id, name)) in opts.iter().enumerate() {
+            let bw = (w - 6.0) * weights[i] / total;
+            let r = Rect::from_min_size(area.min + vec2(x, 3.0), vec2(bw, 26.0));
+            x += bw;
+            let resp = ui.interact(r, ui.id().with(("ard-lang", i)), Sense::click());
             let on = *id == mode;
             if on {
                 ui.painter().rect_filled(r, CornerRadius::same(8), p.active);
+            } else if resp.hovered() {
+                ui.painter().rect_filled(r, CornerRadius::same(8), p.card2);
             }
             widgets::text(ui, r.center(), Align2::CENTER_CENTER, name, if on { theme::bold(12.0) } else { theme::ui(12.0) }, if on { p.text } else { p.text2 }, bw - 6.0);
             if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() && !on {
-                if let Some(path) = self.tabs.get(self.active).map(|t| t.path.clone()) {
-                    self.ard.over.insert(path, id.to_string());
-                }
+                go = Some(*id);
             }
+        }
+        self.ard_hint(ui, &t("Click another language to open (or create) a file in it next to this one."));
+        if let Some(l) = go {
+            self.ard_switch_lang(l);
+        }
+    }
+
+    // ako je doska pripojená: (0 offline, 1 USB, 2 Bluetooth, text)
+    fn ard_link(&self) -> (u8, String) {
+        let port = self.ard_port();
+        let boards = self.ard.boards.lock().unwrap();
+        match boards.iter().find(|b| Some(&b.port) == port.as_ref()) {
+            Some(b) => {
+                let bt = b.chip == Some("Bluetooth") || b.port.contains("rfcomm") || b.name.to_lowercase().contains("bluetooth");
+                (if bt { 2 } else { 1 }, format!("{} ({})", b.name, b.port))
+            }
+            None => (0, String::new()),
         }
     }
 
@@ -458,8 +531,7 @@ impl App {
     fn ard_py_ui(&mut self, ui: &mut egui::Ui, mode: &str) {
         let p = self.pal;
         let tools = self.ard.tools.lock().unwrap().clone();
-        ui.label(egui::RichText::new(t("PROGRAMMING LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
-        self.ard_mode_picker(ui, mode);
+        self.ard_head_ui(ui, mode);
         let desc = match mode {
             "micropython" => "Python runs on the board itself (ESP32, ESP8266, Raspberry Pi Pico…). Flux sends your file with mpremote.",
             "circuitpython" => "Python runs on the board itself (Pico, Adafruit, Seeed…). The board shows up as a CIRCUITPY drive – Flux copies your file there as code.py.",
@@ -491,9 +563,7 @@ impl App {
                     to_firmata = widgets::button(ui, None, &t("Switch to Python + Firmata"), p.accent, p.accent_fg, 28.0, &p).clicked();
                 });
                 if to_firmata {
-                    if let Some(path) = self.tabs.get(self.active).map(|t| t.path.clone()) {
-                        self.ard.over.insert(path, "firmata".into());
-                    }
+                    self.ard_switch_lang("firmata");
                 }
             }
         }
@@ -520,14 +590,14 @@ impl App {
                     ui.label(egui::RichText::new(t("ACTIONS")).font(theme::bold(11.0)).color(p.text3));
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-                        if widgets::button(ui, Some("play"), &t("Run on board"), p.accent, p.accent_fg, 30.0, &p).on_hover_text(t("Run the file on the board without saving it (F5)")).clicked() {
-                            act = Some("run");
-                        }
-                        if widgets::button(ui, Some("upload"), &t("Save as main.py"), p.card2, p.text, 30.0, &p)
-                            .on_hover_text(t("Store it on the board so it starts by itself after power-up"))
+                        if widgets::button(ui, Some("upload"), &t("Upload to board"), p.accent, p.accent_fg, 30.0, &p)
+                            .on_hover_text(t("Store it on the board as main.py so it starts by itself after power-up (F5)"))
                             .clicked()
                         {
                             act = Some("save");
+                        }
+                        if widgets::button(ui, Some("play"), &t("Run (no save)"), p.card2, p.text, 30.0, &p).on_hover_text(t("Run the file on the board without saving it")).clicked() {
+                            act = Some("run");
                         }
                         if widgets::button(ui, Some("terminal"), &t("REPL"), p.card2, p.text, 30.0, &p)
                             .on_hover_text(t("Type Python on the board directly (Ctrl+D = restart, Stop to close)"))
@@ -747,8 +817,7 @@ impl App {
         ui.painter().hline(r.x_range(), head.bottom(), Stroke::new(1.0, p.line));
         // sekcie (pri Pythone na doske len Doska a Firmvér)
         let mode = self.ard_mode().unwrap_or_else(|| "cpp".into());
-        let sections: Vec<(u8, String)> =
-            if mode == "cpp" { vec![(0, t("Board")), (1, t("Wiring")), (2, t("Libraries")), (3, t("Firmware"))] } else { vec![(0, t("Board")), (1, t("Wiring")), (3, t("Firmware"))] };
+        let sections: Vec<(u8, String)> = if mode == "cpp" { vec![(0, t("Board")), (2, t("Libraries")), (3, t("Firmware"))] } else { vec![(0, t("Board")), (3, t("Firmware"))] };
         if !sections.iter().any(|x| x.0 == self.ard.section) {
             self.ard.section = 0;
         }
@@ -774,7 +843,6 @@ impl App {
             match (self.ard.section, mode.as_str()) {
                 (0, "cpp") => self.ard_board_ui(ui, &ctx),
                 (0, m) => self.ard_py_ui(ui, m),
-                (1, _) => self.ard_wiring_ui(ui),
                 (2, _) => self.ard_libs_ui(ui, &ctx),
                 (_, "micropython" | "circuitpython") => self.ard_py_fw_ui(ui, &mode),
                 _ => self.ard_firmware_ui(ui),
@@ -912,6 +980,7 @@ impl App {
     fn ard_board_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let p = self.pal;
         let w = ui.available_width();
+        self.ard_head_ui(ui, "cpp");
         // nástroje
         let cli = self.ard_cli();
         let inst = self.ard.inst.lock().unwrap().clone();
@@ -949,18 +1018,6 @@ impl App {
             }
         }
         let boards = self.ard_ports_ui(ui);
-        // typ dosky
-        ui.add_space(4.0);
-        ui.label(egui::RichText::new(t("BOARD TYPE")).font(theme::bold(11.0)).color(p.text3));
-        let fq = self.ard_board();
-        let opts: Vec<String> = BOARDS.iter().map(|b| t(b.1)).collect();
-        let cur_label = BOARDS.iter().find(|b| b.0 == fq).map(|b| t(b.1)).unwrap_or(fq.clone());
-        if let Some(i) = widgets::select(ui, egui::Id::new("ard-board"), &cur_label, &opts, w, &p) {
-            let f = BOARDS[i].0;
-            self.update_settings(|o| {
-                o.insert("arduinoBoard".into(), json!(f));
-            });
-        }
         if boards.iter().any(|b| b.chip == Some("CH340")) {
             self.ard_hint(ui, &t("Clone boards (CH340) can't tell which board they are – pick it here. Nano clones usually need “old bootloader”."));
         }
@@ -992,24 +1049,6 @@ impl App {
             }
         });
         self.ard_hint(ui, &t("Use the same speed as Serial.begin() in your code. Close the monitor (Stop) before uploading."));
-        // Python namiesto C++
-        ui.add_space(4.0);
-        let mut new_py = false;
-        self.ard_card(ui, |ui| {
-            ui.label(egui::RichText::new(t("Prefer Python?")).font(theme::bold(13.0)).color(p.text));
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(t("MicroPython and CircuitPython run Python on the board, or use Python + Firmata from the computer. Pick one in New file."))
-                        .font(theme::ui(12.0))
-                        .color(p.text2),
-                )
-                .wrap(),
-            );
-            new_py = widgets::button(ui, Some("plus"), &t("New Python file for a board…"), p.card2, p.text, 28.0, &p).clicked();
-        });
-        if new_py {
-            self.open_new_file(None);
-        }
         match act {
             Some("upload") => self.ard_upload(true),
             Some("verify") => self.ard_upload(false),
@@ -1018,44 +1057,58 @@ impl App {
         }
     }
 
-    // obrázok dosky: 0 = Uno / Nano / Mega, 1 = ESP32 DevKit, 2 = Raspberry Pi Pico (podľa pripojenej dosky, alebo ručne)
+    // obrázok dosky: 0 = Uno / Nano / Mega, 1 = ESP32 DevKit, 2 = Raspberry Pi Pico (zvolená alebo pripojená doska)
     fn ard_layout(&self, mode: &str) -> u8 {
-        if let Some(l) = self.ard.layout {
-            return l;
-        }
         let by_fqbn = |f: &str| match f.split(':').next() {
             Some("esp32" | "esp8266") => Some(1),
             Some("rp2040") => Some(2),
-            _ => None,
+            Some(_) => Some(0),
+            None => None,
         };
-        if mode == "cpp" {
-            return by_fqbn(&self.ard_board()).unwrap_or(0);
+        let fq = self.ard_board();
+        if self.get("arduinoBoardAuto").as_bool() == Some(false) {
+            return by_fqbn(&fq).unwrap_or(0);
         }
         let port = self.ard_port();
-        let boards = self.ard.boards.lock().unwrap();
-        let Some(b) = boards.iter().find(|b| Some(&b.port) == port.as_ref()) else { return if mode == "micropython" { 1 } else { 0 } };
-        let n = b.name.to_lowercase();
-        b.fqbn
-            .as_deref()
-            .and_then(by_fqbn)
-            .or(if n.contains("esp") {
-                Some(1)
-            } else if n.contains("pico") || n.contains("rp2") {
-                Some(2)
-            } else {
-                None
-            })
-            .unwrap_or(0)
+        let boards = self.ard.boards.lock().unwrap().clone();
+        match boards.iter().find(|b| Some(&b.port) == port.as_ref()) {
+            Some(b) => {
+                let n = b.name.to_lowercase();
+                if let Some(l) = b.fqbn.as_deref().and_then(by_fqbn).filter(|l| *l != 0) {
+                    l
+                } else if n.contains("esp") || (mode == "micropython" && b.chip == Some("CH340")) {
+                    1
+                } else if n.contains("pico") || n.contains("rp2") {
+                    2
+                } else {
+                    0
+                }
+            }
+            None if mode == "cpp" => by_fqbn(&fq).unwrap_or(0),
+            None if mode == "micropython" => 1,
+            None => 0,
+        }
     }
 
-    // schéma: doska s pinmi použitými v kóde (číslo v krúžku), klik na pin = pridať do kódu
-    fn ard_wiring_ui(&mut self, ui: &mut egui::Ui) {
+    // hlavička panela: obrázok dosky so stavom pripojenia, výber dosky (automaticky / vlastná), piny, vlastný kód a jazyk
+    fn ard_head_ui(&mut self, ui: &mut egui::Ui, mode: &str) {
         let p = self.pal;
-        let mode = self.ard_mode().unwrap_or_else(|| "cpp".into());
         let code = self.tabs.get(self.active).map(|t| t.text.clone()).unwrap_or_default();
-        let pins = ard::pins_for(&mode, &code);
-        let layout = self.ard_layout(&mode);
+        let pins = ard::pins_for(mode, &code);
+        let layout = self.ard_layout(mode);
         let w = ui.available_width();
+        // stav: USB / Bluetooth / offline
+        let (kind, what) = self.ard_link();
+        let (col, text) = match kind {
+            1 => (p.green, tf("Connected via USB: {what}", &[("what", &what)])),
+            2 => (Color32::from_rgb(0x4d, 0xa3, 0xff), tf("Connected via Bluetooth: {what}", &[("what", &what)])),
+            _ => (p.text3, t("Offline – no board connected")),
+        };
+        ui.horizontal(|ui| {
+            let (cr, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
+            ui.painter().circle_filled(cr.center(), 4.5, col);
+            ui.add(egui::Label::new(egui::RichText::new(text).font(theme::bold(12.0)).color(if kind == 0 { p.text2 } else { p.text })).truncate());
+        });
         let sel = self.ard.sel.clone();
         let clicked = match layout {
             1 => self.ard_draw_vertical(ui, w, "ESP32", &ESP_L, &ESP_R, false, Color32::from_rgb(0x23, 0x25, 0x2b), &pins, &sel),
@@ -1065,17 +1118,27 @@ impl App {
         if let Some(c) = clicked {
             self.ard.sel = if sel.as_deref() == Some(c.as_str()) { None } else { Some(c) };
         }
-        // obrázok: automaticky / ručne
-        let opts = [t("Automatic"), "Arduino Uno / Nano / Mega".to_string(), "ESP32 DevKit".to_string(), "Raspberry Pi Pico".to_string()];
-        let cur_label = match self.ard.layout {
-            None => t("Automatic"),
-            Some(l) => opts[l as usize + 1].clone(),
-        };
-        if let Some(i) = widgets::select(ui, egui::Id::new("ard-layout"), &format!("{}: {cur_label}", t("Picture")), &opts, w, &p) {
-            self.ard.layout = if i == 0 { None } else { Some(i as u8 - 1) };
-            self.ard.sel = None;
-        }
+        // doska: automaticky podľa pripojenej, alebo vlastná
+        let auto = self.get("arduinoBoardAuto").as_bool() != Some(false);
         let fq = self.ard_board();
+        let mut opts: Vec<String> = vec![t("Automatic (detected)")];
+        opts.extend(BOARDS.iter().map(|b| t(b.1)));
+        let cur_name = BOARDS.iter().find(|b| b.0 == fq).map(|b| t(b.1)).unwrap_or(fq.clone());
+        let cur_label = if auto { format!("{}: {} · {cur_name}", t("Board"), t("Automatic")) } else { format!("{}: {cur_name}", t("Board")) };
+        if let Some(i) = widgets::select(ui, egui::Id::new("ard-board"), &cur_label, &opts, w, &p) {
+            self.ard.sel = None;
+            if i == 0 {
+                self.update_settings(|o| {
+                    o.insert("arduinoBoardAuto".into(), json!(true));
+                });
+            } else {
+                let f = BOARDS[i - 1].0;
+                self.update_settings(|o| {
+                    o.insert("arduinoBoardAuto".into(), json!(false));
+                    o.insert("arduinoBoard".into(), json!(f));
+                });
+            }
+        }
         if layout != 0 {
             self.ard_hint(ui, &t("ESP32 and Pico pins work at 3.3 V – connect parts to 3V3, not 5V."));
         } else if mode == "cpp" && fq.contains("mega") {
@@ -1084,7 +1147,7 @@ impl App {
             self.ard_hint(ui, &t("The picture shows the Uno layout – the Nano and Pro Mini have the same pin numbers, printed next to each pin."));
         }
         self.ard_hint(ui, &t("Click a pin to add LED, button, servo… code for it."));
-        // vybraný pin → pridať do kódu
+        // vybraný pin → hotové ukážky alebo vlastný kód
         if let Some(sel) = self.ard.sel.clone() {
             let used = pins.iter().find(|x| x.pin == sel).map(|x| mode_info(x.mode).1);
             let kinds: Vec<(&str, String)> = [("led", "LED"), ("button", "Button"), ("pwm", "Fade (PWM)"), ("analog", "Analog sensor"), ("servo", "Servo"), ("buzzer", "Buzzer")]
@@ -1092,12 +1155,13 @@ impl App {
                 .filter(|(k, _)| match (layout, *k) {
                     (0, "analog") => sel.starts_with('A'),
                     (0, "pwm") => ["3", "5", "6", "9", "10", "11"].contains(&sel.as_str()),
-                    (_, "analog") => true,
                     _ => true,
                 })
                 .map(|(k, l)| (k, t(l)))
                 .collect();
             let mut add: Option<&str> = None;
+            let mut custom = std::mem::take(&mut self.ard.custom);
+            let (mut open, mut repeat, mut insert) = (self.ard.custom_open, self.ard.custom_repeat, false);
             self.ard_card(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(13.5)).color(p.text));
@@ -1105,7 +1169,7 @@ impl App {
                         ui.label(egui::RichText::new(u).font(theme::mono(11.0)).color(p.text3));
                     }
                 });
-                ui.label(egui::RichText::new(t("Add to your code:")).font(theme::ui(12.0)).color(p.text2));
+                ui.label(egui::RichText::new(t("Presets – add to your code:")).font(theme::ui(12.0)).color(p.text2));
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
                     for (k, label) in &kinds {
@@ -1113,12 +1177,46 @@ impl App {
                             add = Some(k);
                         }
                     }
+                    if widgets::button(ui, Some("code"), &t("Custom code…"), if open { p.active } else { p.card2 }, p.text, 28.0, &p).clicked() {
+                        open = !open;
+                    }
                 });
+                if open {
+                    ui.add(
+                        egui::TextEdit::multiline(&mut custom)
+                            .hint_text(if mode == "cpp" { "digitalWrite({pin}, HIGH);" } else { "pin = {pin}" })
+                            .font(theme::mono(12.0))
+                            .desired_rows(4)
+                            .desired_width(f32::INFINITY)
+                            .margin(egui::Margin::symmetric(10, 8)),
+                    );
+                    ui.add(egui::Label::new(egui::RichText::new(tf("{pin} becomes the pin number (here {n}).", &[("n", &sel)])).font(theme::ui(11.5)).color(p.text3)).wrap());
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+                        let (once_t, rep_t) = if mode == "cpp" { (t("Once (setup)"), t("Repeat (loop)")) } else { (t("Once (before the loop)"), t("Repeat (in the loop)")) };
+                        if widgets::button(ui, None, &once_t, if !repeat { p.active } else { p.card2 }, p.text, 26.0, &p).clicked() {
+                            repeat = false;
+                        }
+                        if widgets::button(ui, None, &rep_t, if repeat { p.active } else { p.card2 }, p.text, 26.0, &p).clicked() {
+                            repeat = true;
+                        }
+                        if widgets::button(ui, Some("check"), &t("Insert"), p.accent, p.accent_fg, 26.0, &p).clicked() {
+                            insert = true;
+                        }
+                    });
+                }
             });
-            if let Some(kind) = add {
+            self.ard.custom = custom.clone();
+            self.ard.custom_open = open;
+            self.ard.custom_repeat = repeat;
+            if add.is_some() || insert {
                 let Some(i) = (!self.tabs.is_empty()).then_some(self.active) else { return };
                 let name = self.tabs[i].name();
-                match ard::add_snippet(&mode, &self.tabs[i].text, &sel, kind, layout == 2) {
+                let new = match add {
+                    Some(kind) => ard::add_snippet(mode, &self.tabs[i].text, &sel, kind, layout == 2),
+                    None => ard::add_custom(mode, &self.tabs[i].text, &sel, &custom, repeat),
+                };
+                match new {
                     Some(new) => {
                         self.tabs[i].text = new;
                         self.status = tf("Added to {name} – the code is in the editor", &[("name", &name)]);
@@ -1127,6 +1225,7 @@ impl App {
                 }
             }
         }
+        // použité piny
         if pins.is_empty() {
             self.ard_card(ui, |ui| {
                 ui.label(egui::RichText::new(t("No pins used yet")).font(theme::bold(13.0)).color(p.text));
@@ -1137,11 +1236,10 @@ impl App {
                 };
                 ui.add(egui::Label::new(egui::RichText::new(t(hint)).font(theme::ui(12.0)).color(p.text2)).wrap());
             });
-            return;
         }
         let mut jump: Option<usize> = None;
         for (k, pin) in pins.iter().enumerate() {
-            let (col, mode, part) = mode_info(pin.mode);
+            let (col, pmode, part) = mode_info(pin.mode);
             let resp = egui::Frame::NONE
                 .fill(p.hover)
                 .corner_radius(CornerRadius::same(10))
@@ -1157,7 +1255,7 @@ impl App {
                             None => format!("{} {}", t("Pin"), pin.pin),
                         };
                         ui.label(egui::RichText::new(title).font(theme::bold(13.0)).color(p.text));
-                        ui.label(egui::RichText::new(mode).font(theme::mono(11.0)).color(col));
+                        ui.label(egui::RichText::new(pmode).font(theme::mono(11.0)).color(col));
                     });
                     ui.add(egui::Label::new(egui::RichText::new(t(part)).font(theme::ui(12.0)).color(p.text2)).wrap());
                 })
@@ -1169,6 +1267,11 @@ impl App {
         if let Some(l) = jump {
             self.lint_jump = Some(l);
         }
+        // jazyk programu
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new(t("PROGRAMMING LANGUAGE")).font(theme::bold(11.0)).color(p.text3));
+        self.ard_lang_picker(ui, mode);
+        ui.add_space(4.0);
     }
 
     // Uno / Nano / Mega: hore digitálne piny, dole napájanie a analógové

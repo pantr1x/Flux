@@ -1416,7 +1416,7 @@ impl App {
         }
         match self.ard_mode().as_deref() {
             Some("cpp") => return self.ard_upload(true),
-            Some("micropython" | "circuitpython") => return self.ard_py_run(false),
+            Some("micropython" | "circuitpython") => return self.ard_py_run(true),
             _ => {}
         }
         if let Some(why) = self.run_block() {
@@ -2202,7 +2202,7 @@ impl App {
             } else if self.is_ino() {
                 ("upload", t("Upload"), t("Compile and upload to the board (F5)"))
             } else if matches!(self.ard_mode().as_deref(), Some("micropython" | "circuitpython")) {
-                ("upload", t("Run on board"), t("Run the file on the board (F5)"))
+                ("upload", t("Upload to board"), t("Store the file on the board so it starts by itself (F5)"))
             } else {
                 ("play", t("Run"), t("Run (F5)"))
             };
@@ -2256,6 +2256,18 @@ impl App {
                 }
                 rx -= w + 7.0;
             }
+        }
+        // MicroPython: spustiť na doske bez uloženia
+        if can_run && self.ard_mode().as_deref() == Some("micropython") {
+            let rr = Rect::from_min_size(pos2(rx - 36.0, cy - 15.0), vec2(36.0, 30.0));
+            let resp = ui.interact(rr, ui.id().with("ard-run"), Sense::click());
+            ui.painter().rect_filled(rr, CornerRadius::same(10), if resp.hovered() { p.active } else { p.hover });
+            widgets::icon_at(ui, rr.center(), 15.0, "play", p.text2);
+            if resp.on_hover_text(t("Run on the board without saving")).clicked() {
+                self.save(self.active);
+                self.ard_py_run(false);
+            }
+            rx -= 43.0;
         }
         // Arduino panel (len pri .ino): otvoriť / zavrieť
         if can_run && self.ard_mode().is_some() {

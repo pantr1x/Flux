@@ -64,7 +64,7 @@ fn sentence(rng: &mut Rng, k: usize, first: bool) -> String {
             out.push(' ');
         }
         out += &if i == 0 { cap(w) } else { w.to_string() };
-        if i > 2 && i + 2 < k && rng.next(100) < 12 {
+        if i > 2 && i + 2 < k && !(first && i < OPENING.len()) && rng.next(100) < 12 {
             out.push(',');
         }
     }

@@ -134,7 +134,7 @@ impl App {
                 let chosen: Vec<String> = self.core.setting("codeLangs").as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
                 let more = intro.more || CODE_LANGS.iter().any(|c| c.3 && c.0 != "explore" && chosen.iter().any(|x| x == c.0));
                 let w = if step == "extras" {
-                    645.0
+                    760.0
                 } else if step == "code" && more {
                     600.0
                 } else {
@@ -353,7 +353,7 @@ impl App {
     fn intro_extras(&mut self, ui: &mut egui::Ui, body: Rect) {
         let p = self.pal;
         // Skratky
-        let half = (body.width() - 10.0) / 2.0;
+        let half = (body.width() - 20.0) / 3.0;
         let sk = Rect::from_min_size(body.min, vec2(half, 180.0));
         section_card(ui, sk, "command", &t("Shortcuts"), &p);
         for (i, (label, key)) in SHORTCUTS.iter().enumerate() {
@@ -389,6 +389,40 @@ impl App {
             ui.painter().text(pos2(r.left() + 29.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::bold(12.0), p.text);
             if resp.clicked() {
                 self.intro_set("githubPlugin", json!(*val));
+            }
+        }
+        // Arduino a dosky: stiahnutie nástrojov hneď
+        let ar = Rect::from_min_size(pos2(body.left() + 2.0 * (half + 10.0), body.top()), vec2(half, 180.0));
+        section_card(ui, ar, "chip", &t("Arduino & boards"), &p);
+        let state = self.ard_tools_state();
+        let note = match state {
+            1 => t("Downloading the Arduino tools…"),
+            2 => t("Arduino tools are ready."),
+            _ => t("Upload code to Arduino, ESP32 and Pico boards. Flux downloads the tools (about 25 MB)."),
+        };
+        let mut job = egui::text::LayoutJob::single_section(note, egui::TextFormat { font_id: theme::ui(11.5), color: p.text2, ..Default::default() });
+        job.wrap.max_width = half - 24.0;
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        ui.painter().galley(pos2(ar.left() + 12.0, ar.top() + 40.0), g, p.text2);
+        let want = self.core.setting("arduinoTools").as_bool() == Some(true) || state != 0;
+        for (i, (val, label)) in [(true, "Download now"), (false, "Not now")].iter().enumerate() {
+            let r = Rect::from_min_size(pos2(ar.left() + 12.0, ar.top() + 100.0 + i as f32 * 36.0), vec2(half - 24.0, 30.0));
+            let resp = ui.interact(r, ui.id().with(("ard", i)), Sense::click());
+            let sel = want == *val;
+            ui.painter().rect_filled(r, CornerRadius::same(8), p.card2.lerp_to_gamma(p.hover, ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12)));
+            ui.painter().rect_stroke(r, CornerRadius::same(8), if sel { Stroke::new(1.5, p.text) } else { Stroke::new(1.0, p.line) }, StrokeKind::Inside);
+            let c = pos2(r.left() + 16.0, r.center().y);
+            ui.painter().circle_stroke(c, 5.5, Stroke::new(1.2, if sel { p.text } else { p.text3 }));
+            if sel {
+                ui.painter().circle_filled(c, 2.8, p.text);
+            }
+            ui.painter().text(pos2(r.left() + 29.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::bold(12.0), p.text);
+            if resp.clicked() {
+                self.intro_set("arduinoTools", json!(*val));
+                if *val && state == 0 {
+                    let ctx = ui.ctx().clone();
+                    self.ard_install_tools(&ctx);
+                }
             }
         }
         // Aktualizácie

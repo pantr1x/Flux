@@ -707,12 +707,16 @@ fn add_cpp(text: &str, pin: &str, kind: &str) -> Option<String> {
     if text.contains(&setup.iter().chain(lp.iter()).next()?.clone()) {
         return None; // už pridané
     }
+    Some(place_cpp(text, top, setup, lp))
+}
+
+fn place_cpp(text: &str, top: Vec<String>, setup: Vec<String>, lp: Vec<String>) -> String {
+    let mut top = top;
     let mut lines = lines_of(text);
     let ind = |v: &[String]| v.iter().map(|l| format!("  {l}")).collect::<Vec<_>>();
     match (after_fn(&lines, "void setup"), after_fn(&lines, "void loop")) {
-        (Some(_), Some(_)) => {
-            // najprv loop (pozdĺž súboru neskôr), nech sa indexy nepoplietli
-            let (s, l) = (after_fn(&lines, "void setup")?, after_fn(&lines, "void loop")?);
+        (Some(s), Some(l)) => {
+            // najprv to, čo je neskôr v súbore, nech sa indexy nepoplietli
             let (first, second) = if s > l { ((s, ind(&setup)), (l, ind(&lp))) } else { ((l, ind(&lp)), (s, ind(&setup))) };
             for (at, add) in [first, second] {
                 for (k, line) in add.into_iter().enumerate() {
@@ -739,7 +743,7 @@ fn add_cpp(text: &str, pin: &str, kind: &str) -> Option<String> {
             lines.insert(k, line);
         }
     }
-    Some(join_lines(&lines, text.ends_with('\n') || text.is_empty()))
+    join_lines(&lines, text.ends_with('\n') || text.is_empty())
 }
 
 fn add_py(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<String> {
@@ -861,6 +865,10 @@ fn add_py(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<S
     if text.contains(defs.first()?.as_str()) {
         return None; // už pridané
     }
+    Some(place_py(text, imports, defs, body))
+}
+
+fn place_py(text: &str, imports: Vec<String>, defs: Vec<String>, body: Vec<String>) -> String {
     let mut lines = lines_of(text);
     let is_loop = |l: &String| l.trim_end() == "while True:";
     // telo do slučky, definície pred ňu (alebo na koniec)
@@ -899,7 +907,24 @@ fn add_py(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<S
     for (k, im) in new.iter().enumerate() {
         lines.insert(at + k, im.clone());
     }
-    Some(join_lines(&lines, true))
+    join_lines(&lines, true)
+}
+
+// vlastný kód z panela: {pin} sa nahradí číslom pinu; repeat = do loop() / do slučky, inak do setup() / pred slučku
+pub fn add_custom(mode: &str, text: &str, pin: &str, code: &str, repeat: bool) -> Option<String> {
+    let code = code.replace("{pin}", pin);
+    let mut lines: Vec<String> = code.lines().map(|l| l.trim_end().to_string()).collect();
+    while lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    while lines.first().is_some_and(|l| l.is_empty()) {
+        lines.remove(0);
+    }
+    if lines.is_empty() || text.contains(lines.join("\n").as_str()) {
+        return None;
+    }
+    let (once, each) = if repeat { (vec![], lines) } else { (lines, vec![]) };
+    Some(if mode == "cpp" { place_cpp(text, vec![], once, each) } else { place_py(text, vec![], once, each) })
 }
 
 // pin + druh súčiastky → upravený text súboru (None = nič nepridané / už tam je)
@@ -912,8 +937,6 @@ pub fn add_snippet(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) ->
 }
 
 // ---------- Python na doske (MicroPython, CircuitPython, Python + Firmata) ----------
-pub const PY_MODES: [(&str, &str); 3] = [("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Firmata")];
-
 // podľa importov v .py súbore: ide o kód pre dosku?
 pub fn guess_py(text: &str) -> Option<&'static str> {
     let has = |k: &str| {
@@ -977,8 +1000,17 @@ pub fn pip_install(pkg: &str, app: bool) -> Vec<String> {
         return vec![py().into(), "-m".into(), "pip".into(), "install".into(), "--user".into(), pkg.into()];
     }
     let p = py();
-    let pip = format!("{p} -m pip install --user {pkg} || {p} -m pip install --user --break-system-packages {pkg}");
-    let line = if app { format!("pipx install {pkg} || {pip}") } else { pip };
+    // Ubuntu / Debian nemajú pip od začiatku: stiahne sa get-pip.py (bez sudo); aplikácie najprv skúsia pipx
+    let pipx = if app { format!("if command -v pipx >/dev/null 2>&1; then pipx install {pkg} && exit 0; fi\n") } else { String::new() };
+    let line = format!(
+        "{pipx}if ! {p} -m pip --version >/dev/null 2>&1; then\n\
+         echo 'pip is missing - downloading get-pip.py'\n\
+         T=$(mktemp -d)\n\
+         curl -fsSL https://bootstrap.pypa.io/get-pip.py -o \"$T/get-pip.py\" || {{ echo 'Download failed. Try: sudo apt install python3-pip'; exit 1; }}\n\
+         {p} \"$T/get-pip.py\" --user --break-system-packages || {p} \"$T/get-pip.py\" --user || {{ echo 'Could not install pip. Try: sudo apt install python3-pip'; exit 1; }}\n\
+         fi\n\
+         {p} -m pip install --user {pkg} || {p} -m pip install --user --break-system-packages {pkg}"
+    );
     vec!["sh".into(), "-c".into(), line]
 }
 
@@ -1082,6 +1114,12 @@ mod tests {
         assert!(l.contains(&"from machine import Pin, PWM"));
         // CircuitPython na Pico: board.GP15
         assert!(super::add_snippet("circuitpython", super::CIRCUITPY_BLINK, "15", "led", true).unwrap().contains("board.GP15"));
+        // vlastný kód: {pin} sa nahradí, do loop() alebo do setup()
+        let c = super::add_custom("cpp", super::STARTER, "8", "digitalWrite({pin}, HIGH);", true).unwrap();
+        assert!(c.contains("  digitalWrite(8, HIGH);"));
+        let c = super::add_custom("micropython", super::MICROPY_BLINK, "8", "x = {pin}", false).unwrap();
+        assert!(c.lines().position(|l| l == "x = 8").unwrap() < c.lines().position(|l| l == "while True:").unwrap());
+        assert!(super::add_custom("cpp", super::STARTER, "8", "  \n", true).is_none());
         // pyFirmata
         assert!(super::add_snippet("firmata", &super::firmata_blink("/dev/ttyUSB0"), "9", "servo", false).unwrap().contains("get_pin('d:9:s')"));
     }
