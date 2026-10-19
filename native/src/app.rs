@@ -17,6 +17,7 @@ mod tour;
 mod plugins_ui;
 mod imageview;
 mod imageedit;
+mod arduino;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -351,6 +352,7 @@ pub struct App {
     ok_status: String,                     // hlásenie o úspechu (zelené); ostatné v status sú chyby
     ok_at: Option<Instant>,                // kedy sa hlásenie o úspechu ukázalo (po 4 s zmizne)
     ai: ai::AiUi,                          // Claude: nastavenia a panel
+    ard: arduino::ArdUi,                   // Arduino panel (.ino)
     gh: github::GhUi,                      // GitHub účet a repozitáre
     mcp: Option<crate::mcp::Server>,       // Flux pre iné AI aplikácie (Nastavenia → AI)
     mcp_err: Option<String>,
@@ -491,6 +493,7 @@ impl App {
             ok_status: String::new(),
             ok_at: None,
             ai: Default::default(),
+            ard: Default::default(),
             gh: Default::default(),
             mcp: None,
             mcp_err: None,
@@ -1356,6 +1359,10 @@ impl App {
         }
     }
 
+    fn is_ino(&self) -> bool {
+        self.tabs.get(self.active).is_some_and(|t| t.ext() == "ino")
+    }
+
     fn is_web_file(&self) -> bool {
         let Some(tab) = self.tabs.get(self.active) else { return false };
         match tab.ext().as_str() {
@@ -1401,6 +1408,9 @@ impl App {
         self.save(self.active);
         if self.is_web_file() {
             return self.live_server();
+        }
+        if self.is_ino() {
+            return self.ard_upload(true);
         }
         if let Some(why) = self.run_block() {
             self.status = why;
@@ -2182,6 +2192,8 @@ impl App {
                 ("stop", t("Stop"), if running { t("Stop (Shift+F5)") } else { t("Stop Live Server") })
             } else if web {
                 ("globe", t("Live Server"), t("Open the page in the browser – it reloads when you save (F5)"))
+            } else if self.is_ino() {
+                ("upload", t("Upload"), t("Compile and upload to the board (F5)"))
             } else {
                 ("play", t("Run"), t("Run (F5)"))
             };
@@ -2235,6 +2247,17 @@ impl App {
                 }
                 rx -= w + 7.0;
             }
+        }
+        // Arduino panel (len pri .ino): otvoriť / zavrieť
+        if can_run && self.is_ino() {
+            let ar = Rect::from_min_size(pos2(rx - 36.0, cy - 15.0), vec2(36.0, 30.0));
+            let resp = ui.interact(ar, ui.id().with("ard-btn"), Sense::click());
+            ui.painter().rect_filled(ar, CornerRadius::same(10), if resp.hovered() || self.ard.open { p.active } else { p.hover });
+            widgets::icon_at(ui, ar.center(), 15.0, "chip", if self.ard.open { p.accent } else { p.text2 });
+            if resp.on_hover_text(t("Arduino: board, wiring, libraries")).clicked() {
+                self.ard.open = !self.ard.open;
+            }
+            rx -= 43.0;
         }
         let ai = Rect::from_min_size(pos2(rx - 56.0, cy - 15.0), vec2(56.0, 30.0));
         let ar = ui.interact(ai, ui.id().with("ai"), Sense::click());
@@ -2537,7 +2560,7 @@ impl App {
         let tab = &mut self.tabs[self.active];
         let hlc = self.hls.entry(tab.path.clone()).or_default();
         let ext = tab.ext();
-        let lang = if ext.is_empty() { "txt".to_string() } else { ext };
+        let lang = if ext.is_empty() { "txt".to_string() } else if ext == "ino" { "cpp".to_string() } else { ext };
         let cur_line = self.cursor.0;
         let hover_ln = self.hover_src.as_ref().filter(|h| h.0 == crate::server::key(Path::new(&tab.path))).map(|h| h.1).unwrap_or(0);
         let mut edited = false;
@@ -3779,6 +3802,7 @@ fn lang_name(ext: &str) -> &'static str {
         "md" => "Markdown",
         "c" => "C",
         "cpp" | "cc" | "cxx" | "h" | "hpp" => "C++",
+        "ino" => "Arduino",
         "rs" => "Rust",
         "java" => "Java",
         "go" => "Go",
@@ -4130,6 +4154,28 @@ impl eframe::App for App {
                         self.ai.width = (self.ai.width - gr.drag_delta().x).max(300.0);
                     }
                     self.ai_panel(&mut card_ui, ar);
+                    main.max.x = ar.left();
+                }
+                // Arduino vpravo na karte pri .ino (prvýkrát sa otvorí sám)
+                let ino = !self.home && self.is_ino();
+                if ino {
+                    let path = self.tabs[self.active].path.clone();
+                    if self.ard.seen.insert(path) {
+                        self.ard.open = true;
+                    }
+                }
+                if ino && self.ard.open {
+                    if self.ard.width <= 0.0 {
+                        self.ard.width = 360.0;
+                    }
+                    self.ard.width = self.ard.width.clamp(300.0, (main.width() - 320.0).max(300.0));
+                    let ar = Rect::from_min_max(pos2(main.right() - self.ard.width, main.top()), main.max);
+                    let grip = Rect::from_min_max(pos2(ar.left() - 3.0, ar.top()), pos2(ar.left() + 3.0, ar.bottom()));
+                    let gr = card_ui.interact(grip, card_ui.id().with("ard-grip"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeColumn);
+                    if gr.dragged() {
+                        self.ard.width = (self.ard.width - gr.drag_delta().x).max(300.0);
+                    }
+                    self.ard_panel(&mut card_ui, ar);
                     main.max.x = ar.left();
                 }
                 let show_editor = !self.home && !self.tabs.is_empty();

@@ -10,6 +10,7 @@ mod glass;
 mod lint;
 mod complete;
 mod lorem;
+mod arduino;
 mod colors;
 mod perf;
 #[cfg(target_os = "linux")]

@@ -406,9 +406,9 @@ jobs:
 
   # Flux Native pre Linux: zostaví sa až po úspešnej Windows zostave (smoke test + Defender), vyskúša sa spustenie a aktualizácia
   # a publikuje sa do vetvy ci-native-linux (vetva ci-native sa pri každom vydaní zakladá odznova, preto samostatná)
+  # Linux je hlavná platforma: beží súbežne s Windows (nečaká naň), zverejní sa hneď po vlastných testoch
   linux:
     runs-on: ubuntu-latest
-    needs: windows
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

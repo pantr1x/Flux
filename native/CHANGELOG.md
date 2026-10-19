@@ -2,6 +2,19 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.56
+
+**Arduino** (Linux first, Windows too)
+- Open or create an `.ino` sketch (*New file → Arduino*) and the **Arduino panel** opens on the right (the chip button in the top bar toggles it).
+- **Finds your board** and shows which port it is on (`/dev/ttyUSB0`, `/dev/ttyACM0`, `COM3`) – original Arduino boards and **Elegoo / clone boards with the CH340 chip** too.
+- **Install Arduino tools** with one button: Flux downloads the official `arduino-cli` and the board package by itself.
+- **▶ Upload** (or *F5*) compiles and uploads the sketch, *Verify* only compiles. The output is in the Output panel.
+- **Serial monitor** with the baud rate of your choice.
+- **Wiring**: a drawing of the board with the pins your code uses (from `pinMode`, `digitalWrite`, `analogRead`, `#define` …), colored by mode, with a hint how to connect each one. Click a pin to jump to its line.
+- **Libraries**: search and install Arduino libraries.
+- **Firmware**: upload the Blink test, StandardFirmata (control the board from Python or JavaScript) or an empty program.
+- On Linux, when the port needs permission, Flux shows the one command to fix it (`uucp` group on Arch/EndeavourOS, `dialout` on Ubuntu).
+
 ## 0.9.55
 
 **Images**

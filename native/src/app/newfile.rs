@@ -7,7 +7,7 @@ use flux_core::fsops;
 use std::path::Path;
 
 // (id, názov, prípona, predvolené meno, začiatok súboru; {name} = meno bez prípony)
-const LANGS: [(&str, &str, &str, &str, &str); 21] = [
+const LANGS: [(&str, &str, &str, &str, &str); 22] = [
     ("python", "Python", "py", "main", "print(\"Hello!\")\n"),
     ("html", "HTML", "html", "index", "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>{name}</title>\n</head>\n<body>\n    <h1>{name}</h1>\n</body>\n</html>\n"),
     ("css", "CSS", "css", "style", "body {\n    font-family: system-ui, sans-serif;\n}\n"),
@@ -26,6 +26,7 @@ const LANGS: [(&str, &str, &str, &str, &str); 21] = [
     ("r", "R", "R", "main", "cat(\"Hello from R!\\n\")\n"),
     ("julia", "Julia", "jl", "main", "println(\"Hello from Julia!\")\n"),
     ("perl", "Perl", "pl", "main", "print \"Hello from Perl!\\n\";\n"),
+    ("arduino", "Arduino", "ino", "sketch", crate::arduino::STARTER),
     ("md", "Markdown", "md", "README", "# {name}\n\n"),
     ("json", "JSON", "json", "data", "{\n}\n"),
     ("txt", "Text", "txt", "notes", ""),
@@ -85,14 +86,16 @@ impl App {
             return;
         }
         let file = nf.file_name();
-        let path = Path::new(&nf.dir).join(&file).to_string_lossy().to_string();
+        // Arduino sketch: vlastný priečinok s rovnakým menom (tak to chce arduino-cli)
+        let ino_dir = file.to_lowercase().ends_with(".ino").then(|| Path::new(&nf.dir).join(Path::new(&file).file_stem().unwrap_or_default()).to_string_lossy().to_string());
+        let path = Path::new(ino_dir.as_deref().unwrap_or(&nf.dir)).join(&file).to_string_lossy().to_string();
         if Path::new(&path).exists() {
             self.status = tf("{name} already exists.", &[("name", &file)]);
             return;
         }
         let stem = Path::new(&file).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let content = LANGS[nf.lang].4.replace("{name}", &stem);
-        let dir = nf.dir.clone();
+        let dir = ino_dir.unwrap_or_else(|| nf.dir.clone());
         let _ = std::fs::create_dir_all(&dir);
         if let Err(e) = fsops::create(&path, false).and_then(|_| fsops::write(&path, &content)) {
             self.status = e;

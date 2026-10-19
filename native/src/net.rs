@@ -82,6 +82,13 @@ pub fn stream(url: &str, headers: &[String], body: &str) -> Result<Child, String
     spawn(&cfg, &["-N"])
 }
 
+// väčší súbor (nástroje): dlhší časový limit, aby ho nezastavil pomalší internet
+pub fn download(url: &str, secs: u32) -> Option<Vec<u8>> {
+    let cfg = config("GET", url, &[], None, secs);
+    let out = spawn(&cfg, &["-f"]).ok()?.wait_with_output().ok()?;
+    out.status.success().then_some(out.stdout)
+}
+
 // súbor (napr. avatar) do pamäte
 pub fn bytes(url: &str) -> Option<Vec<u8>> {
     let cfg = config("GET", url, &[], None, 30);

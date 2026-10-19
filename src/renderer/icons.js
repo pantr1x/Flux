@@ -29,6 +29,7 @@ const paths = {
   resize: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   imageEdit: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
   laptop: '<path d="M5 6h14v10H5zM2 19h20"/>',
   qr: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2M14 18h2v2M18 18h2v2h-2"/>',
@@ -137,6 +138,7 @@ const FILE_ICONS = {
   r: svg16('<ellipse cx="8" cy="7.2" rx="6.8" ry="4.6" fill="#9FA3AB"/><ellipse cx="8.3" cy="7.4" rx="4.3" ry="2.7" fill="#fff"/>' + txt(9.5, 14, 'R', '#2266B8', 9)),
   julia: svg16('<circle cx="4.5" cy="11" r="2.8" fill="#CB3C33"/><circle cx="11.5" cy="11" r="2.8" fill="#9558B2"/><circle cx="8" cy="4.8" r="2.8" fill="#389826"/>'),
   csv: svg16('<rect x="1.5" y="2" width="13" height="12" rx="1.8" fill="#1F9D55"/><path d="M1.5 6h13M1.5 10h13M6 2v12M10.5 2v12" stroke="#E6F7EE" stroke-width=".9"/>'),
+  arduino: svg16('<rect x="1" y="3" width="14" height="10" rx="5" fill="#00979D"/><circle cx="5.4" cy="8" r="2.3" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="10.6" cy="8" r="2.3" fill="none" stroke="#fff" stroke-width="1.2"/><path d="M4.4 8h2M9.6 8h2M10.6 7v2" stroke="#fff" stroke-width="1"/>'),
   file: svg16('<path d="M3.5 1.5h6l3 3v10h-9Z" fill="none" stroke="#8A8A96" stroke-width="1.1" stroke-linejoin="round"/><path d="M9.5 1.5v3h3" fill="none" stroke="#8A8A96" stroke-width="1.1"/>'),
 };
 
@@ -149,7 +151,7 @@ const EXT_ICON = {
   sh: 'shell', bash: 'shell', bat: 'shell', cmd: 'shell', ps1: 'powershell',
   txt: 'text', log: 'text', csv: 'csv', tsv: 'csv',
   toml: 'config', ini: 'config', cfg: 'config', yml: 'config', yaml: 'config', env: 'config', gitignore: 'config', lock: 'config',
-  c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', lua: 'lua', pl: 'perl', pm: 'perl', cts: 'typescript', git: 'git', zig: 'zig', r: 'r', jl: 'julia',
+  ino: 'arduino', c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cc: 'cpp', cs: 'csharp', java: 'java', go: 'go', rs: 'rust', rb: 'ruby', php: 'php', lua: 'lua', pl: 'perl', pm: 'perl', cts: 'typescript', git: 'git', zig: 'zig', r: 'r', jl: 'julia',
 };
 
 const LANG_ICON = { python: 'python', html: 'html', css: 'css', javascript: 'javascript', typescript: 'typescript', json: 'json', markdown: 'markdown', shell: 'shell' };
