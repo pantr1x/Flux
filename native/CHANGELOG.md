@@ -2,6 +2,21 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.58
+
+**Wiring**
+- The wiring picture now follows your board: **Arduino Uno / Nano / Mega**, **ESP32 DevKit** and **Raspberry Pi Pico** (picked from the board that is plugged in, or by hand under the picture). Pins used by C++, MicroPython, CircuitPython and pyFirmata code are marked in all of them.
+- **Click a pin** (for example 8) and choose LED, button, fade, analog sensor, servo or buzzer: Flux adds the matching code to your file (setup and loop, or the Python definition before `while True:`).
+- Paired **Bluetooth** modules (HC-05 / HC-06…) are listed with the command that turns them into a serial port; `rfcomm` ports show up as boards.
+- Raspberry Pi Pico and ESP32-S3 / ESP32 boards are recognized by USB.
+
+**Boards**
+- Boards that are too small for MicroPython (Uno, Nano, Mega, Elegoo) are marked, with a one-click switch to **Python + Firmata**.
+
+**Projects and files**
+- The project icon list now has the language icons (Python, HTML, Arduino, …) next to your own picture, line icons and emoji.
+- *New file*: the MicroPython, CircuitPython and Firmata names fit in their tiles.
+
 ## 0.9.57
 
 **Boards in Python**

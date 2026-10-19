@@ -110,8 +110,35 @@ pub fn paint_icon(ui: &egui::Ui, r: Rect, spec: &str, p: &theme::Pal) {
 }
 
 // výber ikony: vráti novú hodnotu (prázdna = ikona jazyka)
+// ikony jazykov (rovnaké ako pri súboroch): súbor → názov
+const LANG_ICONS: [(&str, &str); 22] = [
+    ("main.py", "Python"),
+    ("index.html", "HTML"),
+    ("style.css", "CSS"),
+    ("a.js", "JavaScript"),
+    ("a.ts", "TypeScript"),
+    ("A.java", "Java"),
+    ("a.c", "C"),
+    ("a.cpp", "C++"),
+    ("a.cs", "C#"),
+    ("a.go", "Go"),
+    ("a.rs", "Rust"),
+    ("a.rb", "Ruby"),
+    ("a.php", "PHP"),
+    ("a.lua", "Lua"),
+    ("a.zig", "Zig"),
+    ("a.R", "R"),
+    ("a.jl", "Julia"),
+    ("a.pl", "Perl"),
+    ("a.ino", "Arduino"),
+    ("a.md", "Markdown"),
+    ("a.json", "JSON"),
+    ("a.txt", "Text"),
+];
+
 pub fn icon_picker(ui: &mut egui::Ui, cur: &str, lang_file: &str, w: f32, p: &theme::Pal) -> Option<String> {
     let mut all: Vec<String> = vec![String::new(), "pick-image".into()];
+    all.extend(LANG_ICONS.iter().map(|(f, _)| format!("file:{f}")));
     if cur.starts_with("img:") {
         all.push(cur.to_string());
     }
@@ -144,6 +171,8 @@ pub fn icon_picker(ui: &mut egui::Ui, cur: &str, lang_file: &str, w: f32, p: &th
             resp.on_hover_text(t("Automatic: the icon of the main language"))
         } else if spec == "pick-image" {
             resp.on_hover_text(t("Use your own picture…"))
+        } else if let Some(name) = spec.strip_prefix("file:").and_then(|f| LANG_ICONS.iter().find(|x| x.0 == f)) {
+            resp.on_hover_text(name.1)
         } else {
             resp
         };

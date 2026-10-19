@@ -55,7 +55,9 @@ pub fn known(vid: &str, pid: &str) -> Option<(&'static str, Option<&'static str>
         ("2341" | "2a03", "8037" | "0037") => ("Arduino Micro", Some("arduino:avr:micro"), None),
         ("1a86", "7523" | "5523" | "55d4") => ("Elegoo / clone board (CH340)", Some("arduino:avr:uno"), Some("CH340")),
         ("0403", "6001" | "6015") => ("Board with FTDI chip (Nano, Pro Mini…)", Some("arduino:avr:nano"), Some("FTDI")),
-        ("10c4", "ea60") => ("ESP32 / ESP8266 board (CP210x)", None, Some("CP210x")),
+        ("10c4", "ea60") => ("ESP32 / ESP8266 board (CP210x)", Some("esp32:esp32:esp32"), Some("CP210x")),
+        ("2e8a", _) => ("Raspberry Pi Pico (RP2040)", Some("rp2040:rp2040:rpipico"), None),
+        ("303a", _) => ("ESP32-S3 / C3 (native USB)", Some("esp32:esp32:esp32s3"), None),
         _ => return None,
     })
 }
@@ -97,6 +99,10 @@ pub fn scan_ports() -> Vec<Board> {
         let Ok(rd) = std::fs::read_dir("/sys/class/tty") else { return out };
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with("rfcomm") {
+                out.push(Board { port: format!("/dev/{name}"), name: "Bluetooth serial port (HC-05 / HC-06…)".into(), fqbn: None, chip: Some("Bluetooth") });
+                continue;
+            }
             if !(name.starts_with("ttyUSB") || name.starts_with("ttyACM")) {
                 continue;
             }
@@ -502,6 +508,409 @@ pub fn pins_in(code: &str) -> Vec<Pin> {
     out
 }
 
+// ---------- Bluetooth (Linux: bluetoothctl) ----------
+// spárované zariadenia: (meno, MAC, pripojené)
+pub fn bt_devices() -> Vec<(String, String, bool)> {
+    let Some(list) = quiet("bluetoothctl", &["devices", "Paired"]).or_else(|| quiet("bluetoothctl", &["paired-devices"])) else { return vec![] };
+    list.lines()
+        .filter_map(|l| {
+            let mut it = l.trim().splitn(3, ' ');
+            (it.next()? == "Device").then_some(())?;
+            let mac = it.next()?.to_string();
+            let name = it.next().unwrap_or(&mac).to_string();
+            let conn = quiet("bluetoothctl", &["info", &mac]).is_some_and(|i| i.contains("Connected: yes"));
+            Some((name, mac, conn))
+        })
+        .collect()
+}
+
+// ---------- piny v Pythone (MicroPython, CircuitPython, pyFirmata) ----------
+fn merge_pin(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<String>, line: usize) {
+    if let Some(x) = out.iter_mut().find(|x| x.pin == pin) {
+        if rank(mode) > rank(x.mode) {
+            x.mode = mode;
+        }
+        if x.name.is_none() {
+            x.name = name;
+        }
+    } else {
+        out.push(Pin { pin, mode, name, line });
+    }
+}
+
+fn sort_pins(out: &mut [Pin]) {
+    out.sort_by_key(|p| if let Some(a) = p.pin.strip_prefix('A') { 100 + a.parse::<u32>().unwrap_or(0) } else { p.pin.parse::<u32>().unwrap_or(0) });
+}
+
+// prvý argument volania `Pin(` / `PWMOut(` …: číslo, názov konštanty alebo board.GP15 / board.D5 / board.A0
+fn py_pin_arg(a: &str, consts: &[(String, String)]) -> Option<String> {
+    let a = a.trim().trim_matches(|c| c == '\'' || c == '"');
+    if let Some(b) = a.strip_prefix("board.") {
+        let u = b.to_uppercase();
+        if let Some(n) = u.strip_prefix("GP").or_else(|| u.strip_prefix('D')).filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+            return Some(n.to_string());
+        }
+        return norm_pin(&u).filter(|p| p.starts_with('A'));
+    }
+    norm_pin(a).or_else(|| consts.iter().rev().find(|c| c.0 == a).map(|c| c.1.clone()))
+}
+
+pub fn py_pins(code: &str) -> Vec<Pin> {
+    let lines: Vec<&str> = code.lines().map(|l| l.split('#').next().unwrap_or("")).collect();
+    // konštanty: LED = 2
+    let mut consts: Vec<(String, String)> = vec![];
+    for l in &lines {
+        if let Some((n, v)) = l.split_once('=') {
+            let (n, v) = (n.trim(), v.trim());
+            if !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '_') && v.chars().all(|c| c.is_ascii_digit()) && !v.is_empty() {
+                consts.push((n.to_string(), v.to_string()));
+            }
+        }
+    }
+    let mut out: Vec<Pin> = vec![];
+    for (i, l) in lines.iter().enumerate() {
+        let name = l.split_once('=').map(|(n, _)| n.trim()).filter(|n| !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '_')).map(String::from);
+        let arg_of = |key: &str| -> Option<String> {
+            let s = l.find(key)? + key.len();
+            let rest = &l[s..];
+            let end = rest.find([',', ')']).unwrap_or(rest.len());
+            py_pin_arg(&rest[..end], &consts)
+        };
+        // MicroPython
+        if let Some(pin) = arg_of("Pin(") {
+            let mode = if l.contains("PWM(") {
+                "pwm"
+            } else if l.contains("ADC(") {
+                "analog"
+            } else if l.contains("Pin.OUT") {
+                "out"
+            } else if l.contains("PULL_UP") {
+                "pull"
+            } else {
+                "in"
+            };
+            merge_pin(&mut out, pin, mode, name.clone(), i);
+        } else if let Some(pin) = arg_of("ADC(") {
+            merge_pin(&mut out, pin, "analog", name.clone(), i);
+        }
+        // CircuitPython
+        for (key, mode) in [("digitalio.DigitalInOut(", "out"), ("pwmio.PWMOut(", "pwm"), ("analogio.AnalogIn(", "analog")] {
+            if let Some(pin) = arg_of(key) {
+                let mut m = mode;
+                if key.starts_with("digital") {
+                    // smer o pár riadkov nižšie: Direction.INPUT / Pull.UP
+                    let tail: String = lines.iter().skip(i + 1).take(4).copied().collect::<Vec<_>>().join(" ");
+                    if tail.contains("Direction.INPUT") {
+                        m = if tail.contains("Pull.UP") { "pull" } else { "in" };
+                    }
+                }
+                merge_pin(&mut out, pin, m, name.clone(), i);
+            }
+        }
+        // pyFirmata: get_pin('d:8:o'), board.digital[13], board.analog[0]
+        if let Some(a) = l.find("get_pin(") {
+            let spec = l[a + 8..].trim_start().trim_start_matches(|c| c == '\'' || c == '"');
+            let f: Vec<&str> = spec.split(|c| c == ':' || c == '\'' || c == '"').collect();
+            if f.len() >= 3 {
+                let m = match f[2] {
+                    "o" => "out",
+                    "p" => "pwm",
+                    "s" => "servo",
+                    _ => "in",
+                };
+                if f[0] == "a" {
+                    merge_pin(&mut out, format!("A{}", f[1]), "analog", name.clone(), i);
+                } else if f[1].chars().all(|c| c.is_ascii_digit()) && !f[1].is_empty() {
+                    merge_pin(&mut out, f[1].to_string(), m, name.clone(), i);
+                }
+            }
+        }
+        for (key, analog) in [("digital[", false), ("analog[", true)] {
+            if let Some(a) = l.find(key) {
+                let rest = &l[a + key.len()..];
+                if let Some(n) = rest.split(']').next().filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+                    if analog {
+                        merge_pin(&mut out, format!("A{n}"), "analog", None, i);
+                    } else {
+                        merge_pin(&mut out, n.to_string(), if l.contains(".read(") { "in" } else { "out" }, None, i);
+                    }
+                }
+            }
+        }
+    }
+    sort_pins(&mut out);
+    out
+}
+
+// piny podľa jazyka: C++ alebo Python
+pub fn pins_for(mode: &str, code: &str) -> Vec<Pin> {
+    if mode == "cpp" {
+        pins_in(code)
+    } else {
+        py_pins(code)
+    }
+}
+
+// ---------- „pridať do kódu“: kliknutie na pin v schéme vloží ukážku ----------
+fn lines_of(text: &str) -> Vec<String> {
+    text.lines().map(String::from).collect()
+}
+
+fn join_lines(v: &[String], trailing_nl: bool) -> String {
+    let mut s = v.join("\n");
+    if trailing_nl || !s.is_empty() {
+        s.push('\n');
+    }
+    s
+}
+
+// riadok za otváracou zátvorkou funkcie (`void setup() {`), alebo None, ak funkcia v kóde nie je
+fn after_fn(lines: &[String], head: &str) -> Option<usize> {
+    let i = lines.iter().position(|l| l.trim_start().starts_with(head))?;
+    Some(if lines[i].contains('{') { i + 1 } else { i + 2 })
+}
+
+fn add_cpp(text: &str, pin: &str, kind: &str) -> Option<String> {
+    let id = pin.to_lowercase();
+    let mut top: Vec<String> = vec![];
+    let mut setup: Vec<String> = vec![];
+    let mut lp: Vec<String> = vec![];
+    let ser = !text.contains("Serial.begin(");
+    match kind {
+        "led" => {
+            setup.push(format!("pinMode({pin}, OUTPUT);"));
+            lp.extend([format!("digitalWrite({pin}, HIGH);"), "delay(500);".into(), format!("digitalWrite({pin}, LOW);"), "delay(500);".into()]);
+        }
+        "button" => {
+            setup.push(format!("pinMode({pin}, INPUT_PULLUP);"));
+            lp.extend([format!("if (digitalRead({pin}) == LOW) {{"), format!("  Serial.println(\"Button on pin {pin} pressed\");"), "  delay(200);".into(), "}".into()]);
+        }
+        "pwm" => {
+            setup.push(format!("pinMode({pin}, OUTPUT);"));
+            lp.extend([format!("for (int v = 0; v <= 255; v += 5) {{"), format!("  analogWrite({pin}, v);"), "  delay(20);".into(), "}".into()]);
+        }
+        "analog" => lp.extend([format!("int value_{id} = analogRead({pin});"), format!("Serial.println(value_{id});"), "delay(100);".into()]),
+        "servo" => {
+            top.extend(["#include <Servo.h>".into(), format!("Servo servo_{id};")]);
+            setup.push(format!("servo_{id}.attach({pin});"));
+            lp.push(format!("servo_{id}.write(90);"));
+        }
+        "buzzer" => {
+            setup.push(format!("pinMode({pin}, OUTPUT);"));
+            lp.extend([format!("tone({pin}, 1000, 200);"), "delay(500);".into()]);
+        }
+        _ => return None,
+    }
+    if matches!(kind, "button" | "analog") && ser {
+        setup.insert(0, "Serial.begin(9600);".into());
+    }
+    if text.contains(&setup.iter().chain(lp.iter()).next()?.clone()) {
+        return None; // už pridané
+    }
+    let mut lines = lines_of(text);
+    let ind = |v: &[String]| v.iter().map(|l| format!("  {l}")).collect::<Vec<_>>();
+    match (after_fn(&lines, "void setup"), after_fn(&lines, "void loop")) {
+        (Some(_), Some(_)) => {
+            // najprv loop (pozdĺž súboru neskôr), nech sa indexy nepoplietli
+            let (s, l) = (after_fn(&lines, "void setup")?, after_fn(&lines, "void loop")?);
+            let (first, second) = if s > l { ((s, ind(&setup)), (l, ind(&lp))) } else { ((l, ind(&lp)), (s, ind(&setup))) };
+            for (at, add) in [first, second] {
+                for (k, line) in add.into_iter().enumerate() {
+                    lines.insert(at + k, line);
+                }
+            }
+        }
+        _ => {
+            if !lines.is_empty() && !lines.last().is_some_and(|l| l.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push("void setup() {".into());
+            lines.extend(ind(&setup));
+            lines.push("}".into());
+            lines.push(String::new());
+            lines.push("void loop() {".into());
+            lines.extend(ind(&lp));
+            lines.push("}".into());
+        }
+    }
+    if !top.is_empty() {
+        top.push(String::new());
+        for (k, line) in top.into_iter().enumerate() {
+            lines.insert(k, line);
+        }
+    }
+    Some(join_lines(&lines, text.ends_with('\n') || text.is_empty()))
+}
+
+fn add_py(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<String> {
+    let analog = pin.starts_with('A');
+    let num = pin.trim_start_matches('A');
+    let id = pin.to_lowercase();
+    let (mut imports, mut defs, mut body): (Vec<String>, Vec<String>, Vec<String>) = (vec![], vec![], vec![]);
+    match mode {
+        "micropython" => {
+            let pe = num;
+            match kind {
+                "led" => {
+                    imports.extend(["from machine import Pin".into(), "from time import sleep".into()]);
+                    defs.push(format!("led_{id} = Pin({pe}, Pin.OUT)"));
+                    body.extend([format!("led_{id}.toggle()"), "sleep(0.5)".into()]);
+                }
+                "button" => {
+                    imports.push("from machine import Pin".into());
+                    defs.push(format!("button_{id} = Pin({pe}, Pin.IN, Pin.PULL_UP)"));
+                    body.extend([format!("if button_{id}.value() == 0:"), format!("    print(\"Button on pin {pin} pressed\")")]);
+                }
+                "pwm" => {
+                    imports.extend(["from machine import Pin, PWM".into(), "from time import sleep".into()]);
+                    defs.push(format!("pwm_{id} = PWM(Pin({pe}), freq=1000)"));
+                    body.extend([format!("pwm_{id}.duty_u16(32768)"), "sleep(0.5)".into()]);
+                }
+                "analog" => {
+                    imports.extend(["from machine import Pin, ADC".into(), "from time import sleep".into()]);
+                    defs.push(format!("adc_{id} = ADC(Pin({pe}))"));
+                    body.extend([format!("print(adc_{id}.read_u16())"), "sleep(0.1)".into()]);
+                }
+                "servo" => {
+                    imports.extend(["from machine import Pin, PWM".into(), "from time import sleep".into()]);
+                    defs.push(format!("servo_{id} = PWM(Pin({pe}), freq=50)"));
+                    body.extend([format!("servo_{id}.duty_u16(4915)  # about 90 degrees"), "sleep(1)".into()]);
+                }
+                "buzzer" => {
+                    imports.extend(["from machine import Pin, PWM".into(), "from time import sleep".into()]);
+                    defs.push(format!("buzzer_{id} = PWM(Pin({pe}))"));
+                    body.extend([format!("buzzer_{id}.freq(1000)"), format!("buzzer_{id}.duty_u16(32768)"), "sleep(0.2)".into(), format!("buzzer_{id}.duty_u16(0)"), "sleep(0.5)".into()]);
+                }
+                _ => return None,
+            }
+        }
+        "circuitpython" => {
+            let pe = if pico {
+                format!("board.GP{num}")
+            } else if analog {
+                format!("board.{pin}")
+            } else {
+                format!("board.D{num}")
+            };
+            imports.extend(["import time".into(), "import board".into()]);
+            match kind {
+                "led" => {
+                    imports.push("import digitalio".into());
+                    defs.extend([format!("led_{id} = digitalio.DigitalInOut({pe})"), format!("led_{id}.direction = digitalio.Direction.OUTPUT")]);
+                    body.extend([format!("led_{id}.value = not led_{id}.value"), "time.sleep(0.5)".into()]);
+                }
+                "button" => {
+                    imports.push("import digitalio".into());
+                    defs.extend([format!("button_{id} = digitalio.DigitalInOut({pe})"), format!("button_{id}.direction = digitalio.Direction.INPUT"), format!("button_{id}.pull = digitalio.Pull.UP")]);
+                    body.extend([format!("if not button_{id}.value:"), format!("    print(\"Button on pin {pin} pressed\")")]);
+                }
+                "pwm" => {
+                    imports.push("import pwmio".into());
+                    defs.push(format!("pwm_{id} = pwmio.PWMOut({pe}, frequency=1000)"));
+                    body.extend([format!("pwm_{id}.duty_cycle = 32768"), "time.sleep(0.5)".into()]);
+                }
+                "analog" => {
+                    imports.push("import analogio".into());
+                    defs.push(format!("adc_{id} = analogio.AnalogIn({pe})"));
+                    body.extend([format!("print(adc_{id}.value)"), "time.sleep(0.1)".into()]);
+                }
+                "servo" => {
+                    imports.push("import pwmio".into());
+                    defs.push(format!("servo_{id} = pwmio.PWMOut({pe}, frequency=50)"));
+                    body.extend([format!("servo_{id}.duty_cycle = 4915  # about 90 degrees"), "time.sleep(1)".into()]);
+                }
+                "buzzer" => {
+                    imports.push("import pwmio".into());
+                    defs.push(format!("buzzer_{id} = pwmio.PWMOut({pe}, frequency=1000, variable_frequency=True)"));
+                    body.extend([format!("buzzer_{id}.duty_cycle = 32768"), "time.sleep(0.2)".into(), format!("buzzer_{id}.duty_cycle = 0"), "time.sleep(0.5)".into()]);
+                }
+                _ => return None,
+            }
+        }
+        _ => {
+            // pyFirmata2: objekt `board` z Arduino("port")
+            imports.push("import time".into());
+            let sampling = "board.samplingOn()".to_string();
+            match kind {
+                "led" => {
+                    defs.push(format!("led_{id} = board.get_pin('d:{num}:o')"));
+                    body.extend([format!("led_{id}.write(1)"), "time.sleep(0.5)".into(), format!("led_{id}.write(0)"), "time.sleep(0.5)".into()]);
+                }
+                "button" => defs.extend([
+                    format!("button_{id} = board.get_pin('d:{num}:i')"),
+                    format!("button_{id}.register_callback(lambda v: print(\"Pin {pin}:\", v))"),
+                    format!("button_{id}.enable_reporting()"),
+                    sampling,
+                ]),
+                "pwm" | "buzzer" => {
+                    defs.push(format!("pwm_{id} = board.get_pin('d:{num}:p')"));
+                    body.extend([format!("pwm_{id}.write(0.5)"), "time.sleep(0.5)".into()]);
+                }
+                "analog" => {
+                    defs.extend([format!("board.analog[{num}].register_callback(lambda v: print(\"A{num}:\", v))"), format!("board.analog[{num}].enable_reporting()"), sampling]);
+                    body.push("time.sleep(0.1)".into());
+                }
+                "servo" => {
+                    defs.push(format!("servo_{id} = board.get_pin('d:{num}:s')"));
+                    body.extend([format!("servo_{id}.write(90)"), "time.sleep(1)".into()]);
+                }
+                _ => return None,
+            }
+        }
+    }
+    if text.contains(defs.first()?.as_str()) {
+        return None; // už pridané
+    }
+    let mut lines = lines_of(text);
+    let is_loop = |l: &String| l.trim_end() == "while True:";
+    // telo do slučky, definície pred ňu (alebo na koniec)
+    match lines.iter().position(is_loop) {
+        Some(lp) => {
+            for (k, b) in body.iter().enumerate() {
+                lines.insert(lp + 1 + k, format!("    {b}"));
+            }
+            for (k, d) in defs.iter().enumerate() {
+                if !text.contains(d.as_str()) {
+                    lines.insert(lp + k, d.clone());
+                }
+            }
+        }
+        None => {
+            if !lines.is_empty() && !lines.last().is_some_and(|l| l.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.extend(defs.iter().filter(|d| !text.contains(d.as_str())).cloned());
+            if !body.is_empty() {
+                lines.push(String::new());
+                lines.push("while True:".into());
+                lines.extend(body.iter().map(|b| format!("    {b}")));
+            }
+        }
+    }
+    // importy navrch (za úvodné komentáre a existujúce importy)
+    let mut at = 0;
+    for (i, l) in lines.iter().enumerate().take(30) {
+        let t = l.trim_start();
+        if t.starts_with("import ") || t.starts_with("from ") || (t.starts_with('#') && at == i) || (t.is_empty() && at == i) {
+            at = i + 1;
+        }
+    }
+    let new: Vec<String> = imports.into_iter().filter(|im| !text.lines().any(|l| l.trim() == im.as_str())).collect();
+    for (k, im) in new.iter().enumerate() {
+        lines.insert(at + k, im.clone());
+    }
+    Some(join_lines(&lines, true))
+}
+
+// pin + druh súčiastky → upravený text súboru (None = nič nepridané / už tam je)
+pub fn add_snippet(mode: &str, text: &str, pin: &str, kind: &str, pico: bool) -> Option<String> {
+    match mode {
+        "cpp" => add_cpp(text, pin, kind),
+        "micropython" | "circuitpython" | "firmata" => add_py(mode, text, pin, kind, pico),
+        _ => None,
+    }
+}
+
 // ---------- Python na doske (MicroPython, CircuitPython, Python + Firmata) ----------
 pub const PY_MODES: [(&str, &str); 3] = [("micropython", "MicroPython"), ("circuitpython", "CircuitPython"), ("firmata", "Firmata")];
 
@@ -645,6 +1054,38 @@ pub fn firmata_blink(port: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn arduino_py_pins_and_snippets() {
+        let mp = "from machine import Pin, PWM, ADC\nLED = 2\nled = Pin(LED, Pin.OUT)\nbtn = Pin(4, Pin.IN, Pin.PULL_UP)\nm = PWM(Pin(5))\nadc = ADC(Pin(34))\n";
+        let p = super::py_pins(mp);
+        let get = |n: &str| p.iter().find(|x| x.pin == n).map(|x| x.mode);
+        assert_eq!((get("2"), get("4"), get("5"), get("34")), (Some("out"), Some("pull"), Some("pwm"), Some("analog")));
+        let cp = "import board, digitalio, analogio\nled = digitalio.DigitalInOut(board.GP15)\nled.direction = digitalio.Direction.OUTPUT\na = analogio.AnalogIn(board.A0)\n";
+        let p = super::py_pins(cp);
+        assert!(p.iter().any(|x| x.pin == "15" && x.mode == "out") && p.iter().any(|x| x.pin == "A0" && x.mode == "analog"));
+        let fm = "board = Arduino('x')\nled = board.get_pin('d:8:o')\nboard.analog[1].enable_reporting()\n";
+        let p = super::py_pins(fm);
+        assert!(p.iter().any(|x| x.pin == "8" && x.mode == "out") && p.iter().any(|x| x.pin == "A1"));
+        // C++: LED na pin 8 do setup() a loop()
+        let out = super::add_snippet("cpp", super::STARTER, "8", "led", false).unwrap();
+        assert!(out.contains("pinMode(8, OUTPUT);") && out.contains("digitalWrite(8, HIGH);"));
+        assert!(super::add_snippet("cpp", &out, "8", "led", false).is_none());
+        let pins = super::pins_in(&out);
+        assert!(pins.iter().any(|x| x.pin == "8"));
+        // servo: include navrchu
+        assert!(super::add_snippet("cpp", super::STARTER, "9", "servo", false).unwrap().starts_with("#include <Servo.h>"));
+        // MicroPython: definícia pred slučkou, telo v slučke, importy hore
+        let out = super::add_snippet("micropython", super::MICROPY_BLINK, "5", "pwm", false).unwrap();
+        let l: Vec<&str> = out.lines().collect();
+        let w = l.iter().position(|x| *x == "while True:").unwrap();
+        assert!(l[..w].contains(&"pwm_5 = PWM(Pin(5), freq=1000)") && l[w + 1] == "    pwm_5.duty_u16(32768)");
+        assert!(l.contains(&"from machine import Pin, PWM"));
+        // CircuitPython na Pico: board.GP15
+        assert!(super::add_snippet("circuitpython", super::CIRCUITPY_BLINK, "15", "led", true).unwrap().contains("board.GP15"));
+        // pyFirmata
+        assert!(super::add_snippet("firmata", &super::firmata_blink("/dev/ttyUSB0"), "9", "servo", false).unwrap().contains("get_pin('d:9:s')"));
+    }
+
     #[test]
     fn arduino_py_modes() {
         assert_eq!(super::guess_py("from machine import Pin\n"), Some("micropython"));
