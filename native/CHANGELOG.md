@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.69
+
+**The whole Arduino project**
+- Flux now reads the **whole sketch**: every `.ino` file in the folder, the way Arduino joins them when it compiles. The pin list shows which file a pin comes from, and a click opens that file at the line.
+- New **Check** section on the project page: it checks the pins against your board, e.g. `analogWrite` on a pin without PWM (with the list of PWM pins), a pin the board doesn't have, `analogRead` on a digital pin, pins 0/1 while using Serial, A6/A7 on the Nano, and Servo / `tone()` stopping PWM on some pins. Problem pins get a red ring on the board.
+- **You need**: a parts list made from your code (LEDs with resistors, buttons, servo, sensors…).
+- **Libraries**: every `#include` with its state – built in, installed, or an *Install* button.
+- Zoom now goes **to where the mouse is**; drag (or swipe sideways on a touchpad) to move, double-click to reset. A small map shows where you are.
+
 ## 0.9.68
 
 **Smarter pin detection**

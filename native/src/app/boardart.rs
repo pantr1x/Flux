@@ -1,6 +1,6 @@
 // Obrázky dosiek: Arduino Uno a Mega 2560 (pätice hore a dole), Nano, ESP32 DevKit a Raspberry Pi Pico.
 // Vykreslené maľovaním (bez obrázkov); piny sa dajú klikať, použité piny majú očíslovanú bublinu.
-use super::arduino::mode_info;
+use super::arduino::{mode_info, warn_text};
 use crate::arduino as ard;
 use crate::i18n::t;
 use crate::theme;
@@ -148,6 +148,13 @@ fn gray(g: u8) -> Color32 {
 
 fn pickable(l: &str) -> bool {
     !l.is_empty() && (l.chars().all(|c| c.is_ascii_digit()) || (l.starts_with('A') && l.len() <= 3 && l.len() > 1 && l[1..].chars().all(|c| c.is_ascii_digit())))
+}
+
+// výška obrázka Uno / Mega pri šírke `w` (rovnaký výpočet ako v draw_avr)
+pub fn avr_h(w: f32, mega: bool) -> f32 {
+    let side = if mega { 40.0 } else { 6.0 };
+    let bw = (w - 28.0 - side).max(120.0);
+    bw * if mega { 0.52 } else { 0.64 } + 2.0 * if mega { 60.0 } else { 42.0 }
 }
 
 // Arduino Uno (mega = false) alebo Mega 2560 (mega = true): vráti kľúč kliknutého pinu
@@ -440,6 +447,9 @@ pub(super) fn bubble_tip(p: &ard::Pin) -> String {
     if p.parts.first() == Some(&"led") && p.uses.iter().any(|u| u.0 == "read") {
         s += &format!("\n• {}", t("Also read with digitalRead() – that only checks its state, no extra part."));
     }
+    for w in &p.warns {
+        s += &format!("\n⚠ {}", warn_text(w, &p.pin, ""));
+    }
     if p.conflict() {
         s += &format!("\n⚠ {}", t("Two different parts use this pin in your code – they would get in each other's way. Pick a free pin for the new one."));
     }
@@ -448,7 +458,7 @@ pub(super) fn bubble_tip(p: &ard::Pin) -> String {
 
 // značka pri doske: ikona hlavnej súčiastky v farbe pinu, číslo v rohu; viac súčiastok = „+N“, konflikt = červený krúžok
 pub(super) fn bubble(pa: &egui::Painter, c: Pos2, r: f32, col: Color32, pin: &ard::Pin, n: usize) {
-    if pin.conflict() {
+    if pin.conflict() || !pin.warns.is_empty() {
         pa.circle_stroke(c, r + 2.5, Stroke::new(2.0, Color32::from_rgb(0xff, 0x55, 0x55)));
     }
     pa.circle_filled(c, r, col);

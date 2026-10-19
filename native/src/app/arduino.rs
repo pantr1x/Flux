@@ -42,12 +42,13 @@ pub struct ArdUi {
     guide_due: Option<Instant>, // kedy sa po prvom otvorení panela posúdi, či ukázať sprievodcu
     guide_checked: bool,
     scroll_top: bool,
+    sketch: Option<(String, Instant, Sketch)>,                 // piny celého sketchu (kľúč, kedy)
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
     flipped: HashSet<&'static str>,                            // sekcie, ktoré používateľ prepol oproti predvolenému stavu
     pub zoom: f32,                                             // priblíženie dosky (Ctrl + koleso)
-    pic_rect: Option<Rect>,
-    dlg_new: bool,     // v okne pinu: vytvoriť nový súbor namiesto pridania do otvoreného
-    pub pin_dlg: bool, // okno „nový súbor pre pin“
+    pan: egui::Vec2,                                           // posun priblíženej dosky (px)
+    dlg_new: bool,                                             // v okne pinu: vytvoriť nový súbor namiesto pridania do otvoreného
+    pub pin_dlg: bool,                                         // okno „nový súbor pre pin“
     dlg_mode: String,
     dlg_kind: String, // predvoľba (prázdne = prázdny súbor)
     dlg_h: f32,
@@ -85,10 +86,11 @@ impl Default for ArdUi {
             guide_due: None,
             guide_checked: false,
             scroll_top: false,
+            sketch: None,
             proj: None,
             flipped: HashSet::new(),
             zoom: 1.0,
-            pic_rect: None,
+            pan: egui::Vec2::ZERO,
             dlg_new: false,
             pin_dlg: false,
             dlg_mode: String::new(),
@@ -129,6 +131,46 @@ struct Row {
 }
 
 // farba a text súčiastky pre režim pinu
+// sketch = všetky .ino v priečinku (Arduino ich pri kompilácii spojí): piny s kontrolou, kde začína ktorý súbor, knižnice
+#[derive(Clone, Default)]
+pub(super) struct Sketch {
+    pub pins: Vec<ard::Pin>,
+    pub files: Vec<(usize, String)>, // (prvý riadok v spojenom texte, cesta)
+    pub includes: Vec<(String, Option<String>)>,
+}
+
+// text problému s pinom (pwm = zoznam PWM pinov dosky, ak je známy)
+pub(super) fn warn_text(kind: &str, pin: &str, pwm: &str) -> String {
+    match kind {
+        "missing" => tf("Pin {pin} doesn't exist on this board.", &[("pin", pin)]),
+        "nopwm" if !pwm.is_empty() => tf("analogWrite() on pin {pin} only switches it on or off – use a PWM pin: {list}.", &[("pin", pin), ("list", pwm)]),
+        "nopwm" => tf("analogWrite() on pin {pin} only switches it on or off – use a PWM pin (~).", &[("pin", pin)]),
+        "noanalog" => tf("analogRead() needs an analog pin (A0, A1…) – pin {pin} is digital.", &[("pin", pin)]),
+        "analogonly" => tf("{pin} on this board can only be read with analogRead().", &[("pin", pin)]),
+        "serial" => tf("Pin {pin} carries the USB connection (Serial) – uploading and the Serial Monitor can fail. Use another pin.", &[("pin", pin)]),
+        "servo_pwm" => tf("With the Servo library, analogWrite() on pin {pin} stops working – use 3, 5, 6 or 11.", &[("pin", pin)]),
+        "tone_pwm" => tf("tone() stops analogWrite() on pin {pin} – use another PWM pin.", &[("pin", pin)]),
+        _ => String::new(),
+    }
+}
+
+// čo kúpiť / zapojiť pre súčiastku
+fn part_label(part: &str) -> String {
+    t(match part {
+        "led" => "LED + 220 Ω resistor",
+        "button" => "Push button",
+        "sensor" => "Potentiometer or analog sensor",
+        "servo" => "Servo motor",
+        "buzzer" => "Piezo buzzer",
+        "neo" => "NeoPixel LED strip",
+        "dht" => "DHT11 / DHT22 sensor + 10 kΩ resistor",
+        "onewire" => "DS18B20 sensor + 4.7 kΩ resistor",
+        "lcd" => "16×2 LCD + 10 kΩ potentiometer",
+        "serial" => "Serial module (Bluetooth HC-05, GPS…)",
+        _ => "",
+    })
+}
+
 // výber dosky z dizajnu: dva riadky (model, čip + režim) a šípka
 fn dash_select(ui: &mut egui::Ui, id: egui::Id, title: &str, sub: &str, options: &[String], width: f32, p: &theme::Pal) -> Option<usize> {
     let (r, resp) = ui.allocate_exact_size(vec2(width, 54.0), Sense::click());
@@ -1281,17 +1323,6 @@ impl App {
         let w = ui.available_width();
         let sel = self.ard.sel.clone();
         let avr = matches!(layout, 0 | 3);
-        // Ctrl + koleso nad doskou = priblíženie (Uno / Mega)
-        if avr {
-            let z = ui.input(|i| i.zoom_delta());
-            if (z - 1.0).abs() > 0.0001 && self.ard.pic_rect.is_some_and(|r| ui.input(|i| i.pointer.hover_pos()).is_some_and(|pt| r.contains(pt))) {
-                self.ard.zoom = (self.ard.zoom * z.powf(0.5)).clamp(1.0, 2.5);
-            }
-        } else {
-            self.ard.zoom = 1.0;
-        }
-        let zoom = if avr { self.ard.zoom } else { 1.0 };
-        let top = ui.cursor().top();
         let draw = |ui: &mut egui::Ui, w: f32| match layout {
             1 => boardart::draw_vertical(ui, &p, w, "ESP32", &ESP_L, &ESP_R, false, Color32::from_rgb(0x23, 0x25, 0x2b), pins, &sel),
             2 => boardart::draw_vertical(ui, &p, w, "Pico", &PICO_L, &PICO_R, true, Color32::from_rgb(0x1c, 0x7a, 0x44), pins, &sel),
@@ -1299,16 +1330,61 @@ impl App {
             3 => boardart::draw_avr(ui, &p, w, true, pins, &sel),
             _ => boardart::draw_avr(ui, &p, w, false, pins, &sel),
         };
-        let clicked = if zoom > 1.001 { egui::ScrollArea::horizontal().id_salt("ard-zoom").auto_shrink([false, true]).show(ui, |ui| draw(ui, w * zoom)).inner } else { draw(ui, w) };
-        self.ard.pic_rect = Some(Rect::from_min_max(pos2(ui.min_rect().left(), top), pos2(ui.min_rect().left() + w, ui.cursor().top())));
-        if avr {
-            let hint = if zoom > 1.001 {
-                tf("Zoom {z} % – Ctrl + mouse wheel, drag the bar to move", &[("z", &((zoom * 100.0).round() as i32).to_string())])
+        let clicked = if avr {
+            // Uno / Mega: okno pevnej veľkosti; Ctrl + koleso približuje k miestu pod myšou, ťahanie posúva, dvojklik vráti späť
+            let mega = layout == 3;
+            let h0 = boardart::avr_h(w, mega);
+            let (vp, resp) = ui.allocate_exact_size(vec2(w, h0), Sense::click_and_drag());
+            if let Some(pt) = resp.hover_pos() {
+                let zd = ui.input(|i| i.zoom_delta());
+                if (zd - 1.0).abs() > 0.0001 {
+                    let old = self.ard.zoom;
+                    let new = (old * zd.powf(0.6)).clamp(1.0, 3.0);
+                    let rel = pt - vp.min;
+                    self.ard.pan = (rel + self.ard.pan) / old * new - rel;
+                    self.ard.zoom = new;
+                }
+                // touchpad: posun do strán dvoma prstami
+                let sd = ui.input(|i| i.smooth_scroll_delta);
+                if self.ard.zoom > 1.001 && sd.x.abs() > 0.0 {
+                    self.ard.pan.x -= sd.x;
+                }
+            }
+            if resp.dragged() && self.ard.zoom > 1.001 {
+                self.ard.pan -= resp.drag_delta();
+            }
+            if resp.double_clicked() {
+                self.ard.zoom = 1.0;
+                self.ard.pan = egui::Vec2::ZERO;
+            }
+            let z = self.ard.zoom;
+            let hz = boardart::avr_h(w * z, mega);
+            self.ard.pan.x = self.ard.pan.x.clamp(0.0, (w * z - w).max(0.0));
+            self.ard.pan.y = self.ard.pan.y.clamp(0.0, (hz - h0).max(0.0));
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(vp.min - self.ard.pan, vec2(w * z, hz))));
+            child.set_clip_rect(vp.intersect(ui.clip_rect()));
+            let c = draw(&mut child, w * z);
+            if z > 1.001 {
+                // malá mapa: kde v doske práve sme
+                let mini = Rect::from_min_size(pos2(vp.right() - 74.0, vp.bottom() - 46.0), vec2(64.0, 36.0));
+                ui.painter().rect_filled(mini, CornerRadius::same(5), p.card2.gamma_multiply(0.9));
+                ui.painter().rect_stroke(mini, CornerRadius::same(5), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
+                let view = Rect::from_min_size(mini.min + vec2(self.ard.pan.x / (w * z) * mini.width(), self.ard.pan.y / hz * mini.height()), vec2(mini.width() / z, mini.height() * h0 / hz));
+                ui.painter().rect_stroke(view, CornerRadius::same(2), Stroke::new(1.5, p.accent), StrokeKind::Inside);
+                resp.on_hover_cursor(if ui.input(|i| i.pointer.primary_down()) { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
+            }
+            let hint = if z > 1.001 {
+                tf("Zoom {z} % – drag to move, double-click to reset", &[("z", &((z * 100.0).round() as i32).to_string())])
             } else {
-                t("Ctrl + mouse wheel zooms the board")
+                t("Ctrl + mouse wheel zooms where the mouse is")
             };
             ui.label(egui::RichText::new(hint).font(theme::ui(11.0)).color(p.text3));
-        }
+            c
+        } else {
+            self.ard.zoom = 1.0;
+            self.ard.pan = egui::Vec2::ZERO;
+            draw(ui, w)
+        };
         if let Some(c) = clicked {
             self.ard.sel = Some(c);
             self.ard.pin_dlg = true;
@@ -1432,8 +1508,7 @@ impl App {
         let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(inner.min, vec2(inner.width(), 2000.0))));
         cu.set_clip_rect(card);
         cu.spacing_mut().item_spacing.y = 10.0;
-        let text = if target.is_empty() { String::new() } else { self.ard_target_text(&target) };
-        let pins = ard::pins_for(&ctx_mode, &text);
+        let pins = self.ard_sketch(&target, &ctx_mode).pins;
         let used = pins.iter().position(|x| x.pin == sel);
         cu.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("{} {sel}", t("Pin"))).font(theme::bold(20.0)).color(p.text));
@@ -1575,8 +1650,8 @@ impl App {
 
     fn ard_head_ui(&mut self, ui: &mut egui::Ui, mode: &str) {
         let target = self.tabs.get(self.active).map(|t| t.path.clone()).unwrap_or_default();
-        let code = self.tabs.get(self.active).map(|t| t.text.clone()).unwrap_or_default();
-        let pins = ard::pins_for(mode, &code);
+        let sk = self.ard_sketch(&target, mode);
+        let pins = sk.pins.clone();
         let dir = std::path::Path::new(&target).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
         self.ard.ctx = (dir, mode.to_string(), target.clone());
         self.ard_picture(ui, mode, &pins);
@@ -1585,12 +1660,12 @@ impl App {
         let n = pins.len();
         let open = self.ard_sec(ui, "pins", &t("Pins in your code"), true, (n > 0).then(|| n.to_string()));
         if open {
-            self.ard_pins_rows(ui, mode, &pins);
+            self.ard_pins_rows(ui, mode, &pins, &sk.files);
         }
     }
 
     // riadky použitých pinov (hover = čo k nemu pripojiť, klik = skok na riadok v kóde)
-    fn ard_pins_rows(&mut self, ui: &mut egui::Ui, mode: &str, pins: &[ard::Pin]) {
+    fn ard_pins_rows(&mut self, ui: &mut egui::Ui, mode: &str, pins: &[ard::Pin], files: &[(usize, String)]) {
         let p = self.pal;
         if pins.is_empty() {
             let hint = if mode == "cpp" {
@@ -1611,10 +1686,16 @@ impl App {
             // čiara v farbe pinu (rovnaká ako drôtik na doske)
             ui.painter().rect_filled(Rect::from_min_size(pos2(rr.left(), rr.top() + 5.0), vec2(3.0, rr.height() - 10.0)), CornerRadius::same(2), col);
             boardart::bubble(ui.painter(), c, 10.0, col, pin, k + 1);
-            let title = match &pin.name {
+            let mut title = match &pin.name {
                 Some(nm) => format!("{} {}  ·  {nm}", t("Pin"), pin.pin),
                 None => format!("{} {}", t("Pin"), pin.pin),
             };
+            // viac súborov v sketchi: odkiaľ pin je
+            if files.len() > 1 {
+                if let Some(f) = files.iter().rev().find(|f| f.0 <= pin.line) {
+                    title += &format!("  ·  {}", widgets::file_name(&f.1));
+                }
+            }
             let tr = widgets::text(ui, pos2(rr.left() + 36.0, rr.center().y), Align2::LEFT_CENTER, &title, theme::bold(12.5), p.text, rr.width() - 150.0);
             // ďalšie súčiastky na tom istom pine: malé ikony, konflikt červený výkričník
             let mut x = tr.right() + 10.0;
@@ -1623,7 +1704,7 @@ impl App {
                 dash::glyph(ui.painter(), dash::mode_glyph(m), pos2(x + 6.0, rr.center().y), mode_info(m).0, 0.62);
                 x += 16.0;
             }
-            if pin.conflict() {
+            if pin.conflict() || !pin.warns.is_empty() {
                 ui.painter().text(pos2(x + 2.0, rr.center().y), Align2::LEFT_CENTER, "!", theme::bold(13.0), p.red);
             }
             let _ = part;
@@ -1633,8 +1714,58 @@ impl App {
             }
         }
         if let Some(l) = jump {
-            self.lint_jump = Some(l);
+            // riadok v spojenom sketchi → súbor a riadok v ňom
+            match files.iter().rev().find(|f| f.0 <= l) {
+                Some((start, f)) => {
+                    if self.tabs.get(self.active).map(|t| &t.path) != Some(f) {
+                        self.open_file(f);
+                    }
+                    self.lint_jump = Some(l - start);
+                }
+                None => self.lint_jump = Some(l),
+            }
         }
+    }
+
+    // piny celého sketchu (C++: všetky .ino v priečinku, hlavný súbor prvý; Python: len súbor) s kontrolou podľa dosky; kešuje sa 1 s
+    pub(super) fn ard_sketch(&mut self, path: &str, mode: &str) -> Sketch {
+        let fq = self.ard_board();
+        let key = format!("{path}|{mode}|{fq}");
+        if let Some((k, at, sk)) = &self.ard.sketch {
+            if *k == key && at.elapsed() < Duration::from_millis(1000) {
+                return sk.clone();
+            }
+        }
+        let mut sk = Sketch::default();
+        if !path.is_empty() {
+            let mut files = vec![path.to_string()];
+            if mode == "cpp" {
+                if let Some(dir) = std::path::Path::new(path).parent() {
+                    let mut more: Vec<String> =
+                        std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path().to_string_lossy().to_string()).filter(|f| f.ends_with(".ino") && f != path).collect();
+                    more.sort();
+                    files.extend(more);
+                }
+            }
+            let mut text = String::new();
+            let mut line = 0;
+            for f in &files {
+                let t = self.ard_target_text(f);
+                sk.files.push((line, f.clone()));
+                for l in t.lines() {
+                    text.push_str(l);
+                    text.push('\n');
+                    line += 1;
+                }
+            }
+            sk.pins = ard::pins_for(mode, &text);
+            if mode == "cpp" {
+                ard::check(&mut sk.pins, &fq, text.contains("Serial."));
+                sk.includes = ard::includes(&text);
+            }
+        }
+        self.ard.sketch = Some((key, Instant::now(), sk.clone()));
+        sk
     }
 
     // projekt s doskou: súbor, ktorý sa nahráva na dosku (prvé .ino, inak Python s importmi pre dosku) a jeho jazyk; kešuje sa 2 s
@@ -1666,6 +1797,103 @@ impl App {
         BOARDS.iter().find(|b| b.0 == fq).map(|b| t(b.1)).unwrap_or(fq)
     }
 
+    // pravý stĺpec stránky projektu: kontrola, piny, súčiastky, knižnice
+    fn ard_project_sections(&mut self, ui: &mut egui::Ui, mode: &str, path: &str, sk: &Sketch) {
+        let p = self.pal;
+        let cap = |ui: &mut egui::Ui, s: String| {
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(s).font(theme::bold(10.5)).color(p.text3));
+        };
+        let fq = self.ard_board();
+        let pwm = ard::pwm_list(&fq);
+        // kontrola pinov podľa dosky
+        if mode == "cpp" && !sk.pins.is_empty() {
+            let mut probs: Vec<(String, String)> = vec![];
+            for pin in &sk.pins {
+                if pin.conflict() {
+                    probs.push((pin.pin.clone(), tf("Pin {pin}: two different parts use it.", &[("pin", &pin.pin)])));
+                }
+                for w in &pin.warns {
+                    probs.push((pin.pin.clone(), warn_text(w, &pin.pin, &pwm)));
+                }
+            }
+            cap(ui, t("CHECK"));
+            if probs.is_empty() {
+                if ard::caps(&fq).is_some() {
+                    ui.label(egui::RichText::new(format!("✓ {}", t("The pins fit this board."))).font(theme::ui(12.5)).color(p.green));
+                } else {
+                    self.ard_hint(ui, &t("Pin checks are only available for Arduino boards (Uno, Nano, Mega…)."));
+                }
+            }
+            for (pin, text) in probs {
+                ui.horizontal_top(|ui| {
+                    let (r, _) = ui.allocate_exact_size(vec2(26.0, 18.0), Sense::hover());
+                    ui.painter().rect_filled(r, CornerRadius::same(5), p.red.gamma_multiply(0.85));
+                    ui.painter().text(r.center(), Align2::CENTER_CENTER, &pin, theme::bold(10.5), Color32::WHITE);
+                    ui.add(egui::Label::new(egui::RichText::new(text).font(theme::ui(12.5)).color(p.text)).wrap());
+                });
+            }
+        }
+        // piny
+        if !sk.pins.is_empty() {
+            let title = if sk.files.len() > 1 { tf("PINS IN {name}", &[("name", &t("THE SKETCH"))]) } else { tf("PINS IN {name}", &[("name", &widgets::file_name(path).to_uppercase())]) };
+            cap(ui, title);
+            self.ard_pins_rows(ui, mode, &sk.pins, &sk.files);
+        }
+        // súčiastky
+        let parts = ard::parts_list(&sk.pins);
+        if !parts.is_empty() {
+            cap(ui, t("YOU NEED"));
+            for (pt, n) in &parts {
+                ui.label(egui::RichText::new(format!("{n} × {}", part_label(pt))).font(theme::ui(12.5)).color(p.text2));
+            }
+            ui.label(egui::RichText::new(format!("1 × {}", t("Breadboard and jumper wires"))).font(theme::ui(12.5)).color(p.text2));
+        }
+        // knižnice z #include
+        if !sk.includes.is_empty() {
+            cap(ui, t("LIBRARIES"));
+            let cli = self.ard_cli();
+            if let Some(c) = &cli {
+                if self.ard.installed.lock().unwrap().is_none() {
+                    let (slot, c2) = (self.ard.installed.clone(), c.clone());
+                    *slot.lock().unwrap() = Some(vec![]);
+                    std::thread::spawn(move || {
+                        let r = ard::lib_installed(&c2);
+                        *slot.lock().unwrap() = Some(r);
+                    });
+                }
+            }
+            let installed = self.ard.installed.lock().unwrap().clone().unwrap_or_default();
+            let mut install: Option<String> = None;
+            for (h, lib) in &sk.includes {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(h).font(theme::mono(12.0)).color(p.text));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match lib {
+                        None => {
+                            ui.label(egui::RichText::new(t("built in")).font(theme::ui(12.0)).color(p.text3));
+                        }
+                        Some(l) if installed.iter().any(|x| x.0.eq_ignore_ascii_case(l)) => {
+                            ui.label(egui::RichText::new(format!("✓ {}", t("Installed"))).font(theme::ui(12.0)).color(p.green));
+                        }
+                        Some(l) => {
+                            if cli.is_some() {
+                                if widgets::button(ui, Some("download"), &t("Install"), p.card2, p.text, 26.0, &p).on_hover_text(l).clicked() {
+                                    install = Some(l.clone());
+                                }
+                            } else {
+                                ui.label(egui::RichText::new(t("Needs the Arduino tools")).font(theme::ui(12.0)).color(p.text3));
+                            }
+                        }
+                    });
+                });
+            }
+            if let (Some(name), Some(c)) = (install, cli) {
+                self.ard_run(&tf("Installing the {name} library", &[("name", &name)]), vec![ard::v(&c, &["lib", "install", &name])]);
+                *self.ard.installed.lock().unwrap() = None;
+            }
+        }
+    }
+
     // Doska na stránke projektu bez rámikov: meno a pripojenie hore, veľká doska, vpravo výber dosky a použité piny.
     // Bez súboru (`path` prázdna) ukáže „Board is empty“ s tlačidlom na prvý program.
     pub(super) fn ard_project_card(&mut self, ui: &mut egui::Ui, path: &str, mode: &str, ws: &str) {
@@ -1674,8 +1902,8 @@ impl App {
         let ctx = ui.ctx().clone();
         self.ard_scan(&ctx);
         ctx.request_repaint_after(Duration::from_millis(1000));
-        let text = if path.is_empty() { String::new() } else { self.ard_target_text(path) };
-        let pins = ard::pins_for(mode, &text);
+        let sk = self.ard_sketch(path, mode);
+        let pins = sk.pins.clone();
         let dir = if path.is_empty() { ws.to_string() } else { std::path::Path::new(path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default() };
         self.ard.ctx = (dir, mode.to_string(), path.to_string());
         let name = self.ard_model_name();
@@ -1737,11 +1965,7 @@ impl App {
                 });
             } else {
                 this.ard_pin_panel(ui, mode, &pins, false);
-                if !pins.is_empty() {
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new(tf("PINS IN {name}", &[("name", &widgets::file_name(path).to_uppercase())])).font(theme::bold(10.5)).color(p.text3));
-                    this.ard_pins_rows(ui, mode, &pins);
-                }
+                this.ard_project_sections(ui, mode, path, &sk);
             }
         };
         if narrow {

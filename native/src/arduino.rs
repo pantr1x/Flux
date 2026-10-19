@@ -403,6 +403,7 @@ pub struct Pin {
     pub parts: Vec<&'static str>,         // led, button, sensor, servo, buzzer, neo, dht, onewire, lcd, serial
     pub name: Option<String>,             // meno premennej v kóde
     pub line: usize,                      // riadok (od 0) prvého použitia
+    pub warns: Vec<&'static str>,         // problémy podľa dosky (`check()`): missing, nopwm, noanalog, analogonly, serial, servo_pwm, tone_pwm
 }
 
 impl Pin {
@@ -496,7 +497,7 @@ fn merge_pin(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<S
             x.name = name;
         }
     } else {
-        out.push(Pin { pin, mode, uses: vec![(mode, line)], parts: vec![], name, line });
+        out.push(Pin { pin, mode, uses: vec![(mode, line)], parts: vec![], name, line, warns: vec![] });
     }
 }
 
@@ -815,6 +816,132 @@ pub fn pins_for(mode: &str, code: &str) -> Vec<Pin> {
     } else {
         py_pins(code)
     }
+}
+
+// ---------- kontrola projektu podľa dosky ----------
+// čo doska vie: najvyšší digitálny pin, počet analógových, PWM piny, piny len na čítanie (Nano A6/A7)
+pub struct Caps {
+    pub digital: u32,
+    pub analog: u32,
+    pub pwm: &'static [u32],
+    pub analog_only: &'static [u32],
+    pub timers: bool, // AVR: Servo vypne PWM na 9/10, tone() na 3/11
+}
+
+const MEGA_PWM: [u32; 15] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 44, 45, 46];
+
+pub fn caps(fqbn: &str) -> Option<Caps> {
+    let c = |digital, analog, pwm, analog_only, timers| Some(Caps { digital, analog, pwm, analog_only, timers });
+    match fqbn {
+        f if f.starts_with("arduino:avr:mega") => c(53, 16, &MEGA_PWM, &[], false),
+        f if f.starts_with("arduino:avr:nano") || f.starts_with("arduino:avr:pro") => c(13, 8, &[3, 5, 6, 9, 10, 11], &[6, 7], true),
+        f if f.starts_with("arduino:avr:uno") => c(13, 6, &[3, 5, 6, 9, 10, 11], &[], true),
+        f if f.starts_with("arduino:avr:leonardo") || f.starts_with("arduino:avr:micro") => c(13, 6, &[3, 5, 6, 9, 10, 11, 13], &[], false),
+        f if f.starts_with("arduino:renesas_uno") => c(13, 6, &[3, 5, 6, 9, 10, 11], &[], false),
+        f if f.starts_with("arduino:megaavr:nona4809") => c(13, 8, &[3, 5, 6, 9, 10], &[], false),
+        _ => None, // ESP32, ESP8266, Pico: piny sa číslujú inak, nekontrolujeme
+    }
+}
+
+// doplní `warns` pinom podľa dosky; `serial` = kód používa Serial (piny 0/1 sú USB)
+pub fn check(pins: &mut [Pin], fqbn: &str, serial: bool) {
+    let Some(c) = caps(fqbn) else { return };
+    let has = |p: &Pin, m: &str| p.uses.iter().any(|u| u.0 == m);
+    let servo = pins.iter().any(|p| has(p, "servo"));
+    let tone = pins.iter().any(|p| has(p, "tone"));
+    for p in pins.iter_mut() {
+        let mut w: Vec<&'static str> = vec![];
+        let (num, analog) = match p.pin.strip_prefix('A') {
+            Some(a) => (a.parse::<u32>().unwrap_or(99), true),
+            None => (p.pin.parse::<u32>().unwrap_or(999), false),
+        };
+        if (analog && num >= c.analog) || (!analog && num > c.digital) {
+            w.push("missing");
+        } else {
+            let dig = p.uses.iter().any(|u| !matches!(u.0, "analog"));
+            if has(p, "pwm") && (analog || !c.pwm.contains(&num)) {
+                w.push("nopwm");
+            }
+            if has(p, "analog") && !analog {
+                w.push("noanalog");
+            }
+            if analog && c.analog_only.contains(&num) && dig {
+                w.push("analogonly");
+            }
+            if !analog && num <= 1 && serial {
+                w.push("serial");
+            }
+            if c.timers && servo && !analog && (num == 9 || num == 10) && has(p, "pwm") && !has(p, "servo") {
+                w.push("servo_pwm");
+            }
+            if c.timers && tone && !analog && (num == 3 || num == 11) && has(p, "pwm") {
+                w.push("tone_pwm");
+            }
+        }
+        p.warns = w;
+    }
+}
+
+pub fn pwm_list(fqbn: &str) -> String {
+    caps(fqbn).map(|c| c.pwm.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")).unwrap_or_default()
+}
+
+// `#include <X.h>` → (hlavička, knižnica na inštaláciu; None = je v Arduine)
+pub fn includes(code: &str) -> Vec<(String, Option<String>)> {
+    const BUILTIN: [&str; 9] = ["Arduino.h", "Wire.h", "SPI.h", "SoftwareSerial.h", "EEPROM.h", "Servo.h", "LiquidCrystal.h", "Stepper.h", "HardwareSerial.h"];
+    const KNOWN: [(&str, &str); 12] = [
+        ("DHT.h", "DHT sensor library"),
+        ("Adafruit_NeoPixel.h", "Adafruit NeoPixel"),
+        ("OneWire.h", "OneWire"),
+        ("DallasTemperature.h", "DallasTemperature"),
+        ("LiquidCrystal_I2C.h", "LiquidCrystal I2C"),
+        ("IRremote.h", "IRremote"),
+        ("IRremote.hpp", "IRremote"),
+        ("FastLED.h", "FastLED"),
+        ("Adafruit_SSD1306.h", "Adafruit SSD1306"),
+        ("Adafruit_GFX.h", "Adafruit GFX Library"),
+        ("AccelStepper.h", "AccelStepper"),
+        ("MFRC522.h", "MFRC522"),
+    ];
+    let mut out: Vec<(String, Option<String>)> = vec![];
+    for l in code.lines() {
+        let t = l.trim();
+        let Some(r) = t.strip_prefix("#include") else { continue };
+        let r = r.trim();
+        // len systémové <…>; "moje.h" je súbor v projekte
+        let Some(h) = r.strip_prefix('<').and_then(|x| x.split('>').next()) else { continue };
+        let h = h.trim().to_string();
+        if out.iter().any(|x| x.0 == h) || h.contains('/') {
+            continue;
+        }
+        let lib = if BUILTIN.contains(&h.as_str()) || h.starts_with("avr") || h.starts_with("util") {
+            None
+        } else {
+            Some(KNOWN.iter().find(|k| k.0 == h).map(|k| k.1.to_string()).unwrap_or_else(|| h.trim_end_matches(".hpp").trim_end_matches(".h").to_string()))
+        };
+        out.push((h, lib));
+    }
+    out
+}
+
+// súčiastky na nákup / do zapojenia: (súčiastka, počet)
+pub fn parts_list(pins: &[Pin]) -> Vec<(&'static str, usize)> {
+    let mut out: Vec<(&'static str, usize)> = vec![];
+    for p in pins {
+        for pt in &p.parts {
+            match out.iter_mut().find(|x| x.0 == *pt) {
+                Some(x) => x.1 += 1,
+                None => out.push((pt, 1)),
+            }
+        }
+    }
+    // LCD a sériový modul zaberajú viac pinov, ale sú jeden kus
+    for x in out.iter_mut() {
+        if matches!(x.0, "lcd" | "serial") {
+            x.1 = 1;
+        }
+    }
+    out
 }
 
 // ---------- „pridať do kódu“: kliknutie na pin v schéme vloží ukážku ----------
@@ -1430,5 +1557,28 @@ mod tests {
         assert_eq!((mode("7"), mode("6"), mode("12"), mode("A3")), (Some("dht"), Some("neo"), Some("lcd"), Some("lcd")));
         assert!(mode("8").is_none(), "NeoPixel count is not a pin");
         assert_eq!(p.iter().find(|x| x.pin == "2").unwrap().name.as_deref(), Some("leds"));
+    }
+
+    #[test]
+    fn arduino_project_check() {
+        let code = "#include <Servo.h>\n#include <DHT.h>\n#include \"moje.h\"\nServo s;\nvoid setup(){ Serial.begin(9600); pinMode(1, OUTPUT); s.attach(6); pinMode(A7, INPUT); }\nvoid loop(){ analogWrite(7, 100); analogWrite(9, 50); int v = analogRead(4); digitalWrite(20, HIGH); }";
+        let mut p = pins_in(code);
+        check(&mut p, "arduino:avr:nano:cpu=atmega328old", true);
+        let w = |n: &str| p.iter().find(|x| x.pin == n).map(|x| x.warns.clone()).unwrap_or_default();
+        assert_eq!(w("7"), vec!["nopwm"]);
+        assert_eq!(w("1"), vec!["serial"]);
+        assert_eq!(w("4"), vec!["noanalog"]);
+        assert_eq!(w("20"), vec!["missing"]);
+        assert_eq!(w("A7"), vec!["analogonly"]);
+        assert_eq!(w("9"), vec!["servo_pwm"]);
+        assert!(w("6").is_empty());
+        // Mega: 20 existuje, 7 je PWM
+        check(&mut p, "arduino:avr:mega", true);
+        assert!(p.iter().find(|x| x.pin == "20").unwrap().warns.is_empty());
+        assert!(p.iter().find(|x| x.pin == "7").unwrap().warns.is_empty());
+        let inc = includes(code);
+        assert_eq!(inc, vec![("Servo.h".to_string(), None), ("DHT.h".to_string(), Some("DHT sensor library".to_string()))]);
+        let parts = parts_list(&pins_in("void setup(){ pinMode(2, OUTPUT); pinMode(3, OUTPUT); pinMode(4, INPUT_PULLUP); }"));
+        assert_eq!(parts, vec![("led", 2), ("button", 1)]);
     }
 }
