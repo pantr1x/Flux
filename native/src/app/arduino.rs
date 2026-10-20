@@ -39,8 +39,10 @@ pub struct ArdUi {
     pub setup_open: bool, // okno „Getting started“
     setup_mode: String,
     setup_h: f32,
-    guide_due: Option<Instant>, // kedy sa po prvom otvorení panela posúdi, či ukázať sprievodcu
-    guide_checked: bool,
+    setup_new: bool, // okno sa otvorilo pri vytváraní projektu (sprievodca „nastav dosku“)
+    pick: Option<(String, String)>, // stránka projektu: vybraný skript (priečinok, súbor); None = všetky spolu
+    scripts: Vec<(String, String, String)>, // skripty projektu s doskou: (meno, cesta, jazyk)
+    solo: bool, // ard_sketch číta len zvolený súbor (nie všetky .ino)
     scroll_top: bool,
     sketch: Option<(String, Instant, Sketch)>,                 // piny celého sketchu (kľúč, kedy)
     proj: Option<(String, Instant, Option<(String, String)>)>, // stránka projektu: (priečinok, kedy, (súbor dosky, jazyk))
@@ -85,8 +87,10 @@ impl Default for ArdUi {
             setup_open: false,
             setup_mode: String::new(),
             setup_h: 420.0,
-            guide_due: None,
-            guide_checked: false,
+            setup_new: false,
+            pick: None,
+            scripts: vec![],
+            solo: false,
             scroll_top: false,
             sketch: None,
             proj: None,
@@ -773,18 +777,6 @@ impl App {
         }
         self.ard_scan(&ctx);
         ctx.request_repaint_after(Duration::from_millis(1000));
-        // prvýkrát po otvorení panela: ak niečo chýba, ukáže sa okno Getting started (až keď sa zistia nástroje)
-        if !self.ard.guide_checked {
-            let due = *self.ard.guide_due.get_or_insert(Instant::now() + Duration::from_millis(1800));
-            if Instant::now() >= due {
-                self.ard.guide_checked = true;
-                if let Some(m) = self.ard_mode() {
-                    if self.get("arduinoGuideSeen").as_bool() != Some(true) && !self.ard_setup_rows(&m).iter().all(|r| r.ok) {
-                        self.ard_open_setup(&m);
-                    }
-                }
-            }
-        }
         ui.painter().vline(r.left(), r.y_range(), Stroke::new(1.0, p.line));
         let head = Rect::from_min_size(r.min, vec2(r.width(), 44.0));
         widgets::icon_at(ui, pos2(head.left() + 20.0, head.center().y), 15.0, "chip", p.accent);
@@ -1005,7 +997,11 @@ impl App {
         }
         let board = match &cur {
             Some(b) => row(true, t("Board"), format!("{}  ·  {}", b.name, b.port)),
-            None => row(false, t("Board"), t("Plug it in with a USB data cable (not a charge-only one).")),
+            None => {
+                let mut r = row(false, t("Board"), t("Plug it in with a USB data cable (not a charge-only one), or choose the board by hand – you can connect it later."));
+                r.act = Some(("manual-board", t("Choose manually")));
+                r
+            }
         };
         rows.push(board);
         if let Some(port) = &port {
@@ -1024,34 +1020,54 @@ impl App {
         rows
     }
 
-    // malý pruh v paneli: čo ešte chýba + tlačidlo na sprievodcu (okno „Getting started“); nič, keď je všetko hotové
-    fn ard_setup_ui(&mut self, ui: &mut egui::Ui, mode: &str) -> Option<&'static str> {
+    // nový projekt s doskou: sprievodca sa otvorí hneď a nástroje (arduino-cli + balík dosiek) sa začnú sťahovať sami
+    pub(super) fn ard_project_created(&mut self, ctx: &egui::Context) {
+        self.ard_scan(ctx);
+        self.ard.setup_new = true;
+        self.ard_open_setup("cpp");
+        if self.ard_cli().is_none() && matches!(*self.ard.inst.lock().unwrap(), Inst::Idle) {
+            self.ard_install_tools(ctx);
+        }
+    }
+
+    // stránka projektu: výber skriptu, ktorého piny doska ukazuje (jeden súbor alebo všetky spolu)
+    fn ard_script_picker(&mut self, ui: &mut egui::Ui, ws: &str) {
         let p = self.pal;
-        let rows = self.ard_setup_rows(mode);
-        if rows.iter().all(|r| r.ok) {
-            return None;
+        if self.ard.scripts.len() < 2 {
+            return;
         }
-        let (done, total) = (rows.iter().filter(|r| r.ok).count(), rows.len());
-        let mut open = false;
-        egui::Frame::NONE
-            .fill(p.hover.lerp_to_gamma(p.accent, 0.08))
-            .stroke(Stroke::new(1.5, p.accent.gamma_multiply(0.6)))
-            .corner_radius(CornerRadius::same(12))
-            .inner_margin(egui::Margin::same(12))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.label(egui::RichText::new(t("Getting started")).font(theme::bold(13.5)).color(p.text));
-                ui.label(egui::RichText::new(tf("{done} of {total} steps done", &[("done", &done.to_string()), ("total", &total.to_string())])).font(theme::ui(12.0)).color(p.text2));
-                let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 4.0), Sense::hover());
-                ui.painter().rect_filled(bar, CornerRadius::same(2), p.card2);
-                ui.painter().rect_filled(Rect::from_min_size(bar.min, vec2(bar.width() * done as f32 / total.max(1) as f32, 4.0)), CornerRadius::same(2), p.accent);
-                ui.add_space(2.0);
-                open = widgets::button(ui, Some("rocket"), &t("Open the guide"), p.accent, p.accent_fg, 28.0, &p).clicked();
-            });
-        if open {
-            self.ard_open_setup(mode);
+        let cur = self.ard.pick.as_ref().filter(|x| x.0 == ws).map(|x| x.1.clone());
+        let mut chosen: Option<Option<String>> = None;
+        let scripts = self.ard.scripts.clone();
+        let all_cpp = scripts.iter().filter(|s| s.2 == "cpp").count() > 1;
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
+            ui.label(egui::RichText::new(t("Script")).font(theme::bold(11.5)).color(p.text3));
+            let chip = |ui: &mut egui::Ui, label: &str, on: bool, tip: String| -> bool {
+                let w = widgets::text_w(ui, label, theme::bold(12.0)) + 22.0;
+                let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+                let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+                ui.painter().rect_filled(r, CornerRadius::same(8), if on { p.accent.gamma_multiply(0.16) } else { p.card2.lerp_to_gamma(p.hover, hk) });
+                ui.painter().rect_stroke(r, CornerRadius::same(8), Stroke::new(if on { 1.5 } else { 1.0 }, if on { p.accent } else { p.line }), StrokeKind::Inside);
+                ui.painter().text(r.center(), Align2::CENTER_CENTER, label, theme::bold(12.0), if on { p.text } else { p.text2 });
+                resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tip).clicked()
+            };
+            if all_cpp && chip(ui, &t("All scripts"), cur.is_none(), t("The board shows the pins of every .ino file together")) {
+                chosen = Some(None);
+            }
+            for (name, path, _) in &scripts {
+                let on = cur.as_deref() == Some(path.as_str()) || (cur.is_none() && !all_cpp && Some(path) == scripts.first().map(|s| &s.1));
+                if chip(ui, name, on, path.clone()) {
+                    chosen = Some(Some(path.clone()));
+                }
+            }
+        });
+        ui.add_space(4.0);
+        if let Some(c) = chosen {
+            self.ard.pick = c.map(|path| (ws.to_string(), path));
+            self.ard.proj = None;
+            self.ard.sketch = None;
         }
-        None
     }
 
     pub(super) fn ard_open_setup(&mut self, mode: &str) {
@@ -1102,7 +1118,13 @@ impl App {
             });
         });
         cu.label(
-            egui::RichText::new(if all_ok { t("Everything is ready – you can upload to your board now.") } else { t("Do these steps once – after that Upload to board just works.") })
+            egui::RichText::new(if all_ok {
+                t("Everything is ready – you can upload to your board now.")
+            } else if self.ard.setup_new {
+                t("Flux is setting up your board project: first the tools and libraries, then connect the board or choose it by hand.")
+            } else {
+                t("Do these steps once – after that Upload to board just works.")
+            })
                 .font(theme::ui(13.0))
                 .color(if all_ok { p.green } else { p.text2 }),
         );
@@ -1178,6 +1200,7 @@ impl App {
         }
         if close {
             self.ard.setup_open = false;
+            self.ard.setup_new = false;
             self.update_settings(|o| {
                 o.insert("arduinoGuideSeen".into(), json!(true));
             });
@@ -1188,7 +1211,7 @@ impl App {
     fn ard_board_tab(&mut self, ui: &mut egui::Ui, mode: &str) {
         let p = self.pal;
         let w = ui.available_width();
-        let mut act = self.ard_setup_ui(ui, mode);
+        let mut act: Option<&'static str> = None;
         self.ard_head_ui(ui, mode);
         let boards = self.ard.boards.lock().unwrap().clone();
         // Uno, Nano, Mega a klony (ATmega) majú 2–8 KB RAM: MicroPython na nich nebeží
@@ -1288,6 +1311,14 @@ impl App {
             "show-cpp" => self.ard_show_cpp(),
             "monitor" => self.ard_monitor(),
             "install-tools" => self.ard_install_tools(ctx),
+            "manual-board" => {
+                // doska sa vyberie ručne (výber na stránke projektu); sprievodca sa zavrie
+                self.ard.setup_open = false;
+                self.update_settings(|o| {
+                    o.insert("arduinoBoardAuto".into(), json!(false));
+                    o.insert("arduinoGuideSeen".into(), json!(true));
+                });
+            }
             "install-mp" => self.ard_install_py(&t("Installing mpremote"), "mpremote", true),
             "install-serial" => self.ard_install_py(&t("Installing pyserial"), "pyserial", false),
             "install-firmata" => self.ard_install_py(&t("Installing pyFirmata2"), "pyfirmata2", false),
@@ -1936,7 +1967,8 @@ impl App {
     // piny celého sketchu (C++: všetky .ino v priečinku, hlavný súbor prvý; Python: len súbor) s kontrolou podľa dosky; kešuje sa 1 s
     pub(super) fn ard_sketch(&mut self, path: &str, mode: &str) -> Sketch {
         let fq = self.ard_board();
-        let key = format!("{path}|{mode}|{fq}");
+        let solo = self.ard.solo;
+        let key = format!("{path}|{mode}|{fq}|{solo}");
         if let Some((k, at, sk)) = &self.ard.sketch {
             if *k == key && at.elapsed() < Duration::from_millis(1000) {
                 return sk.clone();
@@ -1945,7 +1977,7 @@ impl App {
         let mut sk = Sketch::default();
         if !path.is_empty() {
             let mut files = vec![path.to_string()];
-            if mode == "cpp" {
+            if mode == "cpp" && !solo {
                 if let Some(dir) = std::path::Path::new(path).parent() {
                     let mut more: Vec<String> =
                         std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path().to_string_lossy().to_string()).filter(|f| f.ends_with(".ino") && f != path).collect();
@@ -1978,22 +2010,41 @@ impl App {
     pub(super) fn ard_project_board(&mut self, ws: &str, items: &[(String, String, bool)]) -> Option<(String, String)> {
         if let Some((w, at, r)) = &self.ard.proj {
             if w == ws && at.elapsed() < Duration::from_secs(2) {
-                return r.clone();
+                let r = r.clone();
+                return self.ard_pick_apply(ws, r);
             }
         }
         let mut files: Vec<&(String, String, bool)> = items.iter().filter(|i| !i.2).collect();
         files.sort_by(|a, b| a.0.cmp(&b.0));
-        let mut found = files.iter().find(|i| i.0.ends_with(".ino")).map(|i| (i.1.clone(), "cpp".to_string()));
-        if found.is_none() {
-            let order = ["main.py", "code.py", "firmata.py"];
-            let mut py: Vec<&&(String, String, bool)> = files.iter().filter(|i| i.0.ends_with(".py")).collect();
-            py.sort_by_key(|i| order.iter().position(|o| *o == i.0).unwrap_or(9));
-            found = py.iter().find_map(|i| {
-                let text = std::fs::read(&i.1).ok().map(|b| String::from_utf8_lossy(&b[..b.len().min(16384)]).to_string())?;
-                ard::guess_py(&text).map(|m| (i.1.clone(), m.to_string()))
-            });
+        // všetky skripty, ktoré patria doske: .ino a Python s importmi pre dosku
+        let mut scripts: Vec<(String, String, String)> = files.iter().filter(|i| i.0.ends_with(".ino")).map(|i| (i.0.clone(), i.1.clone(), "cpp".to_string())).collect();
+        let order = ["main.py", "code.py", "firmata.py"];
+        let mut py: Vec<&&(String, String, bool)> = files.iter().filter(|i| i.0.ends_with(".py")).collect();
+        py.sort_by_key(|i| order.iter().position(|o| *o == i.0).unwrap_or(9));
+        for i in py {
+            let text = std::fs::read(&i.1).ok().map(|b| String::from_utf8_lossy(&b[..b.len().min(16384)]).to_string());
+            if let Some(m) = text.and_then(|t| ard::guess_py(&t).map(|m| m.to_string())) {
+                scripts.push((i.0.clone(), i.1.clone(), m));
+            }
         }
+        let found = scripts.first().map(|s| (s.1.clone(), s.2.clone()));
+        self.ard.scripts = scripts;
         self.ard.proj = Some((ws.to_string(), Instant::now(), found.clone()));
+        self.ard_pick_apply(ws, found)
+    }
+
+    // ak si používateľ vybral skript, ukáže sa on (a doska číta len ten súbor)
+    fn ard_pick_apply(&mut self, ws: &str, found: Option<(String, String)>) -> Option<(String, String)> {
+        self.ard.solo = false;
+        if let Some((w, path)) = &self.ard.pick {
+            if w == ws {
+                if let Some(s) = self.ard.scripts.iter().find(|s| &s.1 == path) {
+                    self.ard.solo = true;
+                    return Some((s.1.clone(), s.2.clone()));
+                }
+            }
+        }
+        // bez výberu: pri viacerých .ino všetky spolu, inak prvý skript
         found
     }
 
@@ -2126,20 +2177,8 @@ impl App {
         };
         ui.painter().circle_filled(pos2(tr.left() + 5.0, tr.top() + 42.0), 4.0, col);
         ui.painter().text(pos2(tr.left() + 16.0, tr.top() + 42.0), Align2::LEFT_CENTER, status, theme::ui(13.0), p.text2);
-        let rows = self.ard_setup_rows(mode);
-        if !rows.iter().all(|r| r.ok) {
-            let (done, total) = (rows.iter().filter(|r| r.ok).count(), rows.len());
-            let mut open = false;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(t("Getting started")).font(theme::bold(13.0)).color(p.accent));
-                ui.label(egui::RichText::new(tf("{done} of {total} steps done", &[("done", &done.to_string()), ("total", &total.to_string())])).font(theme::ui(12.5)).color(p.text2));
-                open = widgets::button(ui, Some("rocket"), &t("Open the guide"), p.accent, p.accent_fg, 28.0, &p).clicked();
-            });
-            if open {
-                self.ard_open_setup(mode);
-            }
-            ui.add_space(6.0);
-        }
+        ui.add_space(6.0);
+        self.ard_script_picker(ui, ws);
         let total = ui.available_width();
         let narrow = total < 760.0;
         let lw = if narrow { total } else { (total * 0.64).min(700.0) };

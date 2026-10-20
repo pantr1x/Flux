@@ -1648,6 +1648,7 @@ impl App {
                 "settings" => self.open_settings(if arg.is_empty() { "general" } else { arg }, ctx),
                 "ai" => self.toggle_ai(),
                 "newproj" => self.open_new_project(),
+                "ard-created" => self.ard_project_created(ctx),
                 "newfile" => self.open_new_file(None),
                 "panic" => panic!("test crash"),
                 "gh-signin" => self.gh_sign_in(ctx),

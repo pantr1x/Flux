@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.75
+
+**Pick the script, set up while creating the project**
+- A project with several scripts now has a **Script** row above the board: *All scripts* (every `.ino` together) or one file. The board, the pin list, the check and *Upload to board* follow the file you pick.
+- Creating a board project opens the setup straight away: Flux starts downloading the Arduino tools and libraries by itself, then asks you to **connect the board or choose it by hand** (*Choose manually*). The *Getting started* banner on the project page and in the side panel is gone.
+
 ## 0.9.74
 
 **Unused pins**

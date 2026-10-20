@@ -259,6 +259,10 @@ impl App {
         } else {
             self.note(tf("Project {name} is ready.", &[("name", &name)]));
         }
+        // projekt s doskou: hneď sprievodca (nástroje a knižnice → pripojiť dosku alebo vybrať ručne)
+        if icon == "file:a.ino" {
+            self.ard_project_created(ctx);
+        }
     }
 
     pub(super) fn new_project_ui(&mut self, ui: &mut egui::Ui, full: Rect) {
