@@ -35,7 +35,7 @@ fn words(rng: &mut Rng, n: usize, first: bool) -> String {
     let all: Vec<&str> = WORDS.split(' ').collect();
     let mut out = String::new();
     let mut len = 0;
-    let mut goal = 6 + rng.next(9);
+    let mut goal = if first { OPENING.len() + 1 + rng.next(7) } else { 6 + rng.next(9) };
     for i in 0..n {
         let w = if first && i < OPENING.len() { OPENING[i] } else { all[rng.next(all.len())] };
         if i > 0 {
@@ -47,7 +47,7 @@ fn words(rng: &mut Rng, n: usize, first: bool) -> String {
             out.push('.');
             len = 0;
             goal = 6 + rng.next(9);
-        } else if len > 3 && rng.next(100) < 12 {
+        } else if len > 3 && !(first && i < OPENING.len()) && rng.next(100) < 12 {
             out.push(',');
         }
     }

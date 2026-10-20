@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.74
+
+**Unused pins**
+- A pin that is only set up with `pinMode()` and then never used (for example after you delete its `digitalWrite`) now shows **faded** on the board, in the pin list and in the parts list, and the *Check* section says *"Pin 13 is set up with pinMode() but nothing in the code uses it."* Delete the `pinMode` line too (or press × / *Remove from code*) and the pin disappears completely.
+
 ## 0.9.73
 
 **Upload Python to the board, and test C++ without uploading**

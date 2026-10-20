@@ -844,6 +844,7 @@
  "Pin {pin} carries the USB connection (Serial) – uploading and the Serial Monitor can fail. Use another pin.": "La broche {pin} porte la liaison USB (Serial) – le téléversement et le moniteur série peuvent échouer. Utilise une autre broche.",
  "Pin {pin} doesn't exist on this board.": "La broche {pin} n’existe pas sur cette carte.",
  "Pin {pin} is back in the code": "La broche {pin} est de retour dans le code",
+ "Pin {pin} is set up with pinMode() but nothing in the code uses it.": "La broche {pin} est configurée avec pinMode(), mais rien dans le code ne l’utilise.",
  "Pin {pin} removed from the code": "Broche {pin} retirée du code",
  "Pin {pin}: two different parts use it.": "Broche {pin} : deux composants différents l’utilisent.",
  "Pinned": "Épinglés",

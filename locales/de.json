@@ -876,6 +876,7 @@
  "Pin {pin} carries the USB connection (Serial) – uploading and the Serial Monitor can fail. Use another pin.": "Pin {pin} führt die USB-Verbindung (Serial) – Hochladen und serieller Monitor können scheitern. Nimm einen anderen Pin.",
  "Pin {pin} doesn't exist on this board.": "Pin {pin} gibt es auf diesem Board nicht.",
  "Pin {pin} is back in the code": "Pin {pin} ist wieder im Code",
+ "Pin {pin} is set up with pinMode() but nothing in the code uses it.": "Pin {pin} ist mit pinMode() eingerichtet, aber nichts im Code nutzt ihn.",
  "Pin {pin} removed from the code": "Pin {pin} aus dem Code entfernt",
  "Pin {pin}: two different parts use it.": "Pin {pin}: zwei verschiedene Bauteile nutzen ihn.",
  "Pinned": "Angeheftet",

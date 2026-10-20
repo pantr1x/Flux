@@ -844,6 +844,7 @@
  "Pin {pin} carries the USB connection (Serial) – uploading and the Serial Monitor can fail. Use another pin.": "Il pin {pin} porta la connessione USB (Serial): caricamento e monitor seriale possono fallire. Usa un altro pin.",
  "Pin {pin} doesn't exist on this board.": "Il pin {pin} non esiste su questa scheda.",
  "Pin {pin} is back in the code": "Il pin {pin} è tornato nel codice",
+ "Pin {pin} is set up with pinMode() but nothing in the code uses it.": "Il pin {pin} è impostato con pinMode(), ma nel codice nulla lo usa.",
  "Pin {pin} removed from the code": "Pin {pin} rimosso dal codice",
  "Pin {pin}: two different parts use it.": "Pin {pin}: lo usano due componenti diversi.",
  "Pinned": "Fissati",

@@ -836,6 +836,7 @@
  "Pin {pin} carries the USB connection (Serial) – uploading and the Serial Monitor can fail. Use another pin.": "Пін {pin} – це USB-з’єднання (Serial): завантаження й монітор порту можуть не працювати. Обери інший пін.",
  "Pin {pin} doesn't exist on this board.": "Піна {pin} на цій платі немає.",
  "Pin {pin} is back in the code": "Пін {pin} знову в коді",
+ "Pin {pin} is set up with pinMode() but nothing in the code uses it.": "Пін {pin} налаштовано через pinMode(), але в коді його ніщо не використовує.",
  "Pin {pin} removed from the code": "Пін {pin} видалено з коду",
  "Pin {pin}: two different parts use it.": "Пін {pin}: його використовують дві різні деталі.",
  "Pinned": "Закріплені",

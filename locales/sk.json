@@ -879,6 +879,7 @@
  "Pin {pin} carries the USB connection (Serial) – uploading and the Serial Monitor can fail. Use another pin.": "Pin {pin} vedie USB spojenie (Serial) – nahrávanie a sériový monitor môžu zlyhať. Použi iný pin.",
  "Pin {pin} doesn't exist on this board.": "Pin {pin} na tejto doske nie je.",
  "Pin {pin} is back in the code": "Pin {pin} je späť v kóde",
+ "Pin {pin} is set up with pinMode() but nothing in the code uses it.": "Pin {pin} je nastavený cez pinMode(), ale nič v kóde ho nepoužíva.",
  "Pin {pin} removed from the code": "Pin {pin} odobratý z kódu",
  "Pin {pin}: two different parts use it.": "Pin {pin}: používajú ho dve rôzne súčiastky.",
  "Pinned": "Pripnuté",

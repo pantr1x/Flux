@@ -146,6 +146,7 @@ pub(super) struct Sketch {
 // text problému s pinom (pwm = zoznam PWM pinov dosky, ak je známy)
 pub(super) fn warn_text(kind: &str, pin: &str, pwm: &str) -> String {
     match kind {
+        "unused" => tf("Pin {pin} is set up with pinMode() but nothing in the code uses it.", &[("pin", pin)]),
         "missing" => tf("Pin {pin} doesn't exist on this board.", &[("pin", pin)]),
         "nopwm" if !pwm.is_empty() => tf("analogWrite() on pin {pin} only switches it on or off – use a PWM pin: {list}.", &[("pin", pin), ("list", pwm)]),
         "nopwm" => tf("analogWrite() on pin {pin} only switches it on or off – use a PWM pin (~).", &[("pin", pin)]),
@@ -1893,7 +1894,7 @@ impl App {
                 dash::glyph(ui.painter(), dash::mode_glyph(m), pos2(x + 6.0, rr.center().y), mode_info(m).0, 0.62);
                 x += 16.0;
             }
-            if pin.conflict() || !pin.warns.is_empty() {
+            if pin.conflict() || pin.warns.iter().any(|w| *w != "unused") {
                 ui.painter().text(pos2(x + 2.0, rr.center().y), Align2::LEFT_CENTER, "!", theme::bold(13.0), p.red);
             }
             let _ = part;

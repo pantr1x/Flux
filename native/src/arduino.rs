@@ -403,6 +403,7 @@ pub struct Pin {
     pub parts: Vec<&'static str>,         // led, button, sensor, servo, buzzer, neo, dht, onewire, lcd, serial
     pub name: Option<String>,             // meno premennej v kóde
     pub line: usize,                      // riadok (od 0) prvého použitia
+    pub active: bool,                     // false = len pinMode(), nič ďalšie pin nepoužíva
     pub warns: Vec<&'static str>,         // problémy podľa dosky (`check()`): missing, nopwm, noanalog, analogonly, serial, servo_pwm, tone_pwm
 }
 
@@ -489,7 +490,12 @@ fn finish(p: &mut Pin) {
 }
 
 fn merge_pin(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<String>, line: usize) {
+    merge_pin_a(out, pin, mode, name, line, true)
+}
+
+fn merge_pin_a(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<String>, line: usize, active: bool) {
     if let Some(x) = out.iter_mut().find(|x| x.pin == pin) {
+        x.active |= active;
         if !x.uses.iter().any(|u| u.0 == mode) {
             x.uses.push((mode, line));
         }
@@ -497,7 +503,7 @@ fn merge_pin(out: &mut Vec<Pin>, pin: String, mode: &'static str, name: Option<S
             x.name = name;
         }
     } else {
-        out.push(Pin { pin, mode, uses: vec![(mode, line)], parts: vec![], name, line, warns: vec![] });
+        out.push(Pin { pin, mode, uses: vec![(mode, line)], parts: vec![], name, line, active, warns: vec![] });
     }
 }
 
@@ -669,7 +675,7 @@ pub fn pins_in(code: &str) -> Vec<Pin> {
                     mode
                 };
                 for (pin, name) in resolve(first) {
-                    merge_pin(&mut out, pin, m, name, i);
+                    merge_pin_a(&mut out, pin, m, name, i, func != "pinMode(");
                 }
             }
         }
@@ -1152,12 +1158,15 @@ pub fn caps(fqbn: &str) -> Option<Caps> {
 
 // doplní `warns` pinom podľa dosky; `serial` = kód používa Serial (piny 0/1 sú USB)
 pub fn check(pins: &mut [Pin], fqbn: &str, serial: bool) {
+    for p in pins.iter_mut() {
+        p.warns = if p.active { vec![] } else { vec!["unused"] };
+    }
     let Some(c) = caps(fqbn) else { return };
     let has = |p: &Pin, m: &str| p.uses.iter().any(|u| u.0 == m);
     let servo = pins.iter().any(|p| has(p, "servo"));
     let tone = pins.iter().any(|p| has(p, "tone"));
     for p in pins.iter_mut() {
-        let mut w: Vec<&'static str> = vec![];
+        let mut w: Vec<&'static str> = if p.active { vec![] } else { vec!["unused"] };
         let (num, analog) = match p.pin.strip_prefix('A') {
             Some(a) => (a.parse::<u32>().unwrap_or(99), true),
             None => (p.pin.parse::<u32>().unwrap_or(999), false),
@@ -1234,7 +1243,7 @@ pub fn includes(code: &str) -> Vec<(String, Option<String>)> {
 // súčiastky na nákup / do zapojenia: (súčiastka, počet)
 pub fn parts_list(pins: &[Pin]) -> Vec<(&'static str, usize)> {
     let mut out: Vec<(&'static str, usize)> = vec![];
-    for p in pins {
+    for p in pins.iter().filter(|p| p.active) {
         for pt in &p.parts {
             match out.iter_mut().find(|x| x.0 == *pt) {
                 Some(x) => x.1 += 1,
@@ -1878,7 +1887,7 @@ mod tests {
 
     #[test]
     fn arduino_project_check() {
-        let code = "#include <Servo.h>\n#include <DHT.h>\n#include \"moje.h\"\nServo s;\nvoid setup(){ Serial.begin(9600); pinMode(1, OUTPUT); s.attach(6); pinMode(A7, INPUT); }\nvoid loop(){ analogWrite(7, 100); analogWrite(9, 50); int v = analogRead(4); digitalWrite(20, HIGH); }";
+        let code = "#include <Servo.h>\n#include <DHT.h>\n#include \"moje.h\"\nServo s;\nvoid setup(){ Serial.begin(9600); pinMode(1, OUTPUT); s.attach(6); pinMode(A7, INPUT); }\nvoid loop(){ analogWrite(7, 100); analogWrite(9, 50); int v = analogRead(4); digitalWrite(20, HIGH); digitalWrite(1, HIGH); digitalRead(A7); }";
         let mut p = pins_in(code);
         check(&mut p, "arduino:avr:nano:cpu=atmega328old", true);
         let w = |n: &str| p.iter().find(|x| x.pin == n).map(|x| x.warns.clone()).unwrap_or_default();
@@ -1895,7 +1904,7 @@ mod tests {
         assert!(p.iter().find(|x| x.pin == "7").unwrap().warns.is_empty());
         let inc = includes(code);
         assert_eq!(inc, vec![("Servo.h".to_string(), None), ("DHT.h".to_string(), Some("DHT sensor library".to_string()))]);
-        let parts = parts_list(&pins_in("void setup(){ pinMode(2, OUTPUT); pinMode(3, OUTPUT); pinMode(4, INPUT_PULLUP); }"));
+        let parts = parts_list(&pins_in("void setup(){ pinMode(2, OUTPUT); pinMode(3, OUTPUT); pinMode(4, INPUT_PULLUP); pinMode(5, OUTPUT); }\nvoid loop(){ digitalWrite(2, HIGH); digitalWrite(3, HIGH); digitalRead(4); }"));
         assert_eq!(parts, vec![("led", 2), ("button", 1)]);
     }
 
@@ -1926,5 +1935,16 @@ mod tests {
         let r = remove_pin_py(code, "2").unwrap();
         assert!(!r.contains("btn") && !r.contains("print(1)") && r.contains("led_13.write(0)"), "{r}");
         assert!(remove_pin_py(code, "5").is_none());
+    }
+
+    #[test]
+    fn arduino_unused_pin() {
+        let mut p = pins_in("void setup(){ pinMode(10, OUTPUT); pinMode(13, OUTPUT); }\nvoid loop(){ digitalWrite(10, HIGH); }");
+        check(&mut p, "arduino:avr:mega", false);
+        let get = |n: &str| p.iter().find(|x| x.pin == n).unwrap();
+        assert!(get("10").active && get("10").warns.is_empty());
+        assert!(!get("13").active && get("13").warns == vec!["unused"]);
+        check(&mut p, "esp32:esp32:esp32", false);
+        assert_eq!(p.iter().find(|x| x.pin == "13").unwrap().warns, vec!["unused"]);
     }
 }

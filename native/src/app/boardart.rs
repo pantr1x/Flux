@@ -458,9 +458,11 @@ pub(super) fn bubble_tip(p: &ard::Pin) -> String {
 
 // značka pri doske: ikona hlavnej súčiastky v farbe pinu, číslo v rohu; viac súčiastok = „+N“, konflikt = červený krúžok
 pub(super) fn bubble(pa: &egui::Painter, c: Pos2, r: f32, col: Color32, pin: &ard::Pin, n: usize) {
-    if pin.conflict() || !pin.warns.is_empty() {
+    if pin.conflict() || pin.warns.iter().any(|w| *w != "unused") {
         pa.circle_stroke(c, r + 2.5, Stroke::new(2.0, Color32::from_rgb(0xff, 0x55, 0x55)));
     }
+    // nastavený len cez pinMode(), inak nepoužitý: vyblednutá značka
+    let col = if pin.active { col } else { col.gamma_multiply(0.4) };
     pa.circle_filled(c, r, col);
     pa.circle_stroke(c, r, Stroke::new(1.0, Color32::from_black_alpha(90)));
     super::dash::glyph(pa, super::dash::mode_glyph(pin.mode), c + vec2(-0.6, 0.8), Color32::from_black_alpha(235), r / 13.0);
