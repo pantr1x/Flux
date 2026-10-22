@@ -2,6 +2,10 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.79
+
+- **Arduino errors in plain words.** When a sketch doesn't compile, Flux now finds the compiler's error, jumps to that line, underlines it with an explanation (hover it, or read it after the line), and prints *Error on line N: …* in Output – e.g. a missing `;`, a missing `}`, an unknown name, or a function with too few values.
+
 ## 0.9.78
 
 - In `.ino` files, `pinMode`, `digitalWrite`, `digitalRead`, `analogWrite` and `analogRead` are inserted as just `name()` with the cursor inside – no more `HIGH`, `OUTPUT` or `128` filled in.

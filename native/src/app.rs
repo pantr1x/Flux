@@ -77,6 +77,7 @@ struct Sess {
     shell_started: bool,
     running: bool,
     bottom: Bottom,
+    raw: String, // surový výstup posledného behu (chyby kompilátora Arduina)
 }
 
 impl Sess {
@@ -88,7 +89,7 @@ impl Sess {
         out.ws = ws;
         sh.ws = ws;
         out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.").replace('▶', "›")));
-        Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output }
+        Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output, raw: String::new() }
     }
 
     // udalosti z pty tejto karty idú do aplikácie s jej značkou
@@ -107,9 +108,16 @@ impl Sess {
         match ch {
             "run:start" => {
                 self.running = true;
+                self.raw.clear();
                 self.out.feed(&format!("\x1b[90m\u{203A} {}\x1b[0m\r\n", v["label"].as_str().unwrap_or("")));
             }
-            "run:data" => self.out.feed(v.as_str().unwrap_or("")),
+            "run:data" => {
+                let d = v.as_str().unwrap_or("");
+                if self.raw.len() < 400_000 {
+                    self.raw.push_str(d);
+                }
+                self.out.feed(d)
+            }
             "run:exit" => {
                 self.running = false;
                 let code = v["code"].as_i64().unwrap_or(-1);
@@ -1485,6 +1493,9 @@ impl App {
                 let sid = v["sid"].as_u64().unwrap_or(0);
                 if let Some(s) = self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()).find(|s| s.id == sid) {
                     s.event(&ch, &v["v"]);
+                }
+                if ch == "run:exit" && v["v"]["code"].as_i64().unwrap_or(0) != 0 {
+                    self.ard_errors(sid);
                 }
                 continue;
             }

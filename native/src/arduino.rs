@@ -1727,6 +1727,114 @@ pub fn firmata_blink(port: &str) -> String {
     format!("# Python + Firmata: na dosku sa raz nahrá StandardFirmata, program beží v počítači\nimport time\nfrom pyfirmata2 import Arduino\n\nboard = Arduino(\"{port}\")\n\nwhile True:\n    board.digital[13].write(1)\n    time.sleep(0.5)\n    board.digital[13].write(0)\n    time.sleep(0.5)\n")
 }
 
+// ---------- chyby kompilátora → riadok + zrozumiteľný text ----------
+#[derive(Clone, Debug, PartialEq)]
+pub struct CErr {
+    pub line: usize, // od 1
+    pub col: usize,  // od 1
+    pub msg: String, // už vysvetlené
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut o = String::with_capacity(s.len());
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == '\x1b' {
+            if it.peek() == Some(&'[') {
+                it.next();
+                while let Some(&n) = it.peek() {
+                    it.next();
+                    if n.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else if c != '\r' {
+            o.push(c);
+        }
+    }
+    o
+}
+
+// z výpisu arduino-cli / gcc: `…/<stem>.ino:3:5: error: text` (iba chyby v tomto súbore)
+pub fn parse_errors(raw: &str, stem: &str) -> Vec<CErr> {
+    let want = format!("{stem}.ino");
+    let mut v: Vec<CErr> = vec![];
+    for l in strip_ansi(raw).lines() {
+        let Some(i) = l.find(".ino:") else { continue };
+        let head = &l[..i + 4];
+        let name = head.rsplit(['/', '\\']).next().unwrap_or("");
+        if name != want {
+            continue;
+        }
+        let rest = &l[i + 5..];
+        let mut p = rest.splitn(3, ':');
+        let (Some(a), Some(b), Some(c)) = (p.next(), p.next(), p.next()) else { continue };
+        let (Ok(line), Ok(col)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) else { continue };
+        let c = c.trim();
+        let Some(msg) = c.strip_prefix("error:").or_else(|| c.strip_prefix("fatal error:")) else { continue };
+        let msg = msg.trim().replace(['‘', '’'], "'");
+        if !v.iter().any(|e| e.line == line) {
+            v.push(CErr { line, col, msg: explain(&msg) });
+        }
+    }
+    v
+}
+
+fn quoted(msg: &str) -> String {
+    let mut it = msg.split('\'');
+    it.next();
+    it.next().unwrap_or("").to_string()
+}
+
+// kompilátorové hlášky po ľudsky (C++ / Arduino)
+pub fn explain(msg: &str) -> String {
+    use crate::i18n::{t, tf};
+    let m = msg.to_lowercase();
+    let q = quoted(msg);
+    if m.contains("expected ';'") {
+        t("A semicolon (;) is missing at the end of the line above.")
+    } else if m.contains("expected '}' at end of input") {
+        t("A closing } is missing – every { needs a } at the end of its block.")
+    } else if m.contains("expected declaration before '}'") || m.contains("expected unqualified-id before '}'") {
+        t("There is an extra } here, or a { is missing above.")
+    } else if m.contains("expected ')'") {
+        t("A closing ) is missing here.")
+    } else if m.contains("expected '(' ") || m.contains("expected '('") {
+        t("An opening ( is missing here.")
+    } else if m.contains("was not declared in this scope") {
+        tf("'{name}' is not known here – check the spelling (uppercase and lowercase matter) or declare it first.", &[("name", &q)])
+    } else if m.contains("does not name a type") {
+        tf("'{name}' is not a known type – check the spelling or add the right #include.", &[("name", &q)])
+    } else if m.contains("too few arguments") {
+        t("This function needs more values inside ( ) – for example digitalWrite(pin, HIGH).")
+    } else if m.contains("too many arguments") {
+        t("There are too many values inside ( ) for this function.")
+    } else if m.contains("no matching function for call to") {
+        t("These values don't fit the function – check how many there are and their types.")
+    } else if m.contains("expected primary-expression") {
+        t("Something is missing here – a value or a name is expected, maybe the ( ) is empty or a comma is extra.")
+    } else if m.contains("expected unqualified-id") || m.contains("expected declaration before") {
+        t("This is out of place – look for a missing or extra } or ) above this line.")
+    } else if m.contains("a function-definition is not allowed here") {
+        t("A } is missing above – a function can't start inside another function.")
+    } else if m.contains("'else' without a previous 'if'") {
+        t("This else has no matching if – check the { } of the if above it.")
+    } else if m.contains("stray '\\") {
+        t("A strange character – usually a typographic quote or dash that was pasted. Type it again.")
+    } else if m.contains("missing terminating") {
+        t("This text has no closing quote – add \" at its end.")
+    } else if m.contains("no such file or directory") {
+        tf("The file '{name}' was not found – install the library in the Arduino panel (Libraries).", &[("name", &q)])
+    } else if m.contains("redeclaration") || m.contains("redefinition") {
+        tf("'{name}' is already defined – use each name only once.", &[("name", &q)])
+    } else if m.contains("invalid conversion") || m.contains("cannot convert") {
+        t("The value has a different type than expected here.")
+    } else {
+        msg.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1946,5 +2054,22 @@ mod tests {
         assert!(!get("13").active && get("13").warns == vec!["unused"]);
         check(&mut p, "esp32:esp32:esp32", false);
         assert_eq!(p.iter().find(|x| x.pin == "13").unwrap().warns, vec!["unused"]);
+    }
+
+    #[test]
+    fn arduino_compile_errors() {
+        let raw = "[31m/home/u/.flux/sketches/pin_9/pin_9.ino:3:20: error: too few arguments to function 'void digitalWrite(uint8_t, uint8_t)'[0m
+/home/u/x/pin_9.ino:7:3: error: expected ';' before 'else'
+/usr/lib/foo.h:1:1: error: bad
+other.ino:2:1: error: nope
+error during build: exit status 1
+";
+        let v = parse_errors(raw, "pin_9");
+        assert_eq!(v.len(), 2);
+        assert_eq!((v[0].line, v[0].col), (3, 20));
+        assert!(v[0].msg.contains("needs more values"));
+        assert_eq!(v[1].line, 7);
+        assert!(v[1].msg.contains("semicolon"));
+        assert!(explain("'ledd' was not declared in this scope").contains("'ledd'"));
     }
 }

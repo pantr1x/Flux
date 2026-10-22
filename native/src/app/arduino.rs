@@ -416,6 +416,39 @@ impl App {
         }
     }
 
+    // po neúspešnej kompilácii .ino: chyby kompilátora → podčiarknutie v kóde, skok na riadok a zrozumiteľný text vo Výstupe
+    pub(super) fn ard_errors(&mut self, sid: u64) {
+        let Some(i) = self.tabs.iter().position(|t| t.sess.as_deref().map(|s| s.id) == Some(sid)) else { return };
+        if self.tabs[i].ext() != "ino" {
+            return;
+        }
+        let path = self.tabs[i].path.clone();
+        let stem = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let errs = ard::parse_errors(self.tabs[i].sess.as_deref().map(|s| s.raw.as_str()).unwrap_or(""), &stem);
+        if errs.is_empty() {
+            return;
+        }
+        let mut msg = String::new();
+        for e in errs.iter().take(5) {
+            msg.push_str(&format!("\r\n\x1b[31m{}\x1b[0m\r\n", tf("Error on line {n}: {msg}", &[("n", &e.line.to_string()), ("msg", &e.msg)])));
+        }
+        if let Some(s) = self.tabs[i].sess.as_deref_mut() {
+            s.out.feed(&msg);
+        }
+        let diags: Vec<crate::lint::Diag> = errs
+            .iter()
+            .map(|e| crate::lint::Diag { line: e.line.saturating_sub(1), col: e.col.saturating_sub(1), len: 0, err: true, msg: e.msg.clone(), color: None })
+            .collect();
+        if let Some(gen) = self.hls.get(&path).map(|h| h.gen) {
+            self.lint_asked.insert(path.clone(), gen);
+            self.lint_res.lock().unwrap().insert(path, (gen, diags));
+        }
+        if i == self.active {
+            self.lint_jump = Some(errs[0].line.saturating_sub(1));
+        }
+        self.status = tf("Error on line {n}: {msg}", &[("n", &errs[0].line.to_string()), ("msg", &errs[0].msg)]);
+    }
+
     fn ard_py_build(&mut self, upload: bool) {
         if !self.ard_cpp_board() && self.ard_mode().as_deref() != Some("firmata") {
             self.status = t("Pick an Arduino board first (Board select).");
