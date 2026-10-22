@@ -577,6 +577,16 @@ fn html(text: &str) -> Vec<Diag> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn lint_ino_semicolon_after_call() {
+        let src = "void setup() {\n  pinMode(13, OUTPUT);\n}\n\nvoid loop() {\n  digitalWrite(13,HIGH);\n  \n}\n";
+        let d = check("ino", src, None);
+        assert!(d.is_empty(), "{:?}", d.iter().map(|x| (x.line, x.msg.clone())).collect::<Vec<_>>());
+        // rozpísaný príkaz bez „;“ sa hlási
+        let d2 = check("ino", "void loop() {\n  digitalWrite(13,HIGH)\n  delay(5);\n}\n", None);
+        assert_eq!(d2.len(), 1);
+    }
+
     use super::*;
 
     fn lines(v: &[Diag]) -> Vec<usize> {

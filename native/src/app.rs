@@ -715,6 +715,8 @@ impl App {
         // úryvok: odsadenie riadku pre ďalšie riadky, kurzor na prvé miesto ($1), Tab skáče ďalej
         let line_start = tab.text[..a].rfind('\n').map(|i| i + 1).unwrap_or(0);
         let indent: String = tab.text[line_start..a].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        // Arduino: pin z tohto súboru (pinMode…, alebo pin_13.ino) namiesto predvoleného čísla
+        let body = if tab.path.ends_with(".ino") { ino_pin_body(&body, &tab.text, &tab.path) } else { body };
         let (text, stops) = crate::complete::expand(&body, &indent, "    ");
         self.sug_again = body.ends_with("=\"$0\"");
         tab.text.replace_range(a..e, &text);
@@ -4545,5 +4547,23 @@ mod sess_tests {
         assert!(a.running);
         a.event("run:exit", &json!({"code": 0, "ms": 5}));
         assert!(!a.running);
+    }
+}
+
+// úryvok funkcie s pinom (`digitalWrite(${1:13}, …)`): predvolené číslo = pin súboru (prvý nájdený pin, inak z mena `pin_13.ino`)
+fn ino_pin_body(body: &str, text: &str, path: &str) -> String {
+    let analog = body.starts_with("analogRead");
+    if !["pinMode", "digitalWrite", "digitalRead", "analogWrite", "analogRead", "tone"].iter().any(|f| body.starts_with(f)) {
+        return body.to_string();
+    }
+    let mut pin = crate::arduino::pins_for("cpp", text).into_iter().map(|p| p.pin).find(|p| analog == p.starts_with('A') && !p.is_empty());
+    if pin.is_none() && !analog {
+        let stem = std::path::Path::new(path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        pin = stem.strip_prefix("pin_").filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())).map(|n| n.to_string());
+    }
+    let Some(pin) = pin else { return body.to_string() };
+    match (body.find("${1:"), body.find('}')) {
+        (Some(i), Some(j)) if j > i => format!("{}${{1:{}}}{}", &body[..i], pin, &body[j + 1..]),
+        _ => body.to_string(),
     }
 }
