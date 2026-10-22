@@ -2728,10 +2728,12 @@ impl App {
                             let trig = !typed_ident && crate::complete::trigger(&lang, &before);
                             if (typed_ident && (plen >= 2 || (cx.rich() && plen >= 1))) || trig || bang || force_sug {
                                 let prefix: String = before[c - plen..].iter().collect();
-                                if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), hlc.gen)) {
+                                // verzia textu sa pri novom otvorení súboru / zmene témy začína odznova → do kľúča aj dĺžka textu
+                                let wkey = hlc.gen ^ ((tab.text.len() as u64) << 32);
+                                if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), wkey)) {
                                     *sug_words = Some((
                                         tab.path.clone(),
-                                        hlc.gen,
+                                        wkey,
                                         crate::complete::words(&tab.text, &lang),
                                         crate::complete::calls(&tab.text, &lang),
                                         crate::complete::members(&tab.text, &lang),

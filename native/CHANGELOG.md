@@ -2,6 +2,10 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.80
+
+- Suggestions: variable names from your own file were sometimes missing (for example `led_pin` while typing `led_p`) after a file was re-created or reopened. The word list is now refreshed whenever the text differs.
+
 ## 0.9.79
 
 - **Arduino errors in plain words.** When a sketch doesn't compile, Flux now finds the compiler's error, jumps to that line, underlines it with an explanation (hover it, or read it after the line), and prints *Error on line N: …* in Output – e.g. a missing `;`, a missing `}`, an unknown name, or a function with too few values.

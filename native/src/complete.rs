@@ -1255,6 +1255,13 @@ mod tests {
     }
 
     #[test]
+    fn complete_own_variable_in_call() {
+        let src = "int led_pin = 9\n\nvoid setup() {\n}\n\nvoid loop() {\n  for (int = fade = 0 ; fade <=255 ; fade + 5){\n      analogWrite(led_p";
+        let r = at("ino", src);
+        assert!(r.iter().any(|i| i.label == "led_pin"), "{r:?}");
+    }
+
+    #[test]
     fn complete_html_lt_and_font() {
         // „<“ samo = všetky značky (ako VS Code), so spúšťačom
         let b: Vec<char> = "<body>\n<".chars().collect();
