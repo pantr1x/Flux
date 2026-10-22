@@ -57,7 +57,7 @@ fn keywords(lang: &str) -> &'static [&'static str] {
             "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "int", "long", "register", "return", "short", "signed",
             "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "include", "define", "bool", "true", "false",
         ],
-        "cpp" | "cc" | "cxx" | "hpp" | "hh" => &[
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" => &[
             "auto", "bool", "break", "case", "catch", "char", "class", "const", "constexpr", "continue", "default", "delete", "do", "double", "else", "enum", "explicit", "false", "float", "for",
             "friend", "if", "include", "inline", "int", "long", "namespace", "new", "nullptr", "operator", "private", "protected", "public", "return", "short", "signed", "sizeof", "static", "struct",
             "switch", "template", "this", "throw", "true", "try", "typedef", "typename", "unsigned", "using", "virtual", "void", "while", "override",
@@ -98,9 +98,11 @@ fn builtins(lang: &str) -> &'static [&'static str] {
             "push", "pop", "map", "filter", "forEach", "reduce", "includes", "indexOf", "slice", "splice", "join", "split", "keys", "values", "entries", "localStorage", "require", "module",
         ],
         "c" | "h" => &["printf", "scanf", "puts", "gets", "fgets", "malloc", "calloc", "free", "strlen", "strcpy", "strcmp", "strcat", "memset", "memcpy", "main", "NULL", "stdio", "stdlib", "string", "FILE", "fopen", "fclose"],
-        "cpp" | "cc" | "cxx" | "hpp" | "hh" => &[
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" => &[
             "std", "cout", "cin", "endl", "string", "vector", "map", "unordered_map", "set", "pair", "push_back", "size", "begin", "end", "sort", "iostream", "main", "printf", "getline", "auto",
             "make_shared", "unique_ptr", "shared_ptr",
+            "setup", "loop", "pinMode", "digitalWrite", "digitalRead", "analogRead", "analogWrite", "delay", "delayMicroseconds", "millis", "micros", "tone", "noTone", "map", "constrain", "Serial",
+            "begin", "println", "print", "available", "read", "attachInterrupt", "HIGH", "LOW", "INPUT", "OUTPUT", "INPUT_PULLUP", "LED_BUILTIN", "byte", "String", "A0", "A1", "A2", "A3", "A4", "A5",
         ],
         "java" => &["System", "out", "println", "print", "String", "Integer", "Double", "Scanner", "nextLine", "nextInt", "ArrayList", "HashMap", "List", "Map", "length", "size", "add", "get", "main", "Math"],
         "cs" => &["Console", "WriteLine", "ReadLine", "Write", "List", "Dictionary", "Math", "Parse", "ToString", "Length", "Count", "Add", "System", "Main", "Linq", "string", "int"],
@@ -211,7 +213,7 @@ fn family(lang: &str) -> &'static str {
         "css" | "scss" | "less" => "css",
         "js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" => "js",
         "py" | "pyw" => "py",
-        "cpp" | "cc" | "cxx" | "hpp" | "hh" => "cpp",
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" => "cpp",
         "c" | "h" => "c",
         "java" => "java",
         "cs" => "cs",
@@ -756,8 +758,18 @@ fn snippets(lang: &str) -> &'static [(&'static str, &'static str, &'static str)]
             ("while", "while (${1:condition}) {\n\t$0\n}", "while (condition) { }"),
             ("inc", "#include <${1:stdio.h}>$0", "#include <…>"),
         ],
-        "cpp" | "cc" | "cxx" | "hpp" | "hh" => &[
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" => &[
             ("main", "#include <iostream>\n\nint main() {\n\t$0\n\treturn 0;\n}", "int main()"),
+            ("setup", "void setup() {\n\t$0\n}", "void setup()"),
+            ("loop", "void loop() {\n\t$0\n}", "void loop()"),
+            ("pinMode", "pinMode(${1:13}, ${2:OUTPUT});$0", "pinMode(pin, mode)"),
+            ("digitalWrite", "digitalWrite(${1:13}, ${2:HIGH});$0", "digitalWrite(pin, value)"),
+            ("digitalRead", "digitalRead(${1:2})$0", "digitalRead(pin)"),
+            ("analogRead", "analogRead(${1:A0})$0", "analogRead(pin)"),
+            ("analogWrite", "analogWrite(${1:9}, ${2:128});$0", "analogWrite(pin, 0–255)"),
+            ("delay", "delay(${1:500});$0", "delay(ms)"),
+            ("Serial.begin", "Serial.begin(${1:9600});$0", "Serial.begin(baud)"),
+            ("Serial.println", "Serial.println($1);$0", "Serial.println(…)"),
             ("cout", "std::cout << $1 << std::endl;$0", "std::cout << … << std::endl;"),
             ("cin", "std::cin >> $1;$0", "std::cin >> …;"),
             ("for", "for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}", "for (int i = 0; …)"),
@@ -808,7 +820,7 @@ fn callable(lang: &str, w: &str) -> bool {
             matches!(w, "log" | "error" | "getElementById" | "querySelector" | "querySelectorAll" | "addEventListener" | "createElement" | "appendChild" | "parse" | "stringify" | "fetch" | "then" | "setTimeout" | "setInterval" | "push" | "pop" | "map" | "filter" | "forEach" | "reduce" | "includes" | "indexOf" | "slice" | "splice" | "join" | "split" | "keys" | "values" | "entries" | "require" | "floor" | "random")
         }
         "c" | "h" => matches!(w, "printf" | "scanf" | "puts" | "gets" | "fgets" | "malloc" | "calloc" | "free" | "strlen" | "strcpy" | "strcmp" | "strcat" | "memset" | "memcpy" | "fopen" | "fclose"),
-        "cpp" | "cc" | "cxx" | "hpp" | "hh" => matches!(w, "push_back" | "size" | "begin" | "end" | "sort" | "getline" | "printf" | "make_shared"),
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" => matches!(w, "push_back" | "size" | "begin" | "end" | "sort" | "getline" | "printf" | "make_shared"),
         "java" => matches!(w, "println" | "print" | "nextLine" | "nextInt" | "length" | "size" | "add" | "get"),
         "cs" => matches!(w, "WriteLine" | "ReadLine" | "Write" | "Parse" | "ToString" | "Add"),
         "go" => matches!(w, "Println" | "Printf" | "Sprintf" | "len" | "append" | "make" | "Scan"),
@@ -1314,6 +1326,10 @@ mod tests {
         assert_eq!(n[0].label, "upper");
         assert_eq!(n[0].insert.as_deref(), Some("upper()$0"));
         assert!(at("cpp", "std::co").iter().any(|i| i.label == "cout"));
+        // Arduino (.ino): funkcie dosky a Serial.
+        assert!(at("ino", "digitalW").iter().any(|i| i.label == "digitalWrite"));
+        assert!(at("ino", "del").iter().any(|i| i.label == "delay"));
+        assert!(at("ino", "Serial.pr").iter().any(|i| i.label == "println"));
         assert_eq!(at("py", "import ra")[0].label, "random");
         assert!(at("py", "from math import sq").iter().any(|i| i.label == "sqrt"));
     }

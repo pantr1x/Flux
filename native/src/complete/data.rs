@@ -467,6 +467,7 @@ rs std: io;fs;env;collections;thread;time;process;fmt;path;sync
 rs io: stdin();stdout();Write;Read;BufRead;Result;Error
 rs fs: read_to_string(path);write(path, contents);read(path);create_dir_all(path);remove_file(path);read_dir(path);copy(from, to);rename(from, to)
 cpp std: cout;cin;cerr;endl;string;vector;map;unordered_map;set;unordered_set;pair;make_pair(a, b);sort(first, last);reverse(first, last);max(a, b);min(a, b);swap(a, b);to_string(value);stoi(s);stod(s);getline(in, str);find(first, last, value);accumulate(first, last, init);array;queue;stack;deque;priority_queue;unique_ptr;shared_ptr;make_unique();make_shared();optional;tuple;abs(x);sqrt(x);pow(x, y)
+cpp Serial: begin(baud);end();print(value);println(value);write(byte);available();read();readString();readStringUntil(char);parseInt();parseFloat();flush();setTimeout(ms);peek()
 cpp *: push_back(value);emplace_back(args);pop_back();size();empty();clear();begin();end();front();back();at(index);insert(pos, value);erase(pos);find(key);count(key);substr(pos, len);length();c_str();append(str);resize(n);reserve(n);first;second
 ";
 

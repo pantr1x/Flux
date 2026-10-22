@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.76
+
+**Suggestions in `.ino` files**
+- Arduino sketches now get suggestions: `pinMode`, `digitalWrite`, `digitalRead`, `analogRead`, `analogWrite`, `delay`, `millis`, `tone`, `HIGH` / `LOW` / `OUTPUT` / `INPUT_PULLUP`, `A0`…, and after `Serial.` the usual methods. Snippets: `setup`, `loop`, `pinMode`, `digitalWrite`, `delay`, `Serial.begin`… Error hints work in `.ino` too.
+
 ## 0.9.75
 
 **Pick the script, set up while creating the project**
