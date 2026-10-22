@@ -2,6 +2,10 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.78
+
+- In `.ino` files, `pinMode`, `digitalWrite`, `digitalRead`, `analogWrite` and `analogRead` are inserted as just `name()` with the cursor inside – no more `HIGH`, `OUTPUT` or `128` filled in.
+
 ## 0.9.77
 
 - In `.ino` files, the pin functions (`pinMode`, `digitalWrite`, `digitalRead`, `analogWrite`, `analogRead`) are inserted with an **empty pin spot**: the cursor waits there for you to type the pin, and Tab moves on to the value.
