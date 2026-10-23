@@ -439,11 +439,12 @@ impl App {
             .iter()
             .map(|e| crate::lint::Diag { line: e.line.saturating_sub(1), col: e.col.saturating_sub(1), len: 0, err: true, msg: e.msg.clone(), color: None })
             .collect();
-        if let Some(gen) = self.hls.get(&path).map(|h| h.gen) {
+        let gen0 = self.tabs[i].sess.as_deref().map(|s| s.gen0).unwrap_or(0);
+        if let Some(gen) = self.hls.get(&path).map(|h| h.gen).filter(|g| *g == gen0) {
             self.lint_asked.insert(path.clone(), gen);
-            self.lint_res.lock().unwrap().insert(path, (gen, diags));
+            self.lint_res.lock().unwrap().insert(path.clone(), (gen, diags));
         }
-        if i == self.active {
+        if i == self.active && self.hls.get(&path).map(|h| h.gen) == Some(gen0) {
             self.lint_jump = Some(errs[0].line.saturating_sub(1));
         }
         self.status = tf("Error on line {n}: {msg}", &[("n", &errs[0].line.to_string()), ("msg", &errs[0].msg)]);
