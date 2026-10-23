@@ -1,0 +1,11 @@
+native : 13 MB private (Task Manager), 24.4 MB working set, 1 processes
+       13.0 MB  flux-native (pid 7300)
+native-liveserver : 63.9 MB private (Task Manager), 259 MB working set, 7 processes
+       24.7 MB  msedgewebview2 (pid 1348)
+       11.2 MB  flux-native (pid 7980)
+       10.3 MB  msedgewebview2#5 (pid 8568)
+        8.9 MB  msedgewebview2#3 (pid 7592)
+        4.6 MB  msedgewebview2#2 (pid 4260)
+        2.7 MB  msedgewebview2#4 (pid 3024)
+        1.5 MB  msedgewebview2#1 (pid 2124)
+Program size: 16 MB
