@@ -1825,7 +1825,8 @@ pub fn explain(msg: &str) -> String {
     } else if m.contains("missing terminating") {
         t("This text has no closing quote – add \" at its end.")
     } else if m.contains("no such file or directory") {
-        tf("The file '{name}' was not found – install the library in the Arduino panel (Libraries).", &[("name", &q)])
+        let h = if q.is_empty() { msg.split(':').next().unwrap_or("").trim().to_string() } else { q };
+        tf("The file '{name}' was not found – the library is probably not installed yet.", &[("name", &h)])
     } else if m.contains("redeclaration") || m.contains("redefinition") {
         tf("'{name}' is already defined – use each name only once.", &[("name", &q)])
     } else if m.contains("invalid conversion") || m.contains("cannot convert") {
@@ -2058,6 +2059,7 @@ mod tests {
 
     #[test]
     fn arduino_compile_errors() {
+        assert!(explain("DHT.h: No such file or directory").contains("'DHT.h'"));
         let raw = "[31m/home/u/.flux/sketches/pin_9/pin_9.ino:3:20: error: too few arguments to function 'void digitalWrite(uint8_t, uint8_t)'[0m
 /home/u/x/pin_9.ino:7:3: error: expected ';' before 'else'
 /usr/lib/foo.h:1:1: error: bad

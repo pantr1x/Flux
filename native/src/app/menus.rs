@@ -201,6 +201,8 @@ impl App {
                     self.set("panelPos", json!(v), ctx);
                 } else if let Some(v) = id.strip_prefix("sidePos:") {
                     self.set("sidePos", json!(v), ctx);
+                } else if let Some(lib) = id.strip_prefix("lib-install:") {
+                    self.ard_install_lib(lib);
                 } else if id == "img-refs" || id.starts_with("img-favicon:") {
                     self.img_ask_done(id);
                 } else if let Some(p) = id.strip_prefix("trash:") {

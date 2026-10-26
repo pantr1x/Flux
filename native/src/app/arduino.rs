@@ -416,6 +416,16 @@ impl App {
         }
     }
 
+    // inštalácia knižnice (po otázke po neúspešnej kompilácii)
+    pub(super) fn ard_install_lib(&mut self, lib: &str) {
+        let Some(cli) = self.ard_cli() else {
+            self.ard_need_setup();
+            return;
+        };
+        self.ard_run(&tf("Installing the {name} library", &[("name", lib)]), vec![ard::v(&cli, &["lib", "install", lib])]);
+        *self.ard.installed.lock().unwrap() = None;
+    }
+
     // po neúspešnej kompilácii .ino: chyby kompilátora → podčiarknutie v kóde, skok na riadok a zrozumiteľný text vo Výstupe
     pub(super) fn ard_errors(&mut self, sid: u64) {
         let Some(i) = self.tabs.iter().position(|t| t.sess.as_deref().map(|s| s.id) == Some(sid)) else { return };
@@ -434,6 +444,25 @@ impl App {
         }
         if let Some(s) = self.tabs[i].sess.as_deref_mut() {
             s.out.feed(&msg);
+        }
+        // chýbajúca knižnica: ponúknuť inštaláciu
+        let raw = self.tabs[i].sess.as_deref().map(|s| s.raw.clone()).unwrap_or_default();
+        let missing = raw.lines().find_map(|l| {
+            let l = l.trim();
+            let h = l.split("fatal error:").nth(1)?.split(':').next()?.trim();
+            l.contains("No such file or directory").then(|| h.to_string())
+        });
+        if let Some(h) = missing {
+            let lib = ard::includes(&format!("#include <{h}>")).into_iter().find_map(|x| x.1);
+            match lib {
+                Some(lib) => {
+                    self.ask = Some(super::menus::Ask { text: tf("The library \"{lib}\" is not installed. Install it now?", &[("lib", &lib)]), yes: t("Install"), action: format!("lib-install:{lib}") });
+                }
+                None => {
+                    self.ask = None;
+                    self.status = tf("The file '{name}' was not found – look for the library in the Arduino panel (Libraries).", &[("name", &h)]);
+                }
+            }
         }
         let diags: Vec<crate::lint::Diag> = errs
             .iter()

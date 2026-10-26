@@ -1492,6 +1492,13 @@ impl App {
             // udalosti programu a terminálu nesú značku karty (Sess::emit); zatvorená karta ich zahodí
             if matches!(ch.as_str(), "run:start" | "run:data" | "run:exit" | "shell:data" | "shell:exit") {
                 let sid = v["sid"].as_u64().unwrap_or(0);
+                if ch == "run:start" || (ch == "run:exit" && v["v"]["code"].as_i64() == Some(0)) {
+                    // nový beh / úspech: staré chyby z kompilácie preč, kontrola kódu sa spustí nanovo
+                    if let Some(pth) = self.tabs.iter().find(|t| t.sess.as_deref().map(|s| s.id) == Some(sid)).map(|t| t.path.clone()) {
+                        self.lint_res.lock().unwrap().remove(&pth);
+                        self.lint_asked.remove(&pth);
+                    }
+                }
                 if ch == "run:start" {
                     let g = self.tabs.iter().find(|t| t.sess.as_deref().map(|s| s.id) == Some(sid)).and_then(|t| self.hls.get(&t.path)).map(|h| h.gen).unwrap_or(0);
                     if let Some(s) = self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()).find(|s| s.id == sid) {
