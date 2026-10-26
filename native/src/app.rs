@@ -714,7 +714,12 @@ impl App {
         let item = sg.items.get(i)?;
         let tab = self.tabs.iter_mut().find(|t| t.path == sg.path)?;
         let b = |c: usize| tab.text.char_indices().nth(c).map(|(b, _)| b).unwrap_or(tab.text.len());
-        let (a, e) = (b(sg.start), b(sg.end));
+        let (mut a, e) = (b(sg.start), b(sg.end));
+        // úryvok začínajúci „#“ (#include) nahradí aj už napísaný „#“, nech nevznikne „##include“
+        let hash_back = item.insert.as_deref().is_some_and(|x| x.starts_with('#')) && tab.text[..a].ends_with('#');
+        if hash_back {
+            a -= 1;
+        }
         let Some(body) = item.insert.clone() else {
             tab.text.replace_range(a..e, &item.label);
             self.last_edit = Some(Instant::now());
@@ -728,7 +733,8 @@ impl App {
         self.sug_again = body.ends_with("=\"$0\"");
         tab.text.replace_range(a..e, &text);
         self.last_edit = Some(Instant::now());
-        let abs: Vec<(usize, usize)> = stops.iter().map(|(x, y)| (sg.start + x, sg.start + y)).collect();
+        let base = sg.start - usize::from(hash_back);
+        let abs: Vec<(usize, usize)> = stops.iter().map(|(x, y)| (base + x, base + y)).collect();
         let first = abs[0];
         self.snip = (abs.len() > 1).then(|| Snip { path: sg.path.clone(), stops: abs, at: 0, len: tab.text.chars().count() });
         self.snip_sel = Some(first);

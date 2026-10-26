@@ -2,6 +2,10 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.83
+
+- Typing `#inc` and accepting the suggestion no longer gives `##include` – the `#` you typed is replaced.
+
 ## 0.9.82
 
 - `.ino` snippets: `pinMode`, `digitalWrite` and `analogWrite` now end with `;` – type the pin, press Tab, and the cursor jumps behind the semicolon.
