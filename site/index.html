@@ -703,7 +703,7 @@
 
     // Linux: príkazy pre skript, Flatpak, Arch (pacman) a Debian/Ubuntu (apt). Balíčky sú vo vetve ci-native-linux.
     const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
-    const LIN = `https://github.com/${REPO}/raw/ci-native-linux`;
+    const LIN = `https://raw.githubusercontent.com/${REPO}/ci-native-linux`;
     const LX = [
       ['Script', 'curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash', 'Any distribution. Installs into your home folder, updates itself.'],
       ['Arch / CachyOS', `echo -e '\\n[flux]\\nSigLevel = Optional TrustAll\\nServer = ${LIN}/pacman' | sudo tee -a /etc/pacman.conf && sudo pacman -Sy flux-editor`, 'Adds the [flux] repository once. After that: sudo pacman -S flux-editor, and updates come with pacman -Syu.'],
