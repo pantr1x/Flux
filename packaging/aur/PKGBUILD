@@ -1,0 +1,50 @@
+# Maintainer: pantr1x <https://github.com/pantr1x>
+# AUR: flux-editor-git – Flux (Rust) zostavený zo zdrojov. Inštalácia: yay -S flux-editor-git
+pkgname=flux-editor-git
+pkgver=0.9.55.r0.g0000000
+pkgrel=1
+pkgdesc='Flux – a small, fast code editor with one-click Run and Live Server (Rust, egui)'
+arch=('x86_64')
+url='https://pantr1x.github.io/Flux/'
+license=('MIT')
+depends=('libxkbcommon' 'libglvnd' 'libx11' 'libxcb' 'mesa' 'curl' 'fontconfig')
+makedepends=('cargo' 'git' 'pkgconf')
+optdepends=('webkit2gtk-4.1: Live Server page inside Flux')
+provides=('flux' 'flux-editor')
+conflicts=('flux-editor')
+options=('!lto')
+source=("$pkgname::git+https://github.com/pantr1x/Flux.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  _v=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' native/Cargo.toml | head -n1)
+  printf '%s.r%s.g%s' "$_v" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$pkgname"
+  export CARGO_TARGET_DIR=target RUSTUP_TOOLCHAIN=stable
+  export GITHUB_SHA=packaged   # nie "dev" (to by vypínalo veci); aktualizácie vypína balík sám (/usr)
+  cargo build -p flux-native --release --locked
+}
+
+package() {
+  cd "$pkgname"
+  install -Dm755 target/release/flux-native "$pkgdir/usr/bin/flux"
+  install -Dm644 site/icon.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/flux.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/flux.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=Flux
+GenericName=Code Editor
+Comment=A small, good-looking code editor
+Exec=flux %F
+Icon=flux
+Terminal=false
+StartupWMClass=flux
+Categories=Development;TextEditor;IDE;
+MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;
+DESK
+}
