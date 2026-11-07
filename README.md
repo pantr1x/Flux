@@ -49,13 +49,15 @@ Pick one. Packages are built on every release and live on the [`ci-native-linux`
 | How | Command |
 |---|---|
 | **Script** (any distro, updates itself) | `curl -fsSL https://pantr1x.github.io/Flux/install.sh \| bash` |
-| **Arch / CachyOS / Manjaro (pacman)** | `curl -fsSLO https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/PKGBUILD && makepkg -si` |
-| **Flatpak** | `curl -fsSLO https://github.com/pantr1x/Flux/raw/ci-native-linux/Flux.flatpak && flatpak install --user -y Flux.flatpak` |
-| **Debian / Ubuntu (apt)** | `curl -fsSLO https://github.com/pantr1x/Flux/raw/ci-native-linux/flux-editor_amd64.deb && sudo apt install ./flux-editor_amd64.deb` |
+| **Arch / CachyOS / Manjaro (pacman)** | `echo -e '\n[flux]\nSigLevel = Optional TrustAll\nServer = https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/pacman' \| sudo tee -a /etc/pacman.conf && sudo pacman -Sy flux-editor` |
+| **Flatpak** | `flatpak remote-add --user --if-not-exists flux https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/Flux.flatpakrepo && flatpak install --user -y flux dev.flux.Flux` |
+| **Debian / Ubuntu (apt)** | `echo 'deb [trusted=yes] https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/apt stable main' \| sudo tee /etc/apt/sources.list.d/flux.list && sudo apt update && sudo apt install flux-editor` |
+| **Fedora (dnf)** | `sudo curl -fsSLo /etc/yum.repos.d/flux.repo https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/flux.repo && sudo dnf install flux-editor` |
 
-- **Package names:** pacman `flux-native-bin` (it provides `flux`), apt `flux-editor`, Flatpak `dev.flux.Flux`. The command to start it is `flux`.
-- Flux is **not in the official repositories**, so `pacman -Ss flux` will not list it. Check an installed copy with `pacman -Qs flux-native`; remove it with `sudo pacman -Rns flux-native-bin`.
-- A package is updated by re-running its command (the script version updates itself). Uninstall the script version with `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash -s -- --uninstall`.
+- The repository is added once; after that Flux installs and updates like any other package (`pacman -Syu`, `apt upgrade`, `dnf upgrade`, `flatpak update`). The command to start it is `flux`.
+- **Package names:** `flux-editor` (pacman, apt, dnf; it provides `flux`) and `dev.flux.Flux` (Flatpak). The repositories are not signed yet, so the commands trust them explicitly. Flux is not in the distributions' own repositories (yet), so `pacman -Ss flux` finds it only after you add `[flux]`.
+- Without a repository on Arch: `curl -fsSLO https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/PKGBUILD && makepkg -si`.
+- Uninstall the script version with `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash -s -- --uninstall`. Package versions: `sudo pacman -Rns flux-editor`, `sudo apt remove flux-editor`, `sudo dnf remove flux-editor`, `flatpak uninstall dev.flux.Flux`.
 
 Programming languages are not bundled, so Flux stays small. It downloads only the ones you pick, from their official sources.
 

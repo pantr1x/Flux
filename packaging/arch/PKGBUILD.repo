@@ -1,0 +1,33 @@
+pkgname=flux-editor
+pkgver=@VER@
+pkgrel=1
+pkgdesc='Flux – a small, fast code editor with one-click Run and Live Server (Rust)'
+arch=('x86_64')
+url='https://pantr1x.github.io/Flux/'
+license=('MIT')
+depends=('libxkbcommon' 'libglvnd' 'libx11' 'libxcb' 'mesa')
+optdepends=('webkit2gtk-4.1: Live Server page inside Flux')
+provides=('flux')
+options=('!strip')
+_raw=''
+source=("flux-native" "flux.png")
+sha256sums=('SKIP' 'SKIP')
+
+
+package() {
+  install -Dm755 flux-native "$pkgdir/usr/bin/flux"
+  install -Dm644 flux.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/flux.png"
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/flux.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=Flux
+GenericName=Code Editor
+Comment=A small, good-looking code editor
+Exec=flux %F
+Icon=flux
+Terminal=false
+StartupWMClass=flux
+Categories=Development;TextEditor;IDE;
+MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;
+DESK
+}

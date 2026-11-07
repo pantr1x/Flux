@@ -327,7 +327,7 @@
     <div class="platforms" aria-label="Platforms">
       <span class="plat on"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>Windows 10 &amp; 11<small>available</small></span>
       <span class="plat"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.9-1.1-2.9-4.2zM13.9 5.2c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.5z"/></svg>macOS<small>coming soon</small></span>
-      <span class="plat on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg>Linux<small>Flatpak · pacman · apt</small></span>
+      <span class="plat on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg>Linux<small>pacman · Flatpak · apt · dnf</small></span>
     </div>
     <div class="lx" id="linux-cmd">
       <div class="lx-tabs" id="lx-tabs" role="tablist" aria-label="Install on Linux"></div>
@@ -706,11 +706,11 @@
     const LIN = `https://github.com/${REPO}/raw/ci-native-linux`;
     const LX = [
       ['Script', 'curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash', 'Any distribution. Installs into your home folder, updates itself.'],
-      ['Flatpak', `curl -fsSLO ${LIN}/Flux.flatpak && flatpak install --user -y Flux.flatpak`, 'Run it with: flatpak run dev.flux.Flux. Updates: install the newest Flux.flatpak again.'],
-      ['Arch (pacman)', `curl -fsSLO ${LIN}/PKGBUILD && makepkg -si`, 'Builds the flux-native-bin package and installs it with pacman. Update: run it again.'],
-      ['Debian / Ubuntu', `curl -fsSLO ${LIN}/flux-editor_amd64.deb && sudo apt install ./flux-editor_amd64.deb`, 'Update: run it again with the newest .deb.'],
-    ];
-    let lxi = 0;
+      ['Arch / CachyOS', `echo -e '\\n[flux]\\nSigLevel = Optional TrustAll\\nServer = ${LIN}/pacman' | sudo tee -a /etc/pacman.conf && sudo pacman -Sy flux-editor`, 'Adds the [flux] repository once. After that: sudo pacman -S flux-editor, and updates come with pacman -Syu.'],
+      ['Flatpak', `flatpak remote-add --user --if-not-exists flux ${LIN}/Flux.flatpakrepo && flatpak install --user -y flux dev.flux.Flux`, 'Run it with: flatpak run dev.flux.Flux. Updates come with flatpak update.'],
+      ['Debian / Ubuntu', `echo 'deb [trusted=yes] ${LIN}/apt stable main' | sudo tee /etc/apt/sources.list.d/flux.list && sudo apt update && sudo apt install flux-editor`, 'Adds the repository once. Updates come with apt upgrade.'],
+      ['Fedora', `sudo curl -fsSLo /etc/yum.repos.d/flux.repo ${LIN}/flux.repo && sudo dnf install flux-editor`, 'Adds the repository once. Updates come with dnf upgrade.'],
+    ];    let lxi = 0;
     const lxShow = () => {
       $('#lx-tabs').innerHTML = LX.map((x, i) => `<button type="button" role="tab" class="${i === lxi ? 'on' : ''}" data-i="${i}">${esc(x[0])}</button>`).join('');
       $('#linux-cmd-text').textContent = LX[lxi][1];
@@ -730,7 +730,7 @@
     if (isLinux) {
       document.querySelectorAll('[data-dl-label]').forEach((x) => (x.textContent = 'Install Flux for Linux'));
       $('#dl-text').textContent = 'Install Flux for Linux';
-      $('#dl-meta').textContent = 'script, Flatpak, pacman or apt';
+      $('#dl-meta').textContent = 'script, pacman, Flatpak, apt or dnf';
       document.querySelectorAll('[data-dl]').forEach((a) => {
         a.setAttribute('href', '#linux-cmd');
         a.addEventListener('click', (e) => { e.preventDefault(); $('#linux-cmd').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
@@ -750,7 +750,7 @@
         if (!isLinux) document.querySelectorAll('[data-dl]').forEach((a) => (a.href = EXE));
         document.querySelectorAll('[data-dl-label]').forEach((s) => (s.textContent = isLinux ? 'Install Flux for Linux' : `Download Flux ${v}`));
         $('#dl-text').textContent = isLinux ? 'Install Flux for Linux' : `Download Flux ${v}`;
-        $('#dl-meta').textContent = isLinux ? 'script, Flatpak, pacman or apt' : `Flux-Native.exe · ${mb(info.size || 0)} · no installation`;
+        $('#dl-meta').textContent = isLinux ? 'script, pacman, Flatpak, apt or dnf' : `Flux-Native.exe · ${mb(info.size || 0)} · no installation`;
         $('#st-ver').textContent = v;
         if (info.size) $('#st-size').textContent = mb(info.size);
         $('#rel-name').textContent = `Flux ${v}`;

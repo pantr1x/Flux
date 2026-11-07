@@ -1,7 +1,8 @@
 # Maintainer: pantr1x
-# Flux Native (Rust) – hotový program z GitHubu. Inštalácia:
+# Flux (Rust) – hotový program z GitHubu, bez pridania repozitára:
 #   curl -fsSLO https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/PKGBUILD && makepkg -si
-pkgname=flux-native-bin
+# (Jednoduchšie: pridaj repozitár [flux] do pacman.conf, pozri README.)
+pkgname=flux-editor
 pkgver=0.9.55
 pkgrel=1
 pkgdesc='Flux – a small, fast code editor with one-click Run and Live Server (Rust)'
@@ -11,11 +12,10 @@ license=('MIT')
 depends=('libxkbcommon' 'libglvnd' 'libx11' 'libxcb' 'mesa')
 optdepends=('webkit2gtk-4.1: Live Server page inside Flux')
 provides=('flux')
-conflicts=('flux')
 options=('!strip')
 _raw='https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux'
 source=("flux-native::$_raw/Flux-Native" "flux.png::https://pantr1x.github.io/Flux/icon.png")
-sha256sums=('SKIP' 'SKIP') # program sa na CI stavia znova; native.json má jeho sha256
+sha256sums=('SKIP' 'SKIP')
 
 pkgver() {
   curl -fsSL "$_raw/native.json" | tr -d '\n ' | grep -o '"version":"[^"]*"' | head -n1 | cut -d'"' -f4

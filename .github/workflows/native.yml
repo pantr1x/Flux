@@ -478,11 +478,37 @@ jobs:
           packaging/deb/build-deb.sh target/release/flux-native "$ver" site/icon.png outl/flux-editor_amd64.deb
           dpkg-deb -I outl/flux-editor_amd64.deb | head -n 8
           cp packaging/arch/PKGBUILD outl/PKGBUILD
+          # --- repozitáre: pacman ([flux]), apt, dnf, flatpak – po jednom pridaní sa inštaluje a aktualizuje bežným príkazom ---
+          base=https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux
+          # pacman (Arch kontajner, makepkg nesmie bežať ako root)
+          mkdir -p pac outl/pacman
+          cp target/release/flux-native pac/flux-native; cp site/icon.png pac/flux.png
+          sed "s/@VER@/$ver/" packaging/arch/PKGBUILD.repo > pac/PKGBUILD
+          docker run --rm -v "$PWD/pac:/w" archlinux:latest bash -c 'pacman -Syu --noconfirm base-devel >/dev/null && useradd -m b && chown -R b /w && cd /w && su b -c "makepkg -f --nodeps" && repo-add flux.db.tar.gz *.pkg.tar.zst'
+          cp -L pac/flux.db.tar.gz pac/flux.files.tar.gz pac/*.pkg.tar.zst outl/pacman/
+          cp -L pac/flux.db.tar.gz outl/pacman/flux.db; cp -L pac/flux.files.tar.gz outl/pacman/flux.files
+          # apt (bez podpisu: trusted=yes)
+          mkdir -p outl/apt/pool outl/apt/dists/stable/main/binary-amd64
+          mv outl/flux-editor_amd64.deb outl/apt/pool/
+          (cd outl/apt && apt-ftparchive packages pool > dists/stable/main/binary-amd64/Packages && gzip -kf dists/stable/main/binary-amd64/Packages \
+            && apt-ftparchive -o APT::FTPArchive::Release::Origin=Flux -o APT::FTPArchive::Release::Suite=stable -o APT::FTPArchive::Release::Codename=stable -o APT::FTPArchive::Release::Architectures=amd64 -o APT::FTPArchive::Release::Components=main release dists/stable > dists/stable/Release)
+          # dnf / rpm
+          sudo apt-get install -y rpm createrepo-c
+          mkdir -p rpmw/SOURCES outl/rpm
+          cp target/release/flux-native rpmw/SOURCES/; cp site/icon.png rpmw/SOURCES/flux.png
+          printf '[Desktop Entry]\nType=Application\nName=Flux\nGenericName=Code Editor\nComment=A small, good-looking code editor\nExec=flux %%F\nIcon=flux\nTerminal=false\nStartupWMClass=flux\nCategories=Development;TextEditor;IDE;\n' > rpmw/SOURCES/flux.desktop
+          sed "s/@VER@/$ver/" packaging/rpm/flux-editor.spec > rpmw/flux-editor.spec
+          rpmbuild -bb --define "_topdir $PWD/rpmw" --target x86_64 rpmw/flux-editor.spec
+          cp rpmw/RPMS/x86_64/*.rpm outl/rpm/ && createrepo_c outl/rpm
+          printf '[flux]\nname=Flux\nbaseurl=%s/rpm\nenabled=1\ngpgcheck=0\n' "$base" > outl/flux.repo
           cp target/release/flux-native build-in/flux-native
           sudo apt-get install -y flatpak flatpak-builder
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak-builder --user --force-clean --install-deps-from=flathub --repo=fp-repo fp-out packaging/flatpak/dev.flux.Flux.yml
           flatpak build-bundle fp-repo outl/Flux.flatpak dev.flux.Flux
+          flatpak build-update-repo fp-repo
+          cp -r fp-repo outl/flatpak-repo
+          printf '[Flatpak Repo]\nTitle=Flux\nUrl=%s/flatpak-repo\nGPGVerify=false\nHomepage=https://pantr1x.github.io/Flux/\n' "$base" > outl/Flux.flatpakrepo
           ls -l outl
       - name: Publish (branch ci-native-linux)
         if: success()
