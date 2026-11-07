@@ -998,6 +998,7 @@
  "Update {n} paths to {name} in {f} files?",
  "Updated {n} paths.",
  "Updates",
+ "Updates come from your package manager (Flatpak, pacman, apt…)",
  "Updating Flux to {v}…",
  "Updating {n} %",
  "Updating {p} %",

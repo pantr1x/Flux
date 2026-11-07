@@ -5,6 +5,7 @@
 - Website: https://pantr1x.github.io/Flux/
 - Download for Windows (newest, no installation): https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe
 - Linux install (one command, updates itself): `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash`
+- Linux packages: Flatpak (`Flux.flatpak`), Arch `PKGBUILD` (pacman), Debian/Ubuntu `.deb` – all at https://github.com/pantr1x/Flux/tree/ci-native-linux
 - Source code: https://github.com/pantr1x/Flux
 - Price: free, no account, no ads
 

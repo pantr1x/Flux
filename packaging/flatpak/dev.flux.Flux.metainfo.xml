@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.flux.Flux</id>
+  <name>Flux</name>
+  <summary>A small, fast code editor with one-click Run and Live Server</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <url type="homepage">https://pantr1x.github.io/Flux/</url>
+  <url type="bugtracker">https://github.com/pantr1x/Flux/issues</url>
+  <description>
+    <p>Flux is a free code editor written in Rust. Run Python, JavaScript, C++ and more with one click, see websites live while you type, and get help from Claude AI.</p>
+  </description>
+  <launchable type="desktop-id">dev.flux.Flux.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="0.9.55" date="2026-11-07"/></releases>
+</component>

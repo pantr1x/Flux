@@ -56,7 +56,7 @@ ver=$(field version); want=$(field sha256)
 [ -n "$ver" ] && [ -n "$want" ] || die "Unexpected answer from $BASE/native.json"
 
 say "Downloading Flux $ver"
-# starý Flux (Electron AppImage z install-electron.sh) by sa inak mohol spúšťať namiesto nového
+# starý Flux (Electron AppImage) by sa inak mohol spúšťať namiesto nového
 if [ -e "$DIR/Flux.AppImage" ] || ls "$APPS"/appimagekit*[Ff]lux*.desktop >/dev/null 2>&1; then
   say "Removing the old Flux (Electron AppImage)"
   rm -f "$DIR/Flux.AppImage" "$APPS"/appimagekit*[Ff]lux*.desktop

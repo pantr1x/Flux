@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Flux
+GenericName=Code Editor
+Comment=A small, good-looking code editor
+Exec=flux %F
+Icon=dev.flux.Flux
+Terminal=false
+StartupWMClass=flux
+Categories=Development;TextEditor;IDE;
+MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;

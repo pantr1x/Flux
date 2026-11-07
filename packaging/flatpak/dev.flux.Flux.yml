@@ -1,0 +1,31 @@
+# Flatpak z hotového programu (CI ho postaví do ./build-in): flatpak-builder --user --install-deps-from=flathub --force-clean out packaging/flatpak/dev.flux.Flux.yml
+app-id: dev.flux.Flux
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: flux
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+  - --filesystem=xdg-run/gvfs
+modules:
+  - name: flux
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 flux-native /app/bin/flux
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/dev.flux.Flux.png
+      - install -Dm644 dev.flux.Flux.desktop /app/share/applications/dev.flux.Flux.desktop
+      - install -Dm644 dev.flux.Flux.metainfo.xml /app/share/metainfo/dev.flux.Flux.metainfo.xml
+    sources:
+      - type: file
+        path: ../../build-in/flux-native
+      - type: file
+        path: ../../site/icon.png
+      - type: file
+        path: dev.flux.Flux.desktop
+      - type: file
+        path: dev.flux.Flux.metainfo.xml

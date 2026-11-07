@@ -217,8 +217,16 @@ pub fn remove_helper() {
     });
 }
 
+// Flatpak / balíček z distribúcie (/usr/bin/flux-native): program je len na čítanie, aktualizuje ho správca balíčkov
+pub fn managed() -> bool {
+    if cfg!(windows) || std::env::var("FLUX_UPDATE_URL").is_ok() {
+        return false;
+    }
+    std::env::var("FLATPAK_ID").is_ok() || std::env::var("FLUX_PACKAGED").is_ok() || exe().map_or(false, |e| e.starts_with("/usr") || e.starts_with("/app"))
+}
+
 pub fn enabled() -> bool {
-    SHA != "dev" || std::env::var("FLUX_UPDATE_URL").is_ok()
+    (SHA != "dev" && !managed()) || std::env::var("FLUX_UPDATE_URL").is_ok()
 }
 
 impl Default for Updater {

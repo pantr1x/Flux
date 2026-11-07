@@ -1088,6 +1088,7 @@
  "Update {n} paths to {name} in {f} files?": "Upraviť cesty k {name} ({n}) v súboroch: {f}?",
  "Updated {n} paths.": "Upravené cesty: {n}.",
  "Updates": "Aktualizácie",
+ "Updates come from your package manager (Flatpak, pacman, apt…)": "Aktualizácie prichádzajú zo správcu balíčkov (Flatpak, pacman, apt…)",
  "Updating Flux to {v}…": "Aktualizujem Flux na {v}…",
  "Updating {n} %": "Aktualizujem {n} %",
  "Updating {p} %": "Aktualizujem {p} %",

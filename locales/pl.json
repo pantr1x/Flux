@@ -1041,6 +1041,7 @@
  "Update {n} paths to {name} in {f} files?": "Zaktualizować ścieżki do {name} ({n}) w plikach: {f}?",
  "Updated {n} paths.": "Zaktualizowano ścieżki: {n}.",
  "Updates": "Aktualizacje",
+ "Updates come from your package manager (Flatpak, pacman, apt…)": "Aktualizacje przychodzą z menedżera pakietów (Flatpak, pacman, apt…)",
  "Updating Flux to {v}…": "Aktualizacja Fluxa do {v}…",
  "Updating {n} %": "Aktualizacja {n} %",
  "Updating {p} %": "Aktualizacja {p} %",

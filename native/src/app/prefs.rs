@@ -1012,6 +1012,7 @@ impl App {
                 use crate::update::State as U;
                 let st = self.upd.state();
                 let note = match &st {
+                    _ if crate::update::managed() => t("Updates come from your package manager (Flatpak, pacman, apt…)"),
                     _ if !crate::update::enabled() => t("Development build – updates are off"),
                     U::Idle => String::new(),
                     U::Checking => t("Checking for updates…"),

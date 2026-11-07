@@ -1026,6 +1026,7 @@
  "Update {n} paths to {name} in {f} files?": "Оновити шляхи до {name} ({n}) у файлах: {f}?",
  "Updated {n} paths.": "Оновлено шляхів: {n}.",
  "Updates": "Оновлення",
+ "Updates come from your package manager (Flatpak, pacman, apt…)": "Оновлення надходять із менеджера пакетів (Flatpak, pacman, apt…)",
  "Updating Flux to {v}…": "Оновлення Flux до {v}…",
  "Updating {n} %": "Оновлення {n} %",
  "Updating {p} %": "Оновлення {p} %",

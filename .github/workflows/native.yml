@@ -471,6 +471,19 @@ jobs:
           cmp "$u/app/flux-native" "$u/srv/Flux-Native" || { echo "::error::wrong content after the update"; ok=0; }
           [ ! -e "$u/app/flux-native.new" ] || { echo "::error::.new was not removed"; ok=0; }
           [ $ok = 1 ]
+      - name: Packages (.deb, Flatpak bundle, PKGBUILD)
+        run: |
+          ver=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' native/Cargo.toml | head -n1)
+          mkdir -p outl build-in
+          packaging/deb/build-deb.sh target/release/flux-native "$ver" site/icon.png outl/flux-editor_amd64.deb
+          dpkg-deb -I outl/flux-editor_amd64.deb | head -n 8
+          cp packaging/arch/PKGBUILD outl/PKGBUILD
+          cp target/release/flux-native build-in/flux-native
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --force-clean --install-deps-from=flathub --repo=fp-repo fp-out packaging/flatpak/dev.flux.Flux.yml
+          flatpak build-bundle fp-repo outl/Flux.flatpak dev.flux.Flux
+          ls -l outl
       - name: Publish (branch ci-native-linux)
         if: success()
         run: |
