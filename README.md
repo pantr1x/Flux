@@ -9,7 +9,7 @@
   <br><br>
   <a href="https://pantr1x.github.io/Flux/"><b>Website</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/pantr1x/Flux/releases/latest"><b>Download for Windows</b></a>
+  <a href="https://pantr1x.github.io/Flux/#releases"><b>Download (Windows &amp; Linux)</b></a>
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">What's new</a>
   &nbsp;·&nbsp;
@@ -38,11 +38,26 @@
 
 ## Install
 
-1. Open the [latest release](https://github.com/pantr1x/Flux/releases/latest) and download `Flux-Setup-x.y.z.exe` under **Assets**.
-2. Run it. Windows may show *"Windows protected your PC"* because Flux is not signed yet – click **More info → Run anyway**.
-3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → General → About & updates). Every version is also on the [website](https://pantr1x.github.io/Flux/#releases).
+### Windows
 
-Programming languages are not bundled, so the installer stays small. Flux downloads only the ones you pick, from their official sources.
+Download [`Flux-Native.exe`](https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe) and run it – nothing to install. Windows may show *"Windows protected your PC"* because Flux is not signed yet – click **More info → Run anyway**. Flux keeps itself up to date (Settings → General → About & updates).
+
+### Linux (x86_64)
+
+Pick one. Packages are built on every release and live on the [`ci-native-linux`](https://github.com/pantr1x/Flux/tree/ci-native-linux) branch.
+
+| How | Command |
+|---|---|
+| **Script** (any distro, updates itself) | `curl -fsSL https://pantr1x.github.io/Flux/install.sh \| bash` |
+| **Arch / CachyOS / Manjaro (pacman)** | `curl -fsSLO https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux/PKGBUILD && makepkg -si` |
+| **Flatpak** | `curl -fsSLO https://github.com/pantr1x/Flux/raw/ci-native-linux/Flux.flatpak && flatpak install --user -y Flux.flatpak` |
+| **Debian / Ubuntu (apt)** | `curl -fsSLO https://github.com/pantr1x/Flux/raw/ci-native-linux/flux-editor_amd64.deb && sudo apt install ./flux-editor_amd64.deb` |
+
+- **Package names:** pacman `flux-native-bin` (it provides `flux`), apt `flux-editor`, Flatpak `dev.flux.Flux`. The command to start it is `flux`.
+- Flux is **not in the official repositories**, so `pacman -Ss flux` will not list it. Check an installed copy with `pacman -Qs flux-native`; remove it with `sudo pacman -Rns flux-native-bin`.
+- A package is updated by re-running its command (the script version updates itself). Uninstall the script version with `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash -s -- --uninstall`.
+
+Programming languages are not bundled, so Flux stays small. It downloads only the ones you pick, from their official sources.
 
 ## What it does
 
