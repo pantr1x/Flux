@@ -20,7 +20,7 @@ const TREE_H: f32 = 24.0; // riadok stromu (VS Code má 22)
 const VIEWS: [(&str, &str, &str); 2] = [("explorer", "file", "Explorer"), ("plugins", "puzzle", "Plugins")];
 
 impl App {
-    fn load_side(&mut self) {
+    pub(super) fn load_side(&mut self) {
         if self.side_view.is_empty() {
             self.side_view = "explorer".into();
         }
@@ -53,11 +53,11 @@ impl App {
         }
     }
 
-    fn sec_open(&self, id: &str) -> bool {
+    pub(super) fn sec_open(&self, id: &str) -> bool {
         !self.side_closed.as_ref().is_some_and(|s| s.contains(id))
     }
 
-    fn toggle_sec(&mut self, id: &str) {
+    pub(super) fn toggle_sec(&mut self, id: &str) {
         let set = self.side_closed.get_or_insert_with(HashSet::new);
         if !set.remove(id) {
             set.insert(id.to_string());

@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.63
+
+**Opening projects**
+- **After opening a project (also one imported from GitHub) you see it right away**: the *PROJECTS* list scrolls to it and its files open in the Explorer, even if you had folded that section. Before, a fifth project could hide below the list and the folded section looked empty.
+
 ## 0.9.62
 
 **Fixes**

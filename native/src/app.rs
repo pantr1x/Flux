@@ -298,6 +298,7 @@ pub struct App {
     tree_kbd: bool,                     // strom má klávesnicu (šípky, Enter, F2, Delete)
     tree_rows: Vec<(String, bool)>,     // viditeľné riadky stromu v poradí (pre šípky)
     drop_rects: Vec<(Rect, String)>,    // kam sa dá pustiť súbor z počítača (priečinky stromu, projekty)
+    proj_reveal: bool,                  // po otvorení projektu posunúť zoznam PROJECTS k nemu
     ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
     real_ptr: Option<egui::Pos2>,       // skutočná poloha myši (egui pri ťahaní výberu dostáva orezanú)
     drag_scroll: egui::Vec2,            // posun editora pri ťahaní výberu za okraj
@@ -446,6 +447,7 @@ impl App {
             tree_kbd: false,
             tree_rows: vec![],
             drop_rects: vec![],
+            proj_reveal: true,
             ed_drag: None,
             real_ptr: None,
             drag_scroll: egui::Vec2::ZERO,
@@ -1119,6 +1121,12 @@ impl App {
         self.open_dirs.clear();
         self.reload_projects();
         self.home = true;
+        // otvorený projekt hneď vidno: jeho súbory rozbalené a zoznam PROJECTS posunutý k nemu
+        self.load_side();
+        if !self.sec_open("project") {
+            self.toggle_sec("project");
+        }
+        self.proj_reveal = true;
         // zmeny v projekte (aj z iných programov) → fs:changed
         let emit = self.emit.clone();
         let last = std::sync::Mutex::new(Instant::now() - Duration::from_secs(1));
@@ -1768,6 +1776,7 @@ impl App {
         let name = pr["name"].as_str().unwrap_or("").to_string();
         let pinned = pr["pinned"].as_bool() == Some(true);
         let sel = ws == Some(dir.as_str());
+        let reveal = sel && std::mem::take(&mut self.proj_reveal);
         let sub = self.project_sub(&dir);
         let spec = self.project_icon(&dir);
         let lead = Lead::Project(&spec);
@@ -1786,6 +1795,9 @@ impl App {
         }
         let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
         self.drop_rects.push((r.rect.intersect(ui.clip_rect()), dir.clone()));
+        if reveal {
+            r.scroll_to_me(Some(egui::Align::Center));
+        }
         // súbor z iného projektu sa dá pustiť na riadok projektu (do jeho koreňa)
         if let Some(src) = r.dnd_hover_payload::<String>() {
             if drop_ok(&src, &dir) {
