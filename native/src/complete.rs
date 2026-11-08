@@ -480,6 +480,15 @@ fn emmet_abbr(before: &[char]) -> Option<String> {
     if s > 0 && !before[s - 1].is_whitespace() && before[s - 1] != '>' {
         return None;
     }
+    // uprostred vety (pred slovom je na riadku iný text) to nie je skratka – inak by obyčajné slová
+    // ponúkali značky a Tab z „title“ urobil <title></title>
+    let mut j = s;
+    while j > 0 && matches!(before[j - 1], ' ' | '\t') {
+        j -= 1;
+    }
+    if j > 0 && before[j - 1] != '\n' && before[j - 1] != '>' {
+        return None;
+    }
     let abbr: String = before[s..].iter().collect();
     let first = abbr.chars().next()?;
     if !(first.is_ascii_alphabetic() || first == '.' || first == '#') {
@@ -693,18 +702,18 @@ fn tag_body(t: &str) -> String {
         "a" => "a href=\"$1\">$0</a>".into(),
         "img" => "img src=\"$1\" alt=\"$2\">".into(),
         "link" => "link rel=\"stylesheet\" href=\"$1\">".into(),
-        "script" => "script src=\"$1\"></script>".into(),
-        "input" => "input type=\"${1:text}\" $0>".into(),
-        "meta" => "meta $0>".into(),
+        "script" => "script>$0</script>".into(),
+        "input" => "input type=\"$1\">".into(),
+        "meta" => "meta $1>".into(),
         "html" => "html lang=\"${1:en}\">\n$0\n</html>".into(),
-        "form" => "form action=\"$1\">$0</form>".into(),
+        "form" => "form>$0</form>".into(),
         "label" => "label for=\"$1\">$0</label>".into(),
-        "iframe" => "iframe src=\"$1\" frameborder=\"0\">$0</iframe>".into(),
+        "iframe" => "iframe src=\"$1\"></iframe>".into(),
         "video" => "video src=\"$1\" controls>$0</video>".into(),
         "audio" => "audio src=\"$1\" controls>$0</audio>".into(),
-        "source" => "source src=\"$1\" type=\"$2\">".into(),
-        "button" => "button type=\"${1:button}\">$0</button>".into(),
-        "option" => "option value=\"$1\">$0</option>".into(),
+        "source" => "source src=\"$1\">".into(),
+        "button" => "button>$0</button>".into(),
+        "option" => "option>$0</option>".into(),
         "ul" | "ol" => format!("{t}>\n\t<li>$0</li>\n</{t}>"),
         "table" => "table>\n\t<tr>\n\t\t<td>$0</td>\n\t</tr>\n</table>".into(),
         t if VOID.contains(&t) => format!("{t}>"),
@@ -1334,6 +1343,9 @@ mod tests {
         // nie vnútri značky ani v próze s bodkou
         assert_eq!(context("html", &"<div cl".chars().collect::<Vec<_>>()).emmet, None);
         assert_eq!(context("html", &"Ahoj e.g.".chars().collect::<Vec<_>>()).emmet, None);
+        // slovo uprostred vety nie je skratka (Tab nesmie urobiť <title></title>)
+        assert_eq!(context("html", &"<p>Nice title".chars().collect::<Vec<_>>()).emmet, None);
+        assert_eq!(context("html", &"<p>title".chars().collect::<Vec<_>>()).emmet.as_deref(), Some("title"));
         // vlastná značka zo súboru po „<“
         assert!(at("html", "<my-card></my-card>\n<my").iter().any(|i| i.label == "my-card"));
     }

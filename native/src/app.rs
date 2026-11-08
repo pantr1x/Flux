@@ -758,12 +758,18 @@ impl App {
         let tab = self.tabs.iter_mut().find(|t| t.path == sg.path)?;
         let b = |c: usize| tab.text.char_indices().nth(c).map(|(b, _)| b).unwrap_or(tab.text.len());
         let (a, e) = (b(sg.start), b(sg.end));
-        let Some(body) = item.insert.clone() else {
+        let Some(mut body) = item.insert.clone() else {
             tab.text.replace_range(a..e, &item.label);
             self.last_edit = Some(Instant::now());
             self.snip = None;
             return Some(sg.start + item.label.chars().count());
         };
+        // značka, ktorej koniec už za kurzorom je (napr. „<|</div>“) – druhý koniec nepridávať
+        if let Some(cl) = body.rfind("</").map(|i| body[i..].to_string()).filter(|c| c.ends_with('>') && !c.contains('\n')) {
+            if tab.text[e..].starts_with(&cl) {
+                body.truncate(body.len() - cl.len());
+            }
+        }
         // úryvok: odsadenie riadku pre ďalšie riadky, kurzor na prvé miesto ($1), Tab skáče ďalej
         let line_start = tab.text[..a].rfind('\n').map(|i| i + 1).unwrap_or(0);
         let indent: String = tab.text[line_start..a].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
