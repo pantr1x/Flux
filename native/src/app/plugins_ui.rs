@@ -42,6 +42,8 @@ pub struct PlugState {
     pub cmds: Vec<PlugCmd>,
     pub status: Vec<PlugStatus>,
     pub acts: Vec<PlugAct>,
+    // nainštalované pluginy (+ ich plugin.json) z disku – čítajú sa najviac raz za 2 s, nie v každom snímku
+    pub disc: Option<(Instant, Vec<(Manifest, Value)>)>,
     pub snips: Vec<(String, String, crate::complete::Item)>, // plugin, jazyk, úryvok
     pub marks: std::collections::HashMap<String, (String, Vec<crate::lint::Diag>)>, // plugin → (cesta, značky)
     pub changed: Option<(String, u64, Instant)>,
@@ -306,6 +308,7 @@ impl App {
     }
 
     pub(super) fn plug_reload_all(&mut self) {
+        self.plug.disc = None;
         let ids: Vec<String> = self.plug.host.as_ref().map(|h| h.list.iter().map(|p| p.man.id.clone()).collect()).unwrap_or_default();
         for id in ids {
             self.plug_unload(&id);
@@ -529,8 +532,27 @@ impl App {
     }
 
     // všetky karty: zabudovaný GitHub, nainštalované pluginy a obchod (podľa karty a hľadania)
+    // zoznam nainštalovaných pluginov s pamäťou (2 s); po inštalácii/odstránení sa zahodí (plug.disc = None)
+    fn plug_installed(&mut self) -> Vec<(Manifest, Value)> {
+        if let Some((at, l)) = &self.plug.disc {
+            if at.elapsed() < Duration::from_secs(2) {
+                return l.clone();
+            }
+        }
+        let l: Vec<(Manifest, Value)> = plugins::Host::discover(&self.plug_dev_dirs())
+            .into_iter()
+            .map(|m| {
+                let raw: Value = std::fs::read_to_string(m.dir.join("plugin.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+                (m, raw)
+            })
+            .collect();
+        self.plug.disc = Some((Instant::now(), l.clone()));
+        l
+    }
+
     fn plug_cards(&mut self, store: bool) -> Option<Vec<PlugCard>> {
-        let installed: Vec<Manifest> = plugins::Host::discover(&self.plug_dev_dirs());
+        let installed_raw = self.plug_installed();
+        let installed: Vec<Manifest> = installed_raw.iter().map(|x| x.0.clone()).collect();
         let cat: Vec<Value> = match self.plug_catalog() {
             Some(Ok(v)) => v,
             _ if store => return None,
@@ -546,8 +568,7 @@ impl App {
             }
         } else {
             out.push(PlugCard::github(self.gh_plugin()));
-            for m in installed {
-                let raw: Value = std::fs::read_to_string(m.dir.join("plugin.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+            for (m, raw) in installed_raw {
                 let mut c = PlugCard::from_entry(&entry(&m.id).unwrap_or(raw), Some(m.clone()));
                 c.name = m.name.clone();
                 c.version = m.version.clone();
@@ -574,7 +595,7 @@ impl App {
             return;
         }
         // horný riadok: Nainštalované / Obchod vľavo, hľadanie vpravo (ako rozšírenia vo VS Code)
-        let installed_n = plugins::Host::discover(&self.plug_dev_dirs()).len() + usize::from(self.gh_plugin());
+        let installed_n = self.plug_installed().len() + usize::from(self.gh_plugin());
         let st = self.plug.tab_store;
         let labels = [(false, "puzzle", tf("Installed ({n})", &[("n", &installed_n.to_string())])), (true, "star", t("Store"))];
         let seg_w: Vec<f32> = labels.iter().map(|l| widgets::text_w(ui, &l.2, theme::bold(13.0)) + 48.0).collect();
@@ -850,6 +871,7 @@ impl App {
 
     // vykoná akciu z karty alebo detailu
     fn plug_do(&mut self, c: &PlugCard, what: &str, ctx: &egui::Context) {
+        self.plug.disc = None; // inštalácia/odstránenie mení zoznam na disku
         let id = c.id.clone();
         let man = c.installed.clone();
         match what {

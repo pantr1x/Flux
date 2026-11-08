@@ -18,44 +18,20 @@ const TREE_H: f32 = 24.0; // riadok stromu (VS Code má 22)
 // zobrazenia v páse ikon: id, ikona, popis
 // (hľadanie je pole v hornej lište, projekty sú sekcia Prieskumníka – ako VS Code)
 const VIEWS: [(&str, &str, &str, &str); 2] = [("explorer", "file", "Explorer", "Ctrl+Shift+E"), ("plugins", "puzzle", "Plugins", "Ctrl+Shift+X")];
-// tlačidlo ľavého pásu: zaoblená plocha pri prechode, ikona sa pri najazdení/kliknutí „odrazí“ (pružina),
-// pri stlačení sa jemne zmenší; vráti (odpoveď, stred, veľkosť a farbu ikony)
+// tlačidlo ľavého pásu: zaoblená plocha pri prechode (jemné prelínanie ako inde vo Fluxe);
+// vráti (odpoveď, stred, mierka a farbu ikony)
 fn bar_button(ui: &egui::Ui, b: Rect, id: egui::Id, active: bool, anim: bool, p: &crate::theme::Pal) -> (egui::Response, egui::Pos2, f32, egui::Color32) {
     let ctx = ui.ctx().clone();
     let resp = ui.interact(b, id, Sense::click());
-    let t = if anim { 0.14 } else { 0.0 };
+    let t = if anim { 0.12 } else { 0.0 };
     let hk = ctx.animate_bool_with_time(id.with("h"), resp.hovered(), t);
     let ak = ctx.animate_bool_with_time(id.with("a"), active, t);
-    let pk = ctx.animate_bool_with_time(id.with("p"), resp.is_pointer_button_down_on(), if anim { 0.07 } else { 0.0 });
-    let now = ctx.input(|i| i.time);
-    // začiatok „odrazu“: najazdenie alebo kliknutie
-    let kick: f64 = ctx.data_mut(|d| {
-        let was = d.get_temp::<bool>(id.with("was")).unwrap_or(false);
-        d.insert_temp(id.with("was"), resp.hovered());
-        if (resp.hovered() && !was) || resp.clicked() {
-            d.insert_temp(id.with("kick"), now);
-        }
-        d.get_temp::<f64>(id.with("kick")).unwrap_or(-10.0)
-    });
-    let dt = (now - kick) as f32;
-    let bounce = if anim && dt < 0.7 {
-        ctx.request_repaint();
-        (-dt * 7.0).exp() * (dt * 24.0).sin() * 0.16
-    } else {
-        0.0
-    };
     let pill = Rect::from_center_size(b.center(), vec2(38.0, 38.0));
-    if hk > 0.0 || ak > 0.0 {
-        ui.painter().rect_filled(pill, CornerRadius::same(12), p.hover.gamma_multiply(hk.max(ak * 0.55)));
+    if hk > 0.0 {
+        ui.painter().rect_filled(pill, CornerRadius::same(10), p.hover.gamma_multiply(hk));
     }
-    if ak > 0.0 {
-        ui.painter().rect_filled(pill, CornerRadius::same(12), p.accent.gamma_multiply(0.10 * ak));
-    }
-    let scale = (1.0 + 0.08 * hk + bounce) * (1.0 - 0.1 * pk);
-    let center = b.center() - vec2(0.0, 1.5 * hk * (1.0 - pk));
     let c = p.text3.lerp_to_gamma(p.text, hk.max(ak));
-    let c = if ak > 0.5 { c.lerp_to_gamma(p.accent, 0.35 * ak) } else { c };
-    (resp, center, scale, c)
+    (resp, b.center(), 1.0, c)
 }
 
 // bublina s názvom a skratkou (klávesy ako malé čiapočky)
@@ -171,10 +147,9 @@ impl App {
                     if ak > 0.0 {
                         // značka aktívneho zobrazenia pri okraji (ako VS Code), v akcentovej farbe, so žiarou
                         let h = 22.0 * ak;
-                        let bx = if right { b.right() - 3.0 } else { b.left() + 0.5 };
-                        let bar = Rect::from_min_size(pos2(bx, b.center().y - h / 2.0), vec2(2.5, h));
-                        ui.painter().rect_filled(bar.expand2(vec2(2.0, 3.0)), CornerRadius::same(3), p.accent.gamma_multiply(0.18 * ak));
-                        ui.painter().rect_filled(bar, CornerRadius::same(2), p.accent);
+                        let bx = if right { b.right() - 2.5 } else { b.left() + 0.5 };
+                        let bar = Rect::from_min_size(pos2(bx, b.center().y - h / 2.0), vec2(2.0, h));
+                        ui.painter().rect_filled(bar, CornerRadius::same(1), p.accent);
                     }
                     widgets::icon_scaled(ui, center, 21.0, scale, icon, c);
                     if id == "explorer" {

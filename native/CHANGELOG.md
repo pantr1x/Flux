@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.73
+
+**Fixes**
+- **Opening Plugins no longer stutters.** The Plugins page used to read the plugins folder and every `plugin.json` from the disk on every frame (twice); on Windows with an antivirus that made it lag. The list is now kept in memory and refreshed every 2 s or after you install or remove a plugin.
+- **Calmer animations in the bar on the left**: just a soft rounded highlight on hover, like everywhere else in Flux – no bouncing icons.
+
 ## 0.9.72
 
 **Changes**
