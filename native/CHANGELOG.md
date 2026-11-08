@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.66
+
+**Fixes**
+- **The button that shows or hides Output and Terminal now always sits in the same place** – at the right end of the tab row above the code (Ctrl+J does the same). Before, it jumped to a small spot at the bottom when the panel was hidden.
+- **Switching to a file of another project switches the Explorer too**: clicking a tab of a file from another project shows that project and its file tree.
+
 ## 0.9.65
 
 **Themes as simple files**

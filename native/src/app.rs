@@ -1226,6 +1226,16 @@ impl App {
     }
 
     fn activate(&mut self, i: usize) {
+        // súbor z iného projektu: Prieskumník sa prepne na jeho projekt (strom súborov)
+        if let Some(path) = self.tabs.get(i).map(|t| t.path.clone()) {
+            if self.workspace().is_none_or(|w| !Path::new(&path).starts_with(&w)) {
+                let owner = self.projects.iter().filter_map(|x| x["dir"].as_str()).filter(|d| Path::new(&path).starts_with(d)).max_by_key(|d| d.len()).map(String::from);
+                if let Some(dir) = owner {
+                    self.open_folder(&dir);
+                    self.proj_reveal = true;
+                }
+            }
+        }
         // prepnutie karty: obsah príde zo strany, kde karta leží (späť/dopredu má svoj smer z go())
         if self.nav_dir == 0.0 && (i != self.active || self.home) {
             self.nav_dir = if self.home || i > self.active { 0.6 } else { -0.6 };
@@ -4117,12 +4127,6 @@ impl eframe::App for App {
                         "right" => main.max.x = panel.left(),
                         _ => main.min.x = panel.right(),
                     }
-                } else if show_panel {
-                    // skrytý panel: malé tlačidlo na jeho vrátenie
-                    let b = Rect::from_center_size(pos2(main.right() - 136.0, main.bottom() - 18.0), vec2(26.0, 26.0));
-                    if widgets::icon_button_at(&mut card_ui, b, "panel", 15.0, &p, true).on_hover_text(t("Show Output")).clicked() {
-                        self.panel_open = true;
-                    }
                 }
                 // prechod pri zmene súboru/stránky: obsah jemne „vybledne“ dnu (transitions)
                 let key = if show_editor { self.tabs[self.active].path.clone() } else { format!("home:{:?}", self.workspace()) };
@@ -4131,9 +4135,29 @@ impl eframe::App for App {
                     self.switched = now;
                 }
                 // karty otvorených súborov v riadku nad editorom (ako VS Code)
-                if !self.tabs.is_empty() && self.get("showTabs").as_bool() != Some(false) {
+                // prepínač Výstupu/Terminálu má stále to isté miesto: vpravo v riadku kariet (bez kariet vpravo hore v editore)
+                let tabs_on = !self.tabs.is_empty() && self.get("showTabs").as_bool() != Some(false);
+                let toggle_w = if show_panel { 38.0 } else { 0.0 };
+                if tabs_on {
                     let strip = Rect::from_min_size(main.min, vec2(main.width(), explorer::TABS_H));
-                    self.tab_strip(&mut card_ui, strip, radius);
+                    self.tab_strip(&mut card_ui, Rect::from_min_max(strip.min, pos2(strip.right() - toggle_w, strip.bottom())), radius);
+                    if show_panel {
+                        // dokreslenie pozadia riadku kariet pod prepínačom
+                        let rest = Rect::from_min_max(pos2(strip.right() - toggle_w, strip.top()), strip.max);
+                        let bg = if p.dark { p.card.lerp_to_gamma(Color32::BLACK, 0.22) } else { p.card.lerp_to_gamma(p.hover, 0.7) };
+                        card_ui.painter().rect_filled(rest, CornerRadius { ne: radius, ..Default::default() }, bg);
+                        card_ui.painter().hline(rest.x_range(), rest.bottom() - 0.5, Stroke::new(1.0, p.line));
+                    }
+                }
+                if show_panel {
+                    let c = if tabs_on { pos2(main.right() - 20.0, main.top() + explorer::TABS_H / 2.0 + 2.0) } else { pos2(main.right() - 20.0, main.top() + 18.0) };
+                    let open = self.panel_open;
+                    let tip = if open { t("Hide panel") } else { t("Show Output") };
+                    if widgets::icon_button_at(&mut card_ui, Rect::from_center_size(c, vec2(28.0, 28.0)), "panel", 15.0, &p, true).on_hover_text(format!("{tip} (Ctrl+J)")).clicked() {
+                        self.panel_open = !open;
+                    }
+                }
+                if tabs_on {
                     main.min.y += explorer::TABS_H;
                 }
                 // späť/dopredu: obsah prichádza zo strany (24 px, doznie s prelínaním)
