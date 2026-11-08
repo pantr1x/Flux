@@ -35,6 +35,7 @@ pub struct Wall {
     // ostane; pri návrate sa video spustí znova od uloženého miesta (resume, 100 ns)
     resume: Arc<std::sync::atomic::AtomicI64>,
     released: Arc<AtomicBool>,
+    pub blur_all: bool, // celé pozadie z rozmazanej kópie („See-through – blurred“, keď to systém nevie)
 }
 
 // ---------- zmenšená kópia živej tapety (userData/wallcache) ----------
@@ -263,7 +264,12 @@ impl Wall {
         let img_rect = Rect::from_center_size(area.center(), egui::vec2(iw * k, ih * k));
         self.img_rect = Some(img_rect);
         let painter = ctx.layer_painter(egui::LayerId::background());
-        painter.image(tex.id(), img_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        // „rozmazané“, keď ho nevie urobiť systém: celá tapeta z rozmazanej kópie
+        let id = match (&self.blur, self.blur_all) {
+            (Some(b), true) => b.id(),
+            _ => tex.id(),
+        };
+        painter.image(id, img_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
         fresh
     }
 }

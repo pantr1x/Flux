@@ -1,7 +1,7 @@
 // Rozloženie ako vo VS Code: úzky pás ikon (Activity Bar) a vedľa neho bočný panel so zobrazením
 // – Prieskumník (projekt ako zbaliteľná sekcia s Nový súbor / Nový priečinok / Obnoviť / Zbaliť,
 // nové súbory sa píšu priamo do stromu) a Projekty (pripnuté, zoznam, Nový projekt).
-use super::{chrome, drag_ghost, drop_ok, name_field, rename_field, short_dir, App, Rn};
+use super::{chrome, Bottom, drag_ghost, drop_ok, name_field, rename_field, short_dir, App, Rn};
 use crate::i18n::t;
 use crate::theme::{self, GAP, TOP_H};
 use crate::widgets::{self, Lead};
@@ -17,7 +17,29 @@ const TREE_H: f32 = 24.0; // riadok stromu (VS Code má 22)
 
 // zobrazenia v páse ikon: id, ikona, popis
 // (hľadanie je pole v hornej lište, projekty sú sekcia Prieskumníka – ako VS Code)
-const VIEWS: [(&str, &str, &str); 2] = [("explorer", "file", "Explorer"), ("plugins", "puzzle", "Plugins")];
+const VIEWS: [(&str, &str, &str, &str); 2] = [("explorer", "file", "Explorer", "Ctrl+Shift+E"), ("plugins", "puzzle", "Plugins", "Ctrl+Shift+X")];
+// rýchle akcie pod zobrazeniami: (príkaz, ikona, názov, skratka)
+const ACTIONS: [(&str, &str, &str, &str); 6] = [
+    ("search", "search", "Search everything", "Ctrl+Shift+A"),
+    ("run", "play", "Run", "F5"),
+    ("terminal", "terminal", "Terminal", "Ctrl+`"),
+    ("ai", "sparkle", "AI assistant", "Ctrl+I"),
+    ("themes", "palette", "Theme store", "Ctrl+Shift+K"),
+    ("github", "github", "GitHub", "Ctrl+Shift+G"),
+];
+
+// bublina s názvom a skratkou (klávesy ako malé čiapočky)
+fn key_tip(ui: &mut egui::Ui, name: &str, key: &str) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(name).strong());
+        if !key.is_empty() {
+            ui.add_space(6.0);
+            for part in key.split('+') {
+                ui.label(egui::RichText::new(part).monospace().size(11.0).background_color(ui.visuals().widgets.inactive.bg_fill));
+            }
+        }
+    });
+}
 
 impl App {
     pub(super) fn load_side(&mut self) {
@@ -109,10 +131,10 @@ impl App {
                 }
                 y += TOP_H + 2.0;
                 let ctx = ui.ctx().clone();
-                for (id, icon, tip) in VIEWS {
+                for (id, icon, tip, key) in VIEWS {
                     let b = Rect::from_min_size(pos2(r.left(), y), vec2(ACT_W, 46.0));
                     let active = self.side_open && self.side_view == id;
-                    let resp = ui.interact(b, ui.id().with(("act", id)), Sense::click()).on_hover_text(t(tip));
+                    let resp = ui.interact(b, ui.id().with(("act", id)), Sense::click()).on_hover_ui(|ui| key_tip(ui, &t(tip), key));
                     let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
                     let ak = ui.ctx().animate_bool_with_time(resp.id.with("a"), active, if self.anim_on() { 0.15 } else { 0.0 });
                     if ak > 0.0 {
@@ -130,6 +152,70 @@ impl App {
                         self.show_view(id, &ctx);
                     }
                     y += 46.0;
+                }
+                // rýchle akcie (s jemnou čiarou nad nimi) a ikony z pluginov (flux.activityBar.add)
+                let limit = r.bottom() - GAP - 4.0 - 80.0;
+                ui.painter().hline(r.left() + 14.0..=r.right() - 14.0, y + 4.0, Stroke::new(1.0, p.line.gamma_multiply(0.7)));
+                y += 9.0;
+                let mut run_act: Option<&str> = None;
+                for (id, icon, tip, key) in ACTIONS {
+                    if id == "github" && !self.gh_plugin() {
+                        continue;
+                    }
+                    if y + 40.0 > limit {
+                        break;
+                    }
+                    let b = Rect::from_min_size(pos2(r.left() + 6.0, y + 2.0), vec2(ACT_W - 12.0, 36.0));
+                    let on = match id {
+                        "ai" => self.ai.open,
+                        "terminal" => self.panel_open && self.sess_mut().map(|s| s.bottom == Bottom::Terminal).unwrap_or(false),
+                        _ => false,
+                    };
+                    let resp = ui.interact(b, ui.id().with(("act2", id)), Sense::click()).on_hover_ui(|ui| key_tip(ui, &t(tip), key));
+                    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+                    if hk > 0.0 || on {
+                        ui.painter().rect_filled(b, CornerRadius::same(10), p.hover.gamma_multiply(if on { 1.0 } else { hk }));
+                    }
+                    let c = if on { p.accent } else { p.text3.lerp_to_gamma(p.text, hk) };
+                    widgets::icon_at(ui, b.center(), 18.0, icon, c);
+                    if resp.clicked() {
+                        run_act = Some(id);
+                    }
+                    y += 40.0;
+                }
+                let mut plug_click = None;
+                if !self.plug.acts.is_empty() && y + 40.0 <= limit {
+                    ui.painter().hline(r.left() + 14.0..=r.right() - 14.0, y + 4.0, Stroke::new(1.0, p.line.gamma_multiply(0.7)));
+                    y += 9.0;
+                }
+                for a in &self.plug.acts {
+                    if y + 40.0 > limit {
+                        break;
+                    }
+                    let b = Rect::from_min_size(pos2(r.left() + 6.0, y + 2.0), vec2(ACT_W - 12.0, 36.0));
+                    let resp = ui.interact(b, ui.id().with(("plug-act", a.plugin.as_str(), a.k.as_str())), Sense::click()).on_hover_ui(|ui| key_tip(ui, &a.title, &a.key_text));
+                    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
+                    if hk > 0.0 {
+                        ui.painter().rect_filled(b, CornerRadius::same(10), p.hover.gamma_multiply(hk));
+                    }
+                    let c = p.text3.lerp_to_gamma(p.text, hk);
+                    if a.icon.trim_start().starts_with("<svg") {
+                        // vlastné SVG pluginu, zafarbené ako ostatné ikony
+                        let uri = format!("bytes://plugact-{}-{}.svg", a.plugin, a.k);
+                        egui::Image::from_bytes(uri, a.icon.as_bytes().to_vec()).tint(c).paint_at(ui, Rect::from_center_size(b.center(), vec2(18.0, 18.0)));
+                    } else {
+                        widgets::icon_at(ui, b.center(), 18.0, &a.icon, c);
+                    }
+                    if resp.clicked() {
+                        plug_click = Some((a.plugin.clone(), a.k.clone()));
+                    }
+                    y += 40.0;
+                }
+                if let Some(id) = run_act {
+                    self.act(id, &ctx);
+                }
+                if let Some((pl, k)) = plug_click {
+                    self.plug_call(&pl, &format!("__click({})", json!(k)));
                 }
                 // dole: ponuka ☰ a nastavenia (svetlá/tmavá je v Nastaveniach → Vzhľad a v ponuke)
                 let mut by = r.bottom() - GAP - 4.0;

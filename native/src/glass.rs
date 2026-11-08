@@ -65,10 +65,23 @@ pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
     go().is_some() && (!on || blur_supported())
 }
 
-// KWin (KDE) rozmazanie podporuje; inde vlastnosť nič nerobí
+// KWin s efektom Blur nastaví na koreňovom okne vlastnosť _KDE_NET_WM_BLUR_BEHIND_REGION (tak to zisťuje aj
+// KWindowEffects::isEffectAvailable); bez nej (iné prostredie, efekt vypnutý) sa za oknom nič nerozmaže
 #[cfg(target_os = "linux")]
 pub fn blur_supported() -> bool {
-    std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase().contains("kde")
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::ConnectionExt;
+    let go = || -> Option<bool> {
+        let (conn, screen) = x11rb::connect(None).ok()?;
+        let root = conn.setup().roots.get(screen)?.root;
+        let atom = conn.intern_atom(true, b"_KDE_NET_WM_BLUR_BEHIND_REGION").ok()?.reply().ok()?.atom;
+        if atom == 0 {
+            return Some(false);
+        }
+        let props = conn.list_properties(root).ok()?.reply().ok()?;
+        Some(props.atoms.contains(&atom))
+    };
+    go().unwrap_or(false)
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]

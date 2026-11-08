@@ -140,6 +140,13 @@ impl App {
                 self.side_open = true;
                 self.side_view = "explorer".into();
             }
+            "view-plugins" => self.open_settings("plugins", ctx),
+            // obchod s témami (Nastavenia → Téma a okno)
+            "themes" => {
+                self.theme_store.browse = true;
+                self.open_settings("appearance", ctx);
+            }
+            "github" => self.open_settings("github", ctx),
             "new-project" => {
                 self.open_new_project();
                 self.side_open = true;

@@ -22,6 +22,12 @@ pub struct ThemeFile {
 }
 
 static LIST: Mutex<Option<Vec<ThemeFile>>> = Mutex::new(None);
+// téma z obchodu na vyskúšanie (ešte nenainštalovaná) – správa sa ako nainštalovaná, kým sa náhľad nezruší
+static PREVIEW: Mutex<Option<ThemeFile>> = Mutex::new(None);
+
+pub fn set_preview(t: Option<ThemeFile>) {
+    *PREVIEW.lock().unwrap() = t;
+}
 
 pub fn user_dir() -> PathBuf {
     flux_core::settings::user_data().join("themes")
@@ -112,7 +118,14 @@ pub fn all() -> Vec<ThemeFile> {
         reload();
         g = LIST.lock().unwrap();
     }
-    g.clone().unwrap_or_default()
+    let mut l = g.clone().unwrap_or_default();
+    drop(g);
+    if let Some(p) = PREVIEW.lock().unwrap().clone() {
+        if !l.iter().any(|x| x.id == p.id) {
+            l.push(p);
+        }
+    }
+    l
 }
 
 pub fn get(id: &str) -> Option<ThemeFile> {

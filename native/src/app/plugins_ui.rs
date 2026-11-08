@@ -18,6 +18,16 @@ pub struct PlugCmd {
     pub key: Option<(egui::Modifiers, egui::Key)>,
 }
 
+// ikona pluginu v ľavom páse (flux.activityBar.add): vstavaná ikona alebo vlastné SVG, skratka
+pub struct PlugAct {
+    pub plugin: String,
+    pub k: String,
+    pub icon: String,
+    pub title: String,
+    pub key: Option<(egui::Modifiers, egui::Key)>,
+    pub key_text: String,
+}
+
 pub struct PlugStatus {
     pub plugin: String,
     pub k: String,
@@ -31,6 +41,7 @@ pub struct PlugState {
     pub host: Option<plugins::Host>,
     pub cmds: Vec<PlugCmd>,
     pub status: Vec<PlugStatus>,
+    pub acts: Vec<PlugAct>,
     pub snips: Vec<(String, String, crate::complete::Item)>, // plugin, jazyk, úryvok
     pub marks: std::collections::HashMap<String, (String, Vec<crate::lint::Diag>)>, // plugin → (cesta, značky)
     pub changed: Option<(String, u64, Instant)>,
@@ -211,7 +222,7 @@ fn markdown(ui: &mut egui::Ui, md: &str, w: f32, p: &theme::Pal) {
 }
 
 // „Ctrl+Alt+H“ → modifikátory + kláves
-fn parse_key(s: &str) -> Option<(egui::Modifiers, egui::Key)> {
+pub(super) fn parse_key(s: &str) -> Option<(egui::Modifiers, egui::Key)> {
     let mut m = egui::Modifiers::NONE;
     let mut key = None;
     for part in s.split('+').map(|x| x.trim()) {
@@ -304,7 +315,7 @@ impl App {
         self.note(t("Plugins reloaded."));
     }
 
-    fn plug_call(&mut self, id: &str, code: &str) {
+    pub(super) fn plug_call(&mut self, id: &str, code: &str) {
         plugins::set_folder(self.workspace().map(PathBuf::from));
         let snap = self.plug_snap(id);
         let fx = self.plug.host.as_mut().map(|h| h.call(id, code, &snap)).unwrap_or_default();
@@ -361,6 +372,16 @@ impl App {
                     } else {
                         self.plug.status.push(PlugStatus { plugin, k, text: s("text"), title: s("title"), show: f["show"].as_bool() != Some(false) });
                     }
+                }
+                "act" => {
+                    let k = s("k");
+                    self.plug.acts.retain(|x| !(x.plugin == plugin && x.k == k));
+                    let key_text = s("key");
+                    self.plug.acts.push(PlugAct { plugin, k, icon: s("icon"), title: s("title"), key: parse_key(&key_text), key_text });
+                }
+                "act-rm" => {
+                    let k = s("k");
+                    self.plug.acts.retain(|x| !(x.plugin == plugin && x.k == k));
                 }
                 "status-rm" => {
                     let k = s("k");
@@ -448,6 +469,11 @@ impl App {
         let hits: Vec<(String, String)> = self.plug.cmds.iter().filter_map(|c| c.key.filter(|(m, k)| ctx.input_mut(|i| i.consume_key(*m, *k))).map(|_| (c.plugin.clone(), c.id.clone()))).collect();
         for (p, id) in hits {
             self.plug_command(&p, &id);
+        }
+        // skratky ikon v ľavom páse
+        let acts: Vec<(String, String)> = self.plug.acts.iter().filter_map(|a| a.key.filter(|(m, k)| ctx.input_mut(|i| i.consume_key(*m, *k))).map(|_| (a.plugin.clone(), a.k.clone()))).collect();
+        for (p, k) in acts {
+            self.plug_call(&p, &format!("__click({})", json!(k)));
         }
         let cur = (!self.start && !self.home).then(|| self.tabs.get(self.active).map(|t| (t.path.clone(), self.hls.get(&t.path).map(|h| h.gen).unwrap_or(0)))).flatten();
         if let Some((path, gen)) = cur.clone() {

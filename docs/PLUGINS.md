@@ -125,6 +125,23 @@ item.show(false);          // hide / show
 item.remove();             // remove it
 ```
 
+### Activity bar (Flux Native)
+
+An icon in the narrow bar on the left, under Explorer, Plugins and the quick actions. It can have its own shortcut, shown in the tooltip.
+
+```js
+flux.commands.register('wordcount', 'Count words', () => flux.toast('…'), { key: 'Ctrl+Alt+W' });
+const icon = flux.activityBar.add({
+  icon: 'rocket',           // a Flux icon name (see below) or your own SVG text '<svg …>…</svg>'
+  title: 'Count words',     // tooltip
+  key: 'Ctrl+Alt+W',        // optional shortcut, shown in the tooltip
+  command: 'wordcount',     // run one of your commands … or use onClick: () => { … }
+});
+icon.remove();
+```
+
+Flux icon names: `file search play stop terminal sparkle palette puzzle rocket star globe code git github folder clock todo robot flask eye lock pin edit save copy download upload trash settings command monitor`. An SVG is tinted like the other icons, so draw it with `stroke="#fff"` or `fill="#fff"`.
+
 ### Snippets
 
 ```js
@@ -240,6 +257,7 @@ Everything a plugin adds through `flux` is removed automatically when the plugin
 | `flux.commands.register(id, label, run, { key })` | Adds a command to the command palette (Ctrl+Shift+P) and search (Ctrl+Shift+A), optionally with a shortcut like `Ctrl+Alt+H`. |
 | `flux.commands.run(id)` | Runs your command or a built-in one (e.g. `run`, `save`, `settings`). |
 | `flux.statusBar.add({ text, title, onClick })` | Adds a button to the status bar. Returns `{ set(text), setTitle(text), show(bool), remove(), element }`. |
+| `flux.activityBar.add({ icon, title, key?, command?, onClick? })` | (Flux Native) Adds an icon to the left activity bar, optionally with a shortcut. Returns `{ remove() }`. |
 | `flux.snippets.add(language, prefix, body, description?)` | Adds a snippet, e.g. `('html', 'card', '<div class="card">$0</div>')`. |
 | `flux.ui.addStyle(css)` | Adds CSS to Flux. Returns `{ remove() }`. |
 | `flux.ui.setVar(name, value)` | Sets a CSS variable of the window, e.g. `setVar('--radius', '20px')`. Undone when the plugin is turned off. |

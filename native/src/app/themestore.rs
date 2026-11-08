@@ -37,6 +37,7 @@ pub struct ThemeStore {
     pub browse: bool,
     pub q: String,
     pub data: Arc<Mutex<Load>>,
+    pub preview: Option<(String, String, String)>, // vyskúšaná téma: (id, meno, predošlá téma)
 }
 
 // súbor z obchodu: FLUX_THEME_REGISTRY = miestny priečinok (testy), inak GitHub (tie isté vetvy ako pluginy)
@@ -103,10 +104,36 @@ impl App {
     }
 
     // nainštaluje tému z obchodu a hneď ju použije
+    // vyskúšať tému bez inštalácie: celý Flux sa hneď prefarbí, Install ju ponechá, Cancel vráti predošlú
+    fn store_preview(&mut self, th: &StoreTheme, ctx: &egui::Context) {
+        let Some(f) = th.file.clone() else { return };
+        let prev = match self.theme_store.preview.take() {
+            Some((_, _, prev)) => prev,
+            None => self.get("codeTheme").as_str().unwrap_or(crate::gen::DEFAULT_THEME).to_string(),
+        };
+        crate::themes::set_preview(Some(f));
+        self.theme_store.preview = Some((th.id.clone(), th.name.clone(), prev));
+        self.set_code_theme(&th.id, ctx);
+        self.apply_look(ctx);
+    }
+
+    // zruší náhľad (vráti predošlú tému); volá sa aj pri zatvorení nastavení
+    pub(super) fn preview_cancel(&mut self, ctx: &egui::Context) {
+        if let Some((_, _, prev)) = self.theme_store.preview.take() {
+            crate::themes::set_preview(None);
+            self.set_code_theme(&prev, ctx);
+            self.apply_look(ctx);
+        }
+    }
+
     fn store_install(&mut self, th: &StoreTheme, ctx: &egui::Context) {
         if !valid_id(&th.id) || th.file.is_none() {
             return;
         }
+        if self.theme_store.preview.as_ref().is_some_and(|p| p.0 == th.id) {
+            self.theme_store.preview = None;
+        }
+        crate::themes::set_preview(None);
         let dir = crate::themes::user_dir();
         let _ = std::fs::create_dir_all(&dir);
         if let Err(e) = std::fs::write(dir.join(format!("{}.conf", th.id)), &th.src) {
@@ -205,16 +232,39 @@ impl App {
         let cw = (w - (cols - 1) as f32 * 12.0) / cols as f32;
         let ch = 170.0;
         let rows = shown.len().div_ceil(cols);
+        let previewing = self.theme_store.preview.as_ref().map(|p| p.0.clone());
+        // pruh náhľadu: vyskúšaná téma + Install / Cancel
+        if let Some((id, name, _)) = self.theme_store.preview.clone() {
+            let (row, _) = ui.allocate_exact_size(vec2(w, 48.0), Sense::hover());
+            let r = Rect::from_min_max(row.min, pos2(row.right(), row.bottom() - 8.0));
+            ui.painter().rect_filled(r, CornerRadius::same(12), p.accent.gamma_multiply(0.14));
+            ui.painter().rect_stroke(r, CornerRadius::same(12), Stroke::new(1.0, p.accent.gamma_multiply(0.6)), StrokeKind::Inside);
+            widgets::icon_at(ui, pos2(r.left() + 20.0, r.center().y), 15.0, "eye", p.accent);
+            widgets::text(ui, pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &tf("Previewing {name} – it is not installed yet", &[("name", &name)]), theme::bold(13.0), p.text, r.width() - 260.0);
+            let mut b = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(r.right() - 230.0, r.top()), pos2(r.right() - 8.0, r.bottom()))).layout(egui::Layout::right_to_left(egui::Align::Center)));
+            if widgets::button(&mut b, Some("download"), &t("Install"), p.accent, p.accent_fg, 30.0, &p).clicked() {
+                if let Some(th) = list.iter().find(|x| x.id == id) {
+                    let th = th.clone();
+                    self.store_install(&th, ctx);
+                    return;
+                }
+            }
+            if widgets::button(&mut b, None, &t("Cancel"), p.card2, p.text, 30.0, &p).clicked() {
+                self.preview_cancel(ctx);
+                return;
+            }
+        }
         let (area, _) = ui.allocate_exact_size(vec2(w, rows as f32 * (ch + 12.0)), Sense::hover());
-        let (mut install, mut use_id, mut remove) = (None, None, None);
+        let (mut install, mut use_id, mut remove, mut try_it) = (None, None, None, None);
         for (i, th) in shown.iter().enumerate() {
             let r = Rect::from_min_size(area.min + vec2((i % cols) as f32 * (cw + 12.0), (i / cols) as f32 * (ch + 12.0)), vec2(cw, ch));
             let installed = have.iter().any(|h| h.id == th.id && h.user);
-            let using = cur == th.id;
+            let trying = previewing.as_deref() == Some(th.id.as_str());
+            let using = cur == th.id && !trying;
             let resp = ui.interact(r, ui.id().with(("ts-card", th.id.as_str())), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
             let hk = ctx.animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
             ui.painter().rect_filled(r, CornerRadius::same(14), p.card2.lerp_to_gamma(p.hover, hk * 0.6));
-            ui.painter().rect_stroke(r, CornerRadius::same(14), if using { Stroke::new(1.5, p.accent) } else { Stroke::new(1.0, p.line.lerp_to_gamma(p.line_strong, hk)) }, StrokeKind::Inside);
+            ui.painter().rect_stroke(r, CornerRadius::same(14), if using || trying { Stroke::new(1.5, p.accent) } else { Stroke::new(1.0, p.line.lerp_to_gamma(p.line_strong, hk)) }, StrokeKind::Inside);
             // ukážka: kúsok editora vo farbách témy
             let pv = Rect::from_min_size(r.min + vec2(8.0, 8.0), vec2(r.width() - 16.0, 86.0));
             if let Some(f) = &th.file {
@@ -258,16 +308,32 @@ impl App {
                 let xr = Rect::from_center_size(pos2(br.left() - 20.0, br.center().y), vec2(28.0, 28.0));
                 x_clicked = widgets::icon_button_at(ui, xr, "trash", 14.0, &p, true).on_hover_text(t("Remove")).clicked();
             }
-            if !th.desc.is_empty() {
-                resp.clone().on_hover_text(&th.desc);
+            if trying {
+                // štítok vpravo hore na ukážke
+                let txt = t("Preview");
+                let tw = widgets::text_w(ui, &txt, theme::bold(11.0)) + 16.0;
+                let chip = Rect::from_min_size(pos2(pv.right() - tw - 8.0, pv.top() + 8.0), vec2(tw, 20.0));
+                ui.painter().rect_filled(chip, CornerRadius::same(10), p.accent);
+                ui.painter().text(chip.center(), Align2::CENTER_CENTER, txt, theme::bold(11.0), p.accent_fg);
+            }
+            let hint = if installed { th.desc.clone() } else { format!("{}\n{}", th.desc, t("Click the card to try it – nothing is installed")) };
+            if !hint.trim().is_empty() {
+                resp.clone().on_hover_text(hint.trim());
             }
             if x_clicked {
                 remove = Some(th.id.clone());
-            } else if (bresp.clicked() || resp.clicked()) && !using {
+            } else if bresp.clicked() && !using {
                 if installed {
                     use_id = Some(th.id.clone());
                 } else {
                     install = Some((*th).clone());
+                }
+            } else if resp.clicked() && !using {
+                // klik na kartu: nainštalovanú použiť, inú len vyskúšať
+                if installed {
+                    use_id = Some(th.id.clone());
+                } else if !trying {
+                    try_it = Some((*th).clone());
                 }
             }
         }
@@ -283,10 +349,14 @@ impl App {
                 self.store_start(ctx);
             }
         });
+        if let Some(th) = try_it {
+            self.store_preview(&th, ctx);
+        }
         if let Some(th) = install {
             self.store_install(&th, ctx);
         }
         if let Some(id) = use_id {
+            self.preview_cancel(ctx);
             self.set_code_theme(&id, ctx);
             self.apply_look(ctx);
         }

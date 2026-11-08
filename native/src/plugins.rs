@@ -95,6 +95,14 @@ var flux = {
       };
     }
   },
+  activityBar: {
+    add: function (o) {
+      o = o || {}; var k = 'a' + (++__n);
+      __status[k] = o.onClick || (o.command ? function () { __cmd(o.command); } : null);
+      __fx.push({ t: 'act', k: k, icon: String(o.icon || 'puzzle'), title: String(o.title || ''), key: String(o.key || '') });
+      return { remove: function () { delete __status[k]; __fx.push({ t: 'act-rm', k: k }); } };
+    }
+  },
   snippets: { add: function (lang, prefix, body, desc) { __fx.push({ t: 'snippet', lang: String(lang), prefix: String(prefix), body: String(body), desc: String(desc || '') }); } },
   themes: { add: function (key, def) { __fx.push({ t: 'theme', key: String(key), def: def || {} }); } },
   marks: {
@@ -463,6 +471,32 @@ export function activate(flux) {
         assert_eq!(out[0]["text"], "Hi a.py");
         let out = h.call("test.a", "__emit('save')", &snap);
         assert_eq!(out[0]["text"], "saved a.py");
+    }
+
+    #[test]
+    fn plugin_activity_bar() {
+        let mut h = Host::new();
+        let m = tmp_plugin(
+            "act",
+            r#"
+export function activate(flux) {
+  flux.commands.register('go', 'Go', () => flux.toast('went'), { key: 'Ctrl+Alt+W' });
+  flux.activityBar.add({ icon: 'rocket', title: 'Go', key: 'Ctrl+Alt+W', command: 'go' });
+  flux.activityBar.add({ icon: '<svg/>', title: 'Click', onClick: () => flux.toast('clicked') });
+}"#,
+        );
+        let snap = json!({ "file": null, "folder": null, "storage": {} });
+        let fx = h.load(m, &snap, true);
+        let acts: Vec<&Value> = fx.iter().filter(|f| f["t"] == "act").collect();
+        assert_eq!(acts.len(), 2, "{fx:?}");
+        assert_eq!(acts[0]["icon"], "rocket");
+        assert_eq!(acts[0]["key"], "Ctrl+Alt+W");
+        let k0 = acts[0]["k"].as_str().unwrap().to_string();
+        let k1 = acts[1]["k"].as_str().unwrap().to_string();
+        let out = h.call("test.act", &format!("__click({})", json!(k0)), &snap);
+        assert_eq!(out[0]["text"], "went");
+        let out = h.call("test.act", &format!("__click({})", json!(k1)), &snap);
+        assert_eq!(out[0]["text"], "clicked");
     }
 
     #[test]

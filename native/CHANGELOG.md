@@ -2,6 +2,17 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.71
+
+**New**
+- **More in the bar on the left**: under Explorer and Plugins there are now quick buttons for Search everything, Run, Terminal, AI assistant, the Theme store and GitHub. Every tooltip shows the shortcut.
+- **New shortcuts:** Ctrl+Shift+X Plugins, Ctrl+Shift+K Theme store, Ctrl+Shift+G GitHub, Ctrl+` Terminal, Ctrl+Shift+F Search.
+- **Plugins can add their own icon to that bar**, with their own shortcut (`flux.activityBar.add`, guide in `docs/PLUGINS.md`). Plugin commands already had shortcuts.
+- **Try themes before installing.** In the Theme store, click a card and the whole Flux switches to that theme right away. A bar above lets you **Install** it or **Cancel**; closing Settings also goes back to your theme.
+
+**Fixes**
+- **See-through – blurred is always blurred now.** When the system can't blur what is behind the window (Linux without the KWin Blur effect, other desktops), Flux draws a blurred copy of your wallpaper instead of staying clear. Switching between clear, blurred and wallpaper also works right away.
+
 ## 0.9.70
 
 **Fixes**

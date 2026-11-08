@@ -58,6 +58,8 @@ export interface Flux {
     run(id: string): void;
   };
   statusBar: { add(item: { text: string; title?: string; onClick?: () => void }): StatusItem };
+  /** Flux Native: icon in the left activity bar. icon = Flux icon name or "<svg …>"; key = shortcut like "Ctrl+Alt+W" */
+  activityBar: { add(item: { icon: string; title: string; key?: string; command?: string; onClick?: () => void }): { remove(): void } };
   snippets: {
     /** language like activeFile().language, or "*" for all; body uses $1, ${1:name}, $0 */
     add(language: string, prefix: string, body: string, description?: string): void;

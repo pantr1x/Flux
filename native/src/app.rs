@@ -303,6 +303,7 @@ pub struct App {
     proj_reveal: bool,                  // po otvorení projektu posunúť zoznam PROJECTS k nemu
     closed_tabs: Vec<String>,           // zavreté karty (Ctrl+Shift+T ich vráti)
     theme_dirty: bool,
+    native_blur: bool, // rozmazanie za oknom robí systém (Windows, KWin)
     theme_store: themestore::ThemeStore, // obchod s témami (Nastavenia → Téma)                  // súbor témy sa zmenil – znova použiť tému
     side_drag: Option<f32>,             // ťahanie okraja bočného panela (šírka pri začiatku)
     layout_name: String,                // pole na meno nového rozloženia okna
@@ -407,8 +408,11 @@ impl App {
         crate::glass::round(cc);
         crate::glass::no_top_line(cc);
         // rozmazané priehľadné okno: rozmazanie robí Windows (glass.rs)
-        if crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && core.setting("material").as_str() == Some("blur") && !crate::glass::blur(cc, true) {
-            eprintln!("[flux] blur behind the window is not available, staying clear");
+        // keď to systém nevie (Linux bez KWin efektu Blur), Flux nakreslí rozmazanú tapetu sám (native_blur = false)
+        let want_blur = crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && core.setting("material").as_str() == Some("blur");
+        let native_blur = want_blur && crate::glass::blur(cc, true);
+        if want_blur && !native_blur {
+            eprintln!("[flux] blur behind the window is not available, drawing a blurred wallpaper");
         }
         // naposledy zistená živá tapeta – hneď od štartu, bez prebliknutia tapety Windows
         let lc = core.setting("liveCache");
@@ -458,6 +462,7 @@ impl App {
             proj_reveal: true,
             closed_tabs: vec![],
             theme_dirty: false,
+            native_blur,
             theme_store: Default::default(),
             side_drag: None,
             layout_name: String::new(),
@@ -1033,7 +1038,13 @@ impl App {
     // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
     pub(crate) fn see_through(&self) -> bool {
         // priehľadné okno ukazuje tapetu, keď sa za behu prepne na „Wallpaper picture“ (bez nového štartu)
-        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && self.wall_on() && matches!(self.get("material").as_str(), Some("see" | "blur"))
+        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed)
+            && self.wall_on()
+            && match self.get("material").as_str() {
+                Some("see") => true,
+                Some("blur") => self.native_blur,
+                _ => false,
+            }
     }
 
     // „Restart to update“: uloží súbory, vymení program a spustí nový
@@ -3530,6 +3541,11 @@ impl App {
                 (i.consume_key(cs, egui::Key::A), "search"),
                 (i.consume_key(cs, egui::Key::P), "commands"),
                 (i.consume_key(cs, egui::Key::E), "view-explorer"),
+                (i.consume_key(cs, egui::Key::F), "search"),
+                (i.consume_key(cs, egui::Key::X), "view-plugins"),
+                (i.consume_key(cs, egui::Key::K), "themes"),
+                (i.consume_key(cs, egui::Key::G), "github"),
+                (i.consume_key(c, egui::Key::Backtick), "terminal"),
                 (i.consume_key(cs, egui::Key::T), "reopen-tab"),
                 (i.consume_key(cs, egui::Key::PageUp), "tab-left"),
                 (i.consume_key(cs, egui::Key::PageDown), "tab-right"),
@@ -3805,6 +3821,12 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // zatvorenie počas náhľadu témy z obchodu: ostane predošlá (nenainštalovaná sa neuloží)
+        if let Some((_, _, prev)) = self.theme_store.preview.take() {
+            self.update_settings(|o| {
+                o.insert("codeTheme".into(), json!(prev));
+            });
+        }
         crate::boot::closed();
     }
 
@@ -3829,8 +3851,15 @@ impl eframe::App for App {
                 s.out.focus(ctx);
             }
         }
+        // vyskúšaná téma z obchodu sa po zatvorení nastavení vráti (nie je nainštalovaná)
+        if self.theme_store.preview.is_some() && self.settings.is_none() {
+            self.preview_cancel(ctx);
+        }
         if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
-            crate::glass::blur(&*frame, self.get("material").as_str() == Some("blur"));
+            let on = self.get("material").as_str() == Some("blur");
+            self.native_blur = crate::glass::blur(&*frame, on) && on;
+            self.wall_at = -100.0; // zdroj tapety hneď znova (rozmazaná tapeta namiesto systému)
+            self.apply_look(ctx);
         }
         self.events();
         if self.intro.is_none() {
@@ -3843,6 +3872,7 @@ impl eframe::App for App {
         }
         self.run_tests(ctx);
         // tapeta pod všetkým (panely sú nad ňou priesvitné)
+        self.wall.blur_all = self.get("material").as_str() == Some("blur") && !self.native_blur;
         if self.wall.paint(ctx) {
             self.apply_look(ctx);
         }

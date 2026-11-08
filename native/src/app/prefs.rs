@@ -619,8 +619,8 @@ impl App {
     }
 
     pub(super) fn set(&mut self, key: &str, v: Value, ctx: &egui::Context) {
-        if key == "material" && matches!(v.as_str(), Some("see" | "blur")) {
-            self.glass_apply = true; // čisté ↔ rozmazané ide hneď, bez nového štartu
+        if key == "material" {
+            self.glass_apply = true; // čisté ↔ rozmazané ↔ tapeta ide hneď, bez nového štartu
         }
         self.update_settings(|o| {
             o.insert(key.into(), v);
