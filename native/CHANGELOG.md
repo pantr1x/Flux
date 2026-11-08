@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.72
+
+**Changes**
+- **The bar on the left is tidy again**: only Explorer and Plugins (plus icons that your plugins add). The quick buttons from 0.9.71 are gone – their shortcuts still work (Ctrl+Shift+A search, Ctrl+` terminal, Ctrl+I AI, Ctrl+Shift+K theme store…).
+- **Hover and click animations** there: a rounded highlight fades in, the icon lifts and gives a small springy bounce, shrinks a little while pressed, and the active view has a glowing accent mark.
+
 ## 0.9.71
 
 **New**

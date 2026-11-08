@@ -76,6 +76,20 @@ pub fn icon_at(ui: &egui::Ui, center: egui::Pos2, size: f32, name: &str, color: 
     icon(ui, Rect::from_center_size(center, vec2(size, size)), name, color);
 }
 
+// ikona s animovanou veľkosťou: textúra sa načíta raz v pevnej veľkosti (base) a len sa zväčší/zmenší –
+// inak by každá nová veľkosť znamenala nové vykreslenie SVG a novú textúru
+pub fn icon_scaled(ui: &egui::Ui, center: egui::Pos2, base: f32, scale: f32, name: &str, color: Color32) {
+    let Some(svg) = gen::line(name) else { return };
+    let img = egui::Image::from_bytes(format!("bytes://li/{name}.svg"), svg.as_bytes());
+    match img.load_for_size(ui.ctx(), vec2(base, base)).ok().and_then(|t| t.texture_id()) {
+        Some(id) => {
+            let r = Rect::from_center_size(center, vec2(base, base) * scale);
+            ui.painter().image(id, r, Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), color);
+        }
+        None => ui.ctx().request_repaint(),
+    }
+}
+
 // Text v jednom riadku, pri nedostatku miesta skrátený na „…“.
 pub fn text(ui: &egui::Ui, pos: egui::Pos2, align: Align2, s: &str, font: FontId, color: Color32, max_w: f32) -> Rect {
     let mut job = LayoutJob::single_section(s.to_string(), TextFormat { font_id: font, color, ..Default::default() });

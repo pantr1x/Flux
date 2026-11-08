@@ -1,7 +1,7 @@
 // Rozloženie ako vo VS Code: úzky pás ikon (Activity Bar) a vedľa neho bočný panel so zobrazením
 // – Prieskumník (projekt ako zbaliteľná sekcia s Nový súbor / Nový priečinok / Obnoviť / Zbaliť,
 // nové súbory sa píšu priamo do stromu) a Projekty (pripnuté, zoznam, Nový projekt).
-use super::{chrome, Bottom, drag_ghost, drop_ok, name_field, rename_field, short_dir, App, Rn};
+use super::{chrome, drag_ghost, drop_ok, name_field, rename_field, short_dir, App, Rn};
 use crate::i18n::t;
 use crate::theme::{self, GAP, TOP_H};
 use crate::widgets::{self, Lead};
@@ -18,15 +18,45 @@ const TREE_H: f32 = 24.0; // riadok stromu (VS Code má 22)
 // zobrazenia v páse ikon: id, ikona, popis
 // (hľadanie je pole v hornej lište, projekty sú sekcia Prieskumníka – ako VS Code)
 const VIEWS: [(&str, &str, &str, &str); 2] = [("explorer", "file", "Explorer", "Ctrl+Shift+E"), ("plugins", "puzzle", "Plugins", "Ctrl+Shift+X")];
-// rýchle akcie pod zobrazeniami: (príkaz, ikona, názov, skratka)
-const ACTIONS: [(&str, &str, &str, &str); 6] = [
-    ("search", "search", "Search everything", "Ctrl+Shift+A"),
-    ("run", "play", "Run", "F5"),
-    ("terminal", "terminal", "Terminal", "Ctrl+`"),
-    ("ai", "sparkle", "AI assistant", "Ctrl+I"),
-    ("themes", "palette", "Theme store", "Ctrl+Shift+K"),
-    ("github", "github", "GitHub", "Ctrl+Shift+G"),
-];
+// tlačidlo ľavého pásu: zaoblená plocha pri prechode, ikona sa pri najazdení/kliknutí „odrazí“ (pružina),
+// pri stlačení sa jemne zmenší; vráti (odpoveď, stred, veľkosť a farbu ikony)
+fn bar_button(ui: &egui::Ui, b: Rect, id: egui::Id, active: bool, anim: bool, p: &crate::theme::Pal) -> (egui::Response, egui::Pos2, f32, egui::Color32) {
+    let ctx = ui.ctx().clone();
+    let resp = ui.interact(b, id, Sense::click());
+    let t = if anim { 0.14 } else { 0.0 };
+    let hk = ctx.animate_bool_with_time(id.with("h"), resp.hovered(), t);
+    let ak = ctx.animate_bool_with_time(id.with("a"), active, t);
+    let pk = ctx.animate_bool_with_time(id.with("p"), resp.is_pointer_button_down_on(), if anim { 0.07 } else { 0.0 });
+    let now = ctx.input(|i| i.time);
+    // začiatok „odrazu“: najazdenie alebo kliknutie
+    let kick: f64 = ctx.data_mut(|d| {
+        let was = d.get_temp::<bool>(id.with("was")).unwrap_or(false);
+        d.insert_temp(id.with("was"), resp.hovered());
+        if (resp.hovered() && !was) || resp.clicked() {
+            d.insert_temp(id.with("kick"), now);
+        }
+        d.get_temp::<f64>(id.with("kick")).unwrap_or(-10.0)
+    });
+    let dt = (now - kick) as f32;
+    let bounce = if anim && dt < 0.7 {
+        ctx.request_repaint();
+        (-dt * 7.0).exp() * (dt * 24.0).sin() * 0.16
+    } else {
+        0.0
+    };
+    let pill = Rect::from_center_size(b.center(), vec2(38.0, 38.0));
+    if hk > 0.0 || ak > 0.0 {
+        ui.painter().rect_filled(pill, CornerRadius::same(12), p.hover.gamma_multiply(hk.max(ak * 0.55)));
+    }
+    if ak > 0.0 {
+        ui.painter().rect_filled(pill, CornerRadius::same(12), p.accent.gamma_multiply(0.10 * ak));
+    }
+    let scale = (1.0 + 0.08 * hk + bounce) * (1.0 - 0.1 * pk);
+    let center = b.center() - vec2(0.0, 1.5 * hk * (1.0 - pk));
+    let c = p.text3.lerp_to_gamma(p.text, hk.max(ak));
+    let c = if ak > 0.5 { c.lerp_to_gamma(p.accent, 0.35 * ak) } else { c };
+    (resp, center, scale, c)
+}
 
 // bublina s názvom a skratkou (klávesy ako malé čiapočky)
 fn key_tip(ui: &mut egui::Ui, name: &str, key: &str) {
@@ -134,17 +164,19 @@ impl App {
                 for (id, icon, tip, key) in VIEWS {
                     let b = Rect::from_min_size(pos2(r.left(), y), vec2(ACT_W, 46.0));
                     let active = self.side_open && self.side_view == id;
-                    let resp = ui.interact(b, ui.id().with(("act", id)), Sense::click()).on_hover_ui(|ui| key_tip(ui, &t(tip), key));
-                    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                    let ak = ui.ctx().animate_bool_with_time(resp.id.with("a"), active, if self.anim_on() { 0.15 } else { 0.0 });
+                    let bid = ui.id().with(("act", id));
+                    let (resp, center, scale, c) = bar_button(ui, b, bid, active, self.anim_on(), &p);
+                    let resp = resp.on_hover_ui(|ui| key_tip(ui, &t(tip), key)).on_hover_cursor(egui::CursorIcon::PointingHand);
+                    let ak = ui.ctx().animate_bool_with_time(bid.with("a"), active, if self.anim_on() { 0.14 } else { 0.0 });
                     if ak > 0.0 {
-                        // značka aktívneho zobrazenia pri okraji (ako VS Code), v akcentovej farbe
+                        // značka aktívneho zobrazenia pri okraji (ako VS Code), v akcentovej farbe, so žiarou
                         let h = 22.0 * ak;
-                        let bx = if right { b.right() - 2.5 } else { b.left() + 0.5 };
-                        ui.painter().rect_filled(Rect::from_min_size(pos2(bx, b.center().y - h / 2.0), vec2(2.0, h)), CornerRadius::same(1), p.accent);
+                        let bx = if right { b.right() - 3.0 } else { b.left() + 0.5 };
+                        let bar = Rect::from_min_size(pos2(bx, b.center().y - h / 2.0), vec2(2.5, h));
+                        ui.painter().rect_filled(bar.expand2(vec2(2.0, 3.0)), CornerRadius::same(3), p.accent.gamma_multiply(0.18 * ak));
+                        ui.painter().rect_filled(bar, CornerRadius::same(2), p.accent);
                     }
-                    let c = p.text3.lerp_to_gamma(p.text, hk.max(ak));
-                    widgets::icon_at(ui, b.center(), 21.0, icon, c);
+                    widgets::icon_scaled(ui, center, 21.0, scale, icon, c);
                     if id == "explorer" {
                         self.tour_rects.insert("files", b);
                     }
@@ -153,36 +185,8 @@ impl App {
                     }
                     y += 46.0;
                 }
-                // rýchle akcie (s jemnou čiarou nad nimi) a ikony z pluginov (flux.activityBar.add)
+                // ikony z pluginov (flux.activityBar.add), pod jemnou čiarou
                 let limit = r.bottom() - GAP - 4.0 - 80.0;
-                ui.painter().hline(r.left() + 14.0..=r.right() - 14.0, y + 4.0, Stroke::new(1.0, p.line.gamma_multiply(0.7)));
-                y += 9.0;
-                let mut run_act: Option<&str> = None;
-                for (id, icon, tip, key) in ACTIONS {
-                    if id == "github" && !self.gh_plugin() {
-                        continue;
-                    }
-                    if y + 40.0 > limit {
-                        break;
-                    }
-                    let b = Rect::from_min_size(pos2(r.left() + 6.0, y + 2.0), vec2(ACT_W - 12.0, 36.0));
-                    let on = match id {
-                        "ai" => self.ai.open,
-                        "terminal" => self.panel_open && self.sess_mut().map(|s| s.bottom == Bottom::Terminal).unwrap_or(false),
-                        _ => false,
-                    };
-                    let resp = ui.interact(b, ui.id().with(("act2", id)), Sense::click()).on_hover_ui(|ui| key_tip(ui, &t(tip), key));
-                    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                    if hk > 0.0 || on {
-                        ui.painter().rect_filled(b, CornerRadius::same(10), p.hover.gamma_multiply(if on { 1.0 } else { hk }));
-                    }
-                    let c = if on { p.accent } else { p.text3.lerp_to_gamma(p.text, hk) };
-                    widgets::icon_at(ui, b.center(), 18.0, icon, c);
-                    if resp.clicked() {
-                        run_act = Some(id);
-                    }
-                    y += 40.0;
-                }
                 let mut plug_click = None;
                 if !self.plug.acts.is_empty() && y + 40.0 <= limit {
                     ui.painter().hline(r.left() + 14.0..=r.right() - 14.0, y + 4.0, Stroke::new(1.0, p.line.gamma_multiply(0.7)));
@@ -192,27 +196,23 @@ impl App {
                     if y + 40.0 > limit {
                         break;
                     }
-                    let b = Rect::from_min_size(pos2(r.left() + 6.0, y + 2.0), vec2(ACT_W - 12.0, 36.0));
-                    let resp = ui.interact(b, ui.id().with(("plug-act", a.plugin.as_str(), a.k.as_str())), Sense::click()).on_hover_ui(|ui| key_tip(ui, &a.title, &a.key_text));
-                    let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-                    if hk > 0.0 {
-                        ui.painter().rect_filled(b, CornerRadius::same(10), p.hover.gamma_multiply(hk));
-                    }
-                    let c = p.text3.lerp_to_gamma(p.text, hk);
+                    let b = Rect::from_min_size(pos2(r.left(), y), vec2(ACT_W, 44.0));
+                    let (resp, center, scale, c) = bar_button(ui, b, ui.id().with(("plug-act", a.plugin.as_str(), a.k.as_str())), false, self.anim_on(), &p);
+                    let resp = resp.on_hover_ui(|ui| key_tip(ui, &a.title, &a.key_text)).on_hover_cursor(egui::CursorIcon::PointingHand);
                     if a.icon.trim_start().starts_with("<svg") {
                         // vlastné SVG pluginu, zafarbené ako ostatné ikony
                         let uri = format!("bytes://plugact-{}-{}.svg", a.plugin, a.k);
-                        egui::Image::from_bytes(uri, a.icon.as_bytes().to_vec()).tint(c).paint_at(ui, Rect::from_center_size(b.center(), vec2(18.0, 18.0)));
+                        let img = egui::Image::from_bytes(uri, a.icon.as_bytes().to_vec());
+                        if let Some(tid) = img.load_for_size(ui.ctx(), vec2(19.0, 19.0)).ok().and_then(|t| t.texture_id()) {
+                            ui.painter().image(tid, Rect::from_center_size(center, vec2(19.0, 19.0) * scale), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), c);
+                        }
                     } else {
-                        widgets::icon_at(ui, b.center(), 18.0, &a.icon, c);
+                        widgets::icon_scaled(ui, center, 19.0, scale, &a.icon, c);
                     }
                     if resp.clicked() {
                         plug_click = Some((a.plugin.clone(), a.k.clone()));
                     }
-                    y += 40.0;
-                }
-                if let Some(id) = run_act {
-                    self.act(id, &ctx);
+                    y += 44.0;
                 }
                 if let Some((pl, k)) = plug_click {
                     self.plug_call(&pl, &format!("__click({})", json!(k)));
