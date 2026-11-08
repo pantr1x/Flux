@@ -1106,6 +1106,7 @@ impl App {
         if fsops::open_workspace(&self.core, dir).is_null() {
             return;
         }
+        self.start = false;
         self.tree.clear();
         self.open_dirs.clear();
         self.reload_projects();
@@ -1236,6 +1237,7 @@ impl App {
     }
 
     fn open_file(&mut self, path: &str) {
+        self.start = false;
         if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
             self.activate(i);
             return;
@@ -3772,18 +3774,16 @@ impl eframe::App for App {
         while self.frames.front().is_some_and(|f| t_now - f > 1.0) {
             self.frames.pop_front();
         }
-        // domov Fluxu namiesto bočného panela a karty
+        // pás ikon a bočný panel ostávajú aj na domove (ako uvítacia stránka VS Code)
+        self.activity_bar(root);
+        if self.side_open {
+            self.sidebar(root);
+        }
         if self.start {
             egui::CentralPanel::default().frame(Frame::new()).show(root, |ui| {
                 let r = ui.max_rect();
                 self.start_ui(ui, r);
             });
-        }
-        if !self.start {
-            self.activity_bar(root);
-        }
-        if self.side_open && !self.start {
-            self.sidebar(root);
         }
         let p = self.pal;
         let radius = self.radius();

@@ -135,7 +135,11 @@ impl App {
         let ctx = ui.ctx().clone();
         let anim = self.anim_on();
         let now = ctx.input(|i| i.time);
-        ui.painter().rect_filled(full, if self.rounded { CornerRadius::same(8) } else { CornerRadius::ZERO }, p.base);
+        // vľavo je pás ikon (a bočný panel) – zaoblené len pravé rohy okna
+        let right_side = self.get("sidePos").as_str() == Some("right");
+        let k = if self.rounded { 8 } else { 0 };
+        let cr = if right_side { CornerRadius { nw: k, sw: k, ..Default::default() } } else { CornerRadius { ne: k, se: k, ..Default::default() } };
+        ui.painter().rect_filled(full, cr, p.base);
         // pohyblivé žiary ako v úvode (ob-aurora)
         // pohyb len 8 s po otvorení a len keď je okno aktívne – potom stoja a nič sa neprekresľuje (CPU)
         let glide_end = self.start_opened + 8.0;
@@ -149,25 +153,31 @@ impl App {
         if moving {
             ctx.request_repaint_after(std::time::Duration::from_millis(33));
         }
-        // ---- horná lišta: logo, ☰, ⚙ (okno sa ťahá za prázdne miesto) ----
+        // ---- horná lišta: ← →, vpravo „Späť do editora“ (logo, ☰ a nastavenia sú v páse ikon) ----
         let top = Rect::from_min_size(full.min, vec2(full.width(), theme::TOP_H));
         super::chrome::drag_area(ui, top, "start");
         let cy = top.center().y;
-        widgets::brand_mark(ui, Rect::from_min_size(pos2(full.left() + 16.0, cy - 10.0), vec2(20.0, 20.0)), &p);
-        ui.painter().text(pos2(full.left() + 44.0, cy), Align2::LEFT_CENTER, "flux", theme::bold(15.0), p.text);
-        let menu = widgets::icon_button_at(ui, Rect::from_center_size(pos2(full.left() + 98.0, cy), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
-        self.app_menu(&menu);
-        // ← → ako v hornej lište (navButtons v app.js)
+        let mut lx = full.left() + 8.0;
+        if !self.side_open {
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(lx + 14.0, cy), vec2(28.0, 28.0)), "sidebar", 16.0, &p, true).on_hover_text(t("Show sidebar")).clicked() {
+                self.side_open = true;
+            }
+            lx += 32.0;
+        }
         let (back, fwd) = (self.hist_i > 0, self.hist_i + 1 < self.hist.len());
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(full.left() + 132.0, cy), vec2(28.0, 28.0)), "arrowLeft", 16.0, &p, back).on_hover_text(t("Back")).clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(lx + 14.0, cy), vec2(28.0, 28.0)), "arrowLeft", 16.0, &p, back).on_hover_text(t("Back")).clicked() {
             self.go(true);
         }
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(full.left() + 162.0, cy), vec2(28.0, 28.0)), "arrowRight", 16.0, &p, fwd).on_hover_text(t("Forward")).clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(lx + 44.0, cy), vec2(28.0, 28.0)), "arrowRight", 16.0, &p, fwd).on_hover_text(t("Forward")).clicked() {
             self.go(false);
         }
-        let set_r = Rect::from_center_size(pos2(full.right() - super::chrome::CONTROLS_W - 24.0, cy), vec2(30.0, 30.0));
-        if widgets::icon_button_at(ui, set_r, "settings", 16.0, &p, true).on_hover_text(t("Settings")).clicked() {
-            self.open_settings("general", &ctx);
+        // zavrieť domov (aj Esc) – späť k projektu / súboru
+        if self.workspace().is_some() || !self.tabs.is_empty() {
+            let rx = if right_side { full.right() - 8.0 } else { full.right() - super::chrome::CONTROLS_W - 10.0 };
+            let xr = Rect::from_center_size(pos2(rx - 14.0, cy), vec2(28.0, 28.0));
+            if widgets::icon_button_at(ui, xr, "x", 16.0, &p, true).on_hover_text(t("Close")).clicked() {
+                self.close_start();
+            }
         }
         // ---- obsah (posúva sa) ----
         let body = Rect::from_min_max(pos2(full.left(), top.bottom()), full.max);

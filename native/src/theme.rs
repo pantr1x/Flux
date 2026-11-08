@@ -256,6 +256,12 @@ pub fn fonts(ctx: &egui::Context, code_font: &str) {
     }
     let bold = FontFamily::Name("bold".into());
     defs.families.insert(bold.clone(), fallback);
-    add(&mut defs, "ui-bold", &["seguisb.ttf", "segoeuib.ttf", "Inter-SemiBold.ttf", "Inter-SemiBold.otf", "NotoSans-SemiBold.ttf", "DejaVuSans-Bold.ttf"], bold);
+    add(&mut defs, "ui-bold", &["seguisb.ttf", "segoeuib.ttf", "Inter-SemiBold.ttf", "Inter-SemiBold.otf", "NotoSans-SemiBold.ttf", "DejaVuSans-Bold.ttf"], bold.clone());
+    // Inter (pribalené, OFL – assets/fonts) je písmo celého rozhrania na všetkých systémoch;
+    // písma systému ostávajú za ním ako záloha znakov
+    defs.font_data.insert("inter".into(), Arc::new(FontData::from_static(include_bytes!("../assets/fonts/Inter-Regular.ttf"))));
+    defs.font_data.insert("inter-bold".into(), Arc::new(FontData::from_static(include_bytes!("../assets/fonts/Inter-SemiBold.ttf"))));
+    defs.families.entry(FontFamily::Proportional).or_default().insert(0, "inter".into());
+    defs.families.entry(bold).or_default().insert(0, "inter-bold".into());
     ctx.set_fonts(defs);
 }

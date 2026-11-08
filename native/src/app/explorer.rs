@@ -130,13 +130,8 @@ impl App {
                     }
                     y += 46.0;
                 }
-                // dole: ponuka ☰, nastavenia, svetlá/tmavá
+                // dole: ponuka ☰ a nastavenia (svetlá/tmavá je v Nastaveniach → Vzhľad a v ponuke)
                 let mut by = r.bottom() - GAP - 4.0;
-                let theme_r = Rect::from_min_max(pos2(r.left() + 6.0, by - 36.0), pos2(r.right() - 6.0, by));
-                if widgets::icon_button_at(ui, theme_r, if p.dark { "sun" } else { "moon" }, 18.0, &p, true).on_hover_text(t("Light / dark")).clicked() {
-                    self.set_theme(!p.dark, &ctx);
-                }
-                by -= 40.0;
                 let set_r = Rect::from_min_max(pos2(r.left() + 6.0, by - 36.0), pos2(r.right() - 6.0, by));
                 self.tour_rects.insert("settings", set_r);
                 if widgets::icon_button_at(ui, set_r, "settings", 20.0, &p, true).on_hover_text(t("Settings")).clicked() {
@@ -322,7 +317,7 @@ impl App {
             let h = (ui.max_rect().bottom() - files_h - ui.cursor().top() - ui.spacing().item_spacing.y * 2.0).max(60.0);
             let sk = egui::Id::new("sa-tree");
             let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-            let mut sa = egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]);
+            let mut sa = egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, true]);
             if let Some(o) = off {
                 sa = sa.vertical_scroll_offset(o);
             }
@@ -346,7 +341,7 @@ impl App {
                     }
                 }
                 // prázdne miesto pod stromom: klik zruší výber (nové súbory pôjdu do koreňa), pravý klik = ponuka koreňa
-                let rest = ui.available_height().max(24.0);
+                let rest = 24.0;
                 let (_, eresp) = ui.allocate_exact_size(vec2(ui.available_width(), rest), Sense::click());
                 if eresp.clicked() {
                     self.tree_focus = None;
@@ -360,20 +355,14 @@ impl App {
                 }
             });
             self.smooth.end(sk, &sout);
-        } else {
-            let gap = (ui.max_rect().bottom() - files_h - ui.cursor().top() - ui.spacing().item_spacing.y).max(0.0);
-            ui.add_space(gap);
         }
         self.files_section(ui, files_h, side_hover);
     }
 
-    // sekcia FILES: súbory otvorené mimo projektu, pri spodku panela
-    fn files_section(&mut self, ui: &mut egui::Ui, files_h: f32, side_hover: bool) {
+    // sekcia FILES: súbory otvorené mimo projektu – hneď pod stromom (ako sekcie vo VS Code)
+    fn files_section(&mut self, ui: &mut egui::Ui, _files_h: f32, side_hover: bool) {
         let p = self.pal;
-        let top = ui.max_rect().bottom() - files_h;
-        if ui.cursor().top() < top {
-            ui.add_space(top - ui.cursor().top());
-        }
+        ui.add_space(4.0);
         ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top() - 2.0, Stroke::new(1.0, p.line));
         let acts = [("filePlus", t("New file"))];
         let (head, hit) = self.sec_header(ui, "files", &t("Files").to_uppercase(), &acts, side_hover);
@@ -481,6 +470,7 @@ impl App {
         if let Some(d) = open {
             if ws.as_deref() == Some(d.as_str()) {
                 self.home = true;
+                self.start = false;
             } else {
                 self.open_folder(&d);
             }

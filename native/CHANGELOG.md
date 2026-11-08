@@ -2,6 +2,16 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.58
+
+**Look**
+- **New font: Inter** for the whole app (menus, sidebar, tabs, settings) on Windows and Linux. It is built into Flux, so it looks the same everywhere. The code font stays as you set it.
+- *FILES* sits right under the project (or under *No folder is open*) instead of at the very bottom of the sidebar.
+- The light/dark button is gone from the bar on the left – switch it in the menu ☰ (or Ctrl+Shift+L) or in Settings → Appearance.
+
+**Home screen**
+- The bar on the left and the Explorer stay visible on the home screen, so you can open a project or file right away. **×** at the top right (or Esc) takes you back to where you were, and ← → work as usual.
+
 ## 0.9.57
 
 **Search and projects like in VS Code**
