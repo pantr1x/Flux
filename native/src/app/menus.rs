@@ -123,9 +123,9 @@ impl App {
             "ai" => self.toggle_ai(),
             "new-file" => self.open_new_file(None),
             "new-folder" => self.start_new_item(true, None),
-            "view-explorer" | "view-projects" => {
+            "view-explorer" => {
                 self.side_open = true;
-                self.side_view = id.trim_start_matches("view-").to_string();
+                self.side_view = "explorer".into();
             }
             "new-project" => {
                 self.open_new_project();

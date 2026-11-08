@@ -93,19 +93,6 @@ pub fn text_w(ui: &egui::Ui, s: &str, font: FontId) -> f32 {
     ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), font, Color32::WHITE).size().x)
 }
 
-// Nadpis sekcie v bočnom paneli („PROJECTS“): 11 px, tučné, s rozostupom písmen; vpravo voliteľné ikonové tlačidlo.
-pub fn section(ui: &mut egui::Ui, title: &str, action: Option<&str>, p: &Pal) -> Option<Response> {
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
-    let mut job = LayoutJob::default();
-    job.append(title, 0.0, TextFormat { font_id: theme::bold(11.0), color: p.text3, extra_letter_spacing: 1.0, ..Default::default() });
-    let galley = ui.fonts_mut(|f| f.layout_job(job));
-    ui.painter().galley(pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0), galley, p.text3);
-    action.map(|name| {
-        let r = Rect::from_center_size(pos2(rect.right() - 11.0, rect.center().y), vec2(24.0, 24.0));
-        icon_button_at(ui, r, name, 14.0, p, true)
-    })
-}
-
 pub fn icon_button_at(ui: &mut egui::Ui, r: Rect, name: &str, size: f32, p: &Pal, enabled: bool) -> Response {
     // aj vypnuté tlačidlo zachytí klik – inak by prepadol do lišty okna (dvojklik = maximalizovať)
     let mut resp = ui.interact(r, ui.id().with(("ib", name, r.min.x as i32, r.min.y as i32)), Sense::click());

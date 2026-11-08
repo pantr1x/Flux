@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.57
+
+**Search and projects like in VS Code**
+- **The search field is always at the top**, in the middle of the window (it moves next to *AI* when the tabs need the room). Click it or press Ctrl+Shift+A to find files, commands, settings and projects. If you only want the magnifier: Settings → Appearance → *Wide search field*.
+- **Projects are now a section of the Explorer** instead of a separate view (VS Code has no Projects view either): *PROJECTS* at the top with pinned projects first, and *New project* / *Open folder* when you hover its title; below it the files of the open project. Click a section title to fold it.
+- The bar with icons on the left now has *Explorer* and *Plugins*.
+
 ## 0.9.56
 
 **Layout like VS Code**

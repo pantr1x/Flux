@@ -1910,10 +1910,14 @@ impl App {
             self.toggle_ai();
         }
         rx -= 63.0;
-        if self.get("showSearch").as_bool() != Some(false) && self.get("searchWide").as_bool() == Some(true) {
-            // široké pole hľadania (body.search-wide #topsearch): 🔍 Search … Ctrl+Shift+A
-            let w = (rx - x - 160.0).clamp(120.0, 280.0);
-            let sr = Rect::from_min_size(pos2(rx - w - 6.0, cy - 15.0), vec2(w, 30.0));
+        if self.get("showSearch").as_bool() != Some(false) && self.get("searchWide").as_bool() != Some(false) {
+            // pole hľadania stále otvorené v hornej lište (ako VS Code): v strede okna, ak tam nezavadzia kartám,
+            // inak vpravo pri AI; Nastavenia → Vzhľad → Široké pole hľadania ho vypne (ostane lupa)
+            let tabs_w: f32 = self.tabs.iter().map(|t| (widgets::text_w(ui, &t.name(), theme::ui(13.0)) + 59.0).min(220.0) + 4.0).sum();
+            let w = (rx - x - 160.0).clamp(140.0, 380.0);
+            let mid = ui.ctx().content_rect().center().x - w / 2.0;
+            let left = if mid >= x + tabs_w + 12.0 && mid + w <= rx - 6.0 { mid } else { rx - w - 6.0 };
+            let sr = Rect::from_min_size(pos2(left, cy - 15.0), vec2(w, 30.0));
             let resp = ui.interact(sr, ui.id().with("topsearch"), Sense::click()).on_hover_cursor(egui::CursorIcon::Text);
             let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
             ui.painter().rect_filled(sr, CornerRadius::same(9), p.card2);
@@ -1928,7 +1932,7 @@ impl App {
             if resp.on_hover_text(t("Search files, commands, settings and projects")).clicked() {
                 self.act("search", ui.ctx());
             }
-            rx -= w + 12.0;
+            rx = rx.min(left - 6.0);
         } else if self.get("showSearch").as_bool() != Some(false) {
             if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 14.0, cy), vec2(30.0, 30.0)), "search", 16.0, &p, true)
                 .on_hover_text(format!("{} (Ctrl+Shift+A)", t("Search files, commands, settings and projects")))

@@ -15,15 +15,13 @@ pub const ACT_W: f32 = 48.0;
 const SEC_H: f32 = 26.0;
 
 // zobrazenia v páse ikon: id, ikona, popis
-const VIEWS: [(&str, &str, &str); 4] = [("explorer", "file", "Explorer"), ("projects", "folder", "Projects"), ("search", "search", "Search everything"), ("plugins", "puzzle", "Plugins")];
+// (hľadanie je pole v hornej lište, projekty sú sekcia Prieskumníka – ako VS Code)
+const VIEWS: [(&str, &str, &str); 2] = [("explorer", "file", "Explorer"), ("plugins", "puzzle", "Plugins")];
 
 impl App {
     fn load_side(&mut self) {
         if self.side_view.is_empty() {
-            self.side_view = match self.get("sideView").as_str() {
-                Some("projects") => "projects".into(),
-                _ => "explorer".into(),
-            };
+            self.side_view = "explorer".into();
         }
         if self.side_closed.is_none() {
             let set: HashSet<String> = self.get("sideClosed").as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
@@ -126,8 +124,6 @@ impl App {
                     widgets::icon_at(ui, b.center(), 21.0, icon, c);
                     if id == "explorer" {
                         self.tour_rects.insert("files", b);
-                    } else if id == "projects" {
-                        self.tour_rects.insert("projects", b);
                     }
                     if resp.clicked() {
                         self.show_view(id, &ctx);
@@ -169,13 +165,8 @@ impl App {
                     let full = Rect::from_min_max(pos2(r.left() - 6.0, r.top()), pos2(r.right() + 6.0, r.bottom() + GAP));
                     ui.ctx().layer_painter(ui.layer_id()).rect_filled(full, CornerRadius::ZERO, p.layer[0]);
                 }
-                let title = if self.side_view == "projects" { t("Projects") } else { t("Explorer") };
-                self.side_head(ui, &title.to_uppercase(), !right);
-                if self.side_view == "projects" {
-                    self.projects_view(ui);
-                } else {
-                    self.explorer_view(ui);
-                }
+                self.side_head(ui, &t("Explorer").to_uppercase(), !right);
+                self.explorer_view(ui);
             });
     }
 
@@ -271,8 +262,10 @@ impl App {
         let files_open = self.sec_open("files");
         let row_h = 38.0f32;
         let files_h = SEC_H + if files_open { (n_files as f32 * row_h).min(row_h * 3.5) + 30.0 } else { 0.0 };
+        // hore zoznam projektov (VS Code nemá zobrazenie Projekty – len nedávne priečinky; tu je to sekcia Prieskumníka)
+        self.projects_section(ui, side_hover, files_h);
         let Some(w) = self.workspace() else {
-            // bez otvoreného priečinka: ako VS Code „You have not yet opened a folder.“ + tlačidlá + nedávne projekty
+            // bez otvoreného priečinka: ako VS Code „You have not yet opened a folder.“ + tlačidlá
             let (head, _) = self.sec_header(ui, "project", &t("No folder is open.").trim_end_matches('.').to_uppercase(), &[], false);
             if head {
                 self.toggle_sec("project");
@@ -304,19 +297,6 @@ impl App {
                         }
                     });
                 });
-                // nedávne projekty – jedným klikom
-                let recent: Vec<Value> = self.projects.iter().take(5).cloned().collect();
-                if !recent.is_empty() {
-                    ui.add_space(14.0);
-                    widgets::section(ui, &t("Recent").to_uppercase(), None, &p);
-                    for pr in recent {
-                        let dir = pr["dir"].as_str().unwrap_or("").to_string();
-                        let spec = self.project_icon(&dir);
-                        if widgets::row(ui, false, 10.0, Lead::Project(&spec), pr["name"].as_str().unwrap_or(""), None, false, &p).on_hover_text(&dir).clicked() {
-                            self.open_folder(&dir);
-                        }
-                    }
-                }
             }
             self.files_section(ui, files_h, side_hover);
             return;
@@ -436,71 +416,62 @@ impl App {
         }
     }
 
-    // ---------- Projekty ----------
-    fn projects_view(&mut self, ui: &mut egui::Ui) {
+    // ---------- sekcia PROJECTS (pripnuté navrchu, Nový projekt / Otvoriť priečinok v hlavičke) ----------
+    fn projects_section(&mut self, ui: &mut egui::Ui, side_hover: bool, files_h: f32) {
         let p = self.pal;
         let ws = self.workspace();
         let mut open = None;
         let mut menu_for: Option<(egui::Response, String, bool)> = None;
         let mut rename: Option<(String, String)> = None;
-        let projects = self.projects.clone();
-        // hore: Nový projekt (zvýraznené) a Otvoriť priečinok
-        ui.add_space(2.0);
-        ui.horizontal(|ui| {
-            ui.add_space(4.0);
-            if widgets::button(ui, Some("plus"), &t("New project"), p.accent, p.accent_fg, 30.0, &p).clicked() {
-                self.open_new_project();
-            }
-            if widgets::icon_button(ui, "folderOpen", &p, true).on_hover_text(t("Open folder")).clicked() {
+        let mut projects = self.projects.clone();
+        // pripnuté prvé (poradie inak ostáva)
+        projects.sort_by_key(|pr| pr["pinned"].as_bool() != Some(true));
+        let acts = [("plus", t("New project")), ("folderOpen", t("Open folder"))];
+        self.tour_rects.insert("projects", Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), SEC_H)));
+        let (head, hit) = self.sec_header(ui, "projects", &t("Projects").to_uppercase(), &acts, side_hover);
+        match hit {
+            Some(0) => self.open_new_project(),
+            Some(1) => {
                 if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
                     self.open_folder(&d.to_string_lossy());
                 }
             }
-        });
-        ui.add_space(8.0);
-        // ---- pripnuté (v jemnom rámčeku, .pr-pinned) ----
-        let pinned: Vec<Value> = projects.iter().filter(|pr| pr["pinned"].as_bool() == Some(true)).cloned().collect();
-        if !pinned.is_empty() {
-            let (cap, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
-            widgets::icon_at(ui, pos2(cap.left() + 13.0, cap.center().y), 11.0, "pin", p.text3);
-            let mut job = egui::text::LayoutJob::default();
-            job.append(&t("Pinned").to_uppercase(), 0.0, egui::TextFormat { font_id: theme::bold(11.0), color: p.text3, extra_letter_spacing: 1.0, ..Default::default() });
-            let g = ui.fonts_mut(|f| f.layout_job(job));
-            ui.painter().galley(pos2(cap.left() + 22.0, cap.center().y - g.size().y / 2.0), g, p.text3);
-            let box_top = ui.cursor().top();
-            let where_ = ui.painter().add(egui::Shape::Noop);
-            ui.add_space(3.0);
-            let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(ui.max_rect().left() + 3.0, ui.cursor().top()), pos2(ui.max_rect().right() - 3.0, ui.max_rect().bottom()))));
-            for pr in &pinned {
-                self.project_row(&mut inner, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
-            }
-            let used = inner.min_rect().height();
-            ui.add_space(used + 3.0);
-            let br = Rect::from_min_max(pos2(ui.max_rect().left(), box_top), pos2(ui.max_rect().right(), ui.cursor().top()));
-            let tint = p.hover.lerp_to_gamma(p.accent.gamma_multiply(0.35), 0.2);
-            ui.painter().set(where_, egui::epaint::RectShape::new(br, CornerRadius::same(12), tint, Stroke::new(1.0, p.line.lerp_to_gamma(p.accent, 0.22)), StrokeKind::Inside));
-            ui.add_space(8.0);
+            _ => {}
         }
-        widgets::section(ui, &t("Projects").to_uppercase(), None, &p);
-        let sk = egui::Id::new("sa-projects");
-        let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-        let mut sa = egui::ScrollArea::vertical().id_salt("projects").auto_shrink([false, false]);
-        if let Some(o) = off {
-            sa = sa.vertical_scroll_offset(o);
+        if head {
+            self.toggle_sec("projects");
         }
-        let sout = sa.show(ui, |ui| {
-            for pr in projects.iter().filter(|pr| pr["pinned"].as_bool() != Some(true)) {
-                self.project_row(ui, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
+        if self.sec_open("projects") {
+            // s otvoreným projektom najviac ~3,5 riadka (strom má prednosť), bez neho celé miesto
+            let row_h = 38.0f32;
+            let max_h = if ws.is_some() {
+                (projects.len() as f32 * row_h).min(row_h * 3.5)
+            } else {
+                (ui.max_rect().bottom() - files_h - ui.cursor().top() - 150.0).max(row_h * 2.0).min(projects.len() as f32 * row_h)
+            };
+            let sk = egui::Id::new("sa-projects");
+            let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
+            let mut sa = egui::ScrollArea::vertical().id_salt("projects").max_height(max_h).auto_shrink([false, true]);
+            if let Some(o) = off {
+                sa = sa.vertical_scroll_offset(o);
             }
+            let sout = sa.show(ui, |ui| {
+                for pr in &projects {
+                    self.project_row(ui, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
+                }
+            });
+            self.smooth.end(sk, &sout);
             if projects.is_empty() {
-                ui.add_space(8.0);
-                ui.horizontal_wrapped(|ui| {
-                    ui.add_space(10.0);
-                    ui.label(egui::RichText::new(t("No folder is open.")).color(p.text3).size(12.5));
+                ui.horizontal(|ui| {
+                    ui.add_space(22.0);
+                    if ui.add(egui::Label::new(egui::RichText::new(format!("+ {}", t("New project"))).color(p.text3).size(12.5)).sense(Sense::click())).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                        self.open_new_project();
+                    }
                 });
             }
-        });
-        self.smooth.end(sk, &sout);
+        }
+        ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top() + 1.0, Stroke::new(1.0, p.line));
+        ui.add_space(5.0);
         if let Some((r, d, pinned)) = menu_for {
             self.project_menu(&r, &d, pinned);
         }
@@ -513,11 +484,6 @@ impl App {
             } else {
                 self.open_folder(&d);
             }
-            // ako VS Code: po otvorení projektu sa ukáže jeho strom súborov
-            self.side_view = "explorer".into();
-            self.update_settings(|o| {
-                o.insert("sideView".into(), json!("explorer"));
-            });
         }
     }
 
