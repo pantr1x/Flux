@@ -1032,7 +1032,8 @@ impl App {
 
     // okno je priehľadné (material „see“ / „blur“): za ním presvitá všetko, Flux tapetu nekreslí
     pub(crate) fn see_through(&self) -> bool {
-        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && self.wall_on()
+        // priehľadné okno ukazuje tapetu, keď sa za behu prepne na „Wallpaper picture“ (bez nového štartu)
+        crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) && self.wall_on() && matches!(self.get("material").as_str(), Some("see" | "blur"))
     }
 
     // „Restart to update“: uloží súbory, vymení program a spustí nový

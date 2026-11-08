@@ -13,6 +13,8 @@ mod colors;
 mod perf;
 #[cfg(target_os = "linux")]
 mod lpreview;
+#[cfg(target_os = "linux")]
+mod linuxwall;
 
 // počítadlo haldy (Nastavenia → Vývojár): koľko pamäte drží kód Fluxu, bez grafického ovládača a dekodérov
 struct Count;

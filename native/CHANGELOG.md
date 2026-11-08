@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.70
+
+**Fixes**
+- **Wallpaper picture works on Linux.** Flux now finds your desktop wallpaper on KDE Plasma, GNOME, Cinnamon, MATE, XFCE, Hyprland (swww, hyprpaper), feh and nitrogen. Before, it only knew where Windows keeps it, so on Linux nothing was drawn.
+- **See-through – blurred works on KDE Plasma.** Flux asks KWin to blur what is behind the window. Other Linux desktops (GNOME…) can't blur behind a window, so there it stays clear.
+- **Switching to Wallpaper picture works right away**, without restarting Flux. Only switching *to* see-through from a non-see-through window still needs *Restart Flux*.
+
 ## 0.9.69
 
 **New**
@@ -13,8 +20,8 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 
 **Changes**
 - **A nicer first start.** Every step shows *Step N of 5*, a bigger title, rounded cards that light up in the accent color when chosen, and an indigo *Continue* button.
-  - *Set up extras*: GitHub and Updates are two clear cards with a simple two-way switch, and the shortcuts are shown as real keys.
-  - *Make it yours*: themes show a small piece of code in their own colors, the preview looks like a real editor window, and *My computer is slower* is a switch that also shows how much memory Flux uses.
+- *Set up extras*: GitHub and Updates are two clear cards with a simple two-way switch, and the shortcuts are shown as real keys.
+- *Make it yours*: themes show a small piece of code in their own colors, the preview looks like a real editor window, and *My computer is slower* is a switch that also shows how much memory Flux uses.
 - **HTML suggestions don't write long forms you don't need.** Ordinary words in a sentence no longer offer tags (Tab after "title" in text made `<title></title>`), and tags are inserted short: `<button>`, `<form>`, `<script>`, `<option>`, `<iframe src="">` without extra attributes. A tag whose end is already right after the cursor doesn't get a second end.
 
 ## 0.9.67

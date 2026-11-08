@@ -103,6 +103,11 @@ pub fn desktop_wallpaper() -> Option<PathBuf> {
             }
         }
     }
+    // Linux: KDE, GNOME, XFCE, Hyprland… (linuxwall.rs)
+    #[cfg(target_os = "linux")]
+    if let Some(p) = crate::linuxwall::find() {
+        return Some(p);
+    }
     None
 }
 

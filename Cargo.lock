@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.69"
+version = "0.9.70"
 dependencies = [
  "alacritty_terminal",
  "arboard",
@@ -1715,6 +1715,7 @@ dependencies = [
  "windows-sys 0.59.0",
  "winit",
  "wry",
+ "x11rb",
  "zstd",
 ]
 

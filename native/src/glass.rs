@@ -38,7 +38,40 @@ pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
     }
 }
 
-#[cfg(not(windows))]
+// Linux (X11, aj XWayland): KDE Plasma (KWin) rozmaže to, čo je za oknom, keď má okno vlastnosť
+// _KDE_NET_WM_BLUR_BEHIND_REGION (prázdna = celé okno). GNOME a iné to nevedia – okno ostane len priehľadné.
+#[cfg(target_os = "linux")]
+pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
+    use raw_window_handle::RawWindowHandle;
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, PropMode};
+    use x11rb::wrapper::ConnectionExt as _;
+    let Ok(h) = w.window_handle() else { return false };
+    let xid = match h.as_raw() {
+        RawWindowHandle::Xlib(h) => h.window as u32,
+        RawWindowHandle::Xcb(h) => h.window.get(),
+        _ => return false,
+    };
+    let go = || -> Option<()> {
+        let (conn, _) = x11rb::connect(None).ok()?;
+        let atom = conn.intern_atom(false, b"_KDE_NET_WM_BLUR_BEHIND_REGION").ok()?.reply().ok()?.atom;
+        if on {
+            conn.change_property32(PropMode::REPLACE, xid, atom, AtomEnum::CARDINAL, &[]).ok()?;
+        } else {
+            conn.delete_property(xid, atom).ok()?;
+        }
+        conn.flush().ok()
+    };
+    go().is_some() && (!on || blur_supported())
+}
+
+// KWin (KDE) rozmazanie podporuje; inde vlastnosť nič nerobí
+#[cfg(target_os = "linux")]
+pub fn blur_supported() -> bool {
+    std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase().contains("kde")
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn blur<T>(_w: &T, _on: bool) -> bool {
     false
 }
