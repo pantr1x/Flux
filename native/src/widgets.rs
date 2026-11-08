@@ -148,6 +148,12 @@ pub fn row_ex(ui: &mut egui::Ui, selected: bool, fill: bool, indent: f32, lead: 
         (false, false) => 28.0,
         (false, true) => 24.0,
     };
+    row_sized(ui, h, selected, fill, indent, lead, name, sub, bold, p)
+}
+
+// riadok s danou výškou (strom súborov je hustejší, ako vo VS Code)
+#[allow(clippy::too_many_arguments)]
+pub fn row_sized(ui: &mut egui::Ui, h: f32, selected: bool, fill: bool, indent: f32, lead: Lead, name: &str, sub: Option<&str>, bold: bool, p: &Pal) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click_and_drag());
     let hovered = resp.hovered();
     // plynulé zvýraznenie pri prejdení myšou
@@ -159,7 +165,7 @@ pub fn row_ex(ui: &mut egui::Ui, selected: bool, fill: bool, indent: f32, lead: 
     } else {
         p.hover.gamma_multiply(hk)
     };
-    ui.painter().rect_filled(rect, CornerRadius::same(8), bg);
+    ui.painter().rect_filled(rect, CornerRadius::same(if h < 27.0 { 6 } else { 8 }), bg);
     let mut x = rect.left() + indent;
     let cy = rect.center().y;
     match lead {

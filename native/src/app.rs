@@ -295,6 +295,8 @@ pub struct App {
     side_view: String,                  // bočný panel: „explorer“ / „projects“ (ako zobrazenia vo VS Code)
     side_closed: Option<HashSet<String>>, // zbalené sekcie bočného panela (načítané pri prvom použití)
     tree_focus: Option<String>,         // naposledy kliknutá položka stromu – sem idú nové súbory (ako VS Code)
+    tree_kbd: bool,                     // strom má klávesnicu (šípky, Enter, F2, Delete)
+    tree_rows: Vec<(String, bool)>,     // viditeľné riadky stromu v poradí (pre šípky)
     ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
     real_ptr: Option<egui::Pos2>,       // skutočná poloha myši (egui pri ťahaní výberu dostáva orezanú)
     drag_scroll: egui::Vec2,            // posun editora pri ťahaní výberu za okraj
@@ -440,6 +442,8 @@ impl App {
             side_view: String::new(),
             side_closed: None,
             tree_focus: None,
+            tree_kbd: false,
+            tree_rows: vec![],
             ed_drag: None,
             real_ptr: None,
             drag_scroll: egui::Vec2::ZERO,
@@ -3303,6 +3307,7 @@ impl App {
     }
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
+        self.tree_keys(ctx);
         let (save, run, open, close) = ctx.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::COMMAND, egui::Key::S),
@@ -3934,6 +3939,12 @@ impl eframe::App for App {
                     } else {
                         self.nav_dir = 0.0;
                     }
+                }
+                // drobky nad editorom (ako VS Code): projekt › priečinky › súbor
+                if show_editor && self.get("breadcrumbs").as_bool() != Some(false) {
+                    let bc = Rect::from_min_size(area.min, vec2(area.width(), explorer::CRUMB_H));
+                    self.breadcrumbs(&mut card_ui, bc);
+                    area.min.y += explorer::CRUMB_H;
                 }
                 if show_editor && self.tabs[self.active].image {
                     self.image_view(&mut card_ui, area);

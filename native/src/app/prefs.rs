@@ -16,7 +16,7 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" | "searchWide" => json!(true),
+        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" | "searchWide" | "breadcrumbs" => json!(true),
         "wordWrap" | "autoReload" | "lite" => json!(false),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
@@ -403,6 +403,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 "Behaviour",
                 vec![
                     Row::Toggle("minimap", "Code map", "small preview of the code on the right"),
+                    Row::Toggle("breadcrumbs", "Path above the code", "project › folders › file above the editor, like in VS Code – click a folder to show it in the Explorer"),
                     Row::Select("whitespace", "Show spaces as dots", "small dots show the indentation and wider gaps in the code and in Output and Terminal", o(&[("indent", "indentation and gaps"), ("all", "every space"), ("off", "off")])),
                     Row::Toggle("autoIndent", "Auto indent", "Enter keeps the indentation of the line above and indents after an opening bracket or tag"),
                     Row::Toggle("autosave", "Auto save", "saves the file shortly after you stop typing"),

@@ -5,7 +5,7 @@ use super::{chrome, drag_ghost, drop_ok, name_field, rename_field, short_dir, Ap
 use crate::i18n::t;
 use crate::theme::{self, GAP, TOP_H};
 use crate::widgets::{self, Lead};
-use eframe::egui::{self, pos2, vec2, CornerRadius, Frame, Margin, Rect, Sense, Stroke, StrokeKind};
+use eframe::egui::{self, pos2, vec2, Align2, CornerRadius, Frame, Margin, Rect, Sense, Stroke, StrokeKind};
 use flux_core::fsops;
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -13,6 +13,7 @@ use std::path::Path;
 
 pub const ACT_W: f32 = 48.0;
 const SEC_H: f32 = 26.0;
+const TREE_H: f32 = 24.0; // riadok stromu (VS Code má 22)
 
 // zobrazenia v páse ikon: id, ikona, popis
 // (hľadanie je pole v hornej lište, projekty sú sekcia Prieskumníka – ako VS Code)
@@ -322,10 +323,12 @@ impl App {
                 sa = sa.vertical_scroll_offset(o);
             }
             let sout = sa.show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
                 // zvýraznenie otvoreného súboru kĺže k novému riadku (slideIndicator v Electron Fluxe)
                 let bg = ui.painter().add(egui::Shape::Noop);
                 let origin = ui.min_rect().top();
                 self.tree_sel = None;
+                self.tree_rows.clear();
                 self.tree_ui(ui, &w, 0);
                 // pri ťahaní: miesto na vytiahnutie von z priečinkov (do koreňa projektu) – až pod stromom;
                 // nad ním by po začatí ťahania posunulo všetky riadky a pod kurzorom by bol iný priečinok
@@ -341,7 +344,7 @@ impl App {
                     }
                 }
                 // prázdne miesto pod stromom: klik zruší výber (nové súbory pôjdu do koreňa), pravý klik = ponuka koreňa
-                let rest = 24.0;
+                let rest = 10.0;
                 let (_, eresp) = ui.allocate_exact_size(vec2(ui.available_width(), rest), Sense::click());
                 if eresp.clicked() {
                     self.tree_focus = None;
@@ -552,9 +555,10 @@ impl App {
             if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == path) {
                 let mut res = Rn::Editing;
                 ui.horizontal(|ui| {
-                    ui.add_space(indent);
+                    // text poľa presne nad menom v riadku (ikona ostáva vľavo)
+                    ui.add_space(indent + if is_dir { 27.0 } else { 33.0 });
                     // pri súbore sa označí meno bez prípony
-                    res = rename_field(ui, egui::Id::new(("rename", &path)), new, Margin::symmetric(10, 5), !is_dir);
+                    res = rename_field(ui, egui::Id::new(("rename", &path)), new, Margin::symmetric(10, 4), !is_dir);
                 });
                 match res {
                     Rn::Editing => {}
@@ -573,12 +577,12 @@ impl App {
             let lead = if is_dir { Lead::Folder { open } } else { Lead::File(&name) };
             let ind = if is_dir { indent } else { indent + 20.0 };
             // aktívny riadok bez vlastnej výplne – kreslí ju kĺzavé zvýraznenie v strome
-            let r = widgets::row_ex(ui, active, false, ind, lead, &name, None, false, &p);
+            let r = widgets::row_sized(ui, TREE_H, active, false, ind, lead, &name, None, false, &p);
             if active {
                 self.tree_sel = Some(r.rect);
             }
-            // vybraný (naposledy kliknutý) priečinok: jemný rámik – sem pôjde nový súbor
-            if is_dir && self.tree_focus.as_deref() == Some(path.as_str()) {
+            // vybraný (naposledy kliknutý) priečinok – sem pôjde nový súbor; pri ovládaní klávesnicou aj súbor
+            if (is_dir || self.tree_kbd) && self.tree_focus.as_deref() == Some(path.as_str()) {
                 ui.painter().rect_stroke(r.rect, CornerRadius::same(6), Stroke::new(1.0, p.accent.gamma_multiply(0.55)), StrokeKind::Inside);
             }
             self.tree_menu(&r, &path, is_dir);
@@ -602,8 +606,10 @@ impl App {
             if dirty {
                 ui.painter().circle_filled(pos2(r.rect.right() - 12.0, r.rect.center().y), 3.0, p.accent);
             }
+            self.tree_rows.push((path.clone(), is_dir));
             if r.clicked() || r.secondary_clicked() {
                 self.tree_focus = Some(path.clone());
+                self.tree_kbd = true;
             }
             if r.clicked() {
                 if is_dir {
@@ -626,6 +632,157 @@ impl App {
                     ui.painter().vline(x, top..=bottom, Stroke::new(1.0, p.line.gamma_multiply(if ui.rect_contains_pointer(ui.clip_rect()) { 1.0 } else { 0.6 })));
                 }
             }
+        }
+    }
+}
+
+pub const CRUMB_H: f32 = 28.0;
+
+impl App {
+    // drobky nad editorom: projekt › priečinok › … › súbor; klik na priečinok ho ukáže v strome
+    pub(super) fn breadcrumbs(&mut self, ui: &mut egui::Ui, r: Rect) {
+        let p = self.pal;
+        let Some(tab) = self.tabs.get(self.active) else { return };
+        let path = tab.path.clone();
+        let ws = self.workspace();
+        // časti cesty: (text, cesta k priečinku / súboru)
+        let mut parts: Vec<(String, String)> = vec![];
+        match ws.as_deref().filter(|w| Path::new(&path).starts_with(w)) {
+            Some(w) => {
+                parts.push((widgets::file_name(w), w.to_string()));
+                let rel = Path::new(&path).strip_prefix(w).map(|x| x.to_path_buf()).unwrap_or_default();
+                let mut cur = Path::new(w).to_path_buf();
+                for c in rel.components() {
+                    cur = cur.join(c);
+                    parts.push((c.as_os_str().to_string_lossy().to_string(), cur.to_string_lossy().to_string()));
+                }
+            }
+            None => {
+                if let Some(d) = Path::new(&path).parent() {
+                    parts.push((widgets::file_name(&d.to_string_lossy()), d.to_string_lossy().to_string()));
+                }
+                parts.push((widgets::file_name(&path), path.clone()));
+            }
+        }
+        let cy = r.center().y + 2.0;
+        let mut x = r.left() + 16.0;
+        let n = parts.len();
+        let font = theme::ui(12.5);
+        let mut clicked: Option<(String, bool)> = None;
+        let clip = ui.painter().with_clip_rect(r);
+        for (i, (name, full)) in parts.iter().enumerate() {
+            let last = i + 1 == n;
+            if i > 0 {
+                widgets::icon_at(ui, pos2(x + 5.0, cy), 11.0, "chevron", p.text3.gamma_multiply(0.8));
+                x += 14.0;
+            }
+            let icon_w = if last { 20.0 } else { 0.0 };
+            let tw = widgets::text_w(ui, name, font.clone());
+            let hit = Rect::from_min_size(pos2(x - 4.0, cy - 10.0), vec2(tw + icon_w + 8.0, 20.0));
+            if hit.left() > r.right() - 20.0 {
+                break;
+            }
+            let resp = ui.interact(hit, ui.id().with(("crumb", i)), Sense::click());
+            if resp.hovered() {
+                clip.rect_filled(hit, CornerRadius::same(5), p.hover);
+            }
+            if last {
+                widgets::file_icon(ui, Rect::from_center_size(pos2(x + 7.0, cy), vec2(14.0, 14.0)), name);
+            }
+            let c = if last || resp.hovered() { p.text } else { p.text3 };
+            clip.text(pos2(x + icon_w, cy), Align2::LEFT_CENTER, name, font.clone(), c);
+            if resp.on_hover_text(full.as_str()).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                clicked = Some((full.clone(), i == 0 && ws.is_some()));
+            }
+            x += tw + icon_w + 6.0;
+        }
+        match clicked {
+            // projekt → jeho stránka
+            Some((_, true)) => self.home = true,
+            // priečinok / súbor → ukáž ho v strome
+            Some((f, false)) => self.reveal(&f),
+            None => {}
+        }
+    }
+
+    // ukáže položku v Prieskumníkovi: otvorí priečinky k nej a vyberie ju
+    pub(super) fn reveal(&mut self, path: &str) {
+        let Some(ws) = self.workspace() else { return };
+        self.side_open = true;
+        self.side_view = "explorer".into();
+        let mut d = if Path::new(path).is_dir() { Some(Path::new(path)) } else { Path::new(path).parent() };
+        while let Some(x) = d.filter(|x| x.starts_with(&ws) && *x != Path::new(&ws)) {
+            self.open_dirs.insert(x.to_string_lossy().to_string());
+            d = x.parent();
+        }
+        self.tree_focus = Some(path.to_string());
+        self.tree_kbd = true;
+    }
+
+    // klávesy v strome (keď nič nepíšeš): ↑/↓ výber, → / ← rozbaliť / zbaliť, Enter otvoriť, F2 premenovať, Delete do Koša
+    pub(super) fn tree_keys(&mut self, ctx: &egui::Context) {
+        if !self.tree_kbd || !self.side_open || self.start || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() {
+            return;
+        }
+        if ctx.egui_wants_keyboard_input() {
+            self.tree_kbd = false;
+            return;
+        }
+        let Some(cur) = self.tree_focus.clone() else { return };
+        let none = egui::Modifiers::NONE;
+        let (up, down, right, left, enter, f2, del, esc) = ctx.input_mut(|i| {
+            (
+                i.consume_key(none, egui::Key::ArrowUp),
+                i.consume_key(none, egui::Key::ArrowDown),
+                i.consume_key(none, egui::Key::ArrowRight),
+                i.consume_key(none, egui::Key::ArrowLeft),
+                i.consume_key(none, egui::Key::Enter),
+                i.consume_key(none, egui::Key::F2),
+                i.consume_key(none, egui::Key::Delete),
+                i.consume_key(none, egui::Key::Escape),
+            )
+        });
+        let idx = self.tree_rows.iter().position(|r| r.0 == cur);
+        let is_dir = Path::new(&cur).is_dir();
+        if up || down {
+            let n = self.tree_rows.len();
+            if n > 0 {
+                let i = match idx {
+                    Some(i) if up => i.saturating_sub(1),
+                    Some(i) => (i + 1).min(n - 1),
+                    None => 0,
+                };
+                self.tree_focus = Some(self.tree_rows[i].0.clone());
+            }
+        } else if right && is_dir {
+            self.open_dirs.insert(cur);
+        } else if left {
+            if is_dir && self.open_dirs.contains(&cur) {
+                self.open_dirs.remove(&cur);
+            } else if let Some(par) = Path::new(&cur).parent().map(|x| x.to_string_lossy().to_string()).filter(|x| self.tree_rows.iter().any(|r| &r.0 == x)) {
+                self.tree_focus = Some(par);
+            }
+        } else if enter {
+            if is_dir {
+                if !self.open_dirs.remove(&cur) {
+                    self.open_dirs.insert(cur);
+                }
+            } else {
+                self.open_file(&cur);
+            }
+        } else if f2 && self.workspace().as_deref() != Some(cur.as_str()) {
+            self.renaming = Some((cur.clone(), widgets::file_name(&cur)));
+        } else if del && self.workspace().as_deref() != Some(cur.as_str()) {
+            self.ask = Some(super::menus::Ask {
+                text: crate::i18n::tf("Delete “{name}”? It goes to the Recycle Bin, so you can still restore it.", &[("name", &widgets::file_name(&cur))]),
+                yes: t("Move to Recycle Bin"),
+                action: format!("trash:{cur}"),
+            });
+        } else if esc {
+            self.tree_kbd = false;
+        }
+        if up || down || right || left || enter {
+            ctx.request_repaint();
         }
     }
 }

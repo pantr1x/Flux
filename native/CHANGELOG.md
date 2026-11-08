@@ -2,6 +2,14 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.59
+
+**Explorer like in VS Code**
+- **Path above the code**: `my-app › src › button › button.ts` sits above the editor. Click a folder in it to show it in the Explorer, click the project name for the project page. Turn it off in Settings → Editor → *Path above the code*.
+- **The file tree is denser** (rows like in VS Code), so more files fit on the screen.
+- **Keyboard in the tree**: after clicking an item, ↑ / ↓ move through the tree, → / ← open and close folders, Enter opens the file, **F2** renames it and **Delete** moves it to the Recycle Bin. Esc or clicking into the code gives the keys back to the editor.
+- The rename field sits exactly over the name.
+
 ## 0.9.58
 
 **Look**
