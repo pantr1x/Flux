@@ -1504,7 +1504,7 @@ impl App {
             "java" if !has("static void main") => no_main(),
             "cs" if !has("Main(") => no_main(),
             "go" if !has("func main(") => no_main(),
-            "rs" if !has("fn main(") && !Path::new(&tab.path).ancestors().any(|d| d.join("Cargo.toml").is_file()) => no_main(),
+            "rs" if !has("fn main(") && !Path::new(&tab.path).ancestors().any(|d| exists_cached(&d.join("Cargo.toml"))) => no_main(),
             _ => None,
         }
     }
@@ -1513,7 +1513,7 @@ impl App {
         let Some(tab) = self.tabs.get(self.active) else { return false };
         match tab.ext().as_str() {
             "html" | "htm" | "css" => true,
-            "js" => Path::new(&tab.path).parent().map(|d| d.join("index.html").exists()).unwrap_or(false),
+            "js" => Path::new(&tab.path).parent().map(|d| exists_cached(&d.join("index.html"))).unwrap_or(false),
             _ => false,
         }
     }
@@ -4368,6 +4368,25 @@ fn regex_lite_find(text: &str, pat: &str) -> bool {
         from = at + head.len();
     }
     false
+}
+
+// existuje súbor? – s pamäťou 3 s: volá sa z kreslenia (tlačidlo Run v každom snímku) a disk tam nepatrí
+fn exists_cached(p: &Path) -> bool {
+    use std::sync::Mutex;
+    static C: Mutex<Option<HashMap<std::path::PathBuf, (Instant, bool)>>> = Mutex::new(None);
+    let mut g = C.lock().unwrap();
+    let m = g.get_or_insert_with(HashMap::new);
+    if let Some((at, v)) = m.get(p) {
+        if at.elapsed() < Duration::from_secs(3) {
+            return *v;
+        }
+    }
+    let v = p.is_file();
+    if m.len() > 512 {
+        m.clear();
+    }
+    m.insert(p.to_path_buf(), (Instant::now(), v));
+    v
 }
 
 #[cfg(test)]

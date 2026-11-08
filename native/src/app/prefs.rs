@@ -474,7 +474,12 @@ fn sections_raw(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 "",
                 // priehľadnosť okna sa dá zmeniť len novým štartom – ponúknuť ho, keď sa líši od želania
                 // priehľadnosť okna sa dá zapnúť len novým štartom; „Wallpaper picture“ ide aj v priehľadnom okne hneď
-                if crate::want_transparent() && !crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+                // to isté ako crate::want_transparent(), ale z nastavení v pamäti (tá číta settings.json z disku – nie v každom snímku)
+                if matches!(app.core.setting("material").as_str(), Some("see" | "blur"))
+                    && app.core.setting("optFx").as_bool().unwrap_or(app.core.setting("lite").as_bool() != Some(true))
+                    && !crate::boot::safe()
+                    && !crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     vec![
                         Row::Button("restart", "Restart Flux", "to switch the window background", "Restart"),
                         Row::Button("look-reset", "Reset the look", "cursor, pointer, fonts, size, corners and background go back to default – your theme and colors stay", "Reset all"),

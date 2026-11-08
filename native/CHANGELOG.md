@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.74
+
+**Faster**
+- **Settings → Theme and window no longer reads `settings.json` from the disk on every frame** (it did that to decide whether to show *Restart Flux*).
+- **The ▶ Run button no longer checks the disk on every frame** (for `.rs` files it looked for `Cargo.toml` in every parent folder, for `.js` for an `index.html`); the answer is now remembered for 3 s.
+
 ## 0.9.73
 
 **Fixes**
