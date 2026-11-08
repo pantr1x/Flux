@@ -541,6 +541,12 @@ impl App {
         if files.is_empty() {
             return;
         }
+        // pustené na priečinok v strome alebo na projekt → tam (podľa miesta myši), inak do otvoreného projektu
+        let at = ctx.input(|i| i.pointer.hover_pos().or(i.pointer.latest_pos()));
+        if let Some(dir) = at.and_then(|pt| self.drop_rects.iter().find(|(r, _)| r.contains(pt)).map(|x| x.1.clone())) {
+            self.import_into(files, &dir);
+            return;
+        }
         match self.workspace() {
             Some(w) => self.import_into(files, &w),
             None => {
@@ -662,6 +668,21 @@ impl App {
                 self.tree.clear();
                 self.open_dirs.insert(target.to_string());
                 self.note(tf("Moved {name}.", &[("name", &name)]));
+                // voľný súbor presunutý do projektu už nepatrí medzi FILES
+                if self.recent_files.iter().any(|f| f == src) {
+                    self.recent_files.retain(|f| f != src);
+                    let s2 = src.to_string();
+                    self.update_settings(|o| {
+                        if let Some(a) = o.get_mut("recentFiles").and_then(|v| v.as_array_mut()) {
+                            a.retain(|v| v.as_str() != Some(s2.as_str()));
+                        }
+                    });
+                }
+                // počty súborov pri projektoch (zdroj aj cieľ)
+                let dirs: Vec<String> = self.projects.iter().filter_map(|x| x["dir"].as_str().map(String::from)).filter(|d| Path::new(src).starts_with(d) || Path::new(target).starts_with(d)).collect();
+                for d in dirs {
+                    self.summarize(&d);
+                }
             }
             Err(e) => self.status = rename_error(&e),
         }

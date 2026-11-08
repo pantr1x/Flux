@@ -252,6 +252,7 @@ impl App {
     // ---------- Prieskumník ----------
     fn explorer_view(&mut self, ui: &mut egui::Ui) {
         let p = self.pal;
+        self.drop_rects.clear();
         let side_hover = ui.rect_contains_pointer(ui.max_rect());
         // dole sekcia FILES (súbory otvorené mimo projektu); strom projektu vyplní zvyšok
         let n_files = self.recent_files.len();
@@ -389,7 +390,16 @@ impl App {
         let sout = sa.show(ui, |ui| {
             for f in &self.recent_files {
                 let sel = !self.home && self.tabs.get(self.active).map(|t| &t.path == f).unwrap_or(false);
-                if widgets::row(ui, sel, 10.0, Lead::File(&widgets::file_name(f)), &widgets::file_name(f), Some(&short_dir(f)), false, &p).on_hover_text(f).clicked() {
+                let r = widgets::row(ui, sel, 10.0, Lead::File(&widgets::file_name(f)), &widgets::file_name(f), Some(&short_dir(f)), false, &p).on_hover_text(f);
+                // voľný súbor sa dá pretiahnuť na projekt alebo priečinok v strome (presunie sa tam)
+                if r.drag_started() {
+                    egui::DragAndDrop::set_payload(ui.ctx(), f.clone());
+                }
+                if r.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                    drag_ghost(ui.ctx(), &widgets::file_name(f));
+                }
+                if r.clicked() {
                     open_f = Some(f.clone());
                 }
             }
@@ -595,6 +605,7 @@ impl App {
                 drag_ghost(ui.ctx(), &name);
             }
             let tgt_dir = if is_dir { path.clone() } else { Path::new(&path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default() };
+            self.drop_rects.push((r.rect.intersect(ui.clip_rect()), tgt_dir.clone()));
             if let Some(src) = r.dnd_hover_payload::<String>() {
                 if drop_ok(&src, &tgt_dir) {
                     ui.painter().rect_stroke(r.rect, CornerRadius::same(8), Stroke::new(1.5, p.accent), StrokeKind::Inside);
@@ -637,6 +648,7 @@ impl App {
 }
 
 pub const CRUMB_H: f32 = 28.0;
+pub const TABS_H: f32 = 36.0;
 
 impl App {
     // drobky nad editorom: projekt › priečinok › … › súbor; klik na priečinok ho ukáže v strome
@@ -783,6 +795,99 @@ impl App {
         }
         if up || down || right || left || enter {
             ctx.request_repaint();
+        }
+    }
+}
+
+impl App {
+    // karty otvorených súborov nad editorom (ako VS Code): riadok na vrchu karty, aktívna karta má farbu editora
+    // a akcentový prúžok hore; koliesko myši posúva karty, prostredné tlačidlo zatvára
+    pub(super) fn tab_strip(&mut self, ui: &mut egui::Ui, r: Rect, radius: u8) {
+        let p = self.pal;
+        let strip_bg = if p.dark { p.card.lerp_to_gamma(egui::Color32::BLACK, 0.22) } else { p.card.lerp_to_gamma(p.hover, 0.7) };
+        ui.painter().rect_filled(r, CornerRadius { nw: radius, ne: radius, ..Default::default() }, strip_bg);
+        ui.painter().hline(r.x_range(), r.bottom() - 0.5, Stroke::new(1.0, p.line));
+        let font = theme::ui(13.0);
+        let widths: Vec<f32> = self.tabs.iter().map(|t| (widgets::text_w(ui, &t.name(), font.clone()) + 64.0).clamp(90.0, 240.0)).collect();
+        let total: f32 = widths.iter().sum();
+        // posun kariet: koliesko nad riadkom; aktívna karta sa vždy ukáže
+        let id = egui::Id::new("tab-strip-off");
+        let mut off: f32 = ui.ctx().data(|d| d.get_temp(id)).unwrap_or(0.0);
+        let left0 = r.left() + if radius > 0 { 4.0 } else { 0.0 };
+        let view_w = r.right() - left0 - 4.0;
+        if ui.rect_contains_pointer(r) {
+            let d = ui.input(|i| i.smooth_scroll_delta());
+            off -= if d.x.abs() > d.y.abs() { d.x } else { d.y };
+        }
+        if !self.home {
+            let a = widths[..self.active.min(widths.len())].iter().sum::<f32>();
+            let b = a + widths.get(self.active).copied().unwrap_or(0.0);
+            if a < off {
+                off = a;
+            } else if b > off + view_w {
+                off = b - view_w;
+            }
+        }
+        off = off.clamp(0.0, (total - view_w).max(0.0));
+        ui.ctx().data_mut(|d| d.insert_temp(id, off));
+        let clip = Rect::from_min_max(pos2(left0, r.top()), pos2(r.right() - 4.0, r.bottom()));
+        let painter = ui.painter().with_clip_rect(clip);
+        let mut x = left0 - off;
+        let (mut close, mut act) = (None, None);
+        for (i, t) in self.tabs.iter().enumerate() {
+            let w = widths[i];
+            let tr = Rect::from_min_size(pos2(x, r.top()), vec2(w, r.height() - 1.0));
+            x += w;
+            if tr.right() < clip.left() || tr.left() > clip.right() {
+                continue;
+            }
+            let sel = i == self.active && !self.home;
+            let name = t.name();
+            let resp = ui.interact(tr.intersect(clip), ui.id().with(("tab", i)), Sense::click());
+            let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered() && !sel, 0.12);
+            if sel {
+                painter.rect_filled(tr, CornerRadius::ZERO, p.card);
+                painter.hline(tr.left() + 1.0..=tr.right() - 1.0, tr.top() + 1.0, Stroke::new(2.0, p.accent));
+            } else if hk > 0.0 {
+                painter.rect_filled(tr, CornerRadius::ZERO, p.hover.gamma_multiply(hk * 0.6));
+            }
+            // oddeľovač medzi kartami
+            painter.vline(tr.right() - 0.5, tr.top() + 8.0..=tr.bottom() - 8.0, Stroke::new(1.0, p.line));
+            let cy = tr.center().y;
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(clip));
+            child.set_clip_rect(clip.intersect(tr));
+            widgets::file_icon(&child, Rect::from_min_size(pos2(tr.left() + 12.0, cy - 8.0), vec2(16.0, 16.0)), &name);
+            widgets::text(&child, pos2(tr.left() + 34.0, cy), egui::Align2::LEFT_CENTER, &name, font.clone(), if sel { p.text } else if resp.hovered() { p.text2 } else { p.text3 }, w - 62.0);
+            let cr = Rect::from_center_size(pos2(tr.right() - 17.0, cy), vec2(20.0, 20.0));
+            let c = ui.interact(cr.intersect(clip), ui.id().with(("tabx", i)), Sense::click());
+            if t.dirty() && !c.hovered() {
+                painter.circle_filled(cr.center(), 3.5, p.text2);
+            } else {
+                if c.hovered() {
+                    painter.rect_filled(cr, CornerRadius::same(5), p.active);
+                }
+                if sel || resp.hovered() || c.hovered() {
+                    widgets::icon_at(&child, cr.center(), 12.0, "x", if c.hovered() { p.text } else { p.text3 });
+                }
+            }
+            let resp = resp.on_hover_text(t.path.as_str());
+            if c.clicked() || resp.middle_clicked() {
+                close = Some(i);
+            } else if resp.clicked() {
+                act = Some(i);
+            }
+        }
+        // prázdne miesto za kartami: dvojklik = nový súbor (ako VS Code)
+        if x < clip.right() {
+            let rest = Rect::from_min_max(pos2(x.max(clip.left()), r.top()), pos2(clip.right(), r.bottom()));
+            if ui.interact(rest, ui.id().with("tabs-rest"), Sense::click()).double_clicked() {
+                self.open_new_file(None);
+            }
+        }
+        if let Some(i) = close {
+            self.close_tab(i);
+        } else if let Some(i) = act {
+            self.activate(i);
         }
     }
 }

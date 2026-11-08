@@ -2,6 +2,17 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.60
+
+**Tabs and search like in VS Code**
+- **The tabs of open files are now in their own row right above the code**, like in VS Code: the open file has the editor's colour and a thin line on top, the others are quieter. Scroll the wheel over the tabs when there are many, middle-click closes a tab and a double-click on the empty space makes a new file.
+- The top bar now only has ← →, the **search field in the middle** and AI / Run.
+
+**Moving files**
+- **Files from FILES can be dragged into a project** (onto a project in *PROJECTS*) or into a folder in the tree – they move there and leave the FILES list.
+- **Files dropped from Windows Explorer** go into the folder or project you drop them on (before, always into the open project).
+- After moving, the file counts of both projects update.
+
 ## 0.9.59
 
 **Explorer like in VS Code**

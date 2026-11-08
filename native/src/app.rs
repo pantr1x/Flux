@@ -297,6 +297,7 @@ pub struct App {
     tree_focus: Option<String>,         // naposledy kliknutá položka stromu – sem idú nové súbory (ako VS Code)
     tree_kbd: bool,                     // strom má klávesnicu (šípky, Enter, F2, Delete)
     tree_rows: Vec<(String, bool)>,     // viditeľné riadky stromu v poradí (pre šípky)
+    drop_rects: Vec<(Rect, String)>,    // kam sa dá pustiť súbor z počítača (priečinky stromu, projekty)
     ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
     real_ptr: Option<egui::Pos2>,       // skutočná poloha myši (egui pri ťahaní výberu dostáva orezanú)
     drag_scroll: egui::Vec2,            // posun editora pri ťahaní výberu za okraj
@@ -444,6 +445,7 @@ impl App {
             tree_focus: None,
             tree_kbd: false,
             tree_rows: vec![],
+            drop_rects: vec![],
             ed_drag: None,
             real_ptr: None,
             drag_scroll: egui::Vec2::ZERO,
@@ -1759,6 +1761,7 @@ impl App {
             return;
         }
         let r = widgets::row(ui, sel, 10.0, lead, &name, Some(&sub), true, &p).on_hover_text(&dir);
+        self.drop_rects.push((r.rect.intersect(ui.clip_rect()), dir.clone()));
         // súbor z iného projektu sa dá pustiť na riadok projektu (do jeho koreňa)
         if let Some(src) = r.dnd_hover_payload::<String>() {
             if drop_ok(&src, &dir) {
@@ -1917,9 +1920,9 @@ impl App {
         }
         rx -= 63.0;
         if self.get("showSearch").as_bool() != Some(false) && self.get("searchWide").as_bool() != Some(false) {
-            // pole hľadania stále otvorené v hornej lište (ako VS Code): v strede okna, ak tam nezavadzia kartám,
+            // pole hľadania stále otvorené v hornej lište (ako VS Code): v strede okna,
             // inak vpravo pri AI; Nastavenia → Vzhľad → Široké pole hľadania ho vypne (ostane lupa)
-            let tabs_w: f32 = self.tabs.iter().map(|t| (widgets::text_w(ui, &t.name(), theme::ui(13.0)) + 59.0).min(220.0) + 4.0).sum();
+            let tabs_w = 0.0; // karty súborov sú v riadku nad editorom (ako VS Code)
             let w = (rx - x - 160.0).clamp(140.0, 380.0);
             let mid = ui.ctx().content_rect().center().x - w / 2.0;
             let left = if mid >= x + tabs_w + 12.0 && mid + w <= rx - 6.0 { mid } else { rx - w - 6.0 };
@@ -1948,71 +1951,7 @@ impl App {
             }
             rx -= 36.0;
         }
-        // karty súborov
-        let mut close = None;
-        let mut act = None;
-        let tabs_clip = Rect::from_x_y_ranges(x..=rx, r.y_range());
-        let painter = ui.painter().with_clip_rect(tabs_clip);
-        // zvýraznenie aktívnej karty sa presúva plynulo (slideIndicator v Electron Fluxe)
-        {
-            let mut xx = x;
-            for (i, t) in self.tabs.iter().enumerate() {
-                let w = (widgets::text_w(ui, &t.name(), theme::ui(13.0)) + 16.0 + 7.0 + 20.0 + 16.0).min(220.0);
-                if i == self.active && !self.home {
-                    let t_anim = if self.anim_on() { 0.18 } else { 0.0 };
-                    let ax = ui.ctx().animate_value_with_time(egui::Id::new("tab-ind-x"), xx, t_anim);
-                    let aw = ui.ctx().animate_value_with_time(egui::Id::new("tab-ind-w"), w, t_anim);
-                    let tr = Rect::from_min_size(pos2(ax, cy - 15.0), vec2(aw, 30.0));
-                    painter.add(egui::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(if p.dark { 70 } else { 18 }) }.as_shape(tr, CornerRadius::same(9)));
-                    painter.rect_filled(tr, CornerRadius::same(9), p.card);
-                    painter.rect_stroke(tr, CornerRadius::same(9), Stroke::new(1.0, p.line), StrokeKind::Inside);
-                }
-                xx += w + 4.0;
-            }
-        }
-        for (i, t) in self.tabs.iter().enumerate() {
-            let sel = i == self.active && !self.home;
-            let name = t.name();
-            let w = (widgets::text_w(ui, &name, theme::ui(13.0)) + 16.0 + 7.0 + 20.0 + 16.0).min(220.0);
-            let tr = Rect::from_min_size(pos2(x, cy - 15.0), vec2(w, 30.0));
-            if tr.left() > rx {
-                break;
-            }
-            let resp = ui.interact(tr.intersect(tabs_clip), ui.id().with(("tab", i)), Sense::click());
-            let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered() && !sel, 0.12);
-            // každá karta má svoj jemný rámik (aktívna ho má výraznejší – kĺzavý indikátor vyššie)
-            if !sel {
-                painter.rect_filled(tr, CornerRadius::same(9), p.card2.lerp_to_gamma(p.hover, hk));
-                painter.rect_stroke(tr, CornerRadius::same(9), Stroke::new(1.0, p.line), StrokeKind::Inside);
-            }
-            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tabs_clip));
-            child.set_clip_rect(tabs_clip);
-            widgets::file_icon(&child, Rect::from_min_size(pos2(tr.left() + 10.0, cy - 8.0), vec2(16.0, 16.0)), &name);
-            widgets::text(&child, pos2(tr.left() + 33.0, cy), Align2::LEFT_CENTER, &name, theme::ui(13.0), if sel || resp.hovered() { p.text } else { p.text2 }, w - 55.0);
-            let cr = Rect::from_center_size(pos2(tr.right() - 16.0, cy), vec2(20.0, 20.0));
-            let c = ui.interact(cr.intersect(tabs_clip), ui.id().with(("tabx", i)), Sense::click());
-            if t.dirty() && !c.hovered() {
-                painter.circle_filled(cr.center(), 3.5, p.text2);
-            } else {
-                if c.hovered() {
-                    painter.rect_filled(cr, CornerRadius::same(6), p.active);
-                }
-                if sel || resp.hovered() || c.hovered() {
-                    widgets::icon_at(&child, cr.center(), 12.0, "x", if c.hovered() { p.text } else { p.text3 });
-                }
-            }
-            if c.clicked() || resp.middle_clicked() {
-                close = Some(i);
-            } else if resp.clicked() {
-                act = Some(i);
-            }
-            x += w + 4.0;
-        }
-        if let Some(i) = close {
-            self.close_tab(i);
-        } else if let Some(i) = act {
-            self.activate(i);
-        }
+        let _ = (x, rx);
     }
 
     // ---------- karta: editor ----------
@@ -3929,6 +3868,12 @@ impl eframe::App for App {
                 if key != self.shown {
                     self.shown = key;
                     self.switched = now;
+                }
+                // karty otvorených súborov v riadku nad editorom (ako VS Code)
+                if !self.tabs.is_empty() {
+                    let strip = Rect::from_min_size(main.min, vec2(main.width(), explorer::TABS_H));
+                    self.tab_strip(&mut card_ui, strip, radius);
+                    main.min.y += explorer::TABS_H;
                 }
                 // späť/dopredu: obsah prichádza zo strany (24 px, doznie s prelínaním)
                 let mut area = main;
