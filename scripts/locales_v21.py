@@ -112,5 +112,16 @@ _V21 = {
     'by file type': ('podľa typu súboru', 'nach Dateityp', 'por tipo de archivo', 'par type de fichier', 'per tipo di file', 'według typu pliku', 'por tipo de ficheiro', 'за типом файлу'),
     'small dot': ('malá bodka', 'kleiner Punkt', 'punto pequeño', 'petit point', 'punto piccolo', 'mała kropka', 'ponto pequeno', 'мала крапка'),
     'large dot': ('veľká bodka', 'großer Punkt', 'punto grande', 'gros point', 'punto grande', 'duża kropka', 'ponto grande', 'велика крапка'),
+    'yours': ('tvoja', 'deins', 'tuyo', 'le vôtre', 'tuo', 'twój', 'seu', 'ваша'),
+    'New theme from this one': ('Nová téma z tejto', 'Neues Design aus diesem', 'Nuevo tema a partir de este', 'Nouveau thème à partir de celui-ci', 'Nuovo tema da questo', 'Nowy motyw na podstawie tego', 'Novo tema a partir deste', 'Нова тема з цієї'),
+    'makes a file with all colors of the current theme – change the values and save': ('vytvorí súbor so všetkými farbami aktuálnej témy – zmeň hodnoty a ulož', 'erstellt eine Datei mit allen Farben des aktuellen Designs – Werte ändern und speichern', 'crea un archivo con todos los colores del tema actual: cambia los valores y guarda', 'crée un fichier avec toutes les couleurs du thème actuel – modifiez les valeurs et enregistrez', 'crea un file con tutti i colori del tema attuale: cambia i valori e salva', 'tworzy plik ze wszystkimi kolorami bieżącego motywu – zmień wartości i zapisz', 'cria um ficheiro com todas as cores do tema atual – altere os valores e grave', 'створює файл з усіма кольорами поточної теми – змініть значення й збережіть'),
+    'Themes folder': ('Priečinok tém', 'Designordner', 'Carpeta de temas', 'Dossier des thèmes', 'Cartella dei temi', 'Folder motywów', 'Pasta de temas', 'Тека тем'),
+    'Change a value and save – the theme updates right away.': ('Zmeň hodnotu a ulož – téma sa hneď zmení.', 'Ändere einen Wert und speichere – das Design ändert sich sofort.', 'Cambia un valor y guarda: el tema se actualiza al instante.', 'Modifiez une valeur et enregistrez – le thème change aussitôt.', 'Cambia un valore e salva: il tema si aggiorna subito.', 'Zmień wartość i zapisz – motyw od razu się zmieni.', 'Altere um valor e grave – o tema muda logo.', 'Змініть значення й збережіть – тема одразу оновиться.'),
+    'Cut': ('Vystrihnúť', 'Ausschneiden', 'Cortar', 'Couper', 'Taglia', 'Wytnij', 'Cortar', 'Вирізати'),
+    'Paste': ('Vložiť', 'Einfügen', 'Pegar', 'Coller', 'Incolla', 'Wklej', 'Colar', 'Вставити'),
+    'Find…': ('Hľadať…', 'Suchen…', 'Buscar…', 'Rechercher…', 'Trova…', 'Znajdź…', 'Procurar…', 'Знайти…'),
+    'Replace…': ('Nahradiť…', 'Ersetzen…', 'Reemplazar…', 'Remplacer…', 'Sostituisci…', 'Zamień…', 'Substituir…', 'Замінити…'),
+    'Run file': ('Spustiť súbor', 'Datei ausführen', 'Ejecutar archivo', 'Exécuter le fichier', 'Esegui file', 'Uruchom plik', 'Executar ficheiro', 'Запустити файл'),
+    'Explain with AI': ('Vysvetliť cez AI', 'Mit KI erklären', 'Explicar con IA', 'Expliquer avec l’IA', 'Spiega con l’IA', 'Wyjaśnij z AI', 'Explicar com IA', 'Пояснити за допомогою ШІ'),
 }
 V21 = {code: {k: v[i] for k, v in _V21.items()} for i, code in enumerate(['sk', 'de', 'es', 'fr', 'it', 'pl', 'pt', 'uk'])}

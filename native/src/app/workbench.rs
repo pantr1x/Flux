@@ -290,4 +290,39 @@ impl App {
         });
         w + 10.0
     }
+
+    // ---------- vlastná téma ----------
+    // súbor userData/themes/<id>.conf so všetkými farbami aktuálnej témy; otvorí sa v editore a po uložení sa hneď použije
+    pub(super) fn new_theme_file(&mut self) {
+        let dir = crate::themes::user_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let mut n = 1;
+        let mut id = "my-theme".to_string();
+        while dir.join(format!("{id}.conf")).exists() {
+            n += 1;
+            id = format!("my-theme-{n}");
+        }
+        let cur = self.get("codeTheme").as_str().unwrap_or(crate::gen::DEFAULT_THEME).to_string();
+        let (dark, code, _) = crate::code::theme_of(&cur);
+        let p = self.pal;
+        let hex = |c: egui::Color32| ((c.r() as u32) << 16) | ((c.g() as u32) << 8) | c.b() as u32;
+        let ui = vec![("background".to_string(), hex(p.base.to_opaque())), ("panel".to_string(), hex(p.card.to_opaque())), ("text".to_string(), hex(p.text)), ("text2".to_string(), hex(p.text2)), ("border".to_string(), hex(p.line.to_opaque())), ("accent".to_string(), hex(p.accent))];
+        let name = if n == 1 { "My theme".to_string() } else { format!("My theme {n}") };
+        let file = dir.join(format!("{id}.conf"));
+        if let Err(e) = std::fs::write(&file, crate::themes::template(&name, dark, &code, &ui)) {
+            self.status = e.to_string();
+            return;
+        }
+        crate::themes::reload();
+        self.update_settings(|o| {
+            o.insert("codeTheme".into(), json!(id));
+        });
+        self.theme_dirty = true;
+        self.settings = None;
+        let f = file.to_string_lossy().to_string();
+        flux_core::fsops::allow_file(&self.core, &f);
+        self.reload_projects();
+        self.open_file(&f);
+        self.note(t("Change a value and save – the theme updates right away."));
+    }
 }

@@ -55,6 +55,7 @@ mod smooth;
 mod term;
 mod ws;
 mod theme;
+mod themes;
 mod update;
 mod wall;
 mod widgets;

@@ -1462,6 +1462,14 @@ impl App {
                 let mut ids: Vec<String> = ["vscode-dark", "flux", "one-dark", "dracula", "tokyo-night", "catppuccin", "nord", "github-dark", "monokai", "vscode-light", "github-light", "catppuccin-latte"].iter().map(|s| s.to_string()).collect();
                 let mut names: Vec<String> =
                     ["VS Code Dark", "Flux", "One Dark Pro", "Dracula", "Tokyo Night", "Catppuccin Mocha", "Nord", "GitHub Dark", "Monokai", "VS Code Light", "GitHub Light", "Catppuccin Latte"].iter().map(|s| s.to_string()).collect();
+                // témy zo súborov (themes/*.conf v repozitári a vlastné v priečinku tém)
+                let files = crate::themes::all();
+                for th in &files {
+                    if !ids.contains(&th.id) {
+                        ids.push(th.id.clone());
+                        names.push(th.name.clone());
+                    }
+                }
                 // témy z pluginov (flux.themes.add)
                 for th in crate::plugins::THEMES.lock().unwrap().iter() {
                     ids.push(th.1.clone());
@@ -1481,14 +1489,33 @@ impl App {
                         ui.painter().rect_filled(Rect::from_min_size(pos2(r.left() + 10.0 + k as f32 * 8.0, r.center().y - 7.0), vec2(6.0, 14.0)), CornerRadius::same(2), theme::hex(c[*idx]));
                     }
                     ui.painter().text(pos2(r.left() + 62.0, r.top() + 18.0), Align2::LEFT_CENTER, &names[i], theme::bold(13.0), p.text);
-                    ui.painter().text(pos2(r.left() + 62.0, r.top() + 36.0), Align2::LEFT_CENTER, if dark { t("dark") } else { t("light") }, theme::ui(11.5), p.text3);
+                    let mine = files.iter().any(|f| f.id == *id && f.user);
+                    let kind = if dark { t("dark") } else { t("light") };
+                    ui.painter().text(pos2(r.left() + 62.0, r.top() + 36.0), Align2::LEFT_CENTER, if mine { format!("{kind} · {}", t("yours")) } else { kind }, theme::ui(11.5), p.text3);
                     if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                         pick = Some(id.to_string());
                     }
                 }
                 if let Some(id) = pick {
                     self.set_code_theme(&id, ctx);
+                    self.apply_look(ctx);
                 }
+                // vlastná téma = jeden súbor s hodnotami (docs/THEMES.md)
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if widgets::button(ui, Some("plus"), &t("New theme from this one"), p.accent, p.accent_fg, 30.0, &p).on_hover_text(t("makes a file with all colors of the current theme – change the values and save")).clicked() {
+                        self.new_theme_file();
+                    }
+                    if widgets::button(ui, Some("folderOpen"), &t("Themes folder"), p.card2, p.text, 30.0, &p).clicked() {
+                        let d = crate::themes::user_dir();
+                        let _ = std::fs::create_dir_all(&d);
+                        flux_core::settings::open_external(&d.to_string_lossy());
+                    }
+                    if widgets::button(ui, Some("refresh"), &t("Reload"), p.card2, p.text, 30.0, &p).clicked() {
+                        crate::themes::reload();
+                        self.theme_dirty = true;
+                    }
+                });
             }
             "accents" => {
                 let cur = self.get("accent").as_str().unwrap_or("mono").to_string();

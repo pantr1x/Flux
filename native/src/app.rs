@@ -301,6 +301,8 @@ pub struct App {
     drop_rects: Vec<(Rect, String)>,    // kam sa dá pustiť súbor z počítača (priečinky stromu, projekty)
     proj_reveal: bool,                  // po otvorení projektu posunúť zoznam PROJECTS k nemu
     closed_tabs: Vec<String>,           // zavreté karty (Ctrl+Shift+T ich vráti)
+    theme_dirty: bool,                  // súbor témy sa zmenil – znova použiť tému
+    side_drag: Option<f32>,             // ťahanie okraja bočného panela (šírka pri začiatku)
     layout_name: String,                // pole na meno nového rozloženia okna
     tool_new: (String, String),         // pole na nový externý nástroj (meno, príkaz)
     ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
@@ -453,6 +455,8 @@ impl App {
             drop_rects: vec![],
             proj_reveal: true,
             closed_tabs: vec![],
+            theme_dirty: false,
+            side_drag: None,
             layout_name: String::new(),
             tool_new: (String::new(), String::new()),
             ed_drag: None,
@@ -639,6 +643,33 @@ impl App {
     fn palette(&self) -> Pal {
         let mut p = theme::palette_for(self.code.dark, self.core.setting("accent").as_str().unwrap_or("mono"), self.core.setting("darkLift").as_f64().unwrap_or(0.0));
         // vlastné farby aplikácie (Nastavenia → Vzhľad → Farby aplikácie)
+        // farby aplikácie zo súboru témy (themes/*.conf) – vlastné farby z nastavení majú prednosť
+        if let Some(tf) = crate::themes::get(self.core.setting("codeTheme").as_str().unwrap_or("")) {
+            let u = |k: &str| tf.ui.get(k).copied().map(theme::hex);
+            if let Some(x) = u("background") {
+                p.base = x;
+            }
+            if let Some(x) = u("panel") {
+                p.card = x;
+                p.card2 = x.lerp_to_gamma(if p.dark { Color32::WHITE } else { Color32::BLACK }, 0.04);
+            }
+            if let Some(x) = u("text") {
+                p.text = x;
+            }
+            if let Some(x) = u("text2") {
+                p.text2 = x;
+                p.text3 = x.gamma_multiply(0.8);
+            }
+            if let Some(x) = u("border") {
+                p.line = x;
+                p.line_strong = x.lerp_to_gamma(p.text, 0.15);
+            }
+            if let (Some(x), true) = (u("accent"), self.core.setting("accent").is_null()) {
+                p.accent = x;
+                let l = 0.299 * x.r() as f32 + 0.587 * x.g() as f32 + 0.114 * x.b() as f32;
+                p.accent_fg = if l > 160.0 { theme::hex(0x16161a) } else { Color32::WHITE };
+            }
+        }
         let c = |k: &str| self.core.setting(k).as_str().filter(|s| s.len() == 7 && s.starts_with('#')).and_then(|s| u32::from_str_radix(&s[1..], 16).ok()).map(theme::hex);
         if let Some(x) = c("uiText") {
             p.text = x;
@@ -1411,6 +1442,12 @@ impl App {
             }
         }
         self.plug_emit("save");
+        // uložená téma (userData/themes/*.conf) sa prejaví hneď
+        if let Some(t) = self.tabs.get(i).filter(|t| t.path.ends_with(".conf") && Path::new(&t.path).starts_with(crate::themes::user_dir())) {
+            let _ = t;
+            crate::themes::reload();
+            self.theme_dirty = true;
+        }
         // Live Server: otvorené stránky sa znova načítajú (už z disku)
         if let Some(s) = &self.server {
             if let Some(t) = self.tabs.get(i) {
@@ -1758,15 +1795,17 @@ impl App {
 
     fn set_code_theme(&mut self, id: &str, ctx: &egui::Context) {
         self.code = Code::new(id);
+        let dark = self.code.dark;
+        let sid = id.to_string();
+        // najprv uložiť (palette() číta farby aplikácie z témy podľa codeTheme)
+        self.update_settings(|o| {
+            o.insert(if dark { "lastDark" } else { "lastLight" }.into(), json!(sid));
+            o.insert("codeTheme".into(), json!(sid));
+        });
         self.pal = self.palette();
         theme::apply(ctx, &self.pal);
-        let dark = self.code.dark;
-        let id = id.to_string();
-        self.update_settings(|o| {
-            o.insert(if dark { "lastDark" } else { "lastLight" }.into(), json!(id));
-            o.insert("codeTheme".into(), json!(id));
-        });
     }
+
 
     // ---------- bočný panel ----------
     fn project_sub(&self, dir: &str) -> String {
@@ -2248,6 +2287,10 @@ impl App {
             sa = sa.scroll_offset((self.ed_off + drag).max(egui::Vec2::ZERO));
         }
         let mut te_drag = false;
+        let mut ctx_menu: Option<&'static str> = None; // pravý klik v kóde
+        let mut ctx_sel: (usize, usize) = (0, 0);
+        // výber z minulej snímky – pravý klik ho v TextEdit zruší, tak ho vrátime
+        let prev_sel = self.sel_chars.filter(|(a, b)| a != b);
         let out = sa.show(&mut child, |ui| {
             ui.add_space(PAD);
             ui.horizontal_top(|ui| {
@@ -2533,6 +2576,42 @@ impl App {
                 }
                 edited = te.response.changed() || new_sel.is_some();
                 te_drag = te.response.dragged();
+                // ponuka pravého kliku (výber ostane taký, aký bol)
+                let right = ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary) || i.pointer.button_released(egui::PointerButton::Secondary) || i.pointer.button_down(egui::PointerButton::Secondary));
+                if right && te.response.hovered() {
+                    if let Some((a, b)) = prev_sel {
+                        let mut st = egui::TextEdit::load_state(ui.ctx(), ed_id).unwrap_or_default();
+                        st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(a), egui::text::CCursor::new(b))));
+                        st.store(ui.ctx(), ed_id);
+                        sel_out = Some((a, b));
+                        ctx_sel = (a.min(b), a.max(b));
+                    }
+                }
+                if let Some(r) = te.cursor_range.filter(|_| !(right && prev_sel.is_some())) {
+                    ctx_sel = (usize::from(r.primary.index).min(usize::from(r.secondary.index)), usize::from(r.primary.index).max(usize::from(r.secondary.index)));
+                }
+                let has_sel = ctx_sel.1 > ctx_sel.0;
+                let pp = p;
+                te.response.context_menu(|ui| {
+                    ui.set_min_width(230.0);
+                    ui.set_max_width(250.0);
+                    let mut it = |ui: &mut egui::Ui, icon: Option<&str>, label: &str, key: &str, on: bool, id: &'static str| {
+                        if menus::item(ui, icon, &t(label), key, false, on, &pp).clicked() {
+                            ctx_menu = Some(id);
+                        }
+                    };
+                    it(ui, None, "Cut", "Ctrl+X", has_sel, "cut");
+                    it(ui, Some("copy"), "Copy", "Ctrl+C", has_sel, "copy");
+                    it(ui, None, "Paste", "Ctrl+V", true, "paste");
+                    it(ui, None, "Select all", "Ctrl+A", true, "all");
+                    menus::sep(ui, &pp);
+                    it(ui, Some("code"), "Toggle comment", "Ctrl+/", true, "comment");
+                    it(ui, Some("search"), "Find…", "Ctrl+F", true, "find");
+                    it(ui, None, "Replace…", "Ctrl+H", true, "replace");
+                    menus::sep(ui, &pp);
+                    it(ui, Some("play"), "Run file", "F5", true, "run");
+                    it(ui, Some("sparkle"), "Explain with AI", "", has_sel, "ai");
+                });
                 // kurzor posunutý nami (Enter s odsadením, Tab, návrh…) – egui sa vtedy k nemu sám neposunie;
                 // blízko začiatku riadka ukáž celý začiatok aj s číslami riadkov (inak po Enteri na dlhom riadku
                 // ostal pohľad odsunutý doprava a nový riadok nebolo vidno)
@@ -2688,6 +2767,9 @@ impl App {
             ui.add_space(PAD);
         });
         self.smooth.end(sk, &out);
+        if let Some(a) = ctx_menu {
+            self.editor_menu_action(a, ctx_sel, ed_id, &ctx);
+        }
         self.ed_off = out.state.offset;
         // kým sa ťahá výber, editor si pamätá svoju plochu – raw_input_hook podľa nej posúva (aj keď myš stojí)
         self.ed_drag = te_drag.then_some((out.inner_rect, !wrap));
@@ -3809,6 +3891,11 @@ impl eframe::App for App {
             return;
         }
         self.shortcuts(ctx);
+        if std::mem::take(&mut self.theme_dirty) {
+            let id = self.get("codeTheme").as_str().unwrap_or(crate::gen::DEFAULT_THEME).to_string();
+            self.set_code_theme(&id, ctx);
+            self.apply_look(ctx);
+        }
         // automatické ukladanie 1 s po poslednej zmene
         let save_ms = self.get("autosaveDelay").as_u64().unwrap_or(1000).clamp(200, 10_000);
         if let Some(t) = self.last_edit {

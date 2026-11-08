@@ -2,6 +2,21 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.65
+
+**Themes as simple files**
+- A theme is now **one small file** with one value per line (`keyword #c792ea`). Settings → *Theme and window* → **New theme from this one** makes such a file with all colors of the current theme and opens it – change a value, save, and Flux updates right away. *Themes folder* opens the folder with your themes.
+- Themes can also color the app itself (background, panels, text, borders, accent).
+- New built-in themes: **Gruvbox Dark**, **Solarized Dark**, **Solarized Light**, **Rosé Pine** and **Everforest Dark**.
+- Anyone can add a theme for everybody: one `.conf` file in the `themes` folder of the Flux repository (see `docs/THEMES.md`).
+
+**Right-click in the code**
+- Right-click in the editor opens a menu: Cut, Copy, Paste, Select all, Toggle comment, Find, Replace, Run file and Explain with AI. **Your selection stays selected** when you right-click.
+
+**Sizes you can change**
+- Drag the **edge of the sidebar** to make it wider or narrower (double-click the edge for the default width).
+- Drag the line under **PROJECTS** and **FILES** to show more or fewer rows.
+
 ## 0.9.64
 
 **Settings sorted into groups**

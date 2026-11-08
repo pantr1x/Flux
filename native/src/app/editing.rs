@@ -308,6 +308,65 @@ pub fn matches(text: &str, q: &str) -> Vec<(usize, usize)> {
 }
 
 impl App {
+    // akcie z ponuky pravého kliku v editore (ctx_sel = výber v znakoch)
+    pub(super) fn editor_menu_action(&mut self, a: &str, sel: (usize, usize), ed_id: egui::Id, ctx: &egui::Context) {
+        let Some(tab) = self.tabs.get_mut(self.active) else { return };
+        let (lo, hi) = sel;
+        let byte = |t: &str, c: usize| t.char_indices().nth(c).map(|x| x.0).unwrap_or(t.len());
+        let selected: String = tab.text.chars().skip(lo).take(hi - lo).collect();
+        let mut cursor: Option<(usize, usize)> = None;
+        match a {
+            "copy" => ctx.copy_text(selected),
+            "cut" => {
+                ctx.copy_text(selected);
+                let (a, b) = (byte(&tab.text, lo), byte(&tab.text, hi));
+                tab.text.replace_range(a..b, "");
+                cursor = Some((lo, lo));
+            }
+            "paste" => {
+                if let Some(clip) = arboard::Clipboard::new().ok().and_then(|mut c| c.get_text().ok()) {
+                    let clip = clip.replace("\r\n", "\n");
+                    let (a, b) = (byte(&tab.text, lo), byte(&tab.text, hi));
+                    tab.text.replace_range(a..b, &clip);
+                    let end = lo + clip.chars().count();
+                    cursor = Some((end, end));
+                }
+            }
+            "all" => cursor = Some((0, tab.text.chars().count())),
+            "comment" => {
+                let ext = tab.ext();
+                cursor = Some(toggle_comment(&mut tab.text, lo, hi, &ext));
+            }
+            "find" | "replace" => {
+                let q = if !selected.is_empty() && !selected.contains('\n') { selected } else { self.find.as_ref().map(|f| f.q.clone()).unwrap_or_default() };
+                self.find = Some(Find { q, repl: String::new(), replace: a == "replace", idx: 0, focus: true });
+                return;
+            }
+            "run" => {
+                self.run();
+                return;
+            }
+            "ai" => {
+                let ext = tab.ext();
+                let q = format!("{}\n```{ext}\n{selected}\n```", crate::i18n::t("Explain this code."));
+                self.ai_ask(&q, ctx);
+                return;
+            }
+            _ => return,
+        }
+        if let Some((x, y)) = cursor {
+            if a != "all" {
+                self.last_edit = Some(std::time::Instant::now());
+            }
+            let mut st = egui::TextEdit::load_state(ctx, ed_id).unwrap_or_default();
+            st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(x), egui::text::CCursor::new(y))));
+            st.store(ctx, ed_id);
+            ctx.memory_mut(|m| m.request_focus(ed_id));
+        }
+    }
+}
+
+impl App {
     // lišta hľadania vpravo hore v editore (ako find widget v Monacu)
     pub(super) fn find_bar(&mut self, ui: &mut egui::Ui, ed: Rect, count: usize) -> Option<&'static str> {
         let p = self.pal;

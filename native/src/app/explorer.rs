@@ -150,9 +150,11 @@ impl App {
         self.load_side();
         let p = self.pal;
         let right = self.get("sidePos").as_str() == Some("right");
-        (if right { egui::Panel::right("side") } else { egui::Panel::left("side") })
+        // šírka sa dá meniť ťahaním okraja (sideWidth)
+        let w = self.side_drag.unwrap_or_else(|| self.get("sideWidth").as_f64().unwrap_or(crate::theme::SIDE_W as f64) as f32).clamp(180.0, 600.0);
+        let resp = (if right { egui::Panel::right("side") } else { egui::Panel::left("side") })
             .resizable(false)
-            .exact_size(crate::theme::SIDE_W)
+            .exact_size(w)
             .show_separator_line(false)
             .frame(Frame::new().fill(self.base_fill()).inner_margin(Margin { left: 6, right: 6, top: 0, bottom: GAP as i8 }))
             .show(root, |ui| {
@@ -164,6 +166,57 @@ impl App {
                 self.side_head(ui, &t("Explorer").to_uppercase(), !right);
                 self.explorer_view(ui);
             });
+        // úchyt na okraji panela
+        let r = resp.response.rect;
+        let x = if right { r.left() } else { r.right() };
+        let grip = Rect::from_min_max(pos2(x - 3.0, r.top() + TOP_H), pos2(x + 3.0, r.bottom()));
+        let g = root.interact(grip, egui::Id::new("side-grip"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+        if g.hovered() || g.dragged() {
+            root.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            root.painter().vline(x, grip.y_range(), Stroke::new(2.0, p.accent.gamma_multiply(0.6)));
+        }
+        if g.dragged() {
+            let d = g.drag_delta().x;
+            self.side_drag = Some((w + if right { -d } else { d }).clamp(180.0, 600.0));
+        }
+        if g.drag_stopped() {
+            if let Some(v) = self.side_drag.take() {
+                self.update_settings(|o| {
+                    o.insert("sideWidth".into(), json!(v.round()));
+                });
+            }
+        }
+        if g.double_clicked() {
+            self.side_drag = None;
+            self.update_settings(|o| {
+                o.remove("sideWidth");
+            });
+        }
+    }
+
+    // výška zoznamu (PROJECTS / FILES) – ťahá sa za čiaru pod ním, uloží sa do nastavení
+    fn list_height(&mut self, ui: &mut egui::Ui, key: &str, cur: f32, row_h: f32, max_rows: usize) -> f32 {
+        let p = self.pal;
+        let y = ui.cursor().top();
+        let grip = Rect::from_min_max(pos2(ui.max_rect().left(), y - 2.0), pos2(ui.max_rect().right(), y + 5.0));
+        let g = ui.interact(grip, ui.id().with(("list-grip", key)), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
+        let id = egui::Id::new(("list-h", key));
+        let mut h = ui.ctx().data(|d| d.get_temp::<f32>(id)).unwrap_or(cur);
+        if g.hovered() || g.dragged() {
+            ui.painter().hline(grip.x_range(), y + 1.0, Stroke::new(2.0, p.accent.gamma_multiply(0.6)));
+        }
+        if g.dragged() {
+            h = (h + g.drag_delta().y).clamp(row_h, row_h * max_rows.max(1) as f32);
+            ui.ctx().data_mut(|d| d.insert_temp(id, h));
+        }
+        if g.drag_stopped() {
+            let k = key.to_string();
+            self.update_settings(|o| {
+                o.insert(k, json!(h.round()));
+            });
+            ui.ctx().data_mut(|d| d.remove::<f32>(id));
+        }
+        h
     }
 
     // hlavička zobrazenia: názov („EXPLORER“) a vpravo skrytie panela; prázdne miesto presúva okno
@@ -383,7 +436,11 @@ impl App {
         let mut open_f = None;
         let sk = egui::Id::new("sa-loose");
         let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-        let mut sa = egui::ScrollArea::vertical().id_salt("loose").max_height(self.recent_files.len().min(4) as f32 * 38.0).auto_shrink([false, true]);
+        let row_h = 38.0 + ui.spacing().item_spacing.y;
+        let n = self.recent_files.len();
+        let live = ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::new(("list-h", "filesHeight"))));
+        let fh = live.or(self.get("filesHeight").as_f64().map(|v| v as f32)).unwrap_or(n.min(4) as f32 * row_h).min(n.max(1) as f32 * row_h);
+        let mut sa = egui::ScrollArea::vertical().id_salt("loose").max_height(fh).auto_shrink([false, true]);
         if let Some(o) = off {
             sa = sa.vertical_scroll_offset(o);
         }
@@ -405,6 +462,9 @@ impl App {
             }
         });
         self.smooth.end(sk, &sout);
+        if n > 1 {
+            self.list_height(ui, "filesHeight", sout.inner_rect.height(), row_h, n);
+        }
         if let Some(f) = open_f {
             self.open_file(&f);
         }
@@ -446,8 +506,10 @@ impl App {
         if self.sec_open("projects") {
             // s otvoreným projektom najviac 4 celé riadky (strom má prednosť), bez neho celé miesto
             let row_h = 38.0 + ui.spacing().item_spacing.y;
+            let saved = self.get("projectsHeight").as_f64().map(|v| v as f32);
             let max_h = if ws.is_some() {
-                projects.len().min(4) as f32 * row_h
+                let live = ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::new(("list-h", "projectsHeight"))));
+                live.or(saved).unwrap_or(projects.len().min(4) as f32 * row_h).min(projects.len().max(1) as f32 * row_h)
             } else {
                 (ui.max_rect().bottom() - files_h - ui.cursor().top() - 150.0).max(row_h * 2.0).min(projects.len() as f32 * row_h)
             };
@@ -463,6 +525,10 @@ impl App {
                 }
             });
             self.smooth.end(sk, &sout);
+            if ws.is_some() && projects.len() > 1 {
+                let cur = sout.inner_rect.height();
+                self.list_height(ui, "projectsHeight", cur, row_h, projects.len());
+            }
             if projects.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(22.0);

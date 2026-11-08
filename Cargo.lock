@@ -1692,9 +1692,10 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.64"
+version = "0.9.65"
 dependencies = [
  "alacritty_terminal",
+ "arboard",
  "chrono",
  "dirs 6.0.0",
  "eframe",

@@ -105,7 +105,7 @@ pub fn item(ui: &mut egui::Ui, icon: Option<&str>, label: &str, key: &str, check
     resp
 }
 
-fn sep(ui: &mut egui::Ui, p: &crate::theme::Pal) {
+pub(super) fn sep(ui: &mut egui::Ui, p: &crate::theme::Pal) {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0, p.line));
 }
