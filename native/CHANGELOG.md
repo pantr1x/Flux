@@ -2,6 +2,18 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.56
+
+**Layout like VS Code**
+- On the left there is now a narrow **bar with icons**: *Explorer* (the files of your project), *Projects*, *Search* and *Plugins*, and at the bottom the menu ☰, *Settings* and light/dark. Clicking the open view again hides the sidebar (also Ctrl+B); Ctrl+Shift+E shows the Explorer.
+- The **Explorer** shows the project as a section with its name. Hover it for **New file**, **New folder**, **Refresh** and **Collapse all**. Thin lines show what belongs to which folder, and the folder of the open file opens by itself.
+- **New files and folders are typed right into the tree**, like in VS Code: the file goes into the folder you clicked last (or the folder of the open file). Type `lib/util.py` and Flux creates the folder `lib` too. Enter creates it, Esc cancels. Right-click → *New file* works the same.
+- *Projects* has its own view with *New project* and *Open folder*; opening a project switches back to its files. Without an open folder the Explorer offers *Open folder*, *New project* and your recent projects.
+
+**Editor**
+- **Selecting with the mouse past the edge scrolls by itself**: hold the button below (or above, left, right of) the editor and it keeps scrolling – faster the further away the mouse is – even when the mouse does not move.
+- **Enter at the end of a long line** now scrolls back to the start, so you see the new line (before, the view stayed scrolled to the right).
+
 ## 0.9.54
 
 **Less memory with Live Server**

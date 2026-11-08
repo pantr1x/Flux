@@ -122,9 +122,10 @@ impl App {
             "reload-plugins" => self.plug_reload_all(),
             "ai" => self.toggle_ai(),
             "new-file" => self.open_new_file(None),
-            "new-folder" => {
-                self.new_item = Some((true, String::new()));
+            "new-folder" => self.start_new_item(true, None),
+            "view-explorer" | "view-projects" => {
                 self.side_open = true;
+                self.side_view = id.trim_start_matches("view-").to_string();
             }
             "new-project" => {
                 self.open_new_project();
@@ -415,13 +416,9 @@ impl App {
                 self.open_file(path);
                 self.run();
             }
-            Some("new-file") => self.open_new_file(Some(base.clone())),
+            Some("new-file") => self.start_new_item(false, Some(base.clone())),
             Some("add-files") => self.add_files(Some(base.clone())),
-            Some("new-folder") => {
-                self.new_in = Some(base.clone());
-                self.open_dirs.insert(base);
-                self.new_item = Some((true, String::new()));
-            }
+            Some("new-folder") => self.start_new_item(true, Some(base)),
             Some("rename") => self.renaming = Some((path.to_string(), widgets::file_name(path))),
             Some("delete") => {
                 self.ask = Some(Ask {

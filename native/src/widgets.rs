@@ -224,10 +224,6 @@ pub fn row_ex(ui: &mut egui::Ui, selected: bool, fill: bool, indent: f32, lead: 
     resp
 }
 
-pub fn separator(ui: &mut egui::Ui, p: &Pal) {
-    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 9.0), Sense::hover());
-    ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0, p.line));
-}
 
 // logo Fluxu: tmavý štvorček so zaoblením a ikonou „code“ (.brand-mark)
 pub fn brand_mark(ui: &egui::Ui, r: Rect, p: &Pal) {

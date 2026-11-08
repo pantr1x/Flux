@@ -16,11 +16,12 @@ mod tools;
 mod tour;
 mod plugins_ui;
 mod imageview;
+mod explorer;
 
 use crate::code::Code;
 use crate::i18n::t;
 use crate::term::TermView;
-use crate::theme::{self, Pal, GAP, SIDE_W, TOP_H};
+use crate::theme::{self, Pal, GAP, TOP_H};
 use crate::widgets::{self, Lead};
 use eframe::egui::{self, pos2, vec2, Align2, Color32, CornerRadius, Frame, Margin, Rect, Sense, Stroke, StrokeKind};
 use flux_core::{fsops, python, runner, settings, Core, Emit};
@@ -291,6 +292,13 @@ pub struct App {
     new_project: Option<newproj::NewProj>,
     new_file: Option<newfile::NewFile>, // okno Nový súbor
     new_item: Option<(bool, String)>,   // (priečinok?, meno) pre nový súbor/priečinok v strome
+    side_view: String,                  // bočný panel: „explorer“ / „projects“ (ako zobrazenia vo VS Code)
+    side_closed: Option<HashSet<String>>, // zbalené sekcie bočného panela (načítané pri prvom použití)
+    tree_focus: Option<String>,         // naposledy kliknutá položka stromu – sem idú nové súbory (ako VS Code)
+    ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
+    real_ptr: Option<egui::Pos2>,       // skutočná poloha myši (egui pri ťahaní výberu dostáva orezanú)
+    drag_scroll: egui::Vec2,            // posun editora pri ťahaní výberu za okraj
+    ed_off: egui::Vec2,                 // posledný posun editora
     new_todo: String,
     side_open: bool,
     next_sid: u64,
@@ -429,6 +437,13 @@ impl App {
             recent_files: vec![],
             new_project: None,
             new_item: None,
+            side_view: String::new(),
+            side_closed: None,
+            tree_focus: None,
+            ed_drag: None,
+            real_ptr: None,
+            drag_scroll: egui::Vec2::ZERO,
+            ed_off: egui::Vec2::ZERO,
             new_file: None,
             new_todo: String::new(),
             side_open: true,
@@ -1140,6 +1155,14 @@ impl App {
         self.active = i;
         self.home = false;
         self.reload_tab(i);
+        // ako VS Code: strom rozbalí priečinky k otvorenému súboru
+        if let (Some(ws), Some(t)) = (self.workspace(), self.tabs.get(i)) {
+            let mut d = Path::new(&t.path).parent();
+            while let Some(x) = d.filter(|x| x.starts_with(&ws) && *x != Path::new(&ws)) {
+                self.open_dirs.insert(x.to_string_lossy().to_string());
+                d = x.parent();
+            }
+        }
     }
 
     // uvoľnený alebo na disku zmenený (neupravený) súbor znova z disku
@@ -1676,35 +1699,6 @@ impl App {
     }
 
     // ---------- bočný panel ----------
-    fn side_top(&mut self, ui: &mut egui::Ui, with_toggle: bool) {
-        let p = self.pal;
-        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), TOP_H), Sense::hover());
-        chrome::drag_area(ui, r, "side");
-        // bočný panel vpravo: vpravo hore sú − □ ×, prepínač panela je v hornej lište
-        let with_toggle = with_toggle && self.get("sidePos").as_str() != Some("right");
-        let brand = Rect::from_min_size(pos2(r.left() + 2.0, r.center().y - 14.0), vec2(70.0, 28.0));
-        self.tour_rects.insert("brand", brand);
-        let resp = ui.interact(brand, ui.id().with("brand"), Sense::click());
-        if resp.hovered() {
-            ui.painter().rect_filled(brand, CornerRadius::same(8), p.hover);
-        }
-        // logo otvorí domov Fluxu (ako .brand v Electron Fluxe)
-        if resp.on_hover_text(t("Home")).clicked() {
-            let now = ui.ctx().input(|i| i.time);
-            self.open_start(now);
-        }
-        widgets::brand_mark(ui, Rect::from_min_size(pos2(brand.left() + 4.0, r.center().y - 10.0), vec2(20.0, 20.0)), &p);
-        ui.painter().text(pos2(brand.left() + 32.0, r.center().y), Align2::LEFT_CENTER, "flux", theme::bold(15.0), p.text);
-        let menu = widgets::icon_button_at(ui, Rect::from_center_size(pos2(brand.right() + 17.0, r.center().y), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
-        self.app_menu(&menu);
-        if with_toggle {
-            let t = Rect::from_center_size(pos2(r.right() - 14.0, r.center().y), vec2(28.0, 28.0));
-            if widgets::icon_button_at(ui, t, "sidebar", 16.0, &p, true).on_hover_text(crate::i18n::t("Hide sidebar")).clicked() {
-                self.side_open = false;
-            }
-        }
-    }
-
     fn project_sub(&self, dir: &str) -> String {
         let Some(s) = self.summaries.get(dir) else {
             return String::new();
@@ -1804,329 +1798,6 @@ impl App {
         }
     }
 
-    fn sidebar(&mut self, root: &mut egui::Ui) {
-        let p = self.pal;
-        (if self.get("sidePos").as_str() == Some("right") { egui::Panel::right("side") } else { egui::Panel::left("side") })
-            .resizable(false)
-            .exact_size(SIDE_W)
-            .show_separator_line(false)
-            // spodok ako karta: päta končí GAP nad okrajom a je v rovine so stavovým riadkom
-            .frame(Frame::new().fill(self.base_fill()).inner_margin(Margin { left: 8, right: 6, top: 0, bottom: GAP as i8 }))
-            .show(root, |ui| {
-                // nepriehľadnosť bočného panela (Vzhľad → Okno)
-                if p.layer[0].a() > 0 {
-                    let r = ui.max_rect();
-                    let full = Rect::from_min_max(pos2(r.left() - 8.0, r.top()), pos2(r.right() + 6.0, r.bottom() + GAP));
-                    let right = self.get("sidePos").as_str() == Some("right");
-                    let k = if self.rounded { 8 } else { 0 };
-                    let cr = if right { CornerRadius { ne: k, se: k, ..Default::default() } } else { CornerRadius { nw: k, sw: k, ..Default::default() } };
-                    ui.ctx().layer_painter(ui.layer_id()).rect_filled(full, cr, p.layer[0]);
-                }
-                self.side_top(ui, true);
-                let ws = self.workspace();
-                let mut open = None;
-                let mut menu_for: Option<(egui::Response, String, bool)> = None;
-                let mut rename: Option<(String, String)> = None;
-                let projects = self.projects.clone();
-                // ---- PINNED (pripnuté projekty v jemnom rámčeku, .pr-pinned) ----
-                let pinned: Vec<Value> = projects.iter().filter(|pr| pr["pinned"].as_bool() == Some(true)).cloned().collect();
-                if !pinned.is_empty() {
-                    let (cap, _) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::hover());
-                    widgets::icon_at(ui, pos2(cap.left() + 13.0, cap.center().y), 11.0, "pin", p.text3);
-                    let mut job = egui::text::LayoutJob::default();
-                    job.append(&t("Pinned").to_uppercase(), 0.0, egui::TextFormat { font_id: theme::bold(11.0), color: p.text3, extra_letter_spacing: 1.0, ..Default::default() });
-                    let g = ui.fonts_mut(|f| f.layout_job(job));
-                    ui.painter().galley(pos2(cap.left() + 22.0, cap.center().y - g.size().y / 2.0), g, p.text3);
-                    let box_top = ui.cursor().top();
-                    let where_ = ui.painter().add(egui::Shape::Noop);
-                    ui.add_space(3.0);
-                    let mut inner = ui
-                        .new_child(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(ui.max_rect().left() + 3.0, ui.cursor().top()), pos2(ui.max_rect().right() - 3.0, ui.max_rect().bottom()))));
-                    for pr in &pinned {
-                        self.project_row(&mut inner, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
-                    }
-                    let used = inner.min_rect().height();
-                    ui.add_space(used + 3.0);
-                    let br = Rect::from_min_max(pos2(ui.max_rect().left(), box_top), pos2(ui.max_rect().right(), ui.cursor().top()));
-                    let tint = p.hover.lerp_to_gamma(p.accent.gamma_multiply(0.35), 0.2);
-                    ui.painter().set(where_, egui::epaint::RectShape::new(br, CornerRadius::same(12), tint, Stroke::new(1.0, p.line.lerp_to_gamma(p.accent, 0.22)), StrokeKind::Inside));
-                    ui.add_space(10.0);
-                }
-                // ---- PROJECTS ----
-                if widgets::section(ui, &t("Projects").to_uppercase(), Some("folderOpen"), &p).map(|r| r.on_hover_text(t("Open folder")).clicked()) == Some(true) {
-                    if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
-                        self.open_folder(&d.to_string_lossy());
-                    }
-                }
-                let sk = egui::Id::new("sa-projects");
-                let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-                let mut sa = egui::ScrollArea::vertical().id_salt("projects").max_height(200.0).auto_shrink([false, true]);
-                if let Some(o) = off {
-                    sa = sa.vertical_scroll_offset(o);
-                }
-                let sout = sa.show(ui, |ui| {
-                    for pr in projects.iter().filter(|pr| pr["pinned"].as_bool() != Some(true)) {
-                        self.project_row(ui, pr, ws.as_deref(), &mut open, &mut menu_for, &mut rename);
-                    }
-                });
-                self.smooth.end(sk, &sout);
-                self.tour_rects.insert("projects", Rect::from_min_size(sout.inner_rect.min, vec2(sout.inner_rect.width(), sout.content_size.y.min(sout.inner_rect.height()))));
-                if let Some((r, d, pinned)) = menu_for {
-                    self.project_menu(&r, &d, pinned);
-                }
-                if let Some((f, n)) = rename {
-                    self.finish_rename(&f, &n);
-                }
-                if let Some(d) = open {
-                    if ws.as_deref() == Some(d.as_str()) {
-                        self.home = true;
-                    } else {
-                        self.open_folder(&d);
-                    }
-                }
-                if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New project"), None, false, &p).clicked() {
-                    self.open_new_project();
-                }
-                // ---- FILES (súbory otvorené mimo projektu) ----
-                // vždy viditeľné, s riadkom „+ New file“ (ako „+ New project“ pri projektoch)
-                {
-                    widgets::separator(ui, &p);
-                    if widgets::section(ui, &t("Files").to_uppercase(), Some("filePlus"), &p).map(|r| r.on_hover_text(t("New file")).clicked()) == Some(true) {
-                        let d = self.recent_files.first().and_then(|f| Path::new(f).parent().map(|d| d.to_string_lossy().to_string()));
-                        self.open_new_file(d);
-                    }
-                    let mut open_f = None;
-                    let sk = egui::Id::new("sa-loose");
-                    let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-                    let mut sa = egui::ScrollArea::vertical().id_salt("loose").max_height(170.0).auto_shrink([false, true]);
-                    if let Some(o) = off {
-                        sa = sa.vertical_scroll_offset(o);
-                    }
-                    let sout = sa.show(ui, |ui| {
-                        for f in &self.recent_files {
-                            let sel = !self.home && self.tabs.get(self.active).map(|t| &t.path == f).unwrap_or(false);
-                            if widgets::row(ui, sel, 10.0, Lead::File(&widgets::file_name(f)), &widgets::file_name(f), Some(&short_dir(f)), false, &p).on_hover_text(f).clicked() {
-                                open_f = Some(f.clone());
-                            }
-                        }
-                    });
-                    self.smooth.end(sk, &sout);
-                    if let Some(f) = open_f {
-                        self.open_file(&f);
-                    }
-                    if widgets::row(ui, false, 10.0, Lead::Line("plus"), &t("New file"), None, false, &p).clicked() {
-                        self.open_new_file(None);
-                    }
-                }
-                // ---- strom súborov projektu ----
-                let footer_h = 28.0; // výška stavového riadka karty
-                if let Some(w) = ws.clone() {
-                    widgets::separator(ui, &p);
-                    let tb = ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
-                        ui.add_space(4.0);
-                        if widgets::icon_button(ui, "filePlus", &p, true).on_hover_text(t("New file")).clicked() {
-                            self.open_new_file(None);
-                        }
-                        if widgets::icon_button(ui, "folderPlus", &p, true).on_hover_text(t("New folder")).clicked() {
-                            self.new_item = Some((true, String::new()));
-                        }
-                        if widgets::icon_button(ui, "upload", &p, true).on_hover_text(t("Add files from your computer")).clicked() {
-                            self.add_files(None);
-                        }
-                        if widgets::icon_button(ui, "refresh", &p, true).on_hover_text(t("Refresh")).clicked() {
-                            self.tree.clear();
-                        }
-                        if widgets::icon_button(ui, "collapse", &p, true).on_hover_text(t("Collapse all")).clicked() {
-                            self.open_dirs.clear();
-                        }
-                    });
-                    self.tour_rects.insert("files", Rect::from_min_size(tb.response.rect.min, vec2(5.0 * 30.0 + 4.0, tb.response.rect.height())));
-                    ui.add_space(4.0);
-                    // strom končí presne nad pätou (aj s medzerou medzi prvkami)
-                    let h = (ui.max_rect().bottom() - footer_h - ui.cursor().top() - ui.spacing().item_spacing.y - 2.0).max(40.0);
-                    let sk = egui::Id::new("sa-tree");
-                    let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-                    let mut sa = egui::ScrollArea::vertical().id_salt("tree").max_height(h).auto_shrink([false, false]);
-                    if let Some(o) = off {
-                        sa = sa.vertical_scroll_offset(o);
-                    }
-                    let sout = sa.show(ui, |ui| {
-                        // zvýraznenie otvoreného súboru kĺže k novému riadku (slideIndicator v Electron Fluxe)
-                        let bg = ui.painter().add(egui::Shape::Noop);
-                        let origin = ui.min_rect().top();
-                        self.tree_sel = None;
-                        self.tree_ui(ui, &w, 0);
-                        // pri ťahaní: miesto na vytiahnutie von z priečinkov (do koreňa projektu) – až pod stromom;
-                        // nad ním by po začatí ťahania posunulo všetky riadky a pod kurzorom by bol iný priečinok
-                        if egui::DragAndDrop::has_payload_of_type::<String>(ui.ctx()) {
-                            let rr = widgets::row_ex(ui, false, false, 6.0, Lead::Line("folderOpen"), &t("Move to the project folder"), None, false, &self.pal);
-                            if let Some(src) = rr.dnd_hover_payload::<String>() {
-                                if drop_ok(&src, &w) {
-                                    ui.painter().rect_stroke(rr.rect, CornerRadius::same(8), Stroke::new(1.5, self.pal.accent), StrokeKind::Inside);
-                                }
-                            }
-                            if let Some(src) = rr.dnd_release_payload::<String>() {
-                                self.move_item(&src, &w);
-                            }
-                        }
-                        if let Some(r) = self.tree_sel {
-                            let t = if self.anim_on() { 0.2 } else { 0.0 };
-                            let y = ui.ctx().animate_value_with_time(egui::Id::new("tree-glide"), r.top() - origin, t);
-                            let gr = Rect::from_min_size(pos2(r.left(), origin + y), r.size());
-                            ui.painter().set(bg, egui::Shape::rect_filled(gr, CornerRadius::same(8), self.pal.active));
-                        }
-                    });
-                    self.smooth.end(sk, &sout);
-                } else {
-                    // bez priečinka: „No folder is open.“ + Open folder
-                    widgets::separator(ui, &p);
-                    ui.add_space(40.0);
-                    ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new(t("No folder is open.")).color(p.text3).size(12.5));
-                        ui.add_space(6.0);
-                        if widgets::button(ui, None, &t("Open folder"), p.accent, p.accent_fg, 28.0, &p).clicked() {
-                            if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
-                                self.open_folder(&d.to_string_lossy());
-                            }
-                        }
-                    });
-                }
-                // ---- päta: Nastavenia, skratky, svetlá/tmavá ----
-                // pevne na spodku panela: čiara = horná čiara stavového riadka karty, text v jeho strede
-                // (nie podľa toku rozloženia – medzery medzi prvkami ju posúvali nižšie)
-                let mr = ui.max_rect();
-                let r = Rect::from_min_max(pos2(mr.left(), mr.bottom() - footer_h), pos2(mr.right(), mr.bottom()));
-                ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0, p.line));
-                let s = Rect::from_min_size(pos2(r.left(), r.center().y - 12.0), vec2(96.0, 24.0));
-                self.tour_rects.insert("settings", r);
-                let sr = ui.interact(s, ui.id().with("settings"), Sense::click());
-                if sr.hovered() {
-                    ui.painter().rect_filled(s, CornerRadius::same(8), p.hover);
-                }
-                widgets::icon_at(ui, pos2(s.left() + 15.0, s.center().y), 15.0, "settings", p.text2);
-                ui.painter().text(pos2(s.left() + 31.0, s.center().y), Align2::LEFT_CENTER, t("Settings"), theme::bold(13.0), p.text2);
-                if sr.on_hover_text(t("Settings")).clicked() {
-                    self.open_settings("general", ui.ctx());
-                }
-                let sun = Rect::from_center_size(pos2(r.right() - 12.0, s.center().y), vec2(26.0, 26.0));
-                let cmd = sun.translate(vec2(-26.0, 0.0));
-                widgets::icon_button_at(ui, cmd, "command", 15.0, &p, true).on_hover_text(t("F5 Run · Ctrl+S Save · Ctrl+O Open folder · Ctrl+W Close"));
-                if widgets::icon_button_at(ui, sun, if p.dark { "sun" } else { "moon" }, 15.0, &p, true).on_hover_text(t("Light / dark")).clicked() {
-                    self.set_theme(!p.dark, ui.ctx());
-                }
-            });
-    }
-
-    // pole na názov nového súboru/priečinka priamo v strome (v cieľovom priečinku)
-    fn new_item_ui(&mut self, ui: &mut egui::Ui, dir: &str, indent: f32) {
-        let target = self.new_in.clone().or_else(|| self.workspace()).unwrap_or_default();
-        let Some((is_dir, name)) = &mut self.new_item else { return };
-        if target != dir {
-            return;
-        }
-        let hint = if *is_dir { t("Folder name") } else { t("File name") };
-        let mut res = Rn::Editing;
-        ui.horizontal(|ui| {
-            ui.add_space(indent);
-            // Enter / klik inam potvrdí, Esc zruší (fokus sa žiada len raz – inak by Enter „zjedlo“ rename_field)
-            res = name_field(ui, egui::Id::new(("new-item", dir)), name, Margin::symmetric(10, 5), false, &hint);
-        });
-        if matches!(res, Rn::Editing) {
-            return;
-        }
-        let (d, n) = (*is_dir, name.trim().to_string());
-        self.new_item = None;
-        self.new_in = None;
-        if matches!(res, Rn::Done) && !n.is_empty() {
-            let target = Path::new(dir).join(&n).to_string_lossy().to_string();
-            match fsops::create(&target, d) {
-                Ok(_) => {
-                    self.tree.clear();
-                    self.open_dirs.insert(dir.to_string());
-                    if d {
-                        self.open_dirs.insert(target);
-                    } else {
-                        self.open_file(&target);
-                    }
-                }
-                Err(e) => self.status = e,
-            }
-        }
-    }
-
-    fn tree_ui(&mut self, ui: &mut egui::Ui, dir: &str, depth: usize) {
-        let p = self.pal;
-        self.new_item_ui(ui, dir, depth as f32 * 14.0);
-        let items = self.list(dir);
-        for (name, path, is_dir) in items {
-            let indent = 6.0 + depth as f32 * 14.0;
-            if let Some((from, new)) = self.renaming.as_mut().filter(|r| r.0 == path) {
-                let mut res = Rn::Editing;
-                ui.horizontal(|ui| {
-                    ui.add_space(indent);
-                    // pri súbore sa označí meno bez prípony
-                    res = rename_field(ui, egui::Id::new(("rename", &path)), new, Margin::symmetric(10, 5), !is_dir);
-                });
-                match res {
-                    Rn::Editing => {}
-                    Rn::Done => {
-                        let (f, n) = (from.clone(), new.clone());
-                        self.renaming = None;
-                        self.finish_rename(&f, &n);
-                    }
-                    Rn::Cancel => self.renaming = None,
-                }
-                continue;
-            }
-            let open = self.open_dirs.contains(&path);
-            let active = !self.home && self.tabs.get(self.active).map(|t| t.path == path).unwrap_or(false);
-            let dirty = self.tabs.iter().any(|t| t.path == path && t.dirty());
-            let lead = if is_dir { Lead::Folder { open } } else { Lead::File(&name) };
-            let ind = if is_dir { indent } else { indent + 20.0 };
-            // aktívny riadok bez vlastnej výplne – kreslí ju kĺzavé zvýraznenie v strome
-            let r = widgets::row_ex(ui, active, false, ind, lead, &name, None, false, &p);
-            if active {
-                self.tree_sel = Some(r.rect);
-            }
-            self.tree_menu(&r, &path, is_dir);
-            // ťahanie: riadok sa dá chytiť a pustiť na priečinok (alebo súbor = jeho priečinok); mimo priečinka cez „Move to the project folder“
-            if r.drag_started() {
-                egui::DragAndDrop::set_payload(ui.ctx(), path.clone());
-            }
-            if r.dragged() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-                drag_ghost(ui.ctx(), &name);
-            }
-            let tgt_dir = if is_dir { path.clone() } else { Path::new(&path).parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_default() };
-            if let Some(src) = r.dnd_hover_payload::<String>() {
-                if drop_ok(&src, &tgt_dir) {
-                    ui.painter().rect_stroke(r.rect, CornerRadius::same(8), Stroke::new(1.5, p.accent), StrokeKind::Inside);
-                }
-            }
-            if let Some(src) = r.dnd_release_payload::<String>() {
-                self.move_item(&src, &tgt_dir);
-            }
-            if dirty {
-                ui.painter().circle_filled(pos2(r.rect.right() - 12.0, r.rect.center().y), 3.0, p.accent);
-            }
-            if r.clicked() {
-                if is_dir {
-                    if open {
-                        self.open_dirs.remove(&path);
-                    } else {
-                        self.open_dirs.insert(path.clone());
-                    }
-                } else {
-                    self.open_file(&path);
-                }
-            }
-            if is_dir && self.open_dirs.contains(&path) {
-                self.tree_ui(ui, &path, depth + 1);
-            }
-        }
-    }
-
     // ---------- horná lišta ----------
     fn top_bar(&mut self, ui: &mut egui::Ui, r: Rect) {
         let p = self.pal;
@@ -2135,9 +1806,8 @@ impl App {
         // prázdna lišta presúva okno (ako -webkit-app-region: drag); tlačidlá nad ňou majú prednosť
         chrome::drag_area(ui, r, "top");
         if !self.side_open {
-            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_min_size(pos2(x + 8.0, r.top()), vec2(140.0, TOP_H))));
-            self.side_top(&mut child, false);
-            x += 138.0;
+            // logo a ☰ sú v páse ikon vľavo; tu len vrátenie bočného panela
+            x += 4.0;
             if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "sidebar", 16.0, &p, true).on_hover_text(t("Show sidebar")).clicked() {
                 self.side_open = true;
             }
@@ -2542,6 +2212,12 @@ impl App {
         if let Some(y) = self.smooth.begin(&child.ctx().clone(), sk, child.layer_id(), self.scroll_to.take()) {
             sa = sa.vertical_scroll_offset(y.max(0.0));
         }
+        // ťahanie výberu za okraj editora: posun z raw_input_hook (rýchlosť podľa vzdialenosti myši od okraja)
+        let drag = std::mem::take(&mut self.drag_scroll);
+        if drag != egui::Vec2::ZERO && self.ed_drag.is_some() {
+            sa = sa.scroll_offset((self.ed_off + drag).max(egui::Vec2::ZERO));
+        }
+        let mut te_drag = false;
         let out = sa.show(&mut child, |ui| {
             ui.add_space(PAD);
             ui.horizontal_top(|ui| {
@@ -2825,6 +2501,21 @@ impl App {
                     }
                 }
                 edited = te.response.changed() || new_sel.is_some();
+                te_drag = te.response.dragged();
+                // kurzor posunutý nami (Enter s odsadením, Tab, návrh…) – egui sa vtedy k nemu sám neposunie;
+                // blízko začiatku riadka ukáž celý začiatok aj s číslami riadkov (inak po Enteri na dlhom riadku
+                // ostal pohľad odsunutý doprava a nový riadok nebolo vidno)
+                if let Some(r) = te.cursor_range.filter(|_| new_sel.is_some() || te.response.changed()) {
+                    let cr = te.galley.pos_from_cursor(r.primary).translate(te.galley_pos.to_vec2());
+                    let view_w = ui.clip_rect().width();
+                    let mut target = cr;
+                    if cr.left() - te.galley_pos.x < view_w - gutter - 80.0 {
+                        target.min.x = te.galley_pos.x - gutter;
+                    } else {
+                        target = target.expand2(vec2(40.0, 0.0));
+                    }
+                    ui.scroll_to_rect(target, None);
+                }
                 // automatické zatváranie zátvoriek a úvodzoviek
                 if te.response.changed() {
                     if let (Some(ch), Some(r)) = (typed, te.cursor_range) {
@@ -2926,6 +2617,12 @@ impl App {
             ui.add_space(PAD);
         });
         self.smooth.end(sk, &out);
+        self.ed_off = out.state.offset;
+        // kým sa ťahá výber, editor si pamätá svoju plochu – raw_input_hook podľa nej posúva (aj keď myš stojí)
+        self.ed_drag = te_drag.then_some((out.inner_rect, !wrap));
+        if te_drag {
+            ctx.request_repaint();
+        }
         // Ctrl+klik na cestu / odkaz, alebo náhľad po 350 ms
         match link_req {
             Some((target, _, true)) => {
@@ -3625,6 +3322,7 @@ impl App {
                 (i.consume_key(c, egui::Key::I), "ai"),
                 (i.consume_key(cs, egui::Key::A), "search"),
                 (i.consume_key(cs, egui::Key::P), "commands"),
+                (i.consume_key(cs, egui::Key::E), "view-explorer"),
                 (i.consume_key(cs, egui::Key::N), "new-project"),
                 (i.consume_key(c, egui::Key::N), "new-file"),
                 (i.consume_key(cs, egui::Key::S), "save-all"),
@@ -3817,12 +3515,56 @@ fn ago(ms: u64) -> String {
     }
 }
 
+impl App {
+    // Ťahanie výberu v editore za okraj (ako VS Code): kým je myš mimo textu, editor sa posúva sám –
+    // aj keď myš stojí. egui dostane polohu orezanú na okraj editora, takže výber siaha po okraj
+    // a posun robíme sami rýchlosťou podľa vzdialenosti od okraja.
+    fn drag_select(&mut self, raw: &mut egui::RawInput) {
+        for e in &raw.events {
+            match e {
+                egui::Event::PointerMoved(p) | egui::Event::PointerButton { pos: p, .. } => self.real_ptr = Some(*p),
+                _ => {}
+            }
+        }
+        let (Some((view, horiz)), Some(ptr)) = (self.ed_drag, self.real_ptr) else { return };
+        let inner = view.shrink(3.0);
+        if inner.contains(ptr) || inner.width() <= 0.0 || inner.height() <= 0.0 {
+            return;
+        }
+        let clamp = |q: egui::Pos2| pos2(q.x.clamp(inner.left(), inner.right()), q.y.clamp(inner.top(), inner.bottom()));
+        let released = raw.events.iter().any(|e| matches!(e, egui::Event::PointerButton { button: egui::PointerButton::Primary, pressed: false, .. }));
+        let mut moved = false;
+        for e in raw.events.iter_mut() {
+            match e {
+                egui::Event::PointerMoved(p) | egui::Event::PointerButton { pos: p, .. } => {
+                    *p = clamp(*p);
+                    moved = true;
+                }
+                _ => {}
+            }
+        }
+        if released {
+            return;
+        }
+        if !moved {
+            raw.events.push(egui::Event::PointerMoved(clamp(ptr)));
+        }
+        let over = |v: f32, lo: f32, hi: f32| if v < lo { v - lo } else if v > hi { v - hi } else { 0.0 };
+        let speed = |d: f32| if d == 0.0 { 0.0 } else { d.signum() * (90.0 + d.abs() * 16.0).min(5000.0) };
+        let dt = raw.predicted_dt.clamp(0.004, 0.05);
+        let dx = if horiz { speed(over(ptr.x, inner.left(), inner.right())) } else { 0.0 };
+        let dy = speed(over(ptr.y, inner.top(), inner.bottom()));
+        self.drag_scroll += vec2(dx, dy) * dt;
+    }
+}
+
 impl eframe::App for App {
     // ako ďaleko zájde jedno otočenie kolieska (Vzhľad → Okno → Rýchlosť posúvania); Ctrl+koliesko = zoom ostáva
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         let k = (self.core.setting("scrollSpeed").as_f64().unwrap_or(100.0) / 100.0).clamp(0.5, 3.0) as f32;
         let line = ctx.options(|o| o.input_options.line_scroll_speed);
         self.smooth.feed(raw, line, k);
+        self.drag_select(raw);
         // atlas písma egui má šírku najväčšej textúry grafickej karty (až 16384 px) – stačí 2048
         raw.max_texture_side = Some(raw.max_texture_side.unwrap_or(2048).min(2048));
     }
@@ -4032,6 +3774,9 @@ impl eframe::App for App {
                 let r = ui.max_rect();
                 self.start_ui(ui, r);
             });
+        }
+        if !self.start {
+            self.activity_bar(root);
         }
         if self.side_open && !self.start {
             self.sidebar(root);
