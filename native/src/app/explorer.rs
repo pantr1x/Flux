@@ -258,7 +258,7 @@ impl App {
         let n_files = self.recent_files.len();
         let files_open = self.sec_open("files");
         let row_h = 38.0f32;
-        let files_h = SEC_H + if files_open { (n_files as f32 * row_h).min(row_h * 3.5) + 30.0 } else { 0.0 };
+        let files_h = SEC_H + if files_open { n_files.min(4) as f32 * row_h + 30.0 } else { 0.0 };
         // hore zoznam projektov (VS Code nemá zobrazenie Projekty – len nedávne priečinky; tu je to sekcia Prieskumníka)
         self.projects_section(ui, side_hover, files_h);
         let Some(w) = self.workspace() else {
@@ -383,7 +383,7 @@ impl App {
         let mut open_f = None;
         let sk = egui::Id::new("sa-loose");
         let off = self.smooth.begin(ui.ctx(), sk, ui.layer_id(), None);
-        let mut sa = egui::ScrollArea::vertical().id_salt("loose").max_height((self.recent_files.len() as f32 * 38.0).min(38.0 * 3.5)).auto_shrink([false, true]);
+        let mut sa = egui::ScrollArea::vertical().id_salt("loose").max_height(self.recent_files.len().min(4) as f32 * 38.0).auto_shrink([false, true]);
         if let Some(o) = off {
             sa = sa.vertical_scroll_offset(o);
         }
@@ -444,10 +444,10 @@ impl App {
             self.toggle_sec("projects");
         }
         if self.sec_open("projects") {
-            // s otvoreným projektom najviac ~3,5 riadka (strom má prednosť), bez neho celé miesto
-            let row_h = 38.0f32;
+            // s otvoreným projektom najviac 4 celé riadky (strom má prednosť), bez neho celé miesto
+            let row_h = 38.0 + ui.spacing().item_spacing.y;
             let max_h = if ws.is_some() {
-                (projects.len() as f32 * row_h).min(row_h * 3.5)
+                projects.len().min(4) as f32 * row_h
             } else {
                 (ui.max_rect().bottom() - files_h - ui.cursor().top() - 150.0).max(row_h * 2.0).min(projects.len() as f32 * row_h)
             };

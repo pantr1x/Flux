@@ -659,7 +659,9 @@ impl App {
             // pri tapete, ktorá sa s témou bije (svetlá v tmavej), o trochu plnšie – text ostane čitateľný
             let base_def = (0.78 + if self.see_through() { 0.0 } else { (clash * 0.5).min(0.15) }).min(0.95);
             let card_def = 0.96;
-            let a = [pct("alphaSide").unwrap_or(base_def), pct("alphaTop").unwrap_or(base_def), pct("alphaEditor").unwrap_or(card_def), pct("alphaPanel").unwrap_or(card_def)];
+            // bočný panel, pás ikon a horná lišta majú jednu spoločnú hodnotu (alphaSide) – inak pôsobili ako dve rôzne sklá
+            let side = pct("alphaSide").unwrap_or(base_def);
+            let a = [side, side, pct("alphaEditor").unwrap_or(card_def), pct("alphaPanel").unwrap_or(card_def)];
             // pozadie okna / karta = priesvitnejšia z dvoch častí, tá druhá sa dofarbí (p.layer) na svoju hodnotu
             let base_a = a[0].min(a[1]);
             let card_a = a[2].min(a[3]);
@@ -1148,6 +1150,28 @@ impl App {
             .collect();
         self.tree.insert(dir.to_string(), items.clone());
         items
+    }
+
+    // súbory projektu do hĺbky 4 (najprv horná úroveň), cesta relatívne „priečinok/súbor“; z vyrovnávacej pamäte stromu
+    fn deep_files(&mut self, dir: &str) -> Vec<(String, String, bool)> {
+        let mut out = vec![];
+        let mut queue = std::collections::VecDeque::from([(dir.to_string(), String::new(), 0usize)]);
+        while let Some((d, rel, depth)) = queue.pop_front() {
+            for (name, path, is_dir) in self.list(&d) {
+                let r = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
+                if is_dir {
+                    if depth < 4 && !name.starts_with('.') {
+                        queue.push_back((path, r, depth + 1));
+                    }
+                } else {
+                    out.push((r, path, false));
+                }
+                if out.len() >= 400 {
+                    return out;
+                }
+            }
+        }
+        out
     }
 
     fn activate(&mut self, i: usize) {
@@ -2933,8 +2957,10 @@ impl App {
             }
             ui.add_space(22.0);
             // ---- súbory (podľa druhu) a TO-DO ----
-            let groups = file_groups(&items);
-            let rows: usize = groups.iter().map(|g| g.1.len() + 2).sum();
+            // súbory aj z podpriečinkov (projekt môže mať navrchu len priečinky)
+            let deep = self.deep_files(&ws);
+            let groups = file_groups(&deep);
+            let rows: usize = groups.iter().map(|g| g.1.len().min(PAGE_ROWS) + 2 + usize::from(g.1.len() > PAGE_ROWS)).sum();
             let files_h = (rows as f32 * 33.0 + 20.0).max(120.0);
             let lw = ((inner_w - 18.0) * 0.575).floor();
             let (cards, _) = ui.allocate_exact_size(vec2(full, files_h), Sense::hover());
@@ -2946,7 +2972,7 @@ impl App {
                 caption(ui, pos2(fc.left() + 16.0, y + 8.0), &t(title).to_uppercase(), &p);
                 ui.painter().text(pos2(fc.right() - 16.0, y + 8.0), Align2::RIGHT_CENTER, files.len().to_string(), theme::bold(10.5), p.text3);
                 y += 26.0;
-                for (name, path) in files {
+                for (name, path) in files.iter().take(PAGE_ROWS) {
                     let r = Rect::from_min_size(pos2(fc.left() + 16.0, y), vec2(lw - 32.0, 32.0));
                     let resp = ui.interact(r, ui.id().with(("pf", path)), Sense::click());
                     let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
@@ -2954,7 +2980,15 @@ impl App {
                         ui.painter().rect_filled(r, CornerRadius::same(8), p.hover.gamma_multiply(hk));
                     }
                     widgets::file_icon(ui, Rect::from_min_size(pos2(r.left() + 10.0, r.center().y - 8.0), vec2(16.0, 16.0)), name);
-                    ui.painter().text(pos2(r.left() + 36.0, r.center().y), Align2::LEFT_CENTER, name, theme::bold(13.0), p.text);
+                    // meno súboru a za ním tlmene priečinok, v ktorom je (ako „Recent“ vo VS Code)
+                    let (dir_part, file_part) = match name.rsplit_once('/') {
+                        Some((d, f)) => (d.to_string(), f.to_string()),
+                        None => (String::new(), name.clone()),
+                    };
+                    let nr = widgets::text(ui, pos2(r.left() + 36.0, r.center().y), Align2::LEFT_CENTER, &file_part, theme::bold(13.0), p.text, r.width() - 100.0);
+                    if !dir_part.is_empty() {
+                        widgets::text(ui, pos2(nr.right() + 8.0, r.center().y), Align2::LEFT_CENTER, &dir_part, theme::ui(12.0), p.text3, (r.right() - 60.0 - nr.right()).max(0.0));
+                    }
                     if main_file.as_ref().map(|m| &m.1 == path).unwrap_or(false) {
                         let b = Rect::from_min_size(pos2(r.right() - 52.0, r.center().y - 9.0), vec2(43.0, 18.0));
                         ui.painter().rect_filled(b, CornerRadius::same(9), p.active);
@@ -2963,6 +2997,10 @@ impl App {
                     if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                         open = Some(path.clone());
                     }
+                    y += 33.0;
+                }
+                if files.len() > PAGE_ROWS {
+                    ui.painter().text(pos2(fc.left() + 26.0, y + 14.0), Align2::LEFT_CENTER, format!("+ {} …", files.len() - PAGE_ROWS), theme::ui(12.0), p.text3);
                     y += 33.0;
                 }
                 y += 12.0;
@@ -3332,6 +3370,9 @@ fn caption(ui: &egui::Ui, pos: egui::Pos2, s: &str, p: &Pal) {
 }
 
 // súbory v koreni projektu podľa druhu – ako „Pages / Styles / Scripts“ na stránke projektu v Electron Fluxe
+// najviac riadkov v jednej skupine na stránke projektu (zvyšok ako „+ N …“)
+const PAGE_ROWS: usize = 8;
+
 fn file_groups(items: &[(String, String, bool)]) -> Vec<(&'static str, Vec<(String, String)>)> {
     let order = ["Pages", "Styles", "Scripts", "Python", "Code", "Notes"];
     let mut groups: Vec<(&'static str, Vec<(String, String)>)> = order.iter().map(|g| (*g, vec![])).collect();

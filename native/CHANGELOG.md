@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.62
+
+**Fixes**
+- **The project page shows your files again** when the project has only folders at the top (e.g. one folder per website): pages, styles, scripts… now come from the subfolders too, with the folder name next to each file (8 per group, then *+ N …*).
+- **One see-through look**: the bar with icons, the Explorer and the top bar now share one opacity – before, the top bar could be more see-through than the sidebar. Set it with Settings → Appearance → Window → *Window opacity*.
+- The *PROJECTS* and *FILES* lists show whole rows (no half-cut project at the bottom).
+
 ## 0.9.61
 
 **Rounded tabs**

@@ -337,8 +337,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 // nepriehľadnosť každej časti okna (100 = plná farba, nič nepresvitá)
                 .chain(if app.get("material").as_str() != Some("none") {
                     vec![
-                        Row::Range("alphaSide", "Sidebar opacity", "Projects and Files – 100 means nothing shines through", 20.0, 100.0, 1.0),
-                        Row::Range("alphaTop", "Top bar opacity", "the bar with the file tabs and Run", 20.0, 100.0, 1.0),
+                        Row::Range("alphaSide", "Window opacity", "the bar with icons, the Explorer and the top bar together – 100 means nothing shines through", 20.0, 100.0, 1.0),
                         Row::Range("alphaEditor", "Editor opacity", "the code, the project page and the Live Server panel", 30.0, 100.0, 1.0),
                         Row::Range("alphaPanel", "Output and Terminal opacity", "the panel with program output and the terminal", 30.0, 100.0, 1.0),
                     ]
