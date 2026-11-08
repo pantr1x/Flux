@@ -806,7 +806,8 @@ impl App {
         let p = self.pal;
         let strip_bg = if p.dark { p.card.lerp_to_gamma(egui::Color32::BLACK, 0.22) } else { p.card.lerp_to_gamma(p.hover, 0.7) };
         ui.painter().rect_filled(r, CornerRadius { nw: radius, ne: radius, ..Default::default() }, strip_bg);
-        ui.painter().hline(r.x_range(), r.bottom() - 0.5, Stroke::new(1.0, p.line));
+        // spodná čiara pod kartami – pod aktívnou kartou sa preruší (karta „vteká“ do editora)
+        let base_line = ui.painter().add(egui::Shape::Noop);
         let font = theme::ui(13.0);
         let widths: Vec<f32> = self.tabs.iter().map(|t| (widgets::text_w(ui, &t.name(), font.clone()) + 64.0).clamp(90.0, 240.0)).collect();
         let total: f32 = widths.iter().sum();
@@ -834,9 +835,11 @@ impl App {
         let painter = ui.painter().with_clip_rect(clip);
         let mut x = left0 - off;
         let (mut close, mut act) = (None, None);
+        let mut active_x: Option<(f32, f32)> = None;
         for (i, t) in self.tabs.iter().enumerate() {
             let w = widths[i];
-            let tr = Rect::from_min_size(pos2(x, r.top()), vec2(w, r.height() - 1.0));
+            // zaoblené karty: aktívna má zaoblený vrch a splýva s editorom, ostatné sú pri prejdení pilulky
+            let tr = Rect::from_min_max(pos2(x + 2.0, r.top() + 5.0), pos2(x + w - 2.0, r.bottom()));
             x += w;
             if tr.right() < clip.left() || tr.left() > clip.right() {
                 continue;
@@ -846,14 +849,24 @@ impl App {
             let resp = ui.interact(tr.intersect(clip), ui.id().with(("tab", i)), Sense::click());
             let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered() && !sel, 0.12);
             if sel {
-                painter.rect_filled(tr, CornerRadius::ZERO, p.card);
-                painter.hline(tr.left() + 1.0..=tr.right() - 1.0, tr.top() + 1.0, Stroke::new(2.0, p.accent));
+                let top = CornerRadius { nw: 10, ne: 10, ..Default::default() };
+                let ta = if self.anim_on() { 0.16 } else { 0.0 };
+                let ax = ui.ctx().animate_value_with_time(egui::Id::new("tabbar-x"), tr.left(), ta);
+                let aw = ui.ctx().animate_value_with_time(egui::Id::new("tabbar-w"), tr.width(), ta);
+                let ar = Rect::from_min_size(pos2(ax, tr.top()), vec2(aw, tr.height() + 1.0));
+                painter.rect_filled(ar, top, p.card);
+                painter.rect_stroke(ar, top, Stroke::new(1.0, p.line), StrokeKind::Inside);
+                // prekrytie spodnej hrany rámika, nech karta plynule prejde do editora
+                painter.rect_filled(Rect::from_min_max(pos2(ar.left() + 1.0, ar.bottom() - 2.0), pos2(ar.right() - 1.0, ar.bottom() + 1.0)), CornerRadius::ZERO, p.card);
+                // malý akcentový prúžok navrchu
+                let bar = Rect::from_center_size(pos2(ar.center().x, ar.top() + 1.5), vec2((ar.width() * 0.35).min(36.0), 3.0));
+                painter.rect_filled(bar, CornerRadius::same(2), p.accent);
+                active_x = Some((ar.left(), ar.right()));
             } else if hk > 0.0 {
-                painter.rect_filled(tr, CornerRadius::ZERO, p.hover.gamma_multiply(hk * 0.6));
+                let pill = Rect::from_min_max(pos2(tr.left(), tr.top() + 1.0), pos2(tr.right(), tr.bottom() - 4.0));
+                painter.rect_filled(pill, CornerRadius::same(8), p.hover.gamma_multiply(hk));
             }
-            // oddeľovač medzi kartami
-            painter.vline(tr.right() - 0.5, tr.top() + 8.0..=tr.bottom() - 8.0, Stroke::new(1.0, p.line));
-            let cy = tr.center().y;
+            let cy = tr.center().y - 1.0;
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(clip));
             child.set_clip_rect(clip.intersect(tr));
             widgets::file_icon(&child, Rect::from_min_size(pos2(tr.left() + 12.0, cy - 8.0), vec2(16.0, 16.0)), &name);
@@ -877,6 +890,14 @@ impl App {
                 act = Some(i);
             }
         }
+        let line = match active_x {
+            Some((a, b)) => egui::Shape::Vec(vec![
+                egui::Shape::hline(r.left()..=a.max(r.left()), r.bottom() - 0.5, Stroke::new(1.0, p.line)),
+                egui::Shape::hline(b.min(r.right())..=r.right(), r.bottom() - 0.5, Stroke::new(1.0, p.line)),
+            ]),
+            None => egui::Shape::hline(r.x_range(), r.bottom() - 0.5, Stroke::new(1.0, p.line)),
+        };
+        ui.painter().set(base_line, line);
         // prázdne miesto za kartami: dvojklik = nový súbor (ako VS Code)
         if x < clip.right() {
             let rest = Rect::from_min_max(pos2(x.max(clip.left()), r.top()), pos2(clip.right(), r.bottom()));

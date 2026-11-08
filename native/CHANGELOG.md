@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.61
+
+**Rounded tabs**
+- The file tabs above the code are rounded like the rest of Flux: the open file is a tab with round top corners that flows into the editor, with a small accent line on top, and it glides to the tab you click. The other tabs light up as a rounded pill when you point at them.
+
 ## 0.9.60
 
 **Tabs and search like in VS Code**
