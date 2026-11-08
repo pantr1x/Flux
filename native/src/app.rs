@@ -18,6 +18,7 @@ mod plugins_ui;
 mod imageview;
 mod explorer;
 mod workbench;
+mod themestore;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -301,7 +302,8 @@ pub struct App {
     drop_rects: Vec<(Rect, String)>,    // kam sa dá pustiť súbor z počítača (priečinky stromu, projekty)
     proj_reveal: bool,                  // po otvorení projektu posunúť zoznam PROJECTS k nemu
     closed_tabs: Vec<String>,           // zavreté karty (Ctrl+Shift+T ich vráti)
-    theme_dirty: bool,                  // súbor témy sa zmenil – znova použiť tému
+    theme_dirty: bool,
+    theme_store: themestore::ThemeStore, // obchod s témami (Nastavenia → Téma)                  // súbor témy sa zmenil – znova použiť tému
     side_drag: Option<f32>,             // ťahanie okraja bočného panela (šírka pri začiatku)
     layout_name: String,                // pole na meno nového rozloženia okna
     tool_new: (String, String),         // pole na nový externý nástroj (meno, príkaz)
@@ -456,6 +458,7 @@ impl App {
             proj_reveal: true,
             closed_tabs: vec![],
             theme_dirty: false,
+            theme_store: Default::default(),
             side_drag: None,
             layout_name: String::new(),
             tool_new: (String::new(), String::new()),
@@ -1713,6 +1716,7 @@ impl App {
                 }
                 "run" => self.run(),
                 "panel" => self.panel_open = !self.panel_open,
+                "theme-store" => self.theme_store.browse = true,
                 "type" => {
                     if let Some(s) = self.sess_mut() {
                         s.out.pty.write(&arg.replace("\\r", "\r"));

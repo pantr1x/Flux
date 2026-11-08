@@ -1,0 +1,46 @@
+{
+  "themes": [
+    {
+      "id": "kanagawa",
+      "name": "Kanagawa",
+      "author": "Flux team",
+      "mode": "dark",
+      "description": "Ink, waves and autumn leaves – calm and warm. Based on Kanagawa by rebelot."
+    },
+    {
+      "id": "ayu-mirage",
+      "name": "Ayu Mirage",
+      "author": "Flux team",
+      "mode": "dark",
+      "description": "Soft blue-grey with bright orange and yellow. Based on Ayu by dempfi."
+    },
+    {
+      "id": "night-owl",
+      "name": "Night Owl",
+      "author": "Flux team",
+      "mode": "dark",
+      "description": "Deep night blue, made for coding late. Based on Night Owl by Sarah Drasner."
+    },
+    {
+      "id": "synthwave-84",
+      "name": "SynthWave '84",
+      "author": "Flux team",
+      "mode": "dark",
+      "description": "Neon pink and cyan on purple – a retro 80s look. Based on SynthWave '84 by Robb Owen."
+    },
+    {
+      "id": "github-dimmed",
+      "name": "GitHub Dimmed",
+      "author": "Flux team",
+      "mode": "dark",
+      "description": "The soft dark grey of GitHub's dimmed mode – easy on the eyes."
+    },
+    {
+      "id": "ayu-light",
+      "name": "Ayu Light",
+      "author": "Flux team",
+      "mode": "light",
+      "description": "Bright and clean with warm orange accents. Based on Ayu by dempfi."
+    }
+  ]
+}

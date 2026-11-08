@@ -1492,6 +1492,15 @@ impl App {
                     ids.push(th.1.clone());
                     names.push(th.2.clone());
                 }
+                // Nainštalované / Obchod s témami (ako pluginy)
+                let browse = ui.vertical(|ui| self.themes_header(ui, w, ctx, ids.len())).inner;
+                if browse {
+                    ui.vertical(|ui| {
+                        ui.set_width(w);
+                        self.theme_store_ui(ui, w, ctx);
+                    });
+                    return;
+                }
                 let cw = (w - 16.0) / 3.0;
                 let (area, _) = ui.allocate_exact_size(vec2(w, ids.len().div_ceil(3) as f32 * 59.0), Sense::hover());
                 let mut pick = None;

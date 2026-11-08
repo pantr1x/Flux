@@ -32,13 +32,31 @@ accent      #8b7bff     # buttons and highlights
 
 Your themes live in the **themes folder** (button *Themes folder*): `%APPDATA%\Flux\themes` on Windows, `~/.config/Flux/themes` on Linux (the Flux settings folder + `themes`). A file there with the same name as a built-in theme replaces it.
 
-## Share a theme with everyone
+## Theme store
 
-Built-in themes are the files in [`themes/`](../themes) of this repository. To add one:
+Settings → *Environment* → *Theme and window* → **Theme store** lists themes made by other people. Each card shows a small piece of code in the theme's own colors; **Install** downloads the file into your themes folder and switches to it right away, **Use** switches back to it later, and the trash button removes it again (you can install it again any time). Your own themes are never removed from there.
 
-1. Fork the repository.
-2. Add `themes/<your-theme>.conf` (lowercase, words joined with `-`, e.g. `tokyo-storm.conf`).
-3. Open a pull request. Flux picks up every `.conf` file in `themes/` by itself when it is built – no other file has to change.
+The store is the folder [`themes/store/`](../themes/store) of this repository: one `.conf` file per theme plus [`index.json`](../themes/store/index.json) with the name, author and one sentence about each.
+
+## Share your theme
+
+Anyone can add a theme to the store:
+
+1. Make your theme in Flux (see above) and check it in both the editor and the menus.
+2. Fork the repository on GitHub.
+3. Copy your file to `themes/store/<your-theme>.conf` – lowercase, words joined with `-`, e.g. `tokyo-storm.conf`. Add a line `author  Your Name`.
+4. Add an entry to `themes/store/index.json`:
+
+   ```json
+   { "id": "tokyo-storm", "name": "Tokyo Storm", "author": "Your Name", "mode": "dark", "description": "One short sentence about the look." }
+   ```
+
+   `id` must be the file name without `.conf`.
+5. Open a pull request. A test (`cargo test -p flux-native themes_store`) checks that every file is listed in `index.json`, can be read, and has an author and a description.
+
+Once it is merged, your theme shows up in every Flux's store – no new Flux version is needed.
+
+**Built-in themes** are the files directly in [`themes/`](../themes) (not in `store/`): Flux bundles every `.conf` file there when it is built. Only add one there when it should come with Flux for everyone.
 
 ## All keys
 

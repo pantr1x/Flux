@@ -3,6 +3,9 @@ fn main() {
     // commit zostavy (CI: GITHUB_SHA) – podľa neho Flux Native pozná, či je v ci-native novšia verzia
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rustc-env=FLUX_SHA={}", std::env::var("GITHUB_SHA").unwrap_or_else(|_| "dev".into()));
+    // vetva zostavy (CI: GITHUB_REF_NAME) – obchod s témami ju skúsi ako prvú
+    println!("cargo:rerun-if-env-changed=GITHUB_REF_NAME");
+    println!("cargo:rustc-env=FLUX_BRANCH={}", std::env::var("GITHUB_REF_NAME").unwrap_or_default());
     // témy z priečinka themes/ (súbory .conf) – nová téma = nový súbor, nič iné sa nemení (src/themes.rs)
     let dir = std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../themes");
     println!("cargo:rerun-if-changed={}", dir.display());

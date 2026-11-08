@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.69
+
+**New**
+- **Theme store.** Settings → *Theme and window* → *Code theme* now has two tabs: *Installed* and **Theme store**. The store shows themes made by other people, each with a small piece of code in its own colors. **Install** downloads it and switches to it right away; the trash button removes it again. Search by name, author or style.
+- **Share your own theme**: put your `.conf` file into `themes/store/` on GitHub with a pull request (button *Share your theme*, guide in `docs/THEMES.md`). After it is merged, everyone sees it in the store – no new Flux version needed.
+- Six themes to start with: Kanagawa, Ayu Mirage, Night Owl, SynthWave '84, GitHub Dimmed and Ayu Light.
+
 ## 0.9.68
 
 **Changes**
