@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.67
+
+**Changes**
+- **The Output/Terminal button is in the panel's own header** (top right of Output and Terminal). When you hide the panel, its header stays at the bottom as a slim bar with Output, Terminal and the same button in the same place – click any of them to open it again (Ctrl+J works too).
+- **Live Server can open the page in your browser** instead of next to the code: Settings → Run → Running → *Live Server* → *Show the page: In your browser*. Flux then runs no web view of its own, so it uses much less memory; the page still reloads when you save.
+- **Neater External tools settings**: the name and command fields have the same rounded frame and height as the Add button, and every tool sits on its own tidy row.
+
 ## 0.9.66
 
 **Fixes**

@@ -39,6 +39,7 @@ pub fn default_of(key: &str) -> Value {
         "density" => json!("comfortable"),
         "terminalFontSize" => json!(13),
         "panelPos" => json!("bottom"),
+        "livePreview" => json!("panel"),
         "sidePos" => json!("left"),
         "userName" | "uiText" | "uiText2" | "uiBase" | "uiCard" | "uiLine" | "fontCustom" => json!(""),
         _ => Value::Null,
@@ -542,6 +543,7 @@ fn sections_raw(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             vec![
                 ("Python", vec![Row::Info("Interpreter", py), Row::Button("python", "Choose another Python", "pick python.exe yourself if Flux found the wrong one", "Change…")]),
                 ("Output", vec![Row::Toggle("clearOnRun", "Clear output before running", "each run starts with an empty Output panel"), Row::Number("terminalFontSize", "Output font size", "size of the text in Output and Terminal", 9.0, 28.0)]),
+                ("Live Server", vec![Row::Select("livePreview", "Show the page", "inside Flux next to the code, or in your own browser – the browser uses no memory of Flux; both reload when you save", o(&[("panel", "Inside Flux"), ("browser", "In your browser")]))]),
                 ("External tools", vec![Row::Lead("Your own commands in the menu ☰ → Tools, run in the Terminal of the open file. $(FilePath), $(FileDir), $(FileName) and $(ProjectDir) are replaced."), Row::Custom("ext-tools")]),
             ]
         }
@@ -906,6 +908,19 @@ impl App {
         ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
     }
 
+    // jednotné textové pole (rám, zaoblenie, výška 32 px) pre riadky „pridať“ v nastaveniach
+    fn field(&self, ui: &mut egui::Ui, text: &mut String, hint: &str, w: f32, mono: bool) -> egui::Response {
+        let p = self.pal;
+        let (r, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
+        let font = if mono { theme::mono(12.5) } else { theme::ui(13.0) };
+        let bg = ui.painter().add(egui::Shape::Noop);
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(10.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let resp = child.add(egui::TextEdit::singleline(text).hint_text(hint).frame(egui::Frame::NONE).font(font).desired_width(r.width() - 20.0));
+        let stroke = if resp.has_focus() { Stroke::new(1.5, p.accent) } else if resp.hovered() { Stroke::new(1.0, p.text3) } else { Stroke::new(1.0, p.line) };
+        ui.painter().set(bg, egui::epaint::RectShape::new(r, CornerRadius::same(8), p.card2, stroke, StrokeKind::Inside));
+        resp
+    }
+
     fn label(&self, ui: &mut egui::Ui, title: &str, hint: &str, w: f32) {
         let p = self.pal;
         ui.vertical(|ui| {
@@ -1182,13 +1197,13 @@ impl App {
                         }
                         ui.horizontal(|ui| {
                             let mut name = std::mem::take(&mut self.layout_name);
-                            let r = ui.add(egui::TextEdit::singleline(&mut name).hint_text(t("Layout name, e.g. Coding")).desired_width(w - 230.0));
+                            let r = self.field(ui, &mut name, &t("Layout name, e.g. Coding"), (w - 250.0).max(140.0), false);
                             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                            if (widgets::button(ui, Some("save"), &t("Save current"), p.accent, p.accent_fg, 28.0, &p).clicked() || enter) && !name.trim().is_empty() {
+                            if (widgets::button(ui, Some("save"), &t("Save current"), p.accent, p.accent_fg, 32.0, &p).clicked() || enter) && !name.trim().is_empty() {
                                 self.layout_save(&name);
                                 name.clear();
                             }
-                            if widgets::button(ui, Some("refresh"), &t("Reset"), p.card2, p.text, 28.0, &p).on_hover_text(t("Reset window layout")).clicked() {
+                            if widgets::button(ui, Some("refresh"), &t("Reset"), p.card2, p.text, 32.0, &p).on_hover_text(t("Reset window layout")).clicked() {
                                 self.layout_reset(ctx);
                             }
                             self.layout_name = name;
@@ -1208,18 +1223,18 @@ impl App {
                         let mut list = self.ext_tools();
                         let mut changed = false;
                         let mut del = None;
+                        ui.add_space(8.0);
                         for (i, (n, c)) in list.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                widgets::icon(ui, Rect::from_min_size(ui.cursor().min + vec2(0.0, 4.0), vec2(16.0, 16.0)), "terminal", p.text2);
-                                ui.add_space(22.0);
-                                ui.label(egui::RichText::new(n).strong());
-                                ui.label(egui::RichText::new(c).monospace().color(p.text3));
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if widgets::icon_button(ui, "trash", &p, true).on_hover_text(t("Delete")).clicked() {
-                                        del = Some(i);
-                                    }
-                                });
-                            });
+                            // riadok nástroja: ikona, názov, príkaz a kôš vpravo
+                            let (r, _) = ui.allocate_exact_size(vec2(w, 36.0), Sense::hover());
+                            let cy = r.center().y;
+                            widgets::icon(ui, Rect::from_center_size(pos2(r.left() + 8.0, cy), vec2(16.0, 16.0)), "terminal", p.text2);
+                            let nw = widgets::text_w(ui, n, theme::bold(13.0));
+                            ui.painter().text(pos2(r.left() + 26.0, cy), Align2::LEFT_CENTER, n, theme::bold(13.0), p.text);
+                            widgets::text(ui, pos2(r.left() + 38.0 + nw, cy), Align2::LEFT_CENTER, c, theme::mono(12.5), p.text3, (w - nw - 90.0).max(20.0));
+                            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(r.right() - 14.0, cy), vec2(26.0, 26.0)), "trash", 14.0, &p, true).on_hover_text(t("Delete")).clicked() {
+                                del = Some(i);
+                            }
                         }
                         if let Some(i) = del {
                             list.remove(i);
@@ -1227,9 +1242,10 @@ impl App {
                         }
                         ui.horizontal(|ui| {
                             let (mut n, mut c) = std::mem::take(&mut self.tool_new);
-                            ui.add(egui::TextEdit::singleline(&mut n).hint_text(t("Name, e.g. Git status")).desired_width(150.0));
-                            ui.add(egui::TextEdit::singleline(&mut c).hint_text(t("Command, e.g. git status")).font(theme::mono(12.5)).desired_width((w - 290.0).max(120.0)));
-                            if widgets::button(ui, Some("plus"), &t("Add"), p.accent, p.accent_fg, 28.0, &p).clicked() && !n.trim().is_empty() && !c.trim().is_empty() {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            self.field(ui, &mut n, &t("Name, e.g. Git status"), 160.0, false);
+                            self.field(ui, &mut c, &t("Command, e.g. git status"), (w - 176.0 - widgets::text_w(ui, &t("Add"), theme::bold(13.0)) - 46.0).max(120.0), true);
+                            if widgets::button(ui, Some("plus"), &t("Add"), p.accent, p.accent_fg, 32.0, &p).clicked() && !n.trim().is_empty() && !c.trim().is_empty() {
                                 list.push((n.trim().to_string(), c.trim().to_string()));
                                 changed = true;
                                 n.clear();
@@ -1237,6 +1253,7 @@ impl App {
                             }
                             self.tool_new = (n, c);
                         });
+                        ui.add_space(10.0);
                         if changed {
                             self.ext_tools_set(list);
                         }

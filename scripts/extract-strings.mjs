@@ -43,7 +43,7 @@ for (const m of readFileSync('src/renderer/themeStudio.js', 'utf8').matchAll(/\[
 for (const m of readFileSync('src/renderer/themeStudio.js', 'utf8').matchAll(/^\s*\['([A-Z]\w+)', \[/gm)) keys.add(m[1]);
 const tpl = readFileSync('src/renderer/templates.js', 'utf8');
 for (const m of tpl.matchAll(/\b(?:label|detail):\s*(['"])((?:\\.|(?!\1).)*)\1/g)) keys.add(lit(m[1], m[2]));
-for (const w of ['compact', 'normal', 'relaxed', 'large', 'by file type', 'small dot', 'large dot']) keys.add(w);
+for (const w of ['compact', 'normal', 'relaxed', 'large', 'by file type', 'small dot', 'large dot', 'Inside Flux', 'In your browser']) keys.add(w);
 // Mená, ktoré sa neprekladajú.
 for (const k of ['Python', 'JavaScript', 'VS Code Dark', 'Consolas', 'Cascadia Code', 'Cascadia Mono', 'Courier New', 'Acrylic (Windows)', 'Mica (Windows)']) keys.delete(k);
 const list = [...keys].filter((k) => k.trim()).sort();

@@ -1706,6 +1706,7 @@ impl App {
                     self.open_file(&p);
                 }
                 "run" => self.run(),
+                "panel" => self.panel_open = !self.panel_open,
                 "type" => {
                     if let Some(s) = self.sess_mut() {
                         s.out.pty.write(&arg.replace("\\r", "\r"));
@@ -3278,6 +3279,15 @@ impl App {
             "left" => ui.painter().vline(rect.right(), rect.y_range(), Stroke::new(1.0, p.line)),
             _ => ui.painter().hline(rect.x_range(), rect.top(), Stroke::new(1.0, p.line)),
         };
+        let collapsed = !self.panel_open;
+        if collapsed && pos != "bottom" {
+            // úzky pás po boku: len prepínač hore
+            let c = pos2(rect.center().x, rect.top() + 20.0);
+            if widgets::icon_button_at(ui, Rect::from_center_size(c, vec2(26.0, 26.0)), "panel", 15.0, &p, true).on_hover_text(format!("{} (Ctrl+J)", t("Show Output"))).clicked() {
+                self.panel_open = true;
+            }
+            return;
+        }
         // pilulky Output | Terminal
         let bottom = self.sess_mut().map(|s| s.bottom).unwrap_or(Bottom::Output);
         let gw = 4.0 + [t("Output"), t("Terminal")].iter().map(|l| widgets::text_w(ui, l, theme::bold(12.5)) + 22.0).sum::<f32>();
@@ -3288,12 +3298,13 @@ impl App {
             let w = widgets::text_w(ui, &t(label), theme::bold(12.5)) + 22.0;
             let r = Rect::from_min_size(pos2(x, group.top() + 2.0), vec2(w, 22.0));
             let resp = ui.interact(r, ui.id().with(label), Sense::click());
-            let sel = bottom == b;
+            let sel = bottom == b && !collapsed;
             if sel {
                 ui.painter().rect_filled(r, CornerRadius::same(6), p.active);
             }
             ui.painter().text(r.center(), Align2::CENTER_CENTER, t(label), theme::bold(12.5), if sel || resp.hovered() { p.text } else { p.text3 });
             if resp.clicked() {
+                self.panel_open = true;
                 if let Some(s) = self.sess_mut() {
                     s.bottom = b;
                 }
@@ -3311,8 +3322,12 @@ impl App {
             x += w;
         }
         let cy = group.center().y;
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 22.0, cy), vec2(26.0, 26.0)), "panel", 15.0, &p, true).on_hover_text(t("Hide panel")).clicked() {
-            self.panel_open = false;
+        let tip = if collapsed { t("Show Output") } else { t("Hide panel") };
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 22.0, cy), vec2(26.0, 26.0)), "panel", 15.0, &p, true).on_hover_text(format!("{tip} (Ctrl+J)")).clicked() {
+            self.panel_open = collapsed;
+        }
+        if collapsed {
+            return;
         }
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 98.0, cy), vec2(26.0, 26.0)), "copy", 15.0, &p, true).on_hover_text(t("Copy all output")).clicked() {
             let text = self.sess_mut().map(|s| if s.bottom == Bottom::Output { s.out.all_text() } else { s.sh.all_text() }).unwrap_or_default();
@@ -4128,6 +4143,21 @@ impl eframe::App for App {
                         _ => main.min.x = panel.right(),
                     }
                 }
+                if !self.panel_open && show_panel {
+                    // zbalený panel: ostane len jeho hlavička (dole) alebo úzky pás (vpravo/vľavo), prepínač je na rovnakom mieste
+                    let panel = match pos.as_str() {
+                        "bottom" => Rect::from_min_max(pos2(main.left(), main.bottom() - 40.0), main.max),
+                        "right" => Rect::from_min_max(pos2(main.right() - 44.0, main.top()), main.max),
+                        _ => Rect::from_min_max(main.min, pos2(main.left() + 44.0, main.bottom())),
+                    };
+                    panel_rect = Some(panel);
+                    self.bottom_panel(&mut card_ui, panel, &pos);
+                    match pos.as_str() {
+                        "bottom" => main.max.y = panel.top(),
+                        "right" => main.max.x = panel.left(),
+                        _ => main.min.x = panel.right(),
+                    }
+                }
                 // prechod pri zmene súboru/stránky: obsah jemne „vybledne“ dnu (transitions)
                 let key = if show_editor { self.tabs[self.active].path.clone() } else { format!("home:{:?}", self.workspace()) };
                 if key != self.shown {
@@ -4135,27 +4165,10 @@ impl eframe::App for App {
                     self.switched = now;
                 }
                 // karty otvorených súborov v riadku nad editorom (ako VS Code)
-                // prepínač Výstupu/Terminálu má stále to isté miesto: vpravo v riadku kariet (bez kariet vpravo hore v editore)
                 let tabs_on = !self.tabs.is_empty() && self.get("showTabs").as_bool() != Some(false);
-                let toggle_w = if show_panel { 38.0 } else { 0.0 };
                 if tabs_on {
                     let strip = Rect::from_min_size(main.min, vec2(main.width(), explorer::TABS_H));
-                    self.tab_strip(&mut card_ui, Rect::from_min_max(strip.min, pos2(strip.right() - toggle_w, strip.bottom())), radius);
-                    if show_panel {
-                        // dokreslenie pozadia riadku kariet pod prepínačom
-                        let rest = Rect::from_min_max(pos2(strip.right() - toggle_w, strip.top()), strip.max);
-                        let bg = if p.dark { p.card.lerp_to_gamma(Color32::BLACK, 0.22) } else { p.card.lerp_to_gamma(p.hover, 0.7) };
-                        card_ui.painter().rect_filled(rest, CornerRadius { ne: radius, ..Default::default() }, bg);
-                        card_ui.painter().hline(rest.x_range(), rest.bottom() - 0.5, Stroke::new(1.0, p.line));
-                    }
-                }
-                if show_panel {
-                    let c = if tabs_on { pos2(main.right() - 20.0, main.top() + explorer::TABS_H / 2.0 + 2.0) } else { pos2(main.right() - 20.0, main.top() + 18.0) };
-                    let open = self.panel_open;
-                    let tip = if open { t("Hide panel") } else { t("Show Output") };
-                    if widgets::icon_button_at(&mut card_ui, Rect::from_center_size(c, vec2(28.0, 28.0)), "panel", 15.0, &p, true).on_hover_text(format!("{tip} (Ctrl+J)")).clicked() {
-                        self.panel_open = !open;
-                    }
+                    self.tab_strip(&mut card_ui, strip, radius);
                 }
                 if tabs_on {
                     main.min.y += explorer::TABS_H;

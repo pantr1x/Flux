@@ -122,6 +122,13 @@ impl App {
     // otvorí panel pre aktívny súbor (spustí Live Server, ak nebeží)
     pub(super) fn open_preview(&mut self) {
         let Some(url) = self.live_url() else { return };
+        // stránka v prehliadači: vo Fluxe nebeží žiadny WebView (šetrí pamäť), server ostane a obnovuje ju pri uložení
+        if self.get("livePreview").as_str() == Some("browser") {
+            self.preview = None;
+            flux_core::settings::open_external(&url);
+            self.note(t("Live Server is open in your browser"));
+            return;
+        }
         match &mut self.preview {
             Some(p) => {
                 p.url = url.clone();
