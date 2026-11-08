@@ -16,8 +16,17 @@ pub fn default_of(key: &str) -> Value {
         "fontFamily" => json!("Consolas"),
         "fontSize" => json!(14),
         "lineHeight" => json!(1.45),
-        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" | "searchWide" | "breadcrumbs" => json!(true),
-        "wordWrap" | "autoReload" | "lite" => json!(false),
+        "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" | "searchWide" | "breadcrumbs"
+        | "cursorBlink" | "lineHighlight" | "indentGuides" | "autoClose" | "autoCloseTags" | "selHighlight" | "matchBrackets" | "wheelZoom" | "showTabs" | "statusBar" | "activityBar"
+        | "confirmDelete" | "glassChip" => json!(true),
+        "wordWrap" | "autoReload" | "lite" | "trimWhitespace" | "finalNewline" | "tabBold" => json!(false),
+        "tabSize" => json!(4),
+        "cursorWidth" => json!(2),
+        "rulers" => json!(0),
+        "autosaveDelay" => json!(1000),
+        "tabColors" => json!("none"),
+        "dirtyDot" => json!("small"),
+        "filesExclude" => json!(""),
         "liveWallMode" => json!("play"),
         "uiZoom" | "scrollSpeed" => json!(100),
         "lineNumbers" => json!("on"),
@@ -38,7 +47,7 @@ pub fn default_of(key: &str) -> Value {
 
 // FONTS z app.js: (id, popis)
 pub const FONTS: [(&str, &str); 6] = [
-    ("Consolas", "Consolas (like VS Code)"),
+    ("Consolas", "Consolas"),
     ("Cascadia Code", "Cascadia Code"),
     ("Cascadia Mono", "Cascadia Mono"),
     ("JetBrains Mono", "JetBrains Mono (if installed)"),
@@ -46,16 +55,24 @@ pub const FONTS: [(&str, &str); 6] = [
     ("Courier New", "Courier New"),
 ];
 
-const TABS: [(&str, &str, &str); 9] = [
-    ("general", "settings", "General"),
-    ("appearance", "palette", "Appearance"),
-    ("editor", "code", "Editor"),
-    ("running", "play", "Running"),
-    ("tools", "download", "Languages"),
-    ("plugins", "puzzle", "Plugins"),
-    ("ai", "sparkle", "AI"),
-    ("github", "github", "GitHub"),
-    ("developer", "flask", "Developer"), // len vývojár (App::developer)
+// (id, ikona, názov, skupina) – skupiny ako stromček v Tools → Options vo Visual Studiu
+const TABS: [(&str, &str, &str, &str); 16] = [
+    ("general", "settings", "General", "Environment"),
+    ("appearance", "palette", "Theme and window", "Environment"),
+    ("fonts", "edit", "Fonts and colors", "Environment"),
+    ("windows", "panel", "Tabs and layout", "Environment"),
+    ("keys", "command", "Keyboard", "Environment"),
+    ("import", "upload", "Import and export", "Environment"),
+    ("editor", "code", "Display", "Text editor"),
+    ("typing", "edit", "Typing", "Text editor"),
+    ("files", "file", "Files and saving", "Text editor"),
+    ("running", "play", "Running", "Run"),
+    ("tools", "download", "Languages", "Run"),
+    ("plugins", "puzzle", "Plugins", "Extensions"),
+    ("ai", "sparkle", "AI", "Extensions"),
+    ("github", "github", "GitHub", "Extensions"),
+    ("developer", "flask", "Developer", ""), // len vývojár (App::developer)
+    ("", "", "", ""),
 ];
 
 #[derive(Clone)]
@@ -233,7 +250,59 @@ pub fn release_notes() -> &'static [Note] {
     })
 }
 
+// kľúč riadka (nastavenie, akcia tlačidla alebo vlastný riadok)
+fn row_id(r: &Row) -> &'static str {
+    match r {
+        Row::Toggle(k, ..) | Row::Select(k, ..) | Row::Range(k, ..) | Row::Number(k, ..) | Row::Text(k, ..) | Row::Color(k, ..) | Row::Button(k, ..) | Row::Info(k, _) | Row::Lead(k) | Row::Custom(k) => k,
+    }
+}
+
 fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
+    let pool: Vec<Row> = ["general", "appearance", "editor"].iter().flat_map(|t| sections_raw(t, app)).flat_map(|s| s.1).collect();
+    let pick = |keys: &[&str]| -> Vec<Row> { keys.iter().filter_map(|k| pool.iter().find(|r| row_id(r) == *k).cloned()).collect() };
+    let raw_sec = |t: &str, names: &[&str]| -> Vec<(&'static str, Vec<Row>)> { sections_raw(t, app).into_iter().filter(|s| names.contains(&s.0)).collect() };
+    let page = |v: Vec<(&'static str, Vec<Row>)>| v.into_iter().filter(|s| !s.1.is_empty()).collect::<Vec<_>>();
+    match tab {
+        "general" => raw_sec("general", &["About & updates", "You", "Language", "Memory & speed", "Welcome"]),
+        "appearance" => page(vec![
+            ("Code theme", pick(&["themes"])),
+            ("Accent color", pick(&["accents"])),
+            ("Window", pick(&["material", "alphaSide", "alphaEditor", "alphaPanel", "glassChip", "bg-pick", "liveWallpaper", "liveWallMode"])),
+            ("Motion", pick(&["inertia", "scrollSpeed", "transitions"])),
+            ("", pick(&["restart", "look-reset"])),
+        ]),
+        "fonts" => page(vec![
+            ("Code", pick(&["fontFamily", "fontSize", "lineHeight", "lineNumbers", "bracketColors"])),
+            ("Size", pick(&["uiZoom", "density", "cornerRadius", "darkLift"])),
+            ("App colors", pick(&["uiText", "uiText2", "uiBase", "uiCard", "uiLine", "colors-reset"])),
+        ]),
+        "windows" => page(vec![
+            ("Parts of the window", pick(&["activityBar", "showTabs", "statusBar", "showSearch", "searchWide"])),
+            ("Position", pick(&["sidePos", "panelPos"])),
+            ("Tabs", pick(&["tabColors", "tabBold", "dirtyDot"])),
+            ("Window layouts", pick(&["layouts"])),
+        ]),
+        "keys" => raw_sec("general", &["Shortcuts"]),
+        "import" => raw_sec("general", &["Import and export"]),
+        "editor" => page(vec![
+            ("Display", pick(&["wordWrap", "minimap", "breadcrumbs", "whitespace", "lineHighlight", "indentGuides", "rulers"])),
+            ("Highlighting", pick(&["selHighlight", "matchBrackets"])),
+            ("Cursor", pick(&["cursorBlink", "cursorWidth", "wheelZoom"])),
+        ]),
+        "typing" => page(vec![
+            ("Indentation", pick(&["tabSize", "autoIndent"])),
+            ("Auto closing", pick(&["autoClose", "autoCloseTags"])),
+            ("Help while typing", pick(&["suggest", "lintHints"])),
+        ]),
+        "files" => page(vec![
+            ("Saving", pick(&["autosave", "autosaveDelay", "trimWhitespace", "finalNewline"])),
+            ("Explorer", pick(&["autoReload", "confirmDelete", "filesExclude"])),
+        ]),
+        t => sections_raw(t, app),
+    }
+}
+
+fn sections_raw(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
     let o = |v: &[(&str, &str)]| v.iter().map(|(a, b)| (json!(a), t(b))).collect::<Vec<_>>();
     match tab {
         "general" => vec![
@@ -251,6 +320,15 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 ],
             ),
             ("Language", vec![Row::Custom("language")]),
+            (
+                "Import and export",
+                vec![
+                    Row::Button("settings-export", "Export settings", "save your look, editor and layout settings to a file – projects and accounts are not included", "Export…"),
+                    Row::Button("settings-import", "Import settings", "load settings from a file exported on another PC", "Import…"),
+                    Row::Button("settings-json", "Edit settings as JSON", "open settings.json in the editor – changes apply after saving and reopening the settings", "Open"),
+                    Row::Button("settings-reset-ask", "Reset all settings", "everything goes back to default; projects, accounts and keys stay", "Reset…"),
+                ],
+            ),
             ("Welcome", vec![Row::Button("intro", "Intro", "Replay the first-start intro.", "Intro"), Row::Button("tour", "Feature tour", "A short walk through the main parts of Flux.", "Tour")]),
             ("Shortcuts", vec![Row::Custom("keys")]),
         ],
@@ -337,9 +415,10 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 // nepriehľadnosť každej časti okna (100 = plná farba, nič nepresvitá)
                 .chain(if app.get("material").as_str() != Some("none") {
                     vec![
-                        Row::Range("alphaSide", "Window opacity", "the bar with icons, the Explorer and the top bar together – 100 means nothing shines through", 20.0, 100.0, 1.0),
-                        Row::Range("alphaEditor", "Editor opacity", "the code, the project page and the Live Server panel", 30.0, 100.0, 1.0),
-                        Row::Range("alphaPanel", "Output and Terminal opacity", "the panel with program output and the terminal", 30.0, 100.0, 1.0),
+                        Row::Range("alphaSide", "Window opacity", "the bar with icons, the Explorer and the top bar together – 100 means nothing shines through", 10.0, 100.0, 1.0),
+                        Row::Range("alphaEditor", "Editor opacity", "the code, the project page and the Live Server panel", 20.0, 100.0, 1.0),
+                        Row::Range("alphaPanel", "Output and Terminal opacity", "the panel with program output and the terminal", 20.0, 100.0, 1.0),
+                        Row::Toggle("glassChip", "Transparency in the status bar", "a small % button at the bottom right opens the sliders – Ctrl+Alt+Z makes everything clearer, Ctrl+Alt+C more solid"),
                     ]
                 } else {
                     vec![]
@@ -374,6 +453,23 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 .collect(),
             ),
             (
+                "Layout",
+                vec![
+                    Row::Toggle("activityBar", "Bar with icons", "the narrow bar on the far left with Explorer, Plugins, menu and Settings"),
+                    Row::Toggle("showTabs", "File tabs", "the row of open files above the code"),
+                    Row::Toggle("statusBar", "Status bar", "the line at the bottom with Ln/Col, language and messages"),
+                    Row::Custom("layouts"),
+                ],
+            ),
+            (
+                "Tabs",
+                vec![
+                    Row::Select("tabColors", "Tab colors", "a coloured line on each tab, so files of one kind are easy to spot", o(&[("none", "none"), ("extension", "by file type")])),
+                    Row::Toggle("tabBold", "Bold active tab", "the name of the open file is bold"),
+                    Row::Select("dirtyDot", "Unsaved changes mark", "the dot on a tab with changes that are not saved yet", o(&[("small", "small dot"), ("large", "large dot")])),
+                ],
+            ),
+            (
                 "",
                 // priehľadnosť okna sa dá zmeniť len novým štartom – ponúknuť ho, keď sa líši od želania
                 if crate::want_transparent() != crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
@@ -402,11 +498,42 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 "Behaviour",
                 vec![
                     Row::Toggle("minimap", "Code map", "small preview of the code on the right"),
-                    Row::Toggle("breadcrumbs", "Path above the code", "project › folders › file above the editor, like in VS Code – click a folder to show it in the Explorer"),
+                    Row::Toggle("breadcrumbs", "Path above the code", "project › folders › file above the code – click a folder to show it in the Explorer"),
                     Row::Select("whitespace", "Show spaces as dots", "small dots show the indentation and wider gaps in the code and in Output and Terminal", o(&[("indent", "indentation and gaps"), ("all", "every space"), ("off", "off")])),
                     Row::Toggle("autoIndent", "Auto indent", "Enter keeps the indentation of the line above and indents after an opening bracket or tag"),
                     Row::Toggle("autosave", "Auto save", "saves the file shortly after you stop typing"),
                     Row::Toggle("autoReload", "Reload changed files without asking", "when another program changes an open file, the editor shows the new version right away"),
+                ],
+            ),
+            (
+                "Cursor and display",
+                vec![
+                    Row::Toggle("cursorBlink", "Blinking cursor", "the text cursor blinks; off = it stays visible all the time"),
+                    Row::Range("cursorWidth", "Cursor width", "how thick the text cursor is, in pixels", 1.0, 4.0, 1.0),
+                    Row::Toggle("lineHighlight", "Highlight the current line", "a soft band behind the line with the cursor"),
+                    Row::Toggle("indentGuides", "Indent guides", "thin vertical lines that show how deep the code is indented"),
+                    Row::Select("rulers", "Ruler", "a vertical line at this column, so long lines are easy to see", vec![(json!(0), t("off")), (json!(80), "80".into()), (json!(100), "100".into()), (json!(120), "120".into())]),
+                    Row::Toggle("selHighlight", "Highlight other occurrences", "select a word and every other place with the same text gets a soft box"),
+                    Row::Toggle("matchBrackets", "Matching brackets", "the bracket that belongs to the one next to the cursor gets a box"),
+                    Row::Toggle("wheelZoom", "Zoom with Ctrl + mouse wheel", "Ctrl + wheel over the code makes the font bigger or smaller"),
+                ],
+            ),
+            (
+                "Typing",
+                vec![
+                    Row::Select("tabSize", "Tab size", "how many spaces one indent step (Tab, Enter after a bracket) is", vec![(json!(2), "2".into()), (json!(4), "4".into()), (json!(8), "8".into())]),
+                    Row::Toggle("autoClose", "Close brackets and quotes", "typing ( [ { \" or ' adds the closing one"),
+                    Row::Toggle("autoCloseTags", "Close HTML tags", "typing > after <div adds </div>"),
+                ],
+            ),
+            (
+                "Files",
+                vec![
+                    Row::Range("autosaveDelay", "Auto save delay", "milliseconds after your last key press before the file is saved", 300.0, 5000.0, 100.0),
+                    Row::Toggle("trimWhitespace", "Remove spaces at line ends when saving", "trailing spaces and tabs are deleted on save (not in Markdown)"),
+                    Row::Toggle("finalNewline", "End files with an empty line", "saving adds a line break at the end if it's missing"),
+                    Row::Toggle("confirmDelete", "Ask before deleting", "Delete in the Explorer asks first; off = it goes straight to the Recycle Bin"),
+                    Row::Text("filesExclude", "Hidden files and folders", "names to hide in the Explorer, separated by commas – *.log hides by file type, temp* by start", "e.g. dist, *.log"),
                 ],
             ),
         ],
@@ -415,6 +542,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             vec![
                 ("Python", vec![Row::Info("Interpreter", py), Row::Button("python", "Choose another Python", "pick python.exe yourself if Flux found the wrong one", "Change…")]),
                 ("Output", vec![Row::Toggle("clearOnRun", "Clear output before running", "each run starts with an empty Output panel"), Row::Number("terminalFontSize", "Output font size", "size of the text in Output and Terminal", 9.0, 28.0)]),
+                ("External tools", vec![Row::Lead("Your own commands in the menu ☰ → Tools, run in the Terminal of the open file. $(FilePath), $(FileDir), $(FileName) and $(ProjectDir) are replaced."), Row::Custom("ext-tools")]),
             ]
         }
         "tools" => vec![("", vec![Row::Custom("tools")])],
@@ -496,6 +624,7 @@ impl App {
         });
         match key {
             "language" => crate::i18n::set_language(self.get("language").as_str().unwrap_or("en")),
+            "filesExclude" => self.tree.clear(),
             "fontFamily" | "fontCustom" => theme::fonts(ctx, self.get("fontFamily").as_str().unwrap_or("Consolas")),
             _ => {}
         }
@@ -550,16 +679,37 @@ impl App {
         let mut go_sub = None;
         let dev = self.developer();
         let gh = self.gh_plugin();
-        for (id, ic, label) in TABS {
-            if (id == "developer" && !dev) || (id == "github" && !gh) {
+        let mut last_group = "";
+        // ponuka sa môže posúvať, keď je okno nízke
+        let nav_clip = Rect::from_min_max(pos2(nav.left(), y - 4.0), pos2(nav.right(), nav.bottom() - 34.0));
+        let nav_off_id = egui::Id::new("s-nav-off");
+        let mut nav_off: f32 = ctx.data(|d| d.get_temp(nav_off_id)).unwrap_or(0.0);
+        if ui.rect_contains_pointer(nav_clip) {
+            nav_off -= ui.input(|i| i.smooth_scroll_delta().y);
+        }
+        let y0 = y;
+        y -= nav_off;
+        let painter_save = ui.painter().clip_rect();
+        ui.set_clip_rect(nav_clip);
+        for (id, ic, label, group) in TABS {
+            if id.is_empty() || (id == "developer" && !dev) || (id == "github" && !gh) {
                 continue;
             }
-            // vývojárska karta oddelená čiarou
-            if id == "developer" {
-                ui.painter().hline(nav.left() + 20.0..=nav.right() - 20.0, y + 4.0, Stroke::new(1.0, p.line));
-                y += 10.0;
+            // nadpis skupiny (ENVIRONMENT, TEXT EDITOR…)
+            if group != last_group {
+                last_group = group;
+                if id == "developer" {
+                    ui.painter().hline(nav.left() + 20.0..=nav.right() - 20.0, y + 6.0, Stroke::new(1.0, p.line));
+                    y += 12.0;
+                } else {
+                    let mut job = egui::text::LayoutJob::default();
+                    job.append(&t(group).to_uppercase(), 0.0, egui::TextFormat { font_id: theme::bold(10.5), color: p.text3, extra_letter_spacing: 0.8, ..Default::default() });
+                    let g = ui.fonts_mut(|f| f.layout_job(job));
+                    ui.painter().galley(pos2(nav.left() + 22.0, y + 10.0), g, p.text3);
+                    y += 28.0;
+                }
             }
-            let r = Rect::from_min_size(pos2(nav.left() + 10.0, y), vec2(nav.width() - 20.0, 36.0));
+            let r = Rect::from_min_size(pos2(nav.left() + 10.0, y), vec2(nav.width() - 20.0, 32.0));
             let resp = ui.interact(r, ui.id().with(("stab", id)), Sense::click());
             let on = id == cur_tab && finding.is_empty();
             let hov = ctx.animate_bool_with_time(ui.id().with(("stab-h", id)), resp.hovered() || on, if anim { 0.12 } else { 0.0 });
@@ -580,13 +730,13 @@ impl App {
                     p.text2
                 },
             );
-            ui.painter().text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::bold(13.0), if on || resp.hovered() { p.text } else { p.text2 });
+            widgets::text(ui, pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &t(label), theme::bold(12.5), if on || resp.hovered() { p.text } else { p.text2 }, r.width() - 44.0);
             if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 go_tab = Some(id.to_string());
             }
-            y += 38.0;
-            // podpoložky (h3) pre General a Appearance
-            if on && (id == "general" || id == "appearance" || id == "developer") {
+            y += 33.0;
+            // podpoložky len pre vývojársku kartu (ostatné stránky sú krátke)
+            if on && id == "developer" {
                 let subs: Vec<&str> = sections(id, self).iter().map(|s| s.0).filter(|s| !s.is_empty()).collect();
                 let top = y;
                 // časť, ktorá je práve navrchu obsahu (scroll spy) – zvýraznenie kĺže
@@ -614,6 +764,10 @@ impl App {
                 y += 6.0;
             }
         }
+        let total = y + nav_off - y0;
+        let max_off = (total - nav_clip.height() + 8.0).max(0.0);
+        ctx.data_mut(|d| d.insert_temp(nav_off_id, nav_off.clamp(0.0, max_off)));
+        ui.set_clip_rect(painter_save);
         ui.painter().text(pos2(nav.left() + 20.0, nav.bottom() - 20.0), Align2::LEFT_CENTER, format!("Flux Native {}", env!("CARGO_PKG_VERSION")), theme::ui(11.0), p.text3);
         if let Some(tb) = go_tab {
             let st = self.settings.as_mut().unwrap();
@@ -631,7 +785,7 @@ impl App {
         // ---- pravá časť: hlavička + obsah ----
         let main = Rect::from_min_max(pos2(nav.right() + 1.0, card.top()), card.max);
         let st = self.settings.as_ref().unwrap();
-        let title = if finding.is_empty() { TABS.iter().find(|x| x.0 == st.tab).map(|x| t(x.2)).unwrap_or_default() } else { t("Search settings…").trim_end_matches('…').to_string() };
+        let title = if finding.is_empty() { TABS.iter().find(|x| x.0 == st.tab).map(|x| if x.3.is_empty() { t(x.2) } else { format!("{} › {}", t(x.3), t(x.2)) }).unwrap_or_default() } else { t("Search settings…").trim_end_matches('…').to_string() };
         ui.painter().text(pos2(main.left() + 28.0, main.top() + 32.0), Align2::LEFT_CENTER, &title, theme::bold(20.0), p.text);
         let close = Rect::from_center_size(pos2(main.right() - 32.0, main.top() + 32.0), vec2(30.0, 30.0));
         let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
@@ -966,6 +1120,10 @@ impl App {
                 }
                 self.apply_look(ctx);
             }
+            "settings-export" => self.settings_export(),
+            "settings-import" => self.settings_import(ctx),
+            "settings-json" => self.settings_json(),
+            "settings-reset-ask" => self.ask_settings_reset(),
             "look-reset" => {
                 for k in ["uiZoom", "cornerRadius", "darkLift", "density", "lineNumbers", "fontCustom"] {
                     self.update_settings(|o| {
@@ -1001,6 +1159,89 @@ impl App {
     fn custom(&mut self, ui: &mut egui::Ui, id: &str, w: f32, ctx: &egui::Context) {
         let p = self.pal;
         match id {
+            // uložené rozloženia okna (Window → Save / Apply Window Layout)
+            "layouts" => {
+                ui.vertical(|ui| {
+                    ui.set_width(w);
+                        self.label(ui, &t("Window layouts"), &t("save how the window looks now (sidebar, panel, tabs, status bar, size) and switch back with one click"), w);
+                        let mut apply = None;
+                        let mut del = None;
+                        for l in self.layouts() {
+                            let n = l["name"].as_str().unwrap_or("").to_string();
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(&n).strong());
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if widgets::icon_button(ui, "trash", &p, true).on_hover_text(t("Delete")).clicked() {
+                                        del = Some(n.clone());
+                                    }
+                                    if widgets::button(ui, None, &t("Apply"), p.card2, p.text, 28.0, &p).clicked() {
+                                        apply = Some(n.clone());
+                                    }
+                                });
+                            });
+                        }
+                        ui.horizontal(|ui| {
+                            let mut name = std::mem::take(&mut self.layout_name);
+                            let r = ui.add(egui::TextEdit::singleline(&mut name).hint_text(t("Layout name, e.g. Coding")).desired_width(w - 230.0));
+                            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            if (widgets::button(ui, Some("save"), &t("Save current"), p.accent, p.accent_fg, 28.0, &p).clicked() || enter) && !name.trim().is_empty() {
+                                self.layout_save(&name);
+                                name.clear();
+                            }
+                            if widgets::button(ui, Some("refresh"), &t("Reset"), p.card2, p.text, 28.0, &p).on_hover_text(t("Reset window layout")).clicked() {
+                                self.layout_reset(ctx);
+                            }
+                            self.layout_name = name;
+                        });
+                        if let Some(n) = apply {
+                            self.layout_apply(&n, ctx);
+                        }
+                        if let Some(n) = del {
+                            self.layout_delete(&n);
+                        }
+                });
+            }
+            // externé nástroje (Tools → External Tools)
+            "ext-tools" => {
+                ui.vertical(|ui| {
+                    ui.set_width(w);
+                        let mut list = self.ext_tools();
+                        let mut changed = false;
+                        let mut del = None;
+                        for (i, (n, c)) in list.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                widgets::icon(ui, Rect::from_min_size(ui.cursor().min + vec2(0.0, 4.0), vec2(16.0, 16.0)), "terminal", p.text2);
+                                ui.add_space(22.0);
+                                ui.label(egui::RichText::new(n).strong());
+                                ui.label(egui::RichText::new(c).monospace().color(p.text3));
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if widgets::icon_button(ui, "trash", &p, true).on_hover_text(t("Delete")).clicked() {
+                                        del = Some(i);
+                                    }
+                                });
+                            });
+                        }
+                        if let Some(i) = del {
+                            list.remove(i);
+                            changed = true;
+                        }
+                        ui.horizontal(|ui| {
+                            let (mut n, mut c) = std::mem::take(&mut self.tool_new);
+                            ui.add(egui::TextEdit::singleline(&mut n).hint_text(t("Name, e.g. Git status")).desired_width(150.0));
+                            ui.add(egui::TextEdit::singleline(&mut c).hint_text(t("Command, e.g. git status")).font(theme::mono(12.5)).desired_width((w - 290.0).max(120.0)));
+                            if widgets::button(ui, Some("plus"), &t("Add"), p.accent, p.accent_fg, 28.0, &p).clicked() && !n.trim().is_empty() && !c.trim().is_empty() {
+                                list.push((n.trim().to_string(), c.trim().to_string()));
+                                changed = true;
+                                n.clear();
+                                c.clear();
+                            }
+                            self.tool_new = (n, c);
+                        });
+                        if changed {
+                            self.ext_tools_set(list);
+                        }
+                });
+            }
             "about" => {
                 let (r, _) = ui.allocate_exact_size(vec2(w, 86.0), Sense::hover());
                 ui.painter().rect_filled(r, CornerRadius::same(14), p.hover);

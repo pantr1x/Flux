@@ -2,6 +2,31 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.64
+
+**Settings sorted into groups**
+- Settings now have groups on the left: **Environment** (General, Theme and window, Fonts and colors, Tabs and layout, Keyboard, Import and export), **Text editor** (Display, Typing, Files and saving), **Run** and **Extensions**. Each page is short, so things are easier to find, and search still finds every setting.
+
+**Transparency at hand**
+- A **% button** at the bottom right of the status bar opens sliders for the window, the editor and Output/Terminal.
+- **Ctrl+Alt+Z** makes everything clearer, **Ctrl+Alt+C** more solid (5 % per press). The window can now go down to 10 %.
+
+**Import, export and layouts**
+- *Environment → Import and export*: **export** your settings to a file, **import** them on another PC, **edit them as JSON**, or **reset all settings** (projects, accounts and keys stay).
+- *Tabs and layout → Window layouts*: save how the window looks (sidebar, panel, tabs, status bar, size) under a name and switch with one click; also in the menu ☰ → Window.
+- The bar with icons, the file tabs and the status bar can be hidden.
+
+**Tabs**
+- **Ctrl+1 … Ctrl+9** jump to a tab (9 = last), **Ctrl+Shift+PgUp / PgDn** move the tab, **Ctrl+Shift+T** brings back the last closed tab.
+- Optional coloured line per file type, a bold active tab and a larger mark for unsaved changes.
+
+**Editor**
+- New: tab size (2 / 4 / 8), blinking cursor and cursor width, current line highlight, indent guides, a ruler at column 80/100/120, **highlight of other occurrences** of the selected text, **matching brackets**, Ctrl + wheel zoom on/off, closing brackets and HTML tags on/off.
+- Files: auto save delay, remove spaces at line ends and end files with an empty line when saving, ask before deleting, and **hidden files and folders** in the Explorer (e.g. `dist, *.log`).
+
+**External tools**
+- *Run → Running → External tools*: your own commands (e.g. `git status`) in the menu ☰ → Tools. They run in the Terminal of the open file; `$(FilePath)`, `$(FileDir)`, `$(FileName)` and `$(ProjectDir)` are filled in.
+
 ## 0.9.63
 
 **Opening projects**

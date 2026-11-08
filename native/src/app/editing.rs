@@ -1,3 +1,14 @@
+// veľkosť odsadenia (nastavenie tabSize, ako editor.tabSize vo VS Code) – nastaví ju editor každú snímku
+pub static TAB: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(4);
+
+pub fn tab_n() -> usize {
+    TAB.load(std::sync::atomic::Ordering::Relaxed).clamp(1, 8)
+}
+
+pub fn tab_str() -> String {
+    " ".repeat(tab_n())
+}
+
 // Úpravy textu ako v Monacu: Tab / Shift+Tab (odsadenie riadkov), Ctrl+/ (komentár), automatické
 // zatváranie zátvoriek a úvodzoviek, Ctrl+F / Ctrl+H (hľadanie a nahrádzanie) so zvýraznením nálezov.
 use super::App;
@@ -53,8 +64,9 @@ fn line_starts(text: &str, a: usize, b: usize) -> Vec<usize> {
 pub fn indent(text: &mut String, a: usize, b: usize, back: bool) -> (usize, usize) {
     if !back && a == b {
         let bi = byte_at(text, a);
-        text.insert_str(bi, "    ");
-        return (a + 4, a + 4);
+        let n = tab_n();
+        text.insert_str(bi, &tab_str());
+        return (a + n, a + n);
     }
     let starts = line_starts(text, a, b);
     let (mut lo, mut hi) = (a.min(b), a.max(b));
@@ -62,7 +74,7 @@ pub fn indent(text: &mut String, a: usize, b: usize, back: bool) -> (usize, usiz
     for (n, st) in starts.iter().enumerate().rev() {
         let st = *st;
         if back {
-            let spaces = text[st..].chars().take(4).take_while(|c| *c == ' ').count();
+            let spaces = text[st..].chars().take(tab_n()).take_while(|c| *c == ' ').count();
             let tab = text[st..].starts_with('\t');
             let remove = if spaces > 0 {
                 spaces
@@ -79,10 +91,10 @@ pub fn indent(text: &mut String, a: usize, b: usize, back: bool) -> (usize, usiz
                 }
             }
         } else {
-            text.insert_str(st, "    ");
-            hi += 4;
+            text.insert_str(st, &tab_str());
+            hi += tab_n();
             if n == 0 {
-                lo += 4;
+                lo += tab_n();
             }
         }
     }
@@ -96,7 +108,7 @@ pub fn indent(text: &mut String, a: usize, b: usize, back: bool) -> (usize, usiz
 // Enter: nový riadok s odsadením aktuálneho riadka (ako VS Code). Za otvorenou zátvorkou / značkou / „:“ v Pythone
 // odsadí o krok navyše; medzi `{|}` alebo `<ul>|</ul>` rozdelí na tri riadky. Riadok len z medzier sa vyprázdni.
 pub fn enter(text: &mut String, a: usize, b: usize, ext: &str) -> (usize, usize) {
-    const STEP: &str = "    ";
+    let step = tab_str();
     let (lo, hi) = (a.min(b), a.max(b));
     let (blo, bhi) = (byte_at(text, lo), byte_at(text, hi));
     let ls = text[..blo].rfind('\n').map(|i| i + 1).unwrap_or(0);
@@ -119,7 +131,7 @@ pub fn enter(text: &mut String, a: usize, b: usize, ext: &str) -> (usize, usize)
     };
     let opens = !blank && (brace.is_some() || open_tag || (matches!(ext, "py" | "pyw") && before.ends_with(':')));
     let closes_here = opens && ((open_tag && after_t.starts_with("</")) || brace.is_some_and(|c| after_t.starts_with(c)));
-    let mid = format!("\n{indent}{}", if opens { STEP } else { "" });
+    let mid = format!("\n{indent}{}", if opens { step.as_str() } else { "" });
     let (from, ins) = if closes_here { (if blank { ls } else { blo }, format!("{mid}\n{indent}")) } else { (if blank { ls } else { blo }, mid.clone()) };
     // kurzor: na konci stredného riadka (pri rozdelení pred zatvárací riadok)
     let caret_byte = from + mid.len();
@@ -239,6 +251,43 @@ pub fn close_tag(text: &mut String, cursor: usize) -> bool {
 }
 
 // nálezy (bez ohľadu na veľkosť písmen) ako rozsahy znakov
+// pár zátvoriek pri kurzore (znak tesne pred kurzorom alebo za ním), indexy v znakoch; hľadá najviac 20 000 znakov
+pub fn bracket_pair(text: &str, cur: usize) -> Option<(usize, usize)> {
+    let cs: Vec<char> = text.chars().collect();
+    let pick = |i: usize| cs.get(i).copied().filter(|c| "()[]{}".contains(*c)).map(|c| (i, c));
+    let (i, c) = pick(cur).or_else(|| cur.checked_sub(1).and_then(pick))?;
+    let (open, close, fwd) = match c {
+        '(' => ('(', ')', true),
+        '[' => ('[', ']', true),
+        '{' => ('{', '}', true),
+        ')' => ('(', ')', false),
+        ']' => ('[', ']', false),
+        _ => ('{', '}', false),
+    };
+    let mut depth = 0i32;
+    let mut j = i;
+    for _ in 0..20_000 {
+        let ch = cs[j];
+        if ch == open {
+            depth += if fwd { 1 } else { -1 };
+        } else if ch == close {
+            depth += if fwd { -1 } else { 1 };
+        }
+        if depth == 0 {
+            return Some((i.min(j), i.max(j)));
+        }
+        if fwd {
+            j += 1;
+            if j >= cs.len() {
+                return None;
+            }
+        } else {
+            j = j.checked_sub(1)?;
+        }
+    }
+    None
+}
+
 pub fn matches(text: &str, q: &str) -> Vec<(usize, usize)> {
     if q.is_empty() {
         return vec![];
@@ -592,5 +641,14 @@ mod enter_tests {
     fn editing_enter_python_colon() {
         assert_eq!(run("def f():", 8, "py").0, "def f():\n    ");
         assert_eq!(run("x = {1: 2}", 10, "py").0, "x = {1: 2}\n");
+    }
+
+    #[test]
+    fn editing_bracket_pair() {
+        let t = "f(a[1], {b})";
+        assert_eq!(super::bracket_pair(t, 2), Some((1, 11)));
+        assert_eq!(super::bracket_pair(t, 12), Some((1, 11)));
+        assert_eq!(super::bracket_pair(t, 4), Some((3, 5)));
+        assert_eq!(super::bracket_pair("x", 0), None);
     }
 }

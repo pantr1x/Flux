@@ -29,6 +29,10 @@ for (const f of rsFiles('native/src')) {
   for (const m of src.matchAll(new RegExp(`Row::(?:Info|Lead)\\(\\s*${q}`, 'g'))) keys.add(m[1]);
   // nadpisy častí: ("Developer", vec![
   for (const m of src.matchAll(/\(\s*"([A-Z][^"]*)",\s*vec!\[/g)) keys.add(m[1]);
+  // stránky nastavení zo zásoby riadkov: ("Display", pick(&[…]))
+  for (const m of src.matchAll(/\(\s*"([A-Z][^"]*)",\s*pick\(/g)) keys.add(m[1]);
+  // ponuka nastavení: ("id", "ikona", "Názov", "Skupina")
+  if (f.endsWith('prefs.rs')) for (const m of src.matchAll(/\("[\w-]*", "[\w-]*", "([^"]+)", "([^"]*)"\)/g)) for (const v of m.slice(1)) if (v) keys.add(v);
 }
 // pluginScan.js: [/regex/, 'block' | 'warn', 'Popis nálezu']
 for (const m of readFileSync('src/main/pluginScan.js', 'utf8').matchAll(/'(?:block|warn)', '([^']+)'\]/g)) keys.add(m[1]);
@@ -39,7 +43,7 @@ for (const m of readFileSync('src/renderer/themeStudio.js', 'utf8').matchAll(/\[
 for (const m of readFileSync('src/renderer/themeStudio.js', 'utf8').matchAll(/^\s*\['([A-Z]\w+)', \[/gm)) keys.add(m[1]);
 const tpl = readFileSync('src/renderer/templates.js', 'utf8');
 for (const m of tpl.matchAll(/\b(?:label|detail):\s*(['"])((?:\\.|(?!\1).)*)\1/g)) keys.add(lit(m[1], m[2]));
-for (const w of ['compact', 'normal', 'relaxed', 'large']) keys.add(w);
+for (const w of ['compact', 'normal', 'relaxed', 'large', 'by file type', 'small dot', 'large dot']) keys.add(w);
 // Mená, ktoré sa neprekladajú.
 for (const k of ['Python', 'JavaScript', 'VS Code Dark', 'Consolas', 'Cascadia Code', 'Cascadia Mono', 'Courier New', 'Acrylic (Windows)', 'Mica (Windows)']) keys.delete(k);
 const list = [...keys].filter((k) => k.trim()).sort();

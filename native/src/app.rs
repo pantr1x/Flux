@@ -17,6 +17,7 @@ mod tour;
 mod plugins_ui;
 mod imageview;
 mod explorer;
+mod workbench;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -299,6 +300,9 @@ pub struct App {
     tree_rows: Vec<(String, bool)>,     // viditeľné riadky stromu v poradí (pre šípky)
     drop_rects: Vec<(Rect, String)>,    // kam sa dá pustiť súbor z počítača (priečinky stromu, projekty)
     proj_reveal: bool,                  // po otvorení projektu posunúť zoznam PROJECTS k nemu
+    closed_tabs: Vec<String>,           // zavreté karty (Ctrl+Shift+T ich vráti)
+    layout_name: String,                // pole na meno nového rozloženia okna
+    tool_new: (String, String),         // pole na nový externý nástroj (meno, príkaz)
     ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
     real_ptr: Option<egui::Pos2>,       // skutočná poloha myši (egui pri ťahaní výberu dostáva orezanú)
     drag_scroll: egui::Vec2,            // posun editora pri ťahaní výberu za okraj
@@ -448,6 +452,9 @@ impl App {
             tree_rows: vec![],
             drop_rects: vec![],
             proj_reveal: true,
+            closed_tabs: vec![],
+            layout_name: String::new(),
+            tool_new: (String::new(), String::new()),
             ed_drag: None,
             real_ptr: None,
             drag_scroll: egui::Vec2::ZERO,
@@ -729,7 +736,7 @@ impl App {
         // úryvok: odsadenie riadku pre ďalšie riadky, kurzor na prvé miesto ($1), Tab skáče ďalej
         let line_start = tab.text[..a].rfind('\n').map(|i| i + 1).unwrap_or(0);
         let indent: String = tab.text[line_start..a].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
-        let (text, stops) = crate::complete::expand(&body, &indent, "    ");
+        let (text, stops) = crate::complete::expand(&body, &indent, &editing::tab_str());
         self.sug_again = body.ends_with("=\"$0\"");
         tab.text.replace_range(a..e, &text);
         self.last_edit = Some(Instant::now());
@@ -1054,7 +1061,10 @@ impl App {
         // plynulé skrolovanie závisí len od svojho prepínača (a šetrenia pamäte), nie od animácií prechodov
         let inertia = self.get("inertia").as_bool() != Some(false) && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true));
         self.smooth.on = inertia;
+        let (blink, cw) = (self.get("cursorBlink").as_bool() != Some(false), self.get("cursorWidth").as_f64().unwrap_or(2.0).clamp(1.0, 4.0) as f32);
         ctx.all_styles_mut(|s| {
+            s.visuals.text_cursor.blink = blink;
+            s.visuals.text_cursor.stroke.width = cw;
             s.scroll_animation = if inertia { egui::style::ScrollAnimation::new(1600.0, egui::Rangef::new(0.12, 0.3)) } else { egui::style::ScrollAnimation::none() };
             s.animation_time = if self.anim_on() { 0.12 } else { 0.0 };
         });
@@ -1149,12 +1159,14 @@ impl App {
         if let Some(v) = self.tree.get(dir) {
             return v.clone();
         }
+        let excl = self.get("filesExclude").as_str().unwrap_or("").to_string();
         let items: Vec<(String, String, bool)> = fsops::list(dir)
             .ok()
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_default()
             .iter()
             .map(|e| (e["name"].as_str().unwrap_or("").to_string(), e["path"].as_str().unwrap_or("").to_string(), e["dir"].as_bool().unwrap_or(false)))
+            .filter(|(n, _, _)| !excluded(n, &excl))
             .collect();
         self.tree.insert(dir.to_string(), items.clone());
         items
@@ -1358,6 +1370,10 @@ impl App {
                 self.save(i);
             }
             let mut gone = self.tabs.remove(i);
+            self.closed_tabs.push(gone.path.clone());
+            if self.closed_tabs.len() > 30 {
+                self.closed_tabs.remove(0);
+            }
             if let Some(s) = gone.sess.as_mut() {
                 s.kill();
             }
@@ -1374,6 +1390,20 @@ impl App {
     }
 
     fn save(&mut self, i: usize) {
+        // files.trimTrailingWhitespace / files.insertFinalNewline (ako VS Code) – mení text aj v editore
+        let (trim, final_nl) = (self.get("trimWhitespace").as_bool() == Some(true), self.get("finalNewline").as_bool() == Some(true));
+        if let Some(t) = self.tabs.get_mut(i).filter(|t| !t.image && (trim || final_nl)) {
+            let mut x = t.text.clone();
+            if trim && !matches!(t.ext().as_str(), "md" | "markdown") {
+                x = x.split('\n').map(|l| l.trim_end_matches([' ', '\t'])).collect::<Vec<_>>().join("\n");
+            }
+            if final_nl && !x.is_empty() && !x.ends_with('\n') {
+                x.push('\n');
+            }
+            if x != t.text {
+                t.text = x;
+            }
+        }
         if let Some(t) = self.tabs.get_mut(i) {
             match fsops::write(&t.path, &t.text) {
                 Ok(_) => t.saved = t.text.clone(),
@@ -1850,6 +1880,12 @@ impl App {
         let cy = r.center().y;
         // prázdna lišta presúva okno (ako -webkit-app-region: drag); tlačidlá nad ňou majú prednosť
         chrome::drag_area(ui, r, "top");
+        // bez pásu ikon (workbench.activityBar.visible): ☰ ponuka v hornej lište
+        if self.get("activityBar").as_bool() == Some(false) {
+            let m = widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 18.0, cy), vec2(28.0, 28.0)), "menu", 16.0, &p, true).on_hover_text(t("Menu"));
+            self.app_menu(&m);
+            x += 34.0;
+        }
         if !self.side_open {
             // logo a ☰ sú v páse ikon vľavo; tu len vrátenie bočného panela
             x += 4.0;
@@ -2005,7 +2041,7 @@ impl App {
         let ed_rect = Rect::from_min_max(rect.min, pos2(rect.right() - mini_w, rect.bottom()));
         // Ctrl + koliesko nad editorom = veľkosť písma (ako v PyCharme)
         let z = ui.input(|i| i.zoom_delta());
-        if (z - 1.0).abs() > 0.0001 && ui.input(|i| i.pointer.hover_pos()).is_some_and(|pt| ed_rect.contains(pt)) {
+        if (z - 1.0).abs() > 0.0001 && self.get("wheelZoom").as_bool() != Some(false) && ui.input(|i| i.pointer.hover_pos()).is_some_and(|pt| ed_rect.contains(pt)) {
             // egui rozloží jedno cvaknutie kolieska na viac snímok: kroky počítame zo súčtu (jedno cvaknutie ≈ 0.2)
             self.zoom_acc += z.ln();
             let steps = (self.zoom_acc / 0.19).trunc();
@@ -2016,6 +2052,15 @@ impl App {
             }
         }
         let mini = Rect::from_min_max(pos2(rect.right() - mini_w, rect.top()), rect.max);
+        // nastavenia ako vo VS Code (editor.tabSize, renderLineHighlight, guides, rulers, autoClosing…, occurrences, matchBrackets)
+        editing::TAB.store(self.get("tabSize").as_u64().unwrap_or(4).clamp(1, 8) as usize, std::sync::atomic::Ordering::Relaxed);
+        let line_hl = self.get("lineHighlight").as_bool() != Some(false);
+        let guides = self.get("indentGuides").as_bool() != Some(false);
+        let auto_br = self.get("autoClose").as_bool() != Some(false);
+        let auto_tags = self.get("autoCloseTags").as_bool() != Some(false);
+        let occ_on = self.get("selHighlight").as_bool() != Some(false);
+        let br_on = self.get("matchBrackets").as_bool() != Some(false);
+        let ruler = self.get("rulers").as_u64().unwrap_or(0) as usize;
         // ---- klávesy editora pred TextEdit: Tab/Shift+Tab, Ctrl+/, Ctrl+F/H, písané zátvorky ----
         let ed_id = egui::Id::new(("editor", self.tabs[self.active].path.clone()));
         let ctx = ui.ctx().clone();
@@ -2210,6 +2255,7 @@ impl App {
                 let hl = ui.painter().add(egui::Shape::Noop);
                 let hov = ui.painter().add(egui::Shape::Noop);
                 let found_shapes = ui.painter().add(egui::Shape::Noop);
+                let occ_shapes = ui.painter().add(egui::Shape::Noop); // ďalšie výskyty výberu a pár zátvoriek
                 let text_shapes = ui.painter().add(egui::Shape::Noop); // farebný text: pod kurzorom a výberom
                 // TextEdit rozloží text bez farieb (neviditeľný); farby sa kreslia nižšie len pre viditeľné riadky
                 let fmt = egui::TextFormat { font_id: font.clone(), color: Color32::TRANSPARENT, line_height: Some(lh), valign: egui::Align::Center, ..Default::default() };
@@ -2506,7 +2552,7 @@ impl App {
                     if let (Some(ch), Some(r)) = (typed, te.cursor_range) {
                         let c = usize::from(r.primary.index);
                         let html = matches!(lang.as_str(), "html" | "htm" | "xml" | "vue" | "svelte" | "php");
-                        if editing::auto_close(&mut tab.text, c, ch) || (ch == '>' && html && editing::close_tag(&mut tab.text, c)) {
+                        if (auto_br && editing::auto_close(&mut tab.text, c, ch)) || (ch == '>' && html && auto_tags && editing::close_tag(&mut tab.text, c)) {
                             let mut st = egui::TextEdit::load_state(ui.ctx(), ed_id).unwrap_or_default();
                             st.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(c))));
                             st.store(ui.ctx(), ed_id);
@@ -2572,7 +2618,7 @@ impl App {
                         let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top() - BAND_UP..=rr.top() - BAND_UP + lh);
                         ui.painter().set(hov, egui::Shape::rect_filled(band, 0.0, p.accent.gamma_multiply(0.22)));
                     }
-                    if n == cur_line && first {
+                    if n == cur_line && first && line_hl {
                         let band = Rect::from_x_y_ranges(clip.left()..=clip.right(), rr.top() - BAND_UP..=rr.top() - BAND_UP + lh);
                         ui.painter().set(hl, egui::Shape::rect_filled(band, 0.0, if p.dark { Color32::from_white_alpha(7) } else { Color32::from_black_alpha(8) }));
                     }
@@ -2587,15 +2633,55 @@ impl App {
                         ui.painter().text(pos2(num_x, rr.top() + lh / 2.0), Align2::RIGHT_CENTER, label, theme::mono((fsz - 1.0).max(9.0)), c);
                     }
                     // vodiace čiary len pre viditeľné riadky (medzery na začiatku riadku galley)
-                    if first {
+                    if first && guides {
+                        let tn = editing::tab_n();
                         let spaces = row.glyphs.iter().take_while(|g| g.chr == ' ').count();
-                        for k in 1..=(spaces / 4) {
-                            let gx = te.galley_pos.x + ((k - 1) * 4) as f32 * cw + 0.5;
-                            if k * 4 <= spaces && k > 0 {
+                        for k in 1..=(spaces / tn) {
+                            let gx = te.galley_pos.x + ((k - 1) * tn) as f32 * cw + 0.5;
+                            if k * tn <= spaces && k > 0 {
                                 ui.painter().vline(gx, rr.top()..=rr.top() + lh, Stroke::new(1.0, p.line));
                             }
                         }
                     }
+                }
+                // pravítko (editor.rulers): zvislá čiara na danom stĺpci
+                if ruler > 0 && !wrap {
+                    let rx = te.galley_pos.x + ruler as f32 * cw;
+                    ui.painter().vline(rx, clip.y_range(), Stroke::new(1.0, p.line));
+                }
+                // ďalšie výskyty označeného textu (editor.occurrencesHighlight) a pár zátvoriek pri kurzore (editor.matchBrackets)
+                if let Some(r) = te.cursor_range.filter(|_| tab.text.len() < 400_000) {
+                    let (a, b) = (usize::from(r.primary.index).min(usize::from(r.secondary.index)), usize::from(r.primary.index).max(usize::from(r.secondary.index)));
+                    let mut occ = vec![];
+                    let rect_of = |x: usize, y: usize| {
+                        let ra = te.galley.pos_from_cursor(egui::text::CCursor::new(x)).translate(te.galley_pos.to_vec2());
+                        let rb = te.galley.pos_from_cursor(egui::text::CCursor::new(y)).translate(te.galley_pos.to_vec2());
+                        Rect::from_min_max(pos2(ra.left(), ra.top() + 1.0), pos2(rb.left().max(ra.left() + 2.0), ra.bottom() - 1.0))
+                    };
+                    if occ_on && b > a && b - a >= 2 && b - a <= 200 && found.is_empty() {
+                        let sel: String = tab.text.chars().skip(a).take(b - a).collect();
+                        if !sel.contains('\n') && !sel.trim().is_empty() {
+                            for (x, y) in editing::matches(&tab.text, &sel) {
+                                if x == a {
+                                    continue;
+                                }
+                                let rr = rect_of(x, y);
+                                if rr.bottom() >= clip.top() && rr.top() <= clip.bottom() {
+                                    occ.push(egui::Shape::rect_filled(rr, 3.0, p.accent.gamma_multiply(0.18)));
+                                    occ.push(egui::Shape::rect_stroke(rr, 3.0, Stroke::new(1.0, p.accent.gamma_multiply(0.35)), StrokeKind::Inside));
+                                }
+                            }
+                        }
+                    }
+                    if br_on && a == b {
+                        if let Some((x, y)) = editing::bracket_pair(&tab.text, a) {
+                            for q in [x, y] {
+                                let rr = rect_of(q, q + 1);
+                                occ.push(egui::Shape::rect_stroke(rr.expand(0.5), 3.0, Stroke::new(1.0, p.text3), StrokeKind::Inside));
+                            }
+                        }
+                    }
+                    ui.painter().set(occ_shapes, egui::Shape::Vec(occ));
                 }
                 let _ = lines;
             });
@@ -3250,6 +3336,9 @@ impl App {
             widgets::icon_at(ui, pos2(r.left() - 9.0, cy), 12.0, "save", p.text2);
             rx = r.left() - 34.0;
         }
+        // priehľadnosť (klik = posuvníky)
+        let used = self.glass_chip(ui, rx, cy);
+        rx -= used;
         // tlačidlá z pluginov (flux.statusBar.add)
         if !self.plug.status.is_empty() {
             let used = self.plug_status_ui(ui, rx, cy);
@@ -3323,6 +3412,11 @@ impl App {
                 (i.consume_key(cs, egui::Key::A), "search"),
                 (i.consume_key(cs, egui::Key::P), "commands"),
                 (i.consume_key(cs, egui::Key::E), "view-explorer"),
+                (i.consume_key(cs, egui::Key::T), "reopen-tab"),
+                (i.consume_key(cs, egui::Key::PageUp), "tab-left"),
+                (i.consume_key(cs, egui::Key::PageDown), "tab-right"),
+                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::Z), "glass-clear"),
+                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::C), "glass-solid"),
                 (i.consume_key(cs, egui::Key::N), "new-project"),
                 (i.consume_key(c, egui::Key::N), "new-file"),
                 (i.consume_key(cs, egui::Key::S), "save-all"),
@@ -3334,6 +3428,13 @@ impl App {
             if hit {
                 self.act(id, ctx);
             }
+        }
+        // Ctrl+1 … Ctrl+9: karta podľa poradia (9 = posledná), ako vo Visual Studiu
+        let nums = [egui::Key::Num1, egui::Key::Num2, egui::Key::Num3, egui::Key::Num4, egui::Key::Num5, egui::Key::Num6, egui::Key::Num7, egui::Key::Num8, egui::Key::Num9];
+        let hit = ctx.input_mut(|i| nums.iter().position(|k| i.consume_key(egui::Modifiers::COMMAND, *k)));
+        if let Some(n) = hit.filter(|_| !self.tabs.is_empty()) {
+            let i = if n == 8 { self.tabs.len() - 1 } else { n.min(self.tabs.len() - 1) };
+            self.activate(i);
         }
         if sets {
             if self.settings.is_some() {
@@ -3382,6 +3483,19 @@ fn caption(ui: &egui::Ui, pos: egui::Pos2, s: &str, p: &Pal) {
 }
 
 // súbory v koreni projektu podľa druhu – ako „Pages / Styles / Scripts“ na stránke projektu v Electron Fluxe
+// files.exclude: mená oddelené čiarkou, „*.ext“ = podľa prípony, „pre*“ = podľa začiatku
+fn excluded(name: &str, pats: &str) -> bool {
+    pats.split([',', ';']).map(str::trim).filter(|x| !x.is_empty()).any(|pat| {
+        if let Some(ext) = pat.strip_prefix("*.") {
+            name.to_lowercase().ends_with(&format!(".{}", ext.to_lowercase()))
+        } else if let Some(pre) = pat.strip_suffix('*') {
+            name.to_lowercase().starts_with(&pre.to_lowercase())
+        } else {
+            name.eq_ignore_ascii_case(pat)
+        }
+    })
+}
+
 // najviac riadkov v jednej skupine na stránke projektu (zvyšok ako „+ N …“)
 const PAGE_ROWS: usize = 8;
 
@@ -3696,14 +3810,15 @@ impl eframe::App for App {
         }
         self.shortcuts(ctx);
         // automatické ukladanie 1 s po poslednej zmene
+        let save_ms = self.get("autosaveDelay").as_u64().unwrap_or(1000).clamp(200, 10_000);
         if let Some(t) = self.last_edit {
-            if t.elapsed() >= Duration::from_millis(1000) {
+            if t.elapsed() >= Duration::from_millis(save_ms) {
                 self.last_edit = None;
                 if self.core.setting("autosave").as_bool() != Some(false) {
                     self.save(self.active);
                 }
             } else {
-                ctx.request_repaint_after(Duration::from_millis(1000) - t.elapsed());
+                ctx.request_repaint_after(Duration::from_millis(save_ms) - t.elapsed());
             }
         }
         self.tour_rects.clear();
@@ -3772,7 +3887,9 @@ impl eframe::App for App {
             self.frames.pop_front();
         }
         // pás ikon a bočný panel ostávajú aj na domove (ako uvítacia stránka VS Code)
-        self.activity_bar(root);
+        if self.get("activityBar").as_bool() != Some(false) {
+            self.activity_bar(root);
+        }
         if self.side_open {
             self.sidebar(root);
         }
@@ -3829,9 +3946,13 @@ impl eframe::App for App {
                 let mut panel_rect: Option<Rect> = None;
                 let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
                 card_ui.set_clip_rect(card_r.shrink(1.0));
-                let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - 28.0), card_r.max);
-                self.tour_rects.insert("status", status);
-                self.status_bar(&mut card_ui, status);
+                // stavový riadok sa dá skryť (workbench.statusBar.visible)
+                let sb_on = self.get("statusBar").as_bool() != Some(false);
+                let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - if sb_on { 28.0 } else { 0.0 }), card_r.max);
+                if sb_on {
+                    self.tour_rects.insert("status", status);
+                    self.status_bar(&mut card_ui, status);
+                }
                 let mut main = Rect::from_min_max(card_r.min, pos2(card_r.right(), status.top()));
                 // Live Server vpravo na karte (šírka sa dá ťahať)
                 if self.preview.is_some() {
@@ -3923,7 +4044,7 @@ impl eframe::App for App {
                     self.switched = now;
                 }
                 // karty otvorených súborov v riadku nad editorom (ako VS Code)
-                if !self.tabs.is_empty() {
+                if !self.tabs.is_empty() && self.get("showTabs").as_bool() != Some(false) {
                     let strip = Rect::from_min_size(main.min, vec2(main.width(), explorer::TABS_H));
                     self.tab_strip(&mut card_ui, strip, radius);
                     main.min.y += explorer::TABS_H;

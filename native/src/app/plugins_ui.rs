@@ -425,7 +425,7 @@ impl App {
         // $0 / $1 ako v úryvkoch
         let line_start = tab.text[..ba].rfind('\n').map(|i| i + 1).unwrap_or(0);
         let indent: String = tab.text[line_start..ba].chars().take_while(|c| *c == ' ' || *c == '\t').collect();
-        let (ins, stops) = crate::complete::expand(text, &indent, "    ");
+        let (ins, stops) = crate::complete::expand(text, &indent, &super::editing::tab_str());
         tab.text.replace_range(ba..bb, &ins);
         let c = a + stops.first().map(|s| s.1).unwrap_or(ins.chars().count());
         self.plug_cursor = Some(c);

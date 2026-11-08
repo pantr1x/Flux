@@ -123,6 +123,19 @@ impl App {
             "ai" => self.toggle_ai(),
             "new-file" => self.open_new_file(None),
             "new-folder" => self.start_new_item(true, None),
+            "reopen-tab" => self.reopen_tab(),
+            "settings-reset-ask" => self.ask_settings_reset(),
+            "layouts-open" => self.open_settings("windows", ctx),
+            "tools-open" => self.open_settings("running", ctx),
+            "tab-left" => self.move_tab(false),
+            "tab-right" => self.move_tab(true),
+            "glass-clear" => self.glass_step(true, ctx),
+            "glass-solid" => self.glass_step(false, ctx),
+            "settings-reset" => self.settings_reset(ctx),
+            "settings-export" => self.settings_export(),
+            "settings-import" => self.settings_import(ctx),
+            "settings-json" => self.settings_json(),
+            "layout-reset" => self.layout_reset(ctx),
             "view-explorer" => {
                 self.side_open = true;
                 self.side_view = "explorer".into();
@@ -196,6 +209,13 @@ impl App {
                     self.set("panelPos", json!(v), ctx);
                 } else if let Some(v) = id.strip_prefix("sidePos:") {
                     self.set("sidePos", json!(v), ctx);
+                } else if let Some(n) = id.strip_prefix("tool:") {
+                    if let Ok(i) = n.parse::<usize>() {
+                        self.ext_tool_run(i);
+                    }
+                } else if let Some(n) = id.strip_prefix("layout:") {
+                    let n = n.to_string();
+                    self.layout_apply(&n, ctx);
                 } else if let Some(p) = id.strip_prefix("trash:") {
                     match fsops::move_to_trash(p) {
                         Ok(_) => {
@@ -332,6 +352,52 @@ impl App {
                     picked = Some("theme".into());
                 }
             });
+            ui.menu_button(t("Window"), |ui| {
+                ui.set_min_width(260.0);
+                ui.set_max_width(260.0);
+                if item(ui, Some("rotate"), &t("Restore closed tab"), "Ctrl+Shift+T", false, !self.closed_tabs.is_empty(), &p).clicked() {
+                    picked = Some("reopen-tab".into());
+                }
+                sep(ui, &p);
+                caption(ui, &t("Window layouts"), &p);
+                for l in self.layouts() {
+                    let n = l["name"].as_str().unwrap_or("").to_string();
+                    if item(ui, Some("panel"), &n, "", false, true, &p).clicked() {
+                        picked = Some(format!("layout:{n}"));
+                    }
+                }
+                if item(ui, Some("save"), &t("Save window layout…"), "", false, true, &p).clicked() {
+                    picked = Some("layouts-open".into());
+                }
+                if item(ui, Some("refresh"), &t("Reset window layout"), "", false, true, &p).clicked() {
+                    picked = Some("layout-reset".into());
+                }
+            });
+            ui.menu_button(t("Tools"), |ui| {
+                ui.set_min_width(260.0);
+                ui.set_max_width(260.0);
+                for (i, (n, _)) in self.ext_tools().iter().enumerate() {
+                    if item(ui, Some("terminal"), n, "", false, true, &p).clicked() {
+                        picked = Some(format!("tool:{i}"));
+                    }
+                }
+                if item(ui, Some("settings"), &t("External tools…"), "", false, true, &p).clicked() {
+                    picked = Some("tools-open".into());
+                }
+                sep(ui, &p);
+                if item(ui, Some("upload"), &t("Export settings…"), "", false, true, &p).clicked() {
+                    picked = Some("settings-export".into());
+                }
+                if item(ui, Some("download"), &t("Import settings…"), "", false, true, &p).clicked() {
+                    picked = Some("settings-import".into());
+                }
+                if item(ui, Some("code"), &t("Edit settings as JSON"), "", false, true, &p).clicked() {
+                    picked = Some("settings-json".into());
+                }
+                if item(ui, Some("rotate"), &t("Reset all settings…"), "", false, true, &p).clicked() {
+                    picked = Some("settings-reset-ask".into());
+                }
+            });
             ui.menu_button(t("Run"), |ui| {
                 ui.set_min_width(250.0);
                 ui.set_max_width(250.0);
@@ -420,6 +486,7 @@ impl App {
             Some("add-files") => self.add_files(Some(base.clone())),
             Some("new-folder") => self.start_new_item(true, Some(base)),
             Some("rename") => self.renaming = Some((path.to_string(), widgets::file_name(path))),
+            Some("delete") if self.get("confirmDelete").as_bool() == Some(false) => self.act(&format!("trash:{path}"), &ctx),
             Some("delete") => {
                 self.ask = Some(Ask {
                     text: tf("Delete “{name}”? It goes to the Recycle Bin, so you can still restore it.", &[("name", &widgets::file_name(path))]),

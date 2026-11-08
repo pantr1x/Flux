@@ -784,6 +784,8 @@ impl App {
             }
         } else if f2 && self.workspace().as_deref() != Some(cur.as_str()) {
             self.renaming = Some((cur.clone(), widgets::file_name(&cur)));
+        } else if del && self.workspace().as_deref() != Some(cur.as_str()) && self.get("confirmDelete").as_bool() == Some(false) {
+            self.act(&format!("trash:{cur}"), ctx);
         } else if del && self.workspace().as_deref() != Some(cur.as_str()) {
             self.ask = Some(super::menus::Ask {
                 text: crate::i18n::tf("Delete “{name}”? It goes to the Recycle Bin, so you can still restore it.", &[("name", &widgets::file_name(&cur))]),
@@ -809,6 +811,8 @@ impl App {
         // spodná čiara pod kartami – pod aktívnou kartou sa preruší (karta „vteká“ do editora)
         let base_line = ui.painter().add(egui::Shape::Noop);
         let font = theme::ui(13.0);
+        let bold = self.get("tabBold").as_bool() == Some(true);
+        let big_dot = self.get("dirtyDot").as_str() == Some("large");
         let widths: Vec<f32> = self.tabs.iter().map(|t| (widgets::text_w(ui, &t.name(), font.clone()) + 64.0).clamp(90.0, 240.0)).collect();
         let total: f32 = widths.iter().sum();
         // posun kariet: koliesko nad riadkom; aktívna karta sa vždy ukáže
@@ -870,11 +874,16 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(clip));
             child.set_clip_rect(clip.intersect(tr));
             widgets::file_icon(&child, Rect::from_min_size(pos2(tr.left() + 12.0, cy - 8.0), vec2(16.0, 16.0)), &name);
-            widgets::text(&child, pos2(tr.left() + 34.0, cy), egui::Align2::LEFT_CENTER, &name, font.clone(), if sel { p.text } else if resp.hovered() { p.text2 } else { p.text3 }, w - 62.0);
+            let f = if sel && bold { theme::bold(13.0) } else { font.clone() };
+            widgets::text(&child, pos2(tr.left() + 34.0, cy), egui::Align2::LEFT_CENTER, &name, f, if sel { p.text } else if resp.hovered() { p.text2 } else { p.text3 }, w - 62.0);
+            // farba karty podľa druhu súboru (Visual Studio: Tab colorization)
+            if let Some(c) = self.tab_color(&name) {
+                painter.rect_filled(Rect::from_min_max(pos2(tr.left() + 10.0, tr.bottom() - 4.0), pos2(tr.right() - 10.0, tr.bottom() - 2.0)), CornerRadius::same(1), c);
+            }
             let cr = Rect::from_center_size(pos2(tr.right() - 17.0, cy), vec2(20.0, 20.0));
             let c = ui.interact(cr.intersect(clip), ui.id().with(("tabx", i)), Sense::click());
             if t.dirty() && !c.hovered() {
-                painter.circle_filled(cr.center(), 3.5, p.text2);
+                painter.circle_filled(cr.center(), if big_dot { 5.0 } else { 3.5 }, if big_dot { p.accent } else { p.text2 });
             } else {
                 if c.hovered() {
                     painter.rect_filled(cr, CornerRadius::same(5), p.active);
