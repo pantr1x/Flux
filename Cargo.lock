@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.74"
+version = "0.9.75"
 dependencies = [
  "alacritty_terminal",
  "arboard",
@@ -1711,6 +1711,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "syntect",
+ "two-face",
  "windows",
  "windows-sys 0.59.0",
  "winit",
@@ -6080,6 +6081,17 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "two-face"
+version = "0.5.2+bat-0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "915be7adc2ff6f4338acbf71f3eda0a146f46003b992a1669c674308610efdac"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "syntect",
+]
 
 [[package]]
 name = "type-map"

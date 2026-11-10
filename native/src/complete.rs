@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 mod data;
+mod more;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
@@ -40,7 +41,7 @@ impl Item {
 }
 
 pub fn ident_char(c: char, lang: &str) -> bool {
-    c.is_alphanumeric() || c == '_' || (c == '-' && matches!(lang, "css" | "scss" | "less" | "html" | "htm")) || (c == '$' && matches!(lang, "js" | "ts" | "php"))
+    c.is_alphanumeric() || c == '_' || (c == '-' && matches!(lang, "css" | "scss" | "less" | "html" | "htm" | "ps1" | "psm1")) || (c == '$' && matches!(lang, "js" | "ts" | "php"))
 }
 
 fn keywords(lang: &str) -> &'static [&'static str] {
@@ -80,7 +81,7 @@ fn keywords(lang: &str) -> &'static [&'static str] {
             "break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough", "for", "func", "go", "goto", "if", "import", "interface", "map", "package", "range", "return", "select",
             "struct", "switch", "type", "var", "true", "false", "nil",
         ],
-        _ => &[],
+        _ => more::keywords(lang),
     }
 }
 
@@ -114,7 +115,7 @@ fn builtins(lang: &str) -> &'static [&'static str] {
             "color", "background", "background-color", "margin", "padding", "border", "border-radius", "display", "flex", "grid", "position", "absolute", "relative", "width", "height", "font-size",
             "font-family", "font-weight", "text-align", "justify-content", "align-items", "gap", "box-shadow", "transition", "transform", "opacity", "cursor", "overflow", "z-index", "none", "auto",
         ],
-        _ => &[],
+        _ => more::builtins(lang),
     }
 }
 
@@ -805,7 +806,7 @@ fn snippets(lang: &str) -> &'static [(&'static str, &'static str, &'static str)]
             ("if", "if ${1:condition} {\n\t$0\n}", "if condition { }"),
             ("func", "func ${1:name}(${2}) {\n\t$0\n}", "func name() { }"),
         ],
-        _ => &[],
+        _ => more::snippets(lang),
     }
 }
 
@@ -821,7 +822,7 @@ fn callable(lang: &str, w: &str) -> bool {
         "java" => matches!(w, "println" | "print" | "nextLine" | "nextInt" | "length" | "size" | "add" | "get"),
         "cs" => matches!(w, "WriteLine" | "ReadLine" | "Write" | "Parse" | "ToString" | "Add"),
         "go" => matches!(w, "Println" | "Printf" | "Sprintf" | "len" | "append" | "make" | "Scan"),
-        _ => false,
+        _ => more::callable(lang, w),
     }
 }
 
@@ -1324,6 +1325,32 @@ mod tests {
         assert!(at("css", "a { background-color: ").iter().any(|i| i.label == "transparent"));
         assert!(trigger("css", &"a { color: ".chars().collect::<Vec<_>>()));
         assert!(at("css", "a { gri").iter().any(|i| i.label == "grid-template-columns"));
+    }
+
+    #[test]
+    fn complete_more_languages() {
+        // kľúčové slová, vstavané mená a úryvky pre jazyky z complete/more.rs
+        for (lang, text, want) in [
+            ("rb", "pu", "puts"),
+            ("php", "<?php\nfore", "foreach"),
+            ("lua", "loc", "local"),
+            ("zig", "comp", "comptime"),
+            ("r", "func", "function"),
+            ("jl", "printl", "println"),
+            ("pl", "ch", "chomp"),
+            ("sh", "ec", "echo"),
+            ("kt", "fu", "fun"),
+            ("swift", "gu", "guard"),
+            ("dart", "voi", "void"),
+            ("sql", "SEL", "SELECT"),
+            ("ps1", "Write-H", "Write-Host"),
+        ] {
+            let s = at(lang, text);
+            assert!(s.iter().any(|i| i.label == want), "{lang}: {want} missing in {:?}", s.iter().map(|i| &i.label).collect::<Vec<_>>());
+        }
+        // úryvok s telom
+        let s = at("lua", "func");
+        assert!(s.iter().any(|i| i.insert.as_deref().is_some_and(|b| b.contains("end"))), "{s:?}");
     }
 
     #[test]

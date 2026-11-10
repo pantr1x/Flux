@@ -2,6 +2,17 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.75
+
+**Languages**
+- **Code colors for many more languages.** TypeScript, Zig, Julia, TOML, Kotlin, Swift, Dart, Vue, Svelte, Dockerfile, CMake, GraphQL, Elixir, Nim, INI, `.env` and about a hundred more were shown as plain text before – now they are colored like the rest.
+- **Suggestions while typing for 13 more languages**: Ruby, PHP, Lua, Zig, R, Julia, Perl, shell scripts, PowerShell, Kotlin, Swift, Dart and SQL – keywords, built-in functions and ready-made snippets (`for`, `if`, `function`, `class`, `main`…, Tab jumps between the blanks).
+- **▶ Run for Dart, Swift and Kotlin scripts** (`.dart`, `.swift`, `.kts`) when the language is installed.
+
+**Memory**
+- TypeScript files use the light JavaScript coloring – the full TypeScript grammar took about 56 MB of memory on its own, this one about 9 MB.
+- The Live Server page inside Flux goes to sleep sooner when you are not looking at it (after 25 s without Flux in front, 10 s when covered by Settings) and wakes up when you come back.
+
 ## 0.9.74
 
 **Faster**

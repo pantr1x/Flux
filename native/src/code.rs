@@ -71,6 +71,44 @@ pub fn theme_of(id: &str) -> (bool, [u32; 16], bool) {
     gen::code_theme(id).or_else(|| crate::themes::code(id)).or_else(|| crate::plugins::theme(id)).or_else(|| gen::code_theme(gen::DEFAULT_THEME)).expect("default theme")
 }
 
+// sada jazykov: základ syntect + ďalšie jazyky z two-face (kontexty jazyka sa rozbalia až pri prvom použití)
+pub fn syntax_set() -> syntect::parsing::SyntaxSet {
+    two_face::syntax::extra_newlines()
+}
+
+// syntax podľa prípony (alebo mena súboru bez prípony); pár prípon, ktoré sada nepozná, má náhradu
+pub fn syntax_for<'a>(ps: &'a syntect::parsing::SyntaxSet, lang: &str) -> &'a syntect::parsing::SyntaxReference {
+    let l = lang.to_lowercase();
+    let alias: &[&str] = match l.as_str() {
+        "mjs" | "cjs" => &["js"],
+        "mts" | "cts" => &["ts"],
+        "pyw" => &["py"],
+        "hh" | "hxx" => &["hpp"],
+        "cc" | "cxx" => &["cpp"],
+        "htm" => &["html"],
+        "svelte" | "vue" => &["svelte", "vue", "html"],
+        "dockerfile" => &["Dockerfile"],
+        "makefile" | "mk" => &["Makefile", "make"],
+        "jsonc" | "json5" => &["json"],
+        "kts" => &["kt"],
+        "jsx" => &["tsx", "js"],
+        // PowerShell v tejto sade nie je – najbližšie je shell (komentáre #, reťazce, premenné $)
+        "ps1" | "psm1" | "psd1" => &["sh"],
+        "zsh" | "fish" | "bash" => &["sh"],
+        _ => &[],
+    };
+    // TypeScript: jeho gramatika v sade zaberie po načítaní ~56 MB pamäte, JavaScript ~4 MB – a kód farbí takmer rovnako
+    let first: &[&str] = if matches!(l.as_str(), "ts" | "mts" | "cts" | "tsx" | "jsx") { &["js"] } else { &[] };
+    first
+        .iter()
+        .copied()
+        .chain(std::iter::once(l.as_str()))
+        .chain(alias.iter().copied())
+        .find_map(|x| ps.find_syntax_by_extension(x).or_else(|| ps.find_syntax_by_name(x)))
+        .or_else(|| ps.find_syntax_by_name(lang))
+        .unwrap_or_else(|| ps.find_syntax_plain_text())
+}
+
 impl Code {
     pub fn new(id: &str) -> Self {
         let (dark, c, _italic) = theme_of(id);
@@ -106,7 +144,7 @@ impl Code {
     pub fn highlight(&self, ctx: &egui::Context, style: &egui::Style, code: &str, lang: &str) -> egui::text::LayoutJob {
         self.used.set(Some(std::time::Instant::now()));
         let mut s = self.settings.borrow_mut();
-        let set = s.get_or_insert_with(|| SyntectSettings { ps: syntect::parsing::SyntaxSet::load_defaults_newlines(), ts: self.theme_set() });
+        let set = s.get_or_insert_with(|| SyntectSettings { ps: syntax_set(), ts: self.theme_set() });
         egui_extras::syntax_highlighting::highlight_with(ctx, style, &self.theme, code, lang, set)
     }
 
@@ -145,9 +183,9 @@ impl Code {
         self.used.set(Some(std::time::Instant::now()));
         let t0 = std::time::Instant::now();
         let mut s = self.settings.borrow_mut();
-        let set = s.get_or_insert_with(|| SyntectSettings { ps: syntect::parsing::SyntaxSet::load_defaults_newlines(), ts: self.theme_set() });
+        let set = s.get_or_insert_with(|| SyntectSettings { ps: syntax_set(), ts: self.theme_set() });
         let ps = &set.ps;
-        let syntax = ps.find_syntax_by_name(&hl.lang).or_else(|| ps.find_syntax_by_extension(&hl.lang)).unwrap_or_else(|| ps.find_syntax_plain_text());
+        let syntax = syntax_for(ps, &hl.lang);
         let hi = Highlighter::new(&self.flux_theme);
         let fg = self.flux_theme.settings.foreground.map(|c| egui::Color32::from_rgb(c.r, c.g, c.b)).unwrap_or(egui::Color32::GRAY);
         let mut i = hl.done();
@@ -252,5 +290,24 @@ mod tests {
         assert!(code.ensure(&mut h, 40, std::time::Duration::from_secs(60)));
         assert!(h.done() > 40 && h.done() < 100, "only the visible window: {}", h.done());
         assert_eq!(h.line_text(3), "x3 = 3\n");
+    }
+}
+
+#[cfg(test)]
+mod lang_tests {
+    // každý jazyk, ktorý Flux vie spustiť alebo vytvoriť, musí mať farbenie (nie obyčajný text)
+    #[test]
+    fn hl_languages_have_syntax() {
+        let ps = super::syntax_set();
+        let mut missing = vec![];
+        for ext in [
+            "py", "js", "mjs", "jsx", "ts", "tsx", "html", "css", "scss", "json", "md", "c", "h", "cpp", "hpp", "cs", "java", "go", "rs", "rb", "php", "lua", "zig", "r", "jl", "pl", "sh", "ps1", "bat",
+            "kt", "swift", "dart", "sql", "toml", "yaml", "yml", "xml", "ini", "vue", "svelte", "dockerfile", "makefile", "diff", "tex", "hs", "scala", "ex", "erl", "clj", "nim", "cmake", "graphql",
+        ] {
+            if super::syntax_for(&ps, ext).name == "Plain Text" {
+                missing.push(ext);
+            }
+        }
+        assert!(missing.is_empty(), "no syntax for: {missing:?}");
     }
 }

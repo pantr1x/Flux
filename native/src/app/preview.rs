@@ -292,7 +292,7 @@ impl App {
     pub(super) fn sync_preview(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         let covered = self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
         // stránka (WebView2 / WebKit) berie desiatky až stovky MB: keď ju nevidno, zavrie sa a po návrate sa otvorí znova –
-        // zbalené okno hneď, Flux bez fokusu po 45 s, zakrytá stránka (nastavenia…) po 20 s; karty a adresy ostanú
+        // zbalené okno hneď, Flux bez fokusu po 25 s, zakrytá stránka (nastavenia…) po 10 s; karty a adresy ostanú
         let (now, focused, minimized, input) = ctx.input(|i| (i.time, i.viewport().focused.unwrap_or(true), i.viewport().minimized.unwrap_or(false), !i.events.is_empty() || i.pointer.is_moving()));
         if let Some(pv) = self.preview.as_mut() {
             // „používaný“ = má fokus alebo doň ide myš/klávesnica (niektoré prostredia fokus nehlásia spoľahlivo)
@@ -304,8 +304,8 @@ impl App {
             } else if pv.away_since.is_none() {
                 pv.away_since = Some(now);
             }
-            let idle = now - pv.active_at > 45.0;
-            pv.asleep = minimized || idle || pv.away_since.is_some_and(|t| now - t > 20.0);
+            let idle = now - pv.active_at > 25.0;
+            pv.asleep = minimized || idle || pv.away_since.is_some_and(|t| now - t > 10.0);
             if (covered || !focused) && !pv.asleep {
                 // bez fokusu sa nekreslí – zobudiť sa, aby sa stránka po limite naozaj zavrela
                 ctx.request_repaint_after(std::time::Duration::from_secs(5));

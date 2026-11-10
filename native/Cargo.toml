@@ -1,6 +1,6 @@
 [package]
 name = "flux-native"
-version = "0.9.74"
+version = "0.9.75"
 edition = "2021"
 license = "MIT"
 description = "Flux – natívna verzia v Ruste (egui), bez Chromia"
@@ -20,6 +20,8 @@ dirs = "6"
 eframe = { version = "0.36", default-features = false, features = ["glow", "wgpu", "default_fonts", "x11", "wayland"] }
 egui_extras = { version = "0.36", features = ["syntect", "svg"] }
 syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }
+# ďalšie jazyky pre farbenie kódu (TypeScript, Zig, Julia, TOML, Kotlin, Swift…) – sada z programu bat
+two-face = { version = "0.5", default-features = false, features = ["syntect-fancy"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp", "gif"] }
 alacritty_terminal = "0.26"
 sha2 = "0.10"
