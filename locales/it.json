@@ -550,6 +550,7 @@
  "Link to a repository": "Link a un repository",
  "Live Server": "Live Server",
  "Live Server is coming to Flux Native soon": "Live Server arriverà presto in Flux Native",
+ "Live Server is off – keep editing, press Live Server to start it again": "Live Server è spento – continua a modificare, premi Live Server per riavviarlo",
  "Live Server is open in your browser": "Live Server è aperto nel browser",
  "Live Server: start": "Live Server: avvia",
  "Live Server: start / stop": "Live Server: avvia / ferma",

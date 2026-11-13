@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.79
+
+**Fixes**
+- **Your open files come back** after an update or a restart – the same tabs, with the one you were on still active.
+- **The blurred window works right after an update or start** – before, you had to switch the window background to something else and back.
+- **Stopping Live Server tells you** it is off and takes you back to your file, also when the page was open in your browser.
+
 ## 0.9.78
 
 **Less memory**

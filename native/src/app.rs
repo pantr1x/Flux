@@ -327,6 +327,9 @@ pub struct App {
     watcher: Option<notify::RecommendedWatcher>,
     test: Vec<(f32, String)>,
     started: Instant,
+    glass_again: u8,                    // rozmazanie znova po zobrazení okna (pri štarte okno ešte nie je ukázané)
+    tabs_sig: String,                   // naposledy uložené otvorené súbory (openTabs)
+    tabs_at: f64,
     cursor: (usize, usize),
     scroll_to: Option<f32>,
     hover_src: Option<(String, usize)>, // súbor (kľúč) a riadok, nad ktorým je myš v Live Serveri
@@ -489,6 +492,9 @@ impl App {
             watcher: None,
             test: vec![],
             started: Instant::now(),
+            glass_again: 0,
+            tabs_sig: String::new(),
+            tabs_at: 0.0,
             cursor: (1, 1),
             scroll_to: None,
             hover_src: None,
@@ -596,6 +602,7 @@ impl App {
         if let Some(last) = app.core.setting("lastFolder").as_str().map(String::from) {
             app.open_folder(&last);
         }
+        app.restore_tabs();
         // súhrny projektov (jazyky, počet súborov): uložené z minula; nanovo sa prečíta len otvorený projekt
         // a projekty bez záznamu (inak by štart čítal všetky súbory všetkých projektov)
         if let Some(m) = std::fs::read_to_string(summaries_file()).ok().and_then(|t| serde_json::from_str::<serde_json::Map<String, Value>>(&t).ok()) {
@@ -629,6 +636,46 @@ impl App {
             app.open_external(&f);
         }
         app
+    }
+
+    // otvorené súbory (settings.openTabs = {files, active}) – po reštarte a aktualizácii sa otvoria znova
+    fn save_tabs(&mut self, now: bool) {
+        let t = self.started.elapsed().as_secs_f64();
+        if !now && t - self.tabs_at < 2.0 {
+            return;
+        }
+        self.tabs_at = t;
+        if self.started.elapsed().as_secs_f32() < 3.0 && !now {
+            return; // kým sa karty obnovujú, nič neprepísať
+        }
+        let files: Vec<String> = self.tabs.iter().map(|t| t.path.clone()).collect();
+        let active = self.tabs.get(self.active).map(|t| t.path.clone()).unwrap_or_default();
+        let sig = format!("{}|{active}", files.join("\n"));
+        if sig == self.tabs_sig {
+            return;
+        }
+        self.tabs_sig = sig;
+        self.update_settings(|o| {
+            o.insert("openTabs".into(), json!({ "files": files, "active": active }));
+        });
+    }
+
+    fn restore_tabs(&mut self) {
+        let v = self.core.setting("openTabs");
+        let files: Vec<String> = v["files"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+        let active = v["active"].as_str().unwrap_or("").to_string();
+        // tichý štart na pozadí (most MCP) karty neotvára, aby ich neprepísal
+        if files.is_empty() || std::env::args().any(|a| a == "--background") && !std::env::args().any(|a| a == "--updated") {
+            return;
+        }
+        let start = self.start;
+        for f in files.iter().take(30).filter(|f| Path::new(f.as_str()).is_file()) {
+            self.open_file(f);
+        }
+        if let Some(i) = self.tabs.iter().position(|t| t.path == active) {
+            self.activate(i);
+        }
+        self.start = start && self.tabs.is_empty();
     }
 
     // súbor alebo priečinok zvonku (Prieskumník „Otvoriť vo Fluxe“, ďalšie spustenie)
@@ -3772,6 +3819,7 @@ impl eframe::App for App {
                 o.insert("codeTheme".into(), json!(prev));
             });
         }
+        self.save_tabs(true);
         crate::boot::closed();
     }
 
@@ -3800,6 +3848,19 @@ impl eframe::App for App {
         if self.theme_store.preview.is_some() && self.settings.is_none() {
             self.preview_cancel(ctx);
         }
+        // okno sa ukáže až po prvom snímku (a pri štarte po aktualizácii môže byť zbalené) – rozmazanie nastavené
+        // v App::new si systém nemusí všimnúť, preto ešte raz po 1 s a po 4 s
+        let up = self.started.elapsed().as_secs_f32();
+        if (self.glass_again == 0 && up > 1.0) || (self.glass_again == 1 && up > 4.0) {
+            self.glass_again += 1;
+            if self.get("material").as_str() == Some("blur") {
+                self.glass_apply = true;
+            }
+        }
+        if self.glass_again < 2 {
+            ctx.request_repaint_after(Duration::from_millis(500));
+        }
+        self.save_tabs(false);
         if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
             let on = self.get("material").as_str() == Some("blur");
             self.native_blur = crate::glass::blur(&*frame, on) && on;

@@ -150,8 +150,17 @@ impl App {
     }
 
     pub(super) fn close_preview(&mut self) {
+        let was = self.server.is_some();
         self.preview = None;
         self.server = None;
+        // vypnutý Live Server: oznámenie a späť na súbor (stránka v prehliadači sa už neobnovuje)
+        if was {
+            if !self.tabs.is_empty() {
+                self.home = false;
+                self.start = false;
+            }
+            self.note(t("Live Server is off – keep editing, press Live Server to start it again"));
+        }
     }
 
     // lišta panela + miesto pre stránku; rect = celý panel na karte

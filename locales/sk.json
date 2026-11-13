@@ -578,6 +578,7 @@
  "Link to a repository": "Odkaz na repozitár",
  "Live Server": "Live Server",
  "Live Server is coming to Flux Native soon": "Live Server čoskoro príde aj do Flux Native",
+ "Live Server is off – keep editing, press Live Server to start it again": "Live Server je vypnutý – pokojne pracuj ďalej, znova ho zapneš tlačidlom Live Server",
  "Live Server is open in your browser": "Live Server je otvorený v prehliadači",
  "Live Server: start": "Live Server: spustiť",
  "Live Server: start / stop": "Live Server: spustiť / zastaviť",
