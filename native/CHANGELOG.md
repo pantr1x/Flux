@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.80
+
+**Look**
+- **Clean window corners on KDE**: the blur now stays inside the rounded window, so the corners no longer show light, half see-through bits.
+- **The same color all around the editor** in a see-through window – the shadow under the editor made the edge on the right and at the bottom darker than at the top and left.
+- The small accent line of the active file tab now sits inside the tab instead of on its edge.
+
 ## 0.9.79
 
 **Fixes**

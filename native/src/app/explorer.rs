@@ -994,8 +994,9 @@ impl App {
                 // prekrytie spodnej hrany rámika výplňou editora nejde (priesvitná by sa zdvojila) – spodok rámika sa zakryje
                 // tým, že čiara pod kartami sa pod aktívnou kartou preruší
                 // malý akcentový prúžok navrchu
-                let bar = Rect::from_center_size(pos2(ar.center().x, ar.top() + 1.5), vec2((ar.width() * 0.35).min(36.0), 3.0));
-                painter.rect_filled(bar, CornerRadius::same(2), p.accent);
+                // vnútri karty pod jej horným okrajom (navrchu prekrýval rámik a trčal nad kartu)
+                let bar = Rect::from_center_size(pos2(ar.center().x, ar.top() + 3.5), vec2((ar.width() * 0.35).min(36.0), 2.0));
+                painter.rect_filled(bar, CornerRadius::same(1), p.accent);
                 active_x = Some((ar.left(), ar.right()));
             } else if hk > 0.0 {
                 let pill = Rect::from_min_max(pos2(tr.left(), tr.top() + 1.0), pos2(tr.right(), tr.bottom() - 4.0));

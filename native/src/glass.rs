@@ -42,6 +42,29 @@ pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
 // _KDE_NET_WM_BLUR_BEHIND_REGION (prázdna = celé okno). GNOME a iné to nevedia – okno ostane len priehľadné.
 #[cfg(target_os = "linux")]
 pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
+    blur_shaped(w, on, &[])
+}
+
+// oblasť rozmazania so zaoblenými rohmi: obdĺžniky (x, y, šírka, výška) po riadkoch v rohoch + stred.
+// Prázdna oblasť = celé okno – vtedy KWin rozmazal aj priehľadné rohy mimo zaobleného pozadia (svetlé kúsky v rohoch).
+pub fn round_region(w: u32, h: u32, r: u32) -> Vec<u32> {
+    if r == 0 || w <= 2 * r || h <= 2 * r {
+        return vec![0, 0, w, h];
+    }
+    let mut v = vec![0, r, w, h - 2 * r];
+    let rf = r as f32;
+    for i in 0..r {
+        let dy = rf - i as f32 - 0.5;
+        let inset = (rf - (rf * rf - dy * dy).max(0.0).sqrt()).round() as u32;
+        let rw = w - 2 * inset;
+        v.extend_from_slice(&[inset, i, rw, 1]);
+        v.extend_from_slice(&[inset, h - 1 - i, rw, 1]);
+    }
+    v
+}
+
+#[cfg(target_os = "linux")]
+pub fn blur_shaped(w: &impl raw_window_handle::HasWindowHandle, on: bool, region: &[u32]) -> bool {
     use raw_window_handle::RawWindowHandle;
     use x11rb::connection::Connection;
     use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, PropMode};
@@ -56,7 +79,7 @@ pub fn blur(w: &impl raw_window_handle::HasWindowHandle, on: bool) -> bool {
         let (conn, _) = x11rb::connect(None).ok()?;
         let atom = conn.intern_atom(false, b"_KDE_NET_WM_BLUR_BEHIND_REGION").ok()?.reply().ok()?.atom;
         if on {
-            conn.change_property32(PropMode::REPLACE, xid, atom, AtomEnum::CARDINAL, &[]).ok()?;
+            conn.change_property32(PropMode::REPLACE, xid, atom, AtomEnum::CARDINAL, region).ok()?;
         } else {
             conn.delete_property(xid, atom).ok()?;
         }
@@ -87,6 +110,25 @@ pub fn blur_supported() -> bool {
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn blur<T>(_w: &T, _on: bool) -> bool {
     false
+}
+
+// Windows zaobľuje rozmazanie sám (DWM), tam stačí obyčajné
+#[cfg(not(target_os = "linux"))]
+pub fn blur_shaped<T: raw_window_handle::HasWindowHandle>(w: &T, on: bool, _region: &[u32]) -> bool {
+    blur(w, on)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn glass_round_region() {
+        let v = super::round_region(100, 50, 8);
+        assert_eq!(v.len(), 4 + 8 * 2 * 4);
+        assert_eq!(&v[..4], &[0, 8, 100, 34]);
+        // prvý riadok je najužší, posledný v rohu skoro celý
+        assert!(v[4] >= 4 && v[4 + 15 * 4] == 0);
+        assert_eq!(super::round_region(10, 10, 8), vec![0, 0, 10, 10]);
+    }
 }
 
 // Priehľadné okno: Windows pod ním kreslí vlastný rám a tlačidlá − □ ×, ktoré presvitali cez lištu Fluxu

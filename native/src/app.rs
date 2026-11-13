@@ -327,7 +327,8 @@ pub struct App {
     watcher: Option<notify::RecommendedWatcher>,
     test: Vec<(f32, String)>,
     started: Instant,
-    glass_again: u8,                    // rozmazanie znova po zobrazení okna (pri štarte okno ešte nie je ukázané)
+    glass_again: u8,
+    blur_shape: (u32, u32, u32),        // veľkosť okna (px) a polomer, pre ktoré je nastavená oblasť rozmazania                    // rozmazanie znova po zobrazení okna (pri štarte okno ešte nie je ukázané)
     tabs_sig: String,                   // naposledy uložené otvorené súbory (openTabs)
     tabs_at: f64,
     cursor: (usize, usize),
@@ -493,6 +494,7 @@ impl App {
             test: vec![],
             started: Instant::now(),
             glass_again: 0,
+            blur_shape: (0, 0, 0),
             tabs_sig: String::new(),
             tabs_at: 0.0,
             cursor: (1, 1),
@@ -3864,6 +3866,7 @@ impl eframe::App for App {
         if std::mem::take(&mut self.glass_apply) && crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
             let on = self.get("material").as_str() == Some("blur");
             self.native_blur = crate::glass::blur(&*frame, on) && on;
+            self.blur_shape = (0, 0, 0);
             self.wall_at = -100.0; // zdroj tapety hneď znova (rozmazaná tapeta namiesto systému)
             self.apply_look(ctx);
         }
@@ -3884,6 +3887,15 @@ impl eframe::App for App {
         }
         // priehľadné okno: pozadie ako jeden zaoblený obdĺžnik (rohy okna oblé ako vo Windows 11), panely bez výplne
         self.rounded = self.round_corners(ctx);
+        // KDE: rozmazanie len pod zaobleným pozadím (nie v rohoch); mení sa s veľkosťou okna a maximalizovaním
+        if self.native_blur && cfg!(target_os = "linux") {
+            let ppp = ctx.pixels_per_point();
+            let sz = ctx.input(|i| i.viewport().inner_rect).map(|r| ((r.width() * ppp).round() as u32, (r.height() * ppp).round() as u32, if self.rounded { (8.0 * ppp).round() as u32 } else { 0 }));
+            if let Some(key) = sz.filter(|k| *k != self.blur_shape) {
+                self.blur_shape = key;
+                crate::glass::blur_shaped(&*frame, true, &crate::glass::round_region(key.0, key.1, key.2));
+            }
+        }
         if self.rounded {
             ctx.layer_painter(egui::LayerId::background()).rect_filled(ctx.content_rect(), CornerRadius::same(8), self.pal.base);
         }
@@ -4095,7 +4107,10 @@ impl eframe::App for App {
                 self.top_bar(ui, top);
                 // jedna zaoblená karta: editor/stránka projektu, Výstup/Terminál, stavový riadok (#card)
                 let card_r = Rect::from_min_max(pos2(full.left() + lpad, top.bottom()), pos2(full.right() - rpad, full.bottom() - GAP));
-                ui.painter().add(egui::Shadow { offset: [0, 8], blur: 30, spread: 0, color: Color32::from_black_alpha(if p.dark { 110 } else { 25 }) }.as_shape(card_r, CornerRadius::same(radius)));
+                // tieň len v nepriehľadnom okne – v priehľadnom stmavil medzeru vpravo a dole inak než hore a vľavo
+                if !crate::TRANSPARENT.load(std::sync::atomic::Ordering::Relaxed) {
+                    ui.painter().add(egui::Shadow { offset: [0, 8], blur: 30, spread: 0, color: Color32::from_black_alpha(if p.dark { 110 } else { 25 }) }.as_shape(card_r, CornerRadius::same(radius)));
+                }
                 // pod kartou rozmazaná tapeta (ako backdrop-filter) – priesvitná karta potom neruší textom tapety
                 self.wall.paint_blurred(ui.painter(), card_r, radius);
                 ui.painter().rect_filled(card_r, CornerRadius::same(radius), p.card);
