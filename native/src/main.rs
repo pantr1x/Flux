@@ -208,6 +208,7 @@ pub fn report(msg: &str) {
 }
 
 fn main() -> eframe::Result {
+    mem::limit_arenas();
     // most pre Claude Desktop: stdin/stdout ↔ MCP server bežiaceho Fluxu, bez okna
     // CI: rozdiel oproti predošlej zostave (update.rs)
     let args: Vec<String> = std::env::args().collect();

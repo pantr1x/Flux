@@ -290,7 +290,15 @@ impl App {
     // vložený WebView2: vytvorí ho, drží ho na mieste panela a skryje, keď je nad ním niečo z egui
     #[allow(unused_variables)]
     pub(super) fn sync_preview(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
-        let covered = self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || self.color_pick.is_some() || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
+        // výber farby zakrýva stránku len vtedy, keď je naozaj nad ňou (inak náhľad ukazuje farbu naživo)
+        let pick_over = self.color_pick.is_some() && match (self.color_pick_rect, self.preview.as_ref().and_then(|p| p.body)) {
+            (Some(a), Some(b)) => a.intersects(b),
+            _ => true,
+        };
+        if self.color_pick.is_none() {
+            self.color_pick_rect = None;
+        }
+        let covered = self.new_file.is_some() || self.new_project.is_some() || self.whats_new.is_some() || pick_over || self.settings.is_some() || self.palette.is_some() || self.ask.is_some() || self.tour.is_some() || self.intro.is_some() || self.start || egui::Popup::is_any_open(ctx);
         // stránka (WebView2 / WebKit) berie desiatky až stovky MB: keď ju nevidno, zavrie sa a po návrate sa otvorí znova –
         // zbalené okno hneď, Flux bez fokusu po 25 s, zakrytá stránka (nastavenia…) po 10 s; karty a adresy ostanú
         let (now, focused, minimized, input) = ctx.input(|i| (i.time, i.viewport().focused.unwrap_or(true), i.viewport().minimized.unwrap_or(false), !i.events.is_empty() || i.pointer.is_moving()));

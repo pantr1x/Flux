@@ -479,6 +479,7 @@ impl App {
             });
         });
         let now = ctx.input(|i| i.time);
+        self.color_pick_rect = Some(area.response.rect);
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) || (now - opened > 0.25 && area.response.clicked_elsewhere()) {
             close = true;
         }

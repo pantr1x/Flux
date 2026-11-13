@@ -2,6 +2,15 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.78
+
+**Less memory**
+- **Blurred background uses less memory**: when Flux draws the blur itself, it keeps only a small blurred copy of the wallpaper, not the full picture (about 5–8 MB less).
+- **On Linux Flux gives freed memory back to the system** (after loading the wallpaper and while it is in the background) and uses fewer memory pools.
+
+**Fixes**
+- **Live Server preview stays visible while you pick a color** in the code – it hides only when the color window is over it, so you see the new color on the page right away.
+
 ## 0.9.77
 
 **Shortcuts**

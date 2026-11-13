@@ -386,6 +386,7 @@ pub struct App {
     sug_again: bool, // po vložení atribútu (class="") hneď ponúknuť jeho hodnoty
     sug_rect: Option<Rect>,
     link_hover: Option<(String, Instant)>, // cesta/odkaz pod myšou a odkedy (náhľad po 350 ms)
+    color_pick_rect: Option<Rect>,         // kde je okno výberu farby (Live náhľad sa skryje, len keď ho prekrýva)
     color_pick: Option<ColorPick>,         // otvorený výber farby pri štvorčeku v kóde // kde je okno návrhov (klik doň vezme editoru fokus skôr, než sa spracuje)
     plug: plugins_ui::PlugState,
     imgs: imageview::Images, // obrázky (karty a náhľady ciest)
@@ -549,6 +550,7 @@ impl App {
             sug_rect: None,
             link_hover: None,
             color_pick: None,
+            color_pick_rect: None,
             plug: Default::default(),
             imgs: Default::default(),
             plug_run: vec![],

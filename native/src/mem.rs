@@ -38,8 +38,40 @@ fn trim() {
     }
 }
 
-#[cfg(not(windows))]
+// Linux (glibc): malloc si uvoľnenú pamäť nechá – malloc_trim ju vráti systému (dekódovaná tapeta, veľké súbory…)
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn trim() {
+    release_heap();
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+pub fn release_heap() {
+    extern "C" {
+        fn malloc_trim(pad: usize) -> i32;
+    }
+    unsafe {
+        malloc_trim(0);
+    }
+}
+
+#[cfg(not(any(windows, all(target_os = "linux", target_env = "gnu"))))]
 fn trim() {}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+pub fn release_heap() {}
+
+// glibc robí pre každé vlákno vlastnú arénu (až 8 × jadrá, každá si drží uvoľnenú pamäť) – dve stačia
+pub fn limit_arenas() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        extern "C" {
+            fn mallopt(param: i32, value: i32) -> i32;
+        }
+        unsafe {
+            mallopt(-8, 2); // M_ARENA_MAX
+        }
+    }
+}
 
 pub fn trim_now() {
     trim();

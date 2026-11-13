@@ -36,6 +36,9 @@ pub struct Wall {
     resume: Arc<std::sync::atomic::AtomicI64>,
     released: Arc<AtomicBool>,
     pub blur_all: bool, // celé pozadie z rozmazanej kópie („See-through – blurred“, keď to systém nevie)
+    // pri blur_all sa ostrá tapeta do grafiky vôbec nenahrá (~8 MB pri 1920 px) – stačí malá rozmazaná kópia
+    sharp_skipped: bool,
+    size: [usize; 2],
 }
 
 // ---------- zmenšená kópia živej tapety (userData/wallcache) ----------
@@ -173,6 +176,7 @@ impl Wall {
         self.tex = None;
         self.blur = None;
         self.lum = None;
+        self.sharp_skipped = false;
         let Some(src) = src else { return };
         // nový slot – oneskorená snímka starého zdroja sa už nezobrazí
         self.pending = Arc::new(Mutex::new(None));
@@ -194,6 +198,7 @@ impl Wall {
                     *slot.lock().unwrap() = Some(l);
                     ctx.request_repaint();
                 }
+                crate::mem::release_heap(); // dekódovaný obrázok (4K = 33 MB) vrátiť systému
             }
             Src::Video(path, preview) | Src::Still(path, preview) => {
                 let once = matches!(src_kind, Kind::Still);
@@ -228,12 +233,21 @@ impl Wall {
     // vráti true, keď sa práve zmenil jas tapety (treba prepočítať farby panelov)
     pub fn paint(&mut self, ctx: &egui::Context) -> bool {
         let mut fresh = false;
+        // rozmazanie vypnuté, ale ostrá tapeta nebola nahraná → načítať znova
+        if !self.blur_all && self.sharp_skipped {
+            self.sharp_skipped = false;
+            self.source = None;
+        }
         if let Some(l) = self.pending.lock().unwrap().take() {
-            match &mut self.tex {
+            self.size = l.img.size;
+            if self.blur_all && (l.blur.is_some() || self.blur.is_some()) {
+                self.tex = None;
+                self.sharp_skipped = true;
+            } else { match &mut self.tex {
                 // rovnaká veľkosť (snímky videa) → len prepísať obsah, bez novej textúry v ovládači
                 Some(t) if t.size() == l.img.size => t.set_partial([0, 0], l.img, TextureOptions::LINEAR),
                 _ => self.tex = Some(ctx.load_texture("flux-wall", l.img, TextureOptions::LINEAR)),
-            }
+            } }
             if let Some(b) = l.blur {
                 match &mut self.blur {
                     Some(t) if t.size() == b.size => t.set(b, TextureOptions::LINEAR),
@@ -247,13 +261,17 @@ impl Wall {
                 }
             }
         }
-        let Some(tex) = &self.tex else {
+        let Some(id) = (match (&self.tex, &self.blur, self.blur_all) {
+            (_, Some(b), true) => Some(b.id()),
+            (Some(t), _, _) => Some(t.id()),
+            _ => None,
+        }) else {
             self.img_rect = None;
             return fresh;
         };
         let screen = ctx.content_rect();
         let (inner, monitor) = ctx.input(|i| (i.viewport().inner_rect, i.viewport().monitor_size));
-        let [iw, ih] = tex.size();
+        let [iw, ih] = self.size;
         let (iw, ih) = (iw as f32, ih as f32);
         // oblasť monitora v súradniciach okna; bez údajov o polohe pokryje len okno
         let area = match (inner, monitor) {
@@ -265,10 +283,6 @@ impl Wall {
         self.img_rect = Some(img_rect);
         let painter = ctx.layer_painter(egui::LayerId::background());
         // „rozmazané“, keď ho nevie urobiť systém: celá tapeta z rozmazanej kópie
-        let id = match (&self.blur, self.blur_all) {
-            (Some(b), true) => b.id(),
-            _ => tex.id(),
-        };
         painter.image(id, img_rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
         fresh
     }
