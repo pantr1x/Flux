@@ -34,11 +34,12 @@ struct S {
     touching: bool,           // prsty sa práve hýbu
     last_touch: f64,          // čas posledného posunu prstami
     touch_vel: f32,           // rýchlosť prstov (px/s, vyhladená)
+    glide: f32,               // násobok dobehu (Plynulosť posúvania, 1 = 100 %)
 }
 
 impl Default for S {
     fn default() -> Self {
-        S { pos: 0.0, vel: 0.0, mode: Mode::Idle, rect: Rect::NOTHING, max: 0.0, last: 0.0, touching: false, last_touch: 0.0, touch_vel: 0.0 }
+        S { pos: 0.0, vel: 0.0, mode: Mode::Idle, rect: Rect::NOTHING, max: 0.0, last: 0.0, touching: false, last_touch: 0.0, touch_vel: 0.0, glide: 1.0 }
     }
 }
 
@@ -57,8 +58,9 @@ impl S {
         if self.vel * px < 0.0 || self.mode == Mode::Idle {
             self.vel = 0.0;
         }
-        self.vel = (self.vel + px / TAU_WHEEL).clamp(-MAX_VEL, MAX_VEL);
-        self.mode = Mode::Fling(TAU_WHEEL);
+        let tau = TAU_WHEEL * self.glide;
+        self.vel = (self.vel + px / tau).clamp(-MAX_VEL, MAX_VEL);
+        self.mode = Mode::Fling(tau);
     }
 
     // posun prstami (px > 0 = posun nadol): hneď a presne, rýchlosť sa len zaznamená
@@ -89,7 +91,7 @@ impl S {
             self.touching = false;
             if self.touch_vel.abs() > TOUCH_MIN_FLING {
                 self.vel = self.touch_vel.clamp(-MAX_VEL, MAX_VEL);
-                self.mode = Mode::Fling(TAU_TOUCH);
+                self.mode = Mode::Fling(TAU_TOUCH * self.glide);
             }
         }
         match self.mode {
@@ -135,6 +137,7 @@ impl S {
 pub struct Smooth {
     map: HashMap<Id, S>,
     pub on: bool,
+    pub glide: f32, // Plynulosť: násobok dobehu (0.4–2.5)
     clock: Instant,
     // vstup z tejto snímky (raw_input_hook): zúbky kolieska a posun prstami, v bodoch
     notches: f32,
@@ -145,7 +148,7 @@ pub struct Smooth {
 
 impl Default for Smooth {
     fn default() -> Self {
-        Smooth { map: HashMap::new(), on: false, clock: Instant::now(), notches: 0.0, touch: 0.0, touch_at: None }
+        Smooth { map: HashMap::new(), on: false, glide: 1.0, clock: Instant::now(), notches: 0.0, touch: 0.0, touch_at: None }
     }
 }
 
@@ -189,7 +192,9 @@ impl Smooth {
     pub fn begin(&mut self, ctx: &egui::Context, id: Id, layer: egui::LayerId, jump: Option<f32>) -> Option<f32> {
         let now = self.now();
         let on = self.on;
+        let glide = self.glide;
         let s = self.map.entry(id).or_default();
+        s.glide = glide;
         if let Some(j) = jump {
             if !on {
                 s.mode = Mode::Idle;

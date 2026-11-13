@@ -32,6 +32,12 @@ for (const f of rsFiles('native/src')) {
   // stránky nastavení zo zásoby riadkov: ("Display", pick(&[…]))
   for (const m of src.matchAll(/\(\s*"([A-Z][^"]*)",\s*pick\(/g)) keys.add(m[1]);
   // ponuka nastavení: ("id", "ikona", "Názov", "Skupina")
+  // klávesové skratky (keymap.rs): ("id", "Skupina", "Názov", "Ctrl+X") a pevné ("Názov", "Ctrl+X"), skupiny GROUPS
+  if (f.endsWith('keymap.rs')) {
+    for (const m of src.matchAll(/\("[\w-]+", "(\w+)", "([^"]+)", "[^"]*"\)/g)) { keys.add(m[1]); keys.add(m[2]); }
+    for (const m of src.matchAll(/^\s*\("([^"]+)", "[^"]+"\),$/gm)) keys.add(m[1]);
+    keys.add('Plugins'); keys.add('Editor');
+  }
   if (f.endsWith('prefs.rs')) for (const m of src.matchAll(/\("[\w-]*", "[\w-]*", "([^"]+)", "([^"]*)"\)/g)) for (const v of m.slice(1)) if (v) keys.add(v);
 }
 // pluginScan.js: [/regex/, 'block' | 'warn', 'Popis nálezu']

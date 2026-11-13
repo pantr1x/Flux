@@ -19,6 +19,7 @@ mod imageview;
 mod explorer;
 mod workbench;
 mod themestore;
+mod keymap;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -307,6 +308,7 @@ pub struct App {
     theme_store: themestore::ThemeStore, // obchod s témami (Nastavenia → Téma)                  // súbor témy sa zmenil – znova použiť tému
     side_drag: Option<f32>,             // ťahanie okraja bočného panela (šírka pri začiatku)
     layout_name: String,                // pole na meno nového rozloženia okna
+    key_rec: Option<String>,            // Nastavenia → Klávesnica: príkaz, ktorému sa nahráva nová skratka
     tool_new: (String, String),         // pole na nový externý nástroj (meno, príkaz)
     ed_drag: Option<(Rect, bool)>,      // ťahanie výberu v editore: viditeľná plocha, vodorovné posúvanie
     real_ptr: Option<egui::Pos2>,       // skutočná poloha myši (egui pri ťahaní výberu dostáva orezanú)
@@ -466,6 +468,7 @@ impl App {
             theme_store: Default::default(),
             side_drag: None,
             layout_name: String::new(),
+            key_rec: None,
             tool_new: (String::new(), String::new()),
             ed_drag: None,
             real_ptr: None,
@@ -1113,6 +1116,7 @@ impl App {
         // plynulé skrolovanie závisí len od svojho prepínača (a šetrenia pamäte), nie od animácií prechodov
         let inertia = self.get("inertia").as_bool() != Some(false) && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true));
         self.smooth.on = inertia;
+        self.smooth.glide = (self.get("scrollGlide").as_f64().unwrap_or(100.0) / 100.0).clamp(0.4, 2.5) as f32;
         let (blink, cw) = (self.get("cursorBlink").as_bool() != Some(false), self.get("cursorWidth").as_f64().unwrap_or(2.0).clamp(1.0, 4.0) as f32);
         ctx.all_styles_mut(|s| {
             s.visuals.text_cursor.blink = blink;
@@ -2074,15 +2078,22 @@ impl App {
             let resp = ui.interact(sr, ui.id().with("topsearch"), Sense::click()).on_hover_cursor(egui::CursorIcon::Text);
             let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
             // priesvitná výplň – tapeta / rozmazanie presvitá aj cez pole hľadania
-            let fill = if p.dark { egui::Color32::from_white_alpha((10.0 + 8.0 * hk) as u8) } else { egui::Color32::from_black_alpha((8.0 + 6.0 * hk) as u8) };
+            // Nastavenia → Rozloženie → Priehľadnosť poľa hľadania (searchAlpha, 0–100 %)
+            let a = self.get("searchAlpha").as_f64().unwrap_or(5.0).clamp(0.0, 100.0) as f32 / 100.0;
+            let fill = if p.dark {
+                egui::Color32::from_white_alpha((a * 200.0 + 8.0 * hk).min(255.0) as u8)
+            } else {
+                egui::Color32::from_black_alpha((a * 160.0 + 6.0 * hk).min(255.0) as u8)
+            };
             ui.painter().rect_filled(sr, CornerRadius::same(9), fill);
             ui.painter().rect_stroke(sr, CornerRadius::same(9), Stroke::new(1.0, p.line.lerp_to_gamma(p.line_strong, hk)), StrokeKind::Inside);
             let col = p.text3.lerp_to_gamma(p.text2, hk);
             widgets::icon_at(ui, pos2(sr.left() + 18.0, cy), 14.0, "search", col);
-            let key_w = if w > 200.0 { widgets::text_w(ui, "Ctrl+Shift+A", theme::ui(10.5)) + 10.0 } else { 0.0 };
+            let skey = self.key_label("search");
+            let key_w = if w > 200.0 && !skey.is_empty() { widgets::text_w(ui, &skey, theme::ui(10.5)) + 10.0 } else { 0.0 };
             widgets::text(ui, pos2(sr.left() + 32.0, cy), Align2::LEFT_CENTER, &t("Search"), theme::ui(13.0), col, w - 40.0 - key_w);
             if key_w > 0.0 {
-                ui.painter().text(pos2(sr.right() - 8.0, cy), Align2::RIGHT_CENTER, "Ctrl+Shift+A", theme::ui(10.5), p.text3);
+                ui.painter().text(pos2(sr.right() - 8.0, cy), Align2::RIGHT_CENTER, &skey, theme::ui(10.5), p.text3);
             }
             if resp.on_hover_text(t("Search files, commands, settings and projects")).clicked() {
                 self.act("search", ui.ctx());
@@ -3517,52 +3528,12 @@ impl App {
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
         self.tree_keys(ctx);
-        let (save, run, open, close) = ctx.input_mut(|i| {
-            (
-                i.consume_key(egui::Modifiers::COMMAND, egui::Key::S),
-                i.consume_key(egui::Modifiers::NONE, egui::Key::F5),
-                i.consume_key(egui::Modifiers::COMMAND, egui::Key::O),
-                i.consume_key(egui::Modifiers::COMMAND, egui::Key::W),
-            )
-        });
-        let (sets, panel, side, dark) = ctx.input_mut(|i| {
-            (
-                i.consume_key(egui::Modifiers::COMMAND, egui::Key::Comma),
-                i.consume_key(egui::Modifiers::COMMAND, egui::Key::J),
-                i.consume_key(egui::Modifiers::COMMAND, egui::Key::B),
-                i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::L),
-            )
-        });
-        // ďalšie skratky z Electron Fluxu
-        let more = ctx.input_mut(|i| {
-            let c = egui::Modifiers::COMMAND;
-            let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
-            [
-                (i.consume_key(c, egui::Key::P), "quick-open"),
-                (i.consume_key(c, egui::Key::I), "ai"),
-                (i.consume_key(cs, egui::Key::A), "search"),
-                (i.consume_key(cs, egui::Key::P), "commands"),
-                (i.consume_key(cs, egui::Key::E), "view-explorer"),
-                (i.consume_key(cs, egui::Key::F), "search"),
-                (i.consume_key(cs, egui::Key::X), "view-plugins"),
-                (i.consume_key(cs, egui::Key::K), "themes"),
-                (i.consume_key(cs, egui::Key::G), "github"),
-                (i.consume_key(c, egui::Key::Backtick), "terminal"),
-                (i.consume_key(cs, egui::Key::T), "reopen-tab"),
-                (i.consume_key(cs, egui::Key::PageUp), "tab-left"),
-                (i.consume_key(cs, egui::Key::PageDown), "tab-right"),
-                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::Z), "glass-clear"),
-                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::C), "glass-solid"),
-                (i.consume_key(cs, egui::Key::N), "new-project"),
-                (i.consume_key(c, egui::Key::N), "new-file"),
-                (i.consume_key(cs, egui::Key::S), "save-all"),
-                (i.consume_key(egui::Modifiers::SHIFT, egui::Key::F5), "stop"),
-                (i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::ALT, egui::Key::O), "open-file"),
-            ]
-        });
-        for (hit, id) in more {
-            if hit {
-                self.act(id, ctx);
+        // skratky z tabuľky (keymap.rs, vlastné v settings.keybindings)
+        for id in self.keymap_hits(ctx) {
+            match id {
+                // Ctrl+, nastavenia aj zavrie
+                "settings" if self.settings.is_some() => self.settings = None,
+                _ => self.act(id, ctx),
             }
         }
         // Ctrl+1 … Ctrl+9: karta podľa poradia (9 = posledná), ako vo Visual Studiu
@@ -3571,36 +3542,6 @@ impl App {
         if let Some(n) = hit.filter(|_| !self.tabs.is_empty()) {
             let i = if n == 8 { self.tabs.len() - 1 } else { n.min(self.tabs.len() - 1) };
             self.activate(i);
-        }
-        if sets {
-            if self.settings.is_some() {
-                self.settings = None;
-            } else {
-                self.open_settings("general", ctx);
-            }
-        }
-        if panel {
-            self.panel_open = !self.panel_open;
-        }
-        if side {
-            self.side_open = !self.side_open;
-        }
-        if dark {
-            self.set_theme(!self.pal.dark, ctx);
-        }
-        if save {
-            self.save(self.active);
-        }
-        if run {
-            self.run();
-        }
-        if open {
-            if let Some(d) = rfd::FileDialog::new().set_title(t("Open folder")).pick_folder() {
-                self.open_folder(&d.to_string_lossy());
-            }
-        }
-        if close && !self.tabs.is_empty() && !self.home {
-            self.close_tab(self.active);
         }
     }
 }

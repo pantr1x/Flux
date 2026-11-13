@@ -2,6 +2,21 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.77
+
+**Shortcuts**
+- **Change any shortcut.** Settings → Keyboard lists all shortcuts by group (File, Run, View, Look). Click one and press the new keys – Esc cancels, Backspace removes it, the ↺ button brings back the default. A shortcut used twice is marked.
+- **Plugin shortcuts have their own group**, and the editor's fixed keys (find, comment, suggestions…) are listed too. Menus and the search field show your own shortcuts.
+
+**Settings**
+- **Scroll glide**: next to *Scroll distance* you can now set how long scrolling keeps gliding (Theme and window → Motion).
+- **Type the number** next to every slider (opacity, zoom, scrolling…) – Enter saves it.
+- **Search field opacity** (Tabs and layout). *Wide search field* shows only while the search button is on.
+- More room below *Window layouts*.
+
+**Plugins**
+- **Installing is much faster and shows progress**: files download at the same time from the right branch, with a progress bar on the card – Flux no longer freezes while installing.
+
 ## 0.9.76
 
 **Fixes**

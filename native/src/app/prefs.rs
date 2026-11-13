@@ -28,7 +28,8 @@ pub fn default_of(key: &str) -> Value {
         "dirtyDot" => json!("small"),
         "filesExclude" => json!(""),
         "liveWallMode" => json!("play"),
-        "uiZoom" | "scrollSpeed" => json!(100),
+        "uiZoom" | "scrollSpeed" | "scrollGlide" => json!(100),
+        "searchAlpha" => json!(5),
         "lineNumbers" => json!("on"),
         "whitespace" => json!("indent"),
         "cornerRadius" => json!(14),
@@ -269,7 +270,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             ("Code theme", pick(&["themes"])),
             ("Accent color", pick(&["accents"])),
             ("Window", pick(&["material", "alphaSide", "alphaEditor", "alphaPanel", "glassChip", "bg-pick", "liveWallpaper", "liveWallMode"])),
-            ("Motion", pick(&["inertia", "scrollSpeed", "transitions"])),
+            ("Motion", pick(&["inertia", "scrollSpeed", "scrollGlide", "transitions"])),
             ("", pick(&["restart", "look-reset"])),
         ]),
         "fonts" => page(vec![
@@ -278,7 +279,19 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             ("App colors", pick(&["uiText", "uiText2", "uiBase", "uiCard", "uiLine", "colors-reset"])),
         ]),
         "windows" => page(vec![
-            ("Parts of the window", pick(&["activityBar", "showTabs", "statusBar", "showSearch", "searchWide"])),
+            // pole hľadania: šírka a priehľadnosť len keď je hľadanie zapnuté
+            ("Parts of the window", {
+                let search = app.get("showSearch").as_bool() != Some(false);
+                let wide = search && app.get("searchWide").as_bool() != Some(false);
+                pick(&["activityBar", "showTabs", "statusBar", "showSearch", "searchWide", "searchAlpha"])
+                    .into_iter()
+                    .filter(|r| match row_id(r) {
+                        "searchWide" => search,
+                        "searchAlpha" => wide,
+                        _ => true,
+                    })
+                    .collect()
+            }),
             ("Position", pick(&["sidePos", "panelPos"])),
             ("Tabs", pick(&["tabColors", "tabBold", "dirtyDot"])),
             ("Window layouts", pick(&["layouts"])),
@@ -440,10 +453,12 @@ fn sections_raw(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 })
                 .chain(vec![
                     Row::Range("scrollSpeed", "Scroll distance", "how far one turn of the mouse wheel scrolls", 50.0, 300.0, 10.0),
+                    Row::Range("scrollGlide", "Scroll glide", "how long the view keeps gliding after the wheel or touchpad stops – higher is smoother and longer", 40.0, 250.0, 10.0),
                     Row::Toggle("inertia", "Smooth scrolling with inertia", "the editor, settings, lists and panels keep gliding a bit after you stop the wheel"),
                     Row::Toggle("transitions", "Transition animations", "a soft fade when you switch files, settings pages and screens"),
                     Row::Toggle("showSearch", "Search button", "a magnifier at the top that finds files, commands and settings"),
                     Row::Toggle("searchWide", "Wide search field", "a search box at the top instead of just the magnifier"),
+                    Row::Range("searchAlpha", "Search field opacity", "how solid the search box at the top is – 0 lets the window background fully shine through", 0.0, 100.0, 1.0),
                     Row::Select("panelPos", "Panel position", "where output and the terminal are", o(&[("bottom", "Bottom"), ("right", "Right"), ("left", "Left")])),
                     Row::Select("sidePos", "Sidebar position", "projects and files", o(&[("left", "Left"), ("right", "Right")])),
                     Row::Range("uiZoom", "Size of everything", "makes text, buttons and panels bigger or smaller", 80.0, 140.0, 5.0),
@@ -915,7 +930,7 @@ impl App {
     }
 
     // jednotné textové pole (rám, zaoblenie, výška 32 px) pre riadky „pridať“ v nastaveniach
-    fn field(&self, ui: &mut egui::Ui, text: &mut String, hint: &str, w: f32, mono: bool) -> egui::Response {
+    pub(super) fn field(&self, ui: &mut egui::Ui, text: &mut String, hint: &str, w: f32, mono: bool) -> egui::Response {
         let p = self.pal;
         let (r, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
         let font = if mono { theme::mono(12.5) } else { theme::ui(13.0) };
@@ -968,10 +983,32 @@ impl App {
                 self.label(ui, title, hint, lw);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let mut v = self.get(key).as_f64().unwrap_or(min);
-                    // hodnota vedľa posuvníka (ako #s-zoom-v v Electron Fluxe)
-                    let val = if key == "uiZoom" || key == "scrollSpeed" { format!("{v:.0} %") } else { format!("{v:.0}") };
-                    let (changed, released) = widgets::slider(ui, egui::Id::new(("rng", key)), &mut v, min, max, step, 180.0, &p);
-                    ui.label(egui::RichText::new(val).font(theme::ui(12.0)).color(p.text3));
+                    // hodnota vpravo od posuvníka – dá sa aj napísať (Enter / kliknutie inam ju uloží)
+                    let pct = key == "uiZoom" || key == "scrollSpeed" || key == "scrollGlide" || key.starts_with("alpha") || key == "searchAlpha";
+                    if pct {
+                        ui.label(egui::RichText::new("%").font(theme::ui(12.0)).color(p.text3));
+                    }
+                    let bid = egui::Id::new(("rngv", key));
+                    let mut buf: String = ctx.data(|d| d.get_temp(bid)).unwrap_or_else(|| format!("{v:.0}"));
+                    let fr = self.field(ui, &mut buf, "", 54.0, false);
+                    if fr.has_focus() {
+                        ctx.data_mut(|d| d.insert_temp(bid, buf.clone()));
+                    }
+                    let mut typed = None;
+                    if fr.lost_focus() {
+                        ctx.data_mut(|d| d.remove::<String>(bid));
+                        if let Ok(n) = buf.trim().trim_end_matches('%').trim().replace(',', ".").parse::<f64>() {
+                            typed = Some(n.clamp(min, max));
+                        }
+                    }
+                    let (mut changed, released) = widgets::slider(ui, egui::Id::new(("rng", key)), &mut v, min, max, step, 180.0, &p);
+                    if let Some(n) = typed {
+                        if n != v {
+                            v = n;
+                            changed = true;
+                        }
+                    }
+                    let released = released || typed.is_some();
                     // náhľad počas ťahania; uiZoom až po pustení (inak by sa okno menilo pod myšou)
                     if (changed && key != "uiZoom") || (released && key == "uiZoom") {
                         self.set(key, json!(v), ctx);
@@ -1220,6 +1257,7 @@ impl App {
                         if let Some(n) = del {
                             self.layout_delete(&n);
                         }
+                        ui.add_space(14.0);
                 });
             }
             // externé nástroje (Tools → External Tools)
@@ -1452,34 +1490,7 @@ impl App {
                     self.set("language", json!(c), ctx);
                 }
             }
-            "keys" => {
-                let keys = [
-                    ("Run current file", "F5"),
-                    ("Save", "Ctrl+S"),
-                    ("Open folder", "Ctrl+O"),
-                    ("Close tab", "Ctrl+W"),
-                    ("Settings", "Ctrl+,"),
-                    ("Toggle output panel", "Ctrl+J"),
-                    ("Toggle sidebar", "Ctrl+B"),
-                    ("Toggle light / dark theme", "Ctrl+Shift+L"),
-                ];
-                let start = ui.cursor().top();
-                let bg = ui.painter().add(egui::Shape::Noop);
-                for (i, (label, key)) in keys.iter().enumerate() {
-                    let (r, _) = ui.allocate_exact_size(vec2(w, 40.0), Sense::hover());
-                    ui.painter().text(pos2(r.left() + 16.0, r.center().y), Align2::LEFT_CENTER, t(label), theme::ui(13.0), p.text);
-                    let kw = widgets::text_w(ui, key, theme::mono(11.5)) + 16.0;
-                    let kr = Rect::from_min_size(pos2(r.right() - 16.0 - kw, r.center().y - 11.0), vec2(kw, 22.0));
-                    ui.painter().rect_stroke(kr, CornerRadius::same(6), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-                    ui.painter().text(kr.center(), Align2::CENTER_CENTER, *key, theme::mono(11.5), p.text);
-                    if i + 1 < keys.len() {
-                        ui.painter().hline(r.left() + 16.0..=r.right() - 16.0, r.bottom(), Stroke::new(1.0, p.line));
-                    }
-                }
-                let r = Rect::from_min_max(pos2(ui.min_rect().left(), start), pos2(ui.min_rect().left() + w, ui.cursor().top()));
-                ui.painter().set(bg, egui::Shape::rect_filled(r, CornerRadius::same(14), p.hover));
-                ui.painter().rect_stroke(r, CornerRadius::same(14), Stroke::new(1.0, p.line), StrokeKind::Inside);
-            }
+            "keys" => self.keys_ui(ui, w, ctx),
             "themes" => {
                 let cur = self.get("codeTheme").as_str().unwrap_or("").to_string();
                 let mut ids: Vec<String> = ["vscode-dark", "flux", "one-dark", "dracula", "tokyo-night", "catppuccin", "nord", "github-dark", "monokai", "vscode-light", "github-light", "catppuccin-latte"].iter().map(|s| s.to_string()).collect();

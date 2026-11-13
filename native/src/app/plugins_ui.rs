@@ -37,6 +37,13 @@ pub struct PlugStatus {
 }
 
 #[derive(Default)]
+pub struct InstProg {
+    pub done: usize,
+    pub total: usize,
+    pub result: Option<Result<PathBuf, String>>,
+}
+
+#[derive(Default)]
 pub struct PlugState {
     pub host: Option<plugins::Host>,
     pub cmds: Vec<PlugCmd>,
@@ -52,6 +59,8 @@ pub struct PlugState {
     pub tick: Option<Instant>,
     pub catalog: Option<Arc<Mutex<Option<Result<Vec<Value>, String>>>>>,
     pub installing: Option<String>,
+    // inštalácia beží na vlákne: (hotovo, spolu, výsledok) + meno, overený
+    pub inst: Option<(Arc<Mutex<InstProg>>, String, bool)>,
     pub query: String,
     pub tab_store: bool,
     pub detail: Option<String>,        // otvorená stránka pluginu
@@ -232,7 +241,7 @@ pub(super) fn parse_key(s: &str) -> Option<(egui::Modifiers, egui::Key)> {
             "ctrl" | "cmd" | "control" => m.command = true,
             "alt" => m.alt = true,
             "shift" => m.shift = true,
-            p => key = egui::Key::from_name(&p.to_uppercase()).or_else(|| egui::Key::from_name(p)),
+            p => key = egui::Key::from_name(&p.to_uppercase()).or_else(|| egui::Key::from_name(part)).or_else(|| egui::Key::from_name(p)),
         }
     }
     if m.command {
@@ -458,6 +467,7 @@ impl App {
 
     // každú snímku: zmena textu (300 ms po písaní), výber, časovače, klávesové skratky príkazov, commands.run
     pub(super) fn plug_frame(&mut self, ctx: &egui::Context) {
+        self.plug_install_poll(ctx);
         if self.plug.host.is_none() {
             return;
         }
@@ -533,7 +543,7 @@ impl App {
 
     // všetky karty: zabudovaný GitHub, nainštalované pluginy a obchod (podľa karty a hľadania)
     // zoznam nainštalovaných pluginov s pamäťou (2 s); po inštalácii/odstránení sa zahodí (plug.disc = None)
-    fn plug_installed(&mut self) -> Vec<(Manifest, Value)> {
+    pub(super) fn plug_installed(&mut self) -> Vec<(Manifest, Value)> {
         if let Some((at, l)) = &self.plug.disc {
             if at.elapsed() < Duration::from_secs(2) {
                 return l.clone();
@@ -839,7 +849,7 @@ impl App {
         let p = self.pal;
         let busy = self.plug.installing.as_deref() == Some(c.id.as_str());
         if busy {
-            b.label(egui::RichText::new(t("Installing…")).font(theme::ui(12.5)).color(p.text3));
+            self.install_bar(b, 120.0, 30.0);
             return None;
         }
         if c.id == "github" {
@@ -869,6 +879,55 @@ impl App {
         None
     }
 
+    // dokončenie inštalácie z vlákna
+    fn plug_install_poll(&mut self, ctx: &egui::Context) {
+        let Some((prog, name, _)) = &self.plug.inst else { return };
+        let res = prog.lock().unwrap().result.take();
+        let Some(res) = res else {
+            ctx.request_repaint_after(Duration::from_millis(50));
+            return;
+        };
+        let name = name.clone();
+        let id = self.plug.installing.take().unwrap_or_default();
+        self.plug.inst = None;
+        self.plug.disc = None;
+        match res {
+            Ok(dir) => {
+                self.plug_unload(&id);
+                let mut name = name;
+                if let Some(m) = plugins::read_manifest(&dir, false) {
+                    name = m.name.clone();
+                    self.plug_load(m);
+                }
+                self.plug.icons.remove(&id);
+                self.note(tf("{name} installed.", &[("name", &name)]));
+            }
+            Err(e) => self.note(tf("Install failed: {e}", &[("e", &e)])),
+        }
+    }
+
+    // pruh priebehu inštalácie (karta aj stránka pluginu): text + plniaci sa pruh, kým súbory nie sú známe, pruh „beží“
+    fn install_bar(&self, ui: &mut egui::Ui, w: f32, h: f32) {
+        let p = self.pal;
+        let (done, total) = self.plug.inst.as_ref().map(|(pr, _, _)| { let g = pr.lock().unwrap(); (g.done, g.total) }).unwrap_or((0, 0));
+        let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+        let label = if total > 0 { format!("{} {done}/{total}", t("Installing…")) } else { t("Installing…") };
+        ui.painter().text(pos2(r.left(), r.center().y - 6.0), Align2::LEFT_CENTER, label, theme::ui(11.5), p.text2);
+        let bar = Rect::from_min_size(pos2(r.left(), r.center().y + 5.0), vec2(w, 5.0));
+        ui.painter().rect_filled(bar, CornerRadius::same(3), p.hover);
+        let time = ui.input(|i| i.time) as f32;
+        let fill = if total > 0 {
+            let k = (done as f32 + 0.3) / (total as f32 + 0.3);
+            Rect::from_min_size(bar.min, vec2(w * k.clamp(0.06, 1.0), 5.0))
+        } else {
+            // neurčitý stav: krátky pruh behá dookola
+            let x = ((time * 0.9).fract() * 1.3 - 0.3) * w;
+            Rect::from_min_max(pos2(bar.left() + x.max(0.0), bar.top()), pos2((bar.left() + x + w * 0.3).min(bar.right()), bar.bottom()))
+        };
+        ui.painter().rect_filled(fill, CornerRadius::same(3), p.accent);
+        ui.ctx().request_repaint();
+    }
+
     // vykoná akciu z karty alebo detailu
     fn plug_do(&mut self, c: &PlugCard, what: &str, ctx: &egui::Context) {
         self.plug.disc = None; // inštalácia/odstránenie mení zoznam na disku
@@ -881,21 +940,18 @@ impl App {
                 self.note(if on { t("GitHub plugin installed. Find it in Settings → GitHub.") } else { t("GitHub plugin removed.") });
             }
             "install" => {
-                self.plug.installing = Some(id.clone());
-                match install_plugin(&id, c.verified) {
-                    Ok(dir) => {
-                        self.plug_unload(&id);
-                        let mut name = c.name.clone();
-                        if let Some(m) = plugins::read_manifest(&dir, false) {
-                            name = m.name.clone();
-                            self.plug_load(m);
-                        }
-                        self.plug.icons.remove(&id);
-                        self.note(tf("{name} installed.", &[("name", &name)]));
-                    }
-                    Err(e) => self.note(tf("Install failed: {e}", &[("e", &e)])),
+                if self.plug.inst.is_some() {
+                    return; // naraz len jedna inštalácia
                 }
-                self.plug.installing = None;
+                self.plug.installing = Some(id.clone());
+                let prog = Arc::new(Mutex::new(InstProg::default()));
+                let (pr, verified, c2) = (prog.clone(), c.verified, ctx.clone());
+                std::thread::spawn(move || {
+                    let r = install_plugin(&id, verified, &pr);
+                    pr.lock().unwrap().result = Some(r);
+                    c2.request_repaint();
+                });
+                self.plug.inst = Some((prog, c.name.clone(), c.verified));
             }
             "toggle" => {
                 let on = !self.plug_enabled(&id);
@@ -976,7 +1032,7 @@ impl App {
         b.spacing_mut().item_spacing.x = 8.0;
         let mut act = None;
         if self.plug.installing.as_deref() == Some(id) {
-            b.label(egui::RichText::new(t("Installing…")).font(theme::ui(13.0)).color(p.text3));
+            self.install_bar(&mut b, 220.0, 34.0);
         } else if c.id == "github" {
             if widgets::button(&mut b, None, &if c.on { t("Remove") } else { t("Install") }, if c.on { p.card2 } else { p.accent }, if c.on { p.text } else { p.accent_fg }, 34.0, &p).clicked() {
                 act = Some("github");
@@ -1057,7 +1113,7 @@ impl App {
     }
 
     pub(super) fn plug_test_install(&mut self, id: &str) {
-        match install_plugin(id, true) {
+        match install_plugin(id, true, &Arc::new(Mutex::new(InstProg::default()))) {
             Ok(dir) => {
                 self.plug_unload(id);
                 if let Some(m) = plugins::read_manifest(&dir, false) {
@@ -1158,14 +1214,19 @@ fn registry_local() -> Option<PathBuf> {
 const BRANCHES: [&str; 2] = ["main", "claude/optimistic-darwin-5i7m9t"];
 
 fn fetch_text(rel: &str) -> Result<String, String> {
+    fetch_from(rel, None).map(|r| r.0)
+}
+
+// stiahne súbor z registra; vráti aj vetvu, kde bol (ďalšie súbory toho pluginu sa už hľadajú len tam)
+fn fetch_from(rel: &str, only: Option<&str>) -> Result<(String, &'static str), String> {
     if let Some(d) = registry_local() {
-        return std::fs::read_to_string(d.join(rel)).map_err(|e| e.to_string());
+        return std::fs::read_to_string(d.join(rel)).map(|t| (t, "")).map_err(|e| e.to_string());
     }
     let mut last = String::new();
-    for b in BRANCHES {
+    for b in BRANCHES.iter().filter(|b| only.is_none_or(|o| o == **b)) {
         let url = format!("https://raw.githubusercontent.com/pantr1x/Flux/{b}/plugins/{rel}");
         match crate::net::request("GET", &url, &[], None, 30) {
-            Ok((200, body)) => return Ok(body),
+            Ok((200, body)) => return Ok((body, b)),
             Ok((code, _)) => last = format!("HTTP {code}"),
             Err(e) => last = e,
         }
@@ -1179,11 +1240,15 @@ fn fetch_index() -> Result<Vec<Value>, String> {
 }
 
 // stiahne súbory pluginu do userData/native-plugins/<id> (najprv do .tmp, potom výmena)
-fn install_plugin(id: &str, verified: bool) -> Result<PathBuf, String> {
+// súbory sa sťahujú naraz (každý vlastným vláknom) a len z vetvy, kde bol plugin.json – predtým išli po jednom
+// a každý najprv skúšal aj vetvu, kde plugin nie je, preto inštalácia trvala dlho
+fn install_plugin(id: &str, verified: bool, prog: &Arc<Mutex<InstProg>>) -> Result<PathBuf, String> {
     if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") {
         return Err("bad id".into());
     }
-    let man: Value = serde_json::from_str(&fetch_text(&format!("{id}/plugin.json"))?).map_err(|e| e.to_string())?;
+    let (text, branch) = fetch_from(&format!("{id}/plugin.json"), None)?;
+    let only = (!branch.is_empty()).then_some(branch);
+    let man: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     let entry = man["native"].as_str().map(String::from).or_else(|| (man["native"] == true).then(|| man["main"].as_str().unwrap_or("plugin.js").to_string())).ok_or("not a Flux Native plugin")?;
     let mut files: Vec<String> = man["files"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
     if !files.contains(&entry) {
@@ -1193,10 +1258,37 @@ fn install_plugin(id: &str, verified: bool) -> Result<PathBuf, String> {
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
     std::fs::write(tmp.join("plugin.json"), serde_json::to_string_pretty(&man).unwrap_or_default()).map_err(|e| e.to_string())?;
-    for f in &files {
-        let ok_ext = [".js", ".json", ".md", ".css", ".svg", ".txt"].iter().any(|x| f.ends_with(x));
-        let Some(dst) = file_in(&tmp, f).filter(|_| ok_ext) else { continue };
-        let text = fetch_text(&format!("{id}/{f}"))?;
+    let wanted: Vec<(String, PathBuf)> = files
+        .iter()
+        .filter(|f| [".js", ".json", ".md", ".css", ".svg", ".txt"].iter().any(|x| f.ends_with(x)))
+        .filter_map(|f| file_in(&tmp, f).map(|d| (f.clone(), d)))
+        .collect();
+    {
+        let mut g = prog.lock().unwrap();
+        g.total = wanted.len() + 1;
+        g.done = 1;
+    }
+    let got: Vec<Result<(String, PathBuf, String), String>> = std::thread::scope(|sc| {
+        let hs: Vec<_> = wanted
+            .iter()
+            .map(|(f, dst)| {
+                sc.spawn(move || {
+                    let r = fetch_from(&format!("{id}/{f}"), only).map(|(t, _)| (f.clone(), dst.clone(), t));
+                    prog.lock().unwrap().done += 1;
+                    r
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().unwrap_or_else(|_| Err("download failed".into()))).collect()
+    });
+    for r in got {
+        let (f, dst, text) = match r {
+            Ok(x) => x,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&tmp);
+                return Err(e);
+            }
+        };
         if f.ends_with(".js") && !verified {
             let warn = plugins::scan(&text);
             if !warn.is_empty() {

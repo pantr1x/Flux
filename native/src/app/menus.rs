@@ -289,7 +289,8 @@ impl App {
                 for (id, label, key, icon) in
                     [("new-file", "New file…", "Ctrl+N", "filePlus"), ("new-project", "New project…", "Ctrl+Shift+N", "plus"), ("new-folder", "New folder…", "", "folderPlus")]
                 {
-                    if item(ui, Some(icon), &t(label), key, false, true, &p).clicked() {
+                    let key = if key.is_empty() { String::new() } else { self.key_label(id) };
+                    if item(ui, Some(icon), &t(label), &key, false, true, &p).clicked() {
                         picked = Some(id.into());
                     }
                 }
@@ -297,22 +298,23 @@ impl App {
                 for (id, label, key, icon) in
                     [("open-folder", "Open folder…", "Ctrl+O", "folderOpen"), ("open-file", "Open file…", "Ctrl+Alt+O", "file"), ("quick-open", "Quick open file…", "Ctrl+P", "search")]
                 {
-                    if item(ui, Some(icon), &t(label), key, false, true, &p).clicked() {
+                    let key = if key.is_empty() { String::new() } else { self.key_label(id) };
+                    if item(ui, Some(icon), &t(label), &key, false, true, &p).clicked() {
                         picked = Some(id.into());
                     }
                 }
                 sep(ui, &p);
-                if item(ui, Some("save"), &t("Save"), "Ctrl+S", false, has_file, &p).clicked() {
+                if item(ui, Some("save"), &t("Save"), &self.key_label("save"), false, has_file, &p).clicked() {
                     picked = Some("save".into());
                 }
-                if item(ui, None, &t("Save all"), "Ctrl+Shift+S", false, true, &p).clicked() {
+                if item(ui, None, &t("Save all"), &self.key_label("save-all"), false, true, &p).clicked() {
                     picked = Some("save-all".into());
                 }
-                if item(ui, Some("x"), &t("Close file"), "Ctrl+W", false, has_file, &p).clicked() {
+                if item(ui, Some("x"), &t("Close file"), &self.key_label("close"), false, has_file, &p).clicked() {
                     picked = Some("close".into());
                 }
                 sep(ui, &p);
-                if item(ui, Some("settings"), &t("Settings"), "Ctrl+,", false, true, &p).clicked() {
+                if item(ui, Some("settings"), &t("Settings"), &self.key_label("settings"), false, true, &p).clicked() {
                     picked = Some("settings".into());
                 }
             });
@@ -326,17 +328,17 @@ impl App {
             ui.menu_button(t("View"), |ui| {
                 ui.set_min_width(270.0);
                 ui.set_max_width(270.0);
-                if item(ui, Some("search"), &t("Search everything…"), "Ctrl+Shift+A", false, true, &p).clicked() {
+                if item(ui, Some("search"), &t("Search everything…"), &self.key_label("search"), false, true, &p).clicked() {
                     picked = Some("search".into());
                 }
-                if item(ui, Some("command"), &t("Commands"), "Ctrl+Shift+P", false, true, &p).clicked() {
+                if item(ui, Some("command"), &t("Commands"), &self.key_label("commands"), false, true, &p).clicked() {
                     picked = Some("commands".into());
                 }
                 sep(ui, &p);
-                if item(ui, None, &t("Sidebar"), "Ctrl+B", self.side_open, true, &p).clicked() {
+                if item(ui, None, &t("Sidebar"), &self.key_label("sidebar"), self.side_open, true, &p).clicked() {
                     picked = Some("sidebar".into());
                 }
-                if item(ui, None, &t("Panel"), "Ctrl+J", self.panel_open, true, &p).clicked() {
+                if item(ui, None, &t("Panel"), &self.key_label("panel"), self.panel_open, true, &p).clicked() {
                     picked = Some("panel".into());
                 }
                 sep(ui, &p);
@@ -355,14 +357,14 @@ impl App {
                     }
                 }
                 sep(ui, &p);
-                if item(ui, Some(if p.dark { "sun" } else { "moon" }), &t("Toggle light / dark theme"), "Ctrl+Shift+L", false, true, &p).clicked() {
+                if item(ui, Some(if p.dark { "sun" } else { "moon" }), &t("Toggle light / dark theme"), &self.key_label("theme"), false, true, &p).clicked() {
                     picked = Some("theme".into());
                 }
             });
             ui.menu_button(t("Window"), |ui| {
                 ui.set_min_width(260.0);
                 ui.set_max_width(260.0);
-                if item(ui, Some("rotate"), &t("Restore closed tab"), "Ctrl+Shift+T", false, !self.closed_tabs.is_empty(), &p).clicked() {
+                if item(ui, Some("rotate"), &t("Restore closed tab"), &self.key_label("reopen-tab"), false, !self.closed_tabs.is_empty(), &p).clicked() {
                     picked = Some("reopen-tab".into());
                 }
                 sep(ui, &p);
@@ -773,6 +775,7 @@ impl App {
         let ctx = ui.ctx().clone();
         let anim = self.anim_on();
         let ws = self.workspace().unwrap_or_default();
+        let keys: std::collections::HashMap<&str, String> = super::keymap::KEYMAP.iter().map(|k| (k.0, self.key_label(k.0))).collect();
         let Some(pal) = self.palette.as_mut() else { return };
         let k = if anim { (((ctx.input(|i| i.time) - pal.opened) / 0.14).clamp(0.0, 1.0)) as f32 } else { 1.0 };
         if k < 1.0 {
@@ -796,7 +799,8 @@ impl App {
             for (id, label, key, icon) in COMMANDS {
                 let l = t(label);
                 if let Some(s) = fuzzy(&l, &q) {
-                    res.push((s + 20, format!("icon:{icon}"), l, key.to_string(), format!("cmd:{id}")));
+                    let key = keys.get(id).cloned().unwrap_or_else(|| key.to_string());
+                    res.push((s + 20, format!("icon:{icon}"), l, key, format!("cmd:{id}")));
                 }
             }
         }
