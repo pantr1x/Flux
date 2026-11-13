@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.76
+
+**Fixes**
+- **The see-through / blurred background now shows behind the row of open files and behind the search field too.** Both were drawn solid, so the blur stopped at them while the editor below was see-through.
+
 ## 0.9.75
 
 **Languages**

@@ -933,8 +933,12 @@ impl App {
     // a akcentový prúžok hore; koliesko myši posúva karty, prostredné tlačidlo zatvára
     pub(super) fn tab_strip(&mut self, ui: &mut egui::Ui, r: Rect, radius: u8) {
         let p = self.pal;
-        let strip_bg = if p.dark { p.card.lerp_to_gamma(egui::Color32::BLACK, 0.22) } else { p.card.lerp_to_gamma(p.hover, 0.7) };
-        ui.painter().rect_filled(r, CornerRadius { nw: radius, ne: radius, ..Default::default() }, strip_bg);
+        // pozadie riadku kariet = ten istý priesvitný p.card ako editor + jemné stmavenie navrch
+        // (lerp k čiernej by zdvihol aj alfu – riadok bol nepriehľadný a tapeta/rozmazanie zaň nepresvitali)
+        // karta pod riadkom už má p.card – tu len stmavenie, okrem miesta aktívnej karty (tá vyzerá ako editor);
+        // kreslí sa až keď je známa poloha aktívnej karty (vyhradené miesto)
+        let cr = CornerRadius { nw: radius, ne: radius, ..Default::default() };
+        let shade_slot = ui.painter().add(egui::Shape::Noop);
         // spodná čiara pod kartami – pod aktívnou kartou sa preruší (karta „vteká“ do editora)
         let base_line = ui.painter().add(egui::Shape::Noop);
         let font = theme::ui(13.0);
@@ -985,10 +989,10 @@ impl App {
                 let ax = ui.ctx().animate_value_with_time(egui::Id::new("tabbar-x"), tr.left(), ta);
                 let aw = ui.ctx().animate_value_with_time(egui::Id::new("tabbar-w"), tr.width(), ta);
                 let ar = Rect::from_min_size(pos2(ax, tr.top()), vec2(aw, tr.height() + 1.0));
-                painter.rect_filled(ar, top, p.card);
-                painter.rect_stroke(ar, top, Stroke::new(1.0, p.line), StrokeKind::Inside);
-                // prekrytie spodnej hrany rámika, nech karta plynule prejde do editora
-                painter.rect_filled(Rect::from_min_max(pos2(ar.left() + 1.0, ar.bottom() - 2.0), pos2(ar.right() - 1.0, ar.bottom() + 1.0)), CornerRadius::ZERO, p.card);
+                // rámik bez spodnej hrany: siaha pod riadok a orezanie (clip končí na spodku riadku) ju odreže
+                painter.rect_stroke(ar.with_max_y(ar.bottom() + 4.0), top, Stroke::new(1.0, p.line), StrokeKind::Inside);
+                // prekrytie spodnej hrany rámika výplňou editora nejde (priesvitná by sa zdvojila) – spodok rámika sa zakryje
+                // tým, že čiara pod kartami sa pod aktívnou kartou preruší
                 // malý akcentový prúžok navrchu
                 let bar = Rect::from_center_size(pos2(ar.center().x, ar.top() + 1.5), vec2((ar.width() * 0.35).min(36.0), 3.0));
                 painter.rect_filled(bar, CornerRadius::same(2), p.accent);
@@ -1034,6 +1038,20 @@ impl App {
             None => egui::Shape::hline(r.x_range(), r.bottom() - 0.5, Stroke::new(1.0, p.line)),
         };
         ui.painter().set(base_line, line);
+        // stmavenie riadku kariet okrem aktívnej karty (vľavo, vpravo a pásik nad ňou)
+        let shade = if p.dark { egui::Color32::from_black_alpha(26) } else { egui::Color32::from_black_alpha(10) };
+        let mut parts = vec![];
+        match active_x {
+            Some((l, rr)) => {
+                let (l, rr) = (l.max(r.left()), rr.min(r.right()));
+                parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(Rect::from_min_max(r.min, pos2(l, r.bottom())), CornerRadius { nw: radius, ..Default::default() }, shade)));
+                parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(Rect::from_min_max(pos2(rr, r.top()), r.max), CornerRadius { ne: radius, ..Default::default() }, shade)));
+                parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(Rect::from_min_max(pos2(l, r.top()), pos2(rr, r.top() + 5.0)), CornerRadius::ZERO, shade)));
+                // zaoblené horné rohy aktívnej karty: dočiernenie rohov by bolo vidno – stačí, že karta zaoblená rámikom
+            }
+            None => parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(r, cr, shade))),
+        }
+        ui.painter().set(shade_slot, egui::Shape::Vec(parts));
         // prázdne miesto za kartami: dvojklik = nový súbor (ako VS Code)
         if x < clip.right() {
             let rest = Rect::from_min_max(pos2(x.max(clip.left()), r.top()), pos2(clip.right(), r.bottom()));

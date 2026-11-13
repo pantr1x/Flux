@@ -2073,7 +2073,9 @@ impl App {
             let sr = Rect::from_min_size(pos2(left, cy - 15.0), vec2(w, 30.0));
             let resp = ui.interact(sr, ui.id().with("topsearch"), Sense::click()).on_hover_cursor(egui::CursorIcon::Text);
             let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), resp.hovered(), 0.12);
-            ui.painter().rect_filled(sr, CornerRadius::same(9), p.card2);
+            // priesvitná výplň – tapeta / rozmazanie presvitá aj cez pole hľadania
+            let fill = if p.dark { egui::Color32::from_white_alpha((10.0 + 8.0 * hk) as u8) } else { egui::Color32::from_black_alpha((8.0 + 6.0 * hk) as u8) };
+            ui.painter().rect_filled(sr, CornerRadius::same(9), fill);
             ui.painter().rect_stroke(sr, CornerRadius::same(9), Stroke::new(1.0, p.line.lerp_to_gamma(p.line_strong, hk)), StrokeKind::Inside);
             let col = p.text3.lerp_to_gamma(p.text2, hk);
             widgets::icon_at(ui, pos2(sr.left() + 18.0, cy), 14.0, "search", col);
