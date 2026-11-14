@@ -1,0 +1,11 @@
+{
+  "version": "0.9.82",
+  "patch": {
+    "from": "d3d06d19a8124af7b3da42c2ba8ef895c4726756",
+    "size": 2036728,
+    "sha256": "17ddaae8ec926537da4e37a03b7106c1811bf4337f76515d830843874a672980"
+  },
+  "size": 17187840,
+  "sha256": "3eeadbbc2730d4943e4baf9ef7fa67043e994b329e364843bc5973d094819329",
+  "sha": "2dd558c6a9f4eff0c565e1a3d417ac80dfe4b565"
+}
