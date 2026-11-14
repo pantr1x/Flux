@@ -7,6 +7,10 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 **Run only the selected code (Python)**
 - Select some code (for example one `print(...)`) and press ▶ Run or F5: Flux runs just that, plus only the parts it needs – the `import` lines, functions, classes and variables it uses. Everything else in the file is skipped. Without a selection, Run works as before.
 
+**Python libraries**
+- If a Python file imports a library you don't have, the name is underlined with a note. Click it and Flux asks *Install?*, then runs `pip install` and shows the progress in the Output panel.
+- Click *Python 3.x* in the status bar (or use the command palette → *Python libraries…*) to see everything the file is missing and which installed libraries have updates, with *Install* / *Update* buttons and *Update all*.
+
 ## 0.9.80
 
 **Look**

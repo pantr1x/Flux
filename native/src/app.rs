@@ -20,6 +20,7 @@ mod explorer;
 mod workbench;
 mod themestore;
 mod keymap;
+mod libs;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -340,6 +341,10 @@ pub struct App {
     find_goto: bool,
     palette: Option<menus::Palette>,
     ask: Option<menus::Ask>,
+    libs: Option<libs::Libs>,                                  // okno Python knižnice
+    lib_missing: Arc<std::sync::Mutex<HashMap<String, Vec<String>>>>, // cesta → chýbajúce balíčky (pre pip)
+    lib_req: Option<String>,                                   // klik na chýbajúci import → otázka „Nainštalovať?“
+    pip_wait: bool,                                            // beží pip v paneli Output
     renaming: Option<(String, String)>,
     desc_edit: Option<(String, String, bool)>, // (projekt, text, fokus) – úprava popisu na stránke projektu
     new_in: Option<String>,
@@ -518,6 +523,10 @@ impl App {
             focus_out: false,
             whats_new: None,
             lint_res: Default::default(),
+            libs: None,
+            lib_missing: Default::default(),
+            lib_req: None,
+            pip_wait: false,
             lint_seen: HashMap::new(),
             lint_asked: HashMap::new(),
             lint_jump: None,
@@ -1001,9 +1010,18 @@ impl App {
         let lang = tab.ext();
         let py = self.python.as_ref().and_then(|v| v["path"].as_str()).map(String::from);
         let res = self.lint_res.clone();
+        let miss = self.lib_missing.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
-            let d = crate::lint::check(&lang, &text, py.as_deref());
+            let mut d = crate::lint::check(&lang, &text, py.as_deref());
+            // chýbajúce Python knižnice (import, ktorý sa nedá nájsť)
+            if let (true, Some(py)) = (matches!(lang.as_str(), "py" | "pyw"), py.as_deref()) {
+                let dir = std::path::Path::new(&path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                let (extra, pkgs) = crate::pylibs::diags(py, &text, &dir);
+                d.extend(extra);
+                d.sort_by_key(|x| (x.line, x.col));
+                miss.lock().unwrap().insert(path.clone(), pkgs);
+            }
             res.lock().unwrap().insert(path, (gen, d));
             ctx.request_repaint();
         });
@@ -1683,6 +1701,9 @@ impl App {
     fn events(&mut self) {
         while let Ok((ch, v)) = self.rx.try_recv() {
             // udalosti programu a terminálu nesú značku karty (Sess::emit); zatvorená karta ich zahodí
+            if ch == "run:exit" && self.pip_wait {
+                self.pip_done();
+            }
             if matches!(ch.as_str(), "run:start" | "run:data" | "run:exit" | "shell:data" | "shell:exit") {
                 let sid = v["sid"].as_u64().unwrap_or(0);
                 if let Some(s) = self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()).find(|s| s.id == sid) {
@@ -2237,6 +2258,7 @@ impl App {
         let mut typed: Option<char> = None;
         let mut new_sel: Option<(usize, usize)> = self.plug_cursor.take().map(|c| (c, c));
         let mut sel_out: Option<(usize, usize)> = None;
+        let mut lib_click: Option<String> = None;
         let sug_on = self.get("suggest").as_bool() != Some(false);
         let ws_flag = self.ws_mode();
         let mut force_sug = false;
@@ -2636,7 +2658,13 @@ impl App {
                                 let r = widgets::text(ui, pos2(mx, at.y + lh / 2.0), Align2::LEFT_CENTER, &d.msg, theme::ui((fsz - 1.5).max(10.0)), col_c.gamma_multiply(0.85), room);
                                 hover = hover.union(r);
                             }
-                            ui.interact(hover, ui.id().with(("lint", k)), Sense::hover()).on_hover_text(&d.msg);
+                            let hr = ui.interact(hover, ui.id().with(("lint", k)), if d.pkg.is_some() { Sense::click() } else { Sense::hover() }).on_hover_text(&d.msg);
+                            if let Some(pk) = &d.pkg {
+                                let hr = hr.on_hover_cursor(egui::CursorIcon::PointingHand);
+                                if hr.clicked() {
+                                    lib_click = Some(pk.clone());
+                                }
+                            }
                         }
                     }
                     ui.painter().set(text_shapes, egui::Shape::Vec(shapes));
@@ -2932,6 +2960,9 @@ impl App {
         }
         if sel_out.is_some() {
             self.sel_chars = sel_out;
+        }
+        if lib_click.is_some() {
+            self.lib_req = lib_click;
         }
         // ---- lišta hľadania ----
         if self.find.is_some() {
@@ -3481,16 +3512,22 @@ impl App {
         let mut x = rect.left() + 16.0;
         let small = theme::ui(12.0);
         // verzia Pythonu len pri Python súbore v editore
+        let mut libs_click = false;
         let py_tab = !self.home && !self.start && self.tabs.get(self.active).is_some_and(|t| matches!(t.ext().as_str(), "py" | "pyw"));
         if let Some(py) = self.python.as_ref().filter(|_| py_tab) {
             widgets::icon_at(ui, pos2(x + 6.0, cy), 13.0, "python", p.text3);
             x += 19.0;
             let v = format!("Python {}", py["version"].as_str().unwrap_or(""));
             let r = widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, &v, small.clone(), p.text2, 200.0);
+            let hit = ui.interact(r.expand2(vec2(4.0, 6.0)), ui.id().with("py-libs"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(t("Python libraries – install and update"));
+            libs_click = hit.clicked();
             x = r.right() + 6.0;
             let src = py["source"].as_str().unwrap_or("");
             let r = widgets::text(ui, pos2(x, cy), Align2::LEFT_CENTER, if src == "PATH" { "PATH" } else { src }, theme::ui(11.0), p.text3, 120.0);
             x = r.right() + 18.0;
+        }
+        if libs_click {
+            self.open_libs();
         }
         let running = self.running();
         let (dot, label) = if running { (p.green, t("Running")) } else { (p.text3, t("Ready")) };
@@ -4333,6 +4370,16 @@ impl eframe::App for App {
                 ui.set_min_size(full.size());
                 self.whats_new_ui(ui, full);
             });
+        }
+        if self.libs.is_some() {
+            let full = ctx.content_rect();
+            egui::Area::new(egui::Id::new("libs-layer")).order(egui::Order::Foreground).fixed_pos(full.min).show(ctx, |ui| {
+                ui.set_min_size(full.size());
+                self.libs_ui(ui, full);
+            });
+        }
+        if let Some(pk) = self.lib_req.take() {
+            self.ask_install(&pk);
         }
         if self.ask.is_some() {
             let full = ctx.content_rect();

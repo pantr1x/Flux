@@ -40,7 +40,7 @@ pub struct Ask {
 }
 
 // (id, text, skratka, ikona)
-const COMMANDS: [(&str, &str, &str, &str); 17] = [
+const COMMANDS: [(&str, &str, &str, &str); 18] = [
     ("new-file", "New file…", "Ctrl+N", "filePlus"),
     ("new-project", "New project…", "Ctrl+Shift+N", "plus"),
     ("open-folder", "Open folder…", "Ctrl+O", "folderOpen"),
@@ -58,6 +58,7 @@ const COMMANDS: [(&str, &str, &str, &str); 17] = [
     ("theme", "Toggle light / dark theme", "Ctrl+Shift+L", "sun"),
     ("home", "Home", "", "template"),
     ("shortcuts", "Shortcuts", "", "command"),
+    ("libs", "Python libraries…", "", "download"),
 ];
 
 // jednoduché „fuzzy“ – všetky znaky v poradí; skóre = kratší rozptyl je lepší
@@ -120,6 +121,7 @@ impl App {
     pub(super) fn act(&mut self, id: &str, ctx: &egui::Context) {
         match id {
             "reload-plugins" => self.plug_reload_all(),
+            "libs" => self.open_libs(),
             "ai" => self.toggle_ai(),
             "new-file" => self.open_new_file(None),
             "new-folder" => self.start_new_item(true, None),
@@ -216,6 +218,12 @@ impl App {
                     self.set("panelPos", json!(v), ctx);
                 } else if let Some(v) = id.strip_prefix("sidePos:") {
                     self.set("sidePos", json!(v), ctx);
+                } else if let Some(l) = id.strip_prefix("pip-install:") {
+                    let l: Vec<String> = l.split(' ').map(String::from).collect();
+                    self.pip_run(&l, false);
+                } else if let Some(l) = id.strip_prefix("pip-update:") {
+                    let l: Vec<String> = l.split(' ').map(String::from).collect();
+                    self.pip_run(&l, true);
                 } else if let Some(n) = id.strip_prefix("tool:") {
                     if let Ok(i) = n.parse::<usize>() {
                         self.ext_tool_run(i);
@@ -952,7 +960,8 @@ impl App {
                 .layout(egui::Layout::right_to_left(egui::Align::Center)),
         );
         b.spacing_mut().item_spacing.x = 8.0;
-        let yes = widgets::button(&mut b, Some("trash"), &ask.yes, p.red, Color32::WHITE, 32.0, &p).clicked();
+        let pip = ask.action.starts_with("pip-");
+        let yes = widgets::button(&mut b, Some(if pip { "download" } else { "trash" }), &ask.yes, if pip { p.accent } else { p.red }, if pip { p.accent_fg } else { Color32::WHITE }, 32.0, &p).clicked();
         let no = widgets::button(&mut b, None, &t("Cancel"), p.card2, p.text, 32.0, &p).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape));
         if yes {
             let a = ask.action.clone();

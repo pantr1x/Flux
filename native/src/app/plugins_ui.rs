@@ -424,6 +424,7 @@ impl App {
                                         err: m["kind"] == "error",
                                         msg: m["message"].as_str().unwrap_or("").to_string(),
                                         color,
+                                        pkg: None,
                                     })
                                 })
                                 .take(2000)

@@ -9,6 +9,7 @@ mod plugins;
 mod glass;
 mod lint;
 mod slice;
+mod pylibs;
 mod complete;
 mod colors;
 mod perf;
