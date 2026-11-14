@@ -1,0 +1,11 @@
+[package]
+name = "flux-tools"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Nástroje pre vývoj Fluxu: texty na preklad a kontrola prekladov (namiesto starých Python/JS skriptov)."
+
+[dependencies]
+serde_json = "1"
+regex = "1"
+serde = "1"

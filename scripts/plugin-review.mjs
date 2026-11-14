@@ -23,7 +23,7 @@ const problems = []; // { level: 'block' | 'warn', file, line, text }
 const add = (level, file, text, line = 0) => problems.push({ level, file, line, text });
 
 // Pravidlá pre kód sú spoločné s Fluxom (upozornenie pred inštaláciou): src/main/pluginScan.js
-const { scanFiles } = createRequire(import.meta.url)('../src/main/pluginScan.js');
+const { scanFiles } = createRequire(import.meta.url)('./review/plugin-scan.cjs');
 
 // Mimo plugins/ PR od komunity nemá čo meniť.
 for (const f of changed) if (!f.startsWith('plugins/')) add('block', f, 'changes a file outside `plugins/` – plugin pull requests may only add or change plugin folders and `plugins/index.json`');

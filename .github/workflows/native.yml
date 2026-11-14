@@ -423,6 +423,8 @@ jobs:
         run: cargo build -p flux-native -p flux-preview --release
       - name: Tests
         run: cargo test -p flux-native --release
+      - name: Translations check
+        run: cargo run -q -p flux-tools -- check
       - name: Smoke test (starts with a window, no crash)
         run: |
           ud="$RUNNER_TEMP/ud-smoke"; mkdir -p "$ud"

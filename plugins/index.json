@@ -1,150 +1,6 @@
 {
   "plugins": [
     {
-      "id": "flux.error-lens",
-      "name": "Error Lens",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Errors and warnings right on the line where they happen – no hovering, no searching.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "errors",
-        "python",
-        "javascript",
-        "productivity"
-      ],
-      "issue": 1
-    },
-    {
-      "id": "flux.auto-rename-tag",
-      "name": "Auto Rename Tag",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Rename an HTML tag and its closing tag changes too – <div> ↔ </div>.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "html",
-        "web",
-        "xml"
-      ],
-      "issue": 2
-    },
-    {
-      "id": "flux.python-docstring",
-      "name": "Python Docstring",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Type \"\"\" under a def and get a ready docstring with every parameter and the return value.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "python",
-        "documentation"
-      ],
-      "issue": 6
-    },
-    {
-      "id": "flux.indent-rainbow",
-      "name": "Indent Rainbow",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Each indentation level gets a soft color, so you always see which block a line belongs to.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "python",
-        "readability",
-        "indentation"
-      ],
-      "issue": 4
-    },
-    {
-      "id": "flux.better-comments",
-      "name": "Better Comments",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Colorful comments: ! important, ? question, TODO, * highlight and // crossed out.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "comments",
-        "readability",
-        "todo"
-      ],
-      "issue": 3
-    },
-    {
-      "id": "flux.css-class-complete",
-      "name": "CSS Class Completion",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Inside class=\"\" Flux suggests the classes from all CSS files in your project.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "html",
-        "css",
-        "web",
-        "autocomplete"
-      ],
-      "issue": 7
-    },
-    {
-      "id": "flux.bookmarks",
-      "name": "Bookmarks",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Mark important lines and jump between them – even across files.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "navigation",
-        "productivity"
-      ],
-      "issue": 8
-    },
-    {
-      "id": "flux.color-highlight",
-      "name": "Color Highlight",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "Shows a color square next to #hex and rgb() colors in any file, with a color picker.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "colors",
-        "design",
-        "web"
-      ],
-      "issue": 9
-    },
-    {
       "id": "flux.word-count",
       "name": "Word Count",
       "publisher": "Flux",
@@ -206,24 +62,6 @@
       "native": true
     },
     {
-      "id": "flux.glass-ui",
-      "name": "Glass UI",
-      "publisher": "Flux",
-      "verified": true,
-      "version": "1.0.0",
-      "description": "See-through glass panels, a soft glow in your accent color and deeper shadows – three strengths to pick from.",
-      "icon": "icon.svg",
-      "screenshots": [
-        "screenshot.png"
-      ],
-      "tags": [
-        "appearance",
-        "ui",
-        "glass"
-      ],
-      "issue": 12
-    },
-    {
       "id": "flux.todo-highlight",
       "name": "TODO Highlight",
       "publisher": "Flux",
@@ -237,8 +75,7 @@
         "comments"
       ],
       "issue": null,
-      "native": true,
-      "electron": false
+      "native": true
     }
   ]
 }

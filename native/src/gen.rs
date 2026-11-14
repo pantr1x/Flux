@@ -1,4 +1,4 @@
-// Vygenerované: node scripts/native-gen.mjs (zdroj src/renderer/icons.js a themes.js). Neupravovať ručne.
+// Ikony a témy kódu Fluxu (pôvodne vygenerované zo starej Electron verzie). Odteraz sa upravujú priamo tu.
 
 // (x, y, text, farba 0xRRGGBB, veľkosť) v súradniciach viewBoxu, y = účaria
 pub type Label = (f32, f32, &'static str, u32, f32);
