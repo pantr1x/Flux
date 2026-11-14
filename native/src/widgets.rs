@@ -380,3 +380,13 @@ pub fn fit_bold(ui: &egui::Ui, s: &str, max_w: f32, size: f32, min: f32) -> egui
     }
     crate::theme::bold(sz)
 }
+
+// ikona v zaoblenom štvorčeku (rovnaký štýl ako ikony na webe a v README): jemná výplň, rámik, ikona v strede
+pub fn icon_tile(ui: &egui::Ui, center: egui::Pos2, side: f32, name: &str, p: &Pal, on: bool) {
+    let r = egui::Rect::from_center_size(center, egui::vec2(side, side));
+    let rad = CornerRadius::same((side * 0.29).round() as u8);
+    let fill = if on { p.accent.gamma_multiply(0.18) } else { p.hover };
+    ui.painter().rect_filled(r, rad, fill);
+    ui.painter().rect_stroke(r, rad, Stroke::new(1.0, if on { p.accent.gamma_multiply(0.55) } else { p.line_strong }), StrokeKind::Inside);
+    icon_at(ui, center, (side * 0.56).round(), name, if on { p.accent } else { p.text });
+}

@@ -903,13 +903,14 @@ impl App {
                 if i == sel && (up || down) {
                     ui.scroll_to_rect(r, None);
                 }
-                let ir = Rect::from_min_size(pos2(r.left() + 12.0, r.center().y - 8.0), vec2(16.0, 16.0));
+                // ikona v štvorčeku ako na webe (súbory majú svoju farebnú ikonu)
+                let ic = pos2(r.left() + 22.0, r.center().y);
                 if let Some(f) = icon.strip_prefix("file:") {
-                    widgets::file_icon(ui, ir, f);
+                    widgets::file_icon(ui, Rect::from_center_size(ic, vec2(16.0, 16.0)), f);
                 } else if let Some(n) = icon.strip_prefix("icon:") {
-                    widgets::icon(ui, ir, n, p.text2);
+                    widgets::icon_tile(ui, ic, 26.0, n, &p, i == sel);
                 }
-                let lr = widgets::text(ui, pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, label, theme::ui(13.5), p.text, r.width() * 0.55);
+                let lr = widgets::text(ui, pos2(r.left() + 44.0, r.center().y), Align2::LEFT_CENTER, label, theme::ui(13.5), p.text, r.width() * 0.55);
                 widgets::text(ui, pos2(lr.right() + 10.0, r.center().y), Align2::LEFT_CENTER, detail, theme::ui(12.0), p.text3, r.right() - lr.right() - 20.0);
                 if resp.clicked() {
                     pick = Some(action.clone());

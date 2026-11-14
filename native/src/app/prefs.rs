@@ -752,20 +752,9 @@ impl App {
                 ui.painter().rect_filled(r, CornerRadius::same(10), if on { p.active } else { p.hover.gamma_multiply(hov) });
             }
             // aktívna karta: ikona vo farbe zvýraznenia (.s-tab.on svg)
-            widgets::icon_at(
-                ui,
-                pos2(r.left() + 20.0, r.center().y),
-                16.0,
-                ic,
-                if on {
-                    p.accent
-                } else if resp.hovered() {
-                    p.text
-                } else {
-                    p.text2
-                },
-            );
-            widgets::text(ui, pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &t(label), theme::bold(12.5), if on || resp.hovered() { p.text } else { p.text2 }, r.width() - 44.0);
+            // ikona v štvorčeku (rovnaký štýl ako na webe), aktívna karta vo farbe zvýraznenia
+            widgets::icon_tile(ui, pos2(r.left() + 20.0, r.center().y), 24.0, ic, &p, on);
+            widgets::text(ui, pos2(r.left() + 42.0, r.center().y), Align2::LEFT_CENTER, &t(label), theme::bold(12.5), if on || resp.hovered() { p.text } else { p.text2 }, r.width() - 44.0);
             if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 go_tab = Some(id.to_string());
             }
