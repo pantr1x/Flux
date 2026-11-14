@@ -1,10 +1,8 @@
 *.bat text eol=crlf
 * text=auto
 
-# Štatistika jazykov na GitHube: Flux je Rust – web, pluginy (JavaScript pre QuickJS), dokumentácia
-# a pomocné CI skripty sa do nej nerátajú.
-site/** linguist-documentation
+# Štatistika jazykov na GitHube: Flux je Rust – pluginy (JavaScript pre QuickJS), ich typy (docs/flux.d.ts)
+# a témy sa do nej nerátajú.
 docs/** linguist-documentation
 plugins/** linguist-vendored
-scripts/** linguist-vendored
 themes/** linguist-vendored

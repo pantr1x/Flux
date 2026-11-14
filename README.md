@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/images/banner.png" width="860" alt="Flux – a small, fast code editor written in Rust">
+  <img src="crates/flux-site/assets/images/banner.png" width="860" alt="Flux – a small, fast code editor written in Rust">
 </p>
 
 <p align="center">
@@ -25,19 +25,19 @@
 </p>
 
 <p align="center">
-  <img src="site/images/editor.png" width="860" alt="Flux: a Python file with its output">
+  <img src="crates/flux-site/assets/images/editor.png" width="860" alt="Flux: a Python file with its output">
 </p>
 
 ## Why Flux
 
 <table>
 <tr>
-<td width="50%"><img src="site/images/icons/small.svg" width="28" align="absmiddle">&nbsp; <b>Small and fast</b><br><sub>One native program, no browser engine inside: ~16 MB to download, ~13 MB of memory.</sub></td>
-<td width="50%"><img src="site/images/icons/ready.svg" width="28" align="absmiddle">&nbsp; <b>Ready right away</b><br><sub>Open Flux, press <b>F5</b>, your code runs. Missing languages download from their official sources.</sub></td>
+<td width="50%"><img src="crates/flux-site/assets/images/icons/small.svg" width="28" align="absmiddle">&nbsp; <b>Small and fast</b><br><sub>One native program, no browser engine inside: ~16 MB to download, ~13 MB of memory.</sub></td>
+<td width="50%"><img src="crates/flux-site/assets/images/icons/ready.svg" width="28" align="absmiddle">&nbsp; <b>Ready right away</b><br><sub>Open Flux, press <b>F5</b>, your code runs. Missing languages download from their official sources.</sub></td>
 </tr>
 <tr>
-<td><img src="site/images/icons/window.svg" width="28" align="absmiddle">&nbsp; <b>Everything in one window</b><br><sub>Code, output, a terminal, a live website preview, GitHub and AI help.</sub></td>
-<td><img src="site/images/icons/yours.svg" width="28" align="absmiddle">&nbsp; <b>Yours to change</b><br><sub>Themes, fonts, a see-through window, every shortcut – and plugins in a few lines of JavaScript.</sub></td>
+<td><img src="crates/flux-site/assets/images/icons/window.svg" width="28" align="absmiddle">&nbsp; <b>Everything in one window</b><br><sub>Code, output, a terminal, a live website preview, GitHub and AI help.</sub></td>
+<td><img src="crates/flux-site/assets/images/icons/yours.svg" width="28" align="absmiddle">&nbsp; <b>Yours to change</b><br><sub>Themes, fonts, a see-through window, every shortcut – and plugins in a few lines of JavaScript.</sub></td>
 </tr>
 </table>
 
@@ -65,49 +65,49 @@ Flux then keeps itself up to date: it checks at start and every hour, downloads 
 
 <table>
 <tr>
-<td width="36"><img src="site/images/icons/run.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/run.svg" width="28" align="absmiddle"></td>
 <td><b>One-click Run</b><br><sub><b>F5</b> runs Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia, Dart and Swift. Select a few lines and Run runs just them – with the imports, functions and variables they need.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/live.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/live.svg" width="28" align="absmiddle"></td>
 <td><b>Live Server</b><br><sub>Your website inside Flux, changing while you type – before you even save. Full, tablet or phone size; select text on the page to jump to its line in the HTML.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/suggest.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/suggest.svg" width="28" align="absmiddle"></td>
 <td><b>Suggestions that know your code</b><br><sub>Members of the Python modules you really have (<code>platform.</code> → <code>release()</code>), keys of the JSON your file loads, HTML and CSS with Emmet, snippets, error hints from the real Python compiler.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/libs.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/libs.svg" width="28" align="absmiddle"></td>
 <td><b>Python libraries</b><br><sub>An import you don't have is underlined – click it and Flux installs it with pip. One window lists what is missing and what can be updated.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/output.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/output.svg" width="28" align="absmiddle"></td>
 <td><b>Output and Terminal</b><br><sub>Every file keeps its own output and a real terminal, with search that highlights every match and a scrollbar to jump around.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/ai.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/ai.svg" width="28" align="absmiddle"></td>
 <td><b>Claude AI</b><br><sub>Ask Claude about your code (<b>Ctrl+I</b>) with your own API key. Claude Desktop, Claude Code and Cursor can also work with your projects through MCP.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/github.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/github.svg" width="28" align="absmiddle"></td>
 <td><b>GitHub</b><br><sub>Sign in with one code, open any of your repositories, or publish a new project.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/theme.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/theme.svg" width="28" align="absmiddle"></td>
 <td><b>Make it yours</b><br><sub>A theme store (try a theme with one click), themes as small text files, a see-through or blurred window, fonts, colors and every shortcut. 9 app languages.</sub></td>
 </tr>
 <tr>
-<td width="36"><img src="site/images/icons/plugin.svg" width="28" align="absmiddle"></td>
+<td width="36"><img src="crates/flux-site/assets/images/icons/plugin.svg" width="28" align="absmiddle"></td>
 <td><b>Plugins</b><br><sub>Word Count, Snippet Pack, Theme Pack, TODO Highlight – and your own, written in JavaScript.</sub></td>
 </tr>
 </table>
 
 <p align="center">
-  <img src="site/images/live.png" width="860" alt="Live Server inside Flux">
+  <img src="crates/flux-site/assets/images/live.png" width="860" alt="Live Server inside Flux">
 </p>
 
 <p align="center">
-  <img src="site/images/themes.png" width="860" alt="Theme store">
+  <img src="crates/flux-site/assets/images/themes.png" width="860" alt="Theme store">
 </p>
 
 ## Shortcuts
@@ -130,7 +130,7 @@ Every shortcut can be changed in **Settings → Keyboard**.
 ## Plugins
 
 <p align="center">
-  <img src="site/images/plugins.png" width="860" alt="Plugin store">
+  <img src="crates/flux-site/assets/images/plugins.png" width="860" alt="Plugin store">
 </p>
 
 Plugins are JavaScript files that run in a small, safe engine inside Flux (QuickJS). They live in [`plugins/`](plugins) and are installed from **Settings → Plugins**.
@@ -165,7 +165,7 @@ On Linux, install `libxkbcommon-dev libgl1-mesa-dev` first (and `libwebkit2gtk-4
 | [`crates/flux-tools`](crates/flux-tools) | translations: `cargo run -p flux-tools -- strings` / `check` / `add` |
 | [`locales/`](locales) | app translations |
 | [`themes/`](themes), [`plugins/`](plugins) | built-in themes, the theme and plugin stores |
-| [`site/`](site) | the website (GitHub Pages) |
+| [`crates/flux-site`](crates/flux-site) | the website (GitHub Pages), generated by Rust |
 
 Every push builds Flux on GitHub Actions, tests it on Windows and Linux (start, update, memory, Windows Defender scan) and publishes it as the next update.
 

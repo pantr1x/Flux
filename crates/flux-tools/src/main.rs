@@ -4,6 +4,9 @@
 //!   cargo run -p flux-tools -- check [--all]    čo v jazykoch chýba a či sedia zástupné znaky {…}
 //!   cargo run -p flux-tools -- add <súbor.json> doplní preklady {"sk": {"Text": "Preklad"}, …} do locales/*.json
 //!   cargo run -p flux-tools -- fmt              zoradí a naformátuje locales/*.json
+//!   cargo run -p flux-tools -- review           kontrola plugin pull requestu (CI, plugin-review.yml)
+mod review;
+
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -190,8 +193,9 @@ fn main() {
             }
             println!("ok");
         }
+        Some("review") => std::process::exit(review::run()),
         _ => {
-            println!("flux-tools strings | check [--all] | add <súbor.json> | fmt");
+            println!("flux-tools strings | check [--all] | add <súbor.json> | fmt | review");
         }
     }
 }

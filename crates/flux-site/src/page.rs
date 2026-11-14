@@ -1,4 +1,8 @@
-<!doctype html>
+// Obsah webu Fluxu (https://pantr1x.github.io/Flux/) – stránka, súhrn pre AI, robots, sitemap a inštalátor pre Linux.
+// Upravuje sa priamo tu; `cargo run -p flux-site -- <priečinok>` z toho zostaví web (CI: .github/workflows/pages.yml).
+
+/// index.html
+pub const INDEX: &str = r########"<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -917,3 +921,171 @@
   </script>
 </body>
 </html>
+"########;
+
+/// llms.txt
+pub const LLMS: &str = r########"# Flux
+
+> Flux is a free, small and modern code editor written in Rust. It runs code with one click, shows websites live while you type and has Claude AI built in – with nothing to set up. It runs on Windows 10 and 11 and on Linux (x86_64); a macOS version is being prepared.
+
+- Website: https://pantr1x.github.io/Flux/
+- Download for Windows (newest, no installation): https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe
+- Linux install (one command, updates itself): `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash`
+- Source code: https://github.com/pantr1x/Flux
+- Price: free, no account, no ads
+
+## Features
+
+- One-click Run (F5) for Python, JavaScript, TypeScript, Java, C / C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia, Dart and Swift. Select some lines and Run runs only them, with the imports and variables they need. Missing languages download from their official sources.
+- Live Server: the website inside Flux, changing while you type (before saving), full / tablet / phone size; selecting text on the page jumps to its line in the HTML.
+- Suggestions from the real code: members of installed Python modules, keys of JSON data loaded in the file, HTML/CSS with Emmet, snippets; error hints from the real Python compiler.
+- Python libraries: a missing import is underlined and installs with one click (pip); outdated libraries can be updated in one window.
+- Output and Terminal for every file, with search (Ctrl+F) that highlights every match.
+- Claude AI assistant: explains and fixes code; Claude Desktop, Claude Code and Cursor can work with Flux projects (MCP).
+- GitHub: sign in, open a repository or publish a new project.
+- Plugins (JavaScript), a theme store, themes as small text files, a see-through or blurred window, customizable shortcuts, 9 interface languages.
+- Automatic updates (often only the changed part).
+
+## Docs
+
+- [Changelog](https://github.com/pantr1x/Flux/blob/HEAD/native/CHANGELOG.md): what changed in every version
+- [Plugin guide](https://github.com/pantr1x/Flux/blob/HEAD/docs/PLUGINS.md): how to make a Flux plugin
+"########;
+
+/// robots.txt
+pub const ROBOTS: &str = r########"User-agent: *
+Allow: /
+
+Sitemap: https://pantr1x.github.io/Flux/sitemap.xml
+"########;
+
+/// sitemap.xml
+pub const SITEMAP: &str = r########"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://pantr1x.github.io/Flux/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+"########;
+
+/// install.sh
+pub const INSTALL: &str = r########"#!/usr/bin/env bash
+# Inštalácia Flux Native (Rust, malý a rýchly) na Linux jedným príkazom:
+#   curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash
+# Stiahne program z vetvy ci-native-linux do ~/.local/share/flux, pridá príkaz `flux` a ikonu do menu aplikácií.
+# Ďalšie aktualizácie si Flux robí sám (Nastavenia → General → About & updates, alebo automaticky).
+# Odinštalovanie:  curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash -s -- --uninstall
+set -euo pipefail
+
+BASE="${FLUX_INSTALL_URL:-https://raw.githubusercontent.com/pantr1x/Flux/ci-native-linux}"
+SITE="${FLUX_SITE_URL:-https://pantr1x.github.io/Flux}"
+DIR="$HOME/.local/share/flux"
+BIN="$HOME/.local/bin"
+APPS="$HOME/.local/share/applications"
+ICONS="$HOME/.local/share/icons/hicolor/512x512/apps"
+
+say() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+die() { printf '\033[31mError:\033[0m %s\n' "$*" >&2; exit 1; }
+
+if [ "${1:-}" = "--uninstall" ]; then
+  rm -rf "$DIR" "$BIN/flux" "$APPS/flux.desktop" "$ICONS/flux.png"
+  command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
+  say "Flux removed. Your settings stay in ~/.config/Flux (delete that folder to remove them too)."
+  exit 0
+fi
+
+[ "$(uname -s)" = Linux ] || die "This installer is for Linux."
+[ "$(uname -m)" = x86_64 ] || die "Flux for Linux is built for x86_64 only (you have $(uname -m))."
+command -v curl >/dev/null || die "curl is needed."
+command -v sha256sum >/dev/null || die "sha256sum is needed."
+
+# knižnice, ktoré okno potrebuje (X11/Wayland, OpenGL, klávesnica) – doinštalovať, ak chýbajú
+need=0
+have_lib() {
+  { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null || true; } | grep -q "$1" && return 0
+  for d in /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu /lib/x86_64-linux-gnu /lib64; do [ -e "$d/$1" ] && return 0; done
+  return 1
+}
+for lib in libxkbcommon.so.0 libGL.so.1 libxcb.so.1 libX11.so.6; do
+  have_lib "$lib" || need=1
+done
+# náhľad Live Servera vo Fluxe (flux-preview) potrebuje WebKitGTK – bez neho sa stránka otvorí v prehliadači
+have_lib libwebkit2gtk-4.1.so.0 || need=1
+if [ "$need" = 1 ]; then
+  say "Installing the libraries Flux needs – you may be asked for your password"
+  if command -v pacman >/dev/null; then sudo pacman -S --needed --noconfirm libxkbcommon mesa libxcb libx11 libglvnd webkit2gtk-4.1 || true
+  elif command -v apt-get >/dev/null; then sudo apt-get install -y libxkbcommon0 libxkbcommon-x11-0 libgl1 libxcb1 libx11-6 libwayland-client0 libegl1 libwebkit2gtk-4.1-0 || true
+  elif command -v dnf >/dev/null; then sudo dnf install -y libxkbcommon mesa-libGL libxcb libX11 libwayland-client mesa-libEGL webkit2gtk4.1 || true
+  elif command -v zypper >/dev/null; then sudo zypper install -y libxkbcommon0 Mesa-libGL1 libxcb1 libX11-6 libwayland-client0 Mesa-libEGL1 libwebkit2gtk-4_1-0 || true
+  else say "Could not install the libraries automatically – if Flux does not start, install libxkbcommon, OpenGL (mesa) and libxcb."; fi
+fi
+
+say "Looking for the newest Flux"
+info=$(curl -fsSL "$BASE/native.json") || die "Could not reach $BASE (no Linux build published yet?)"
+field() { printf '%s' "$info" | tr -d '\n ' | grep -o "\"$1\":\"[^\"]*\"" | head -n1 | cut -d'"' -f4; }
+ver=$(field version); want=$(field sha256)
+[ -n "$ver" ] && [ -n "$want" ] || die "Unexpected answer from $BASE/native.json"
+
+say "Downloading Flux $ver"
+# starý Flux (Electron AppImage z install-electron.sh) by sa inak mohol spúšťať namiesto nového
+if [ -e "$DIR/Flux.AppImage" ] || ls "$APPS"/appimagekit*[Ff]lux*.desktop >/dev/null 2>&1; then
+  say "Removing the old Flux (Electron AppImage)"
+  rm -f "$DIR/Flux.AppImage" "$APPS"/appimagekit*[Ff]lux*.desktop
+fi
+mkdir -p "$DIR" "$BIN" "$APPS" "$ICONS"
+curl -fL --progress-bar -o "$DIR/flux-native.part" "$BASE/Flux-Native"
+got=$(sha256sum "$DIR/flux-native.part" | cut -d' ' -f1)
+[ "$got" = "$want" ] || { rm -f "$DIR/flux-native.part"; die "The download is damaged (checksum mismatch). Try again."; }
+chmod +x "$DIR/flux-native.part"
+mv -f "$DIR/flux-native.part" "$DIR/flux-native"
+
+# pomocník pre náhľad Live Servera vo Fluxe (inak si ho Flux stiahne sám pri prvom náhľade)
+psha=$(printf '%s' "$info" | tr -d '\n ' | grep -o '"preview":{[^}]*}' | grep -o '"sha256":"[^"]*"' | cut -d'"' -f4 || true)
+if [ -n "$psha" ] && curl -fsL -o "$DIR/flux-preview.part" "$BASE/Flux-Preview" && [ "$(sha256sum "$DIR/flux-preview.part" | cut -d' ' -f1)" = "$psha" ]; then
+  chmod +x "$DIR/flux-preview.part"; mv -f "$DIR/flux-preview.part" "$DIR/flux-preview"
+else
+  rm -f "$DIR/flux-preview.part"
+fi
+
+# príkaz `flux`
+cat >"$BIN/flux" <<WRAP
+#!/bin/sh
+exec "$DIR/flux-native" "\$@"
+WRAP
+chmod +x "$BIN/flux"
+
+curl -fsSL -o "$DIR/flux.png" "$SITE/icon.png" || true
+[ -s "$DIR/flux.png" ] && cp -f "$DIR/flux.png" "$ICONS/flux.png" 2>/dev/null || true
+cat >"$APPS/flux.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=Flux
+GenericName=Code Editor
+Comment=A small, good-looking code editor
+Exec=$BIN/flux %F
+Icon=$DIR/flux.png
+Terminal=false
+StartupWMClass=flux
+Categories=Development;TextEditor;IDE;
+MimeType=text/plain;text/x-python;text/html;text/css;application/javascript;application/json;
+DESK
+command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
+command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+
+say "Flux $ver is installed. Open it from your app menu, or run: flux"
+say "It updates itself from now on."
+case ":$PATH:" in
+  *":$BIN:"*) ;;
+  *) say "Tip: ~/.local/bin is not in your PATH, so the 'flux' command is not found yet. Add it:"
+     printf '     bash/zsh:  echo '\''export PATH="$HOME/.local/bin:$PATH"'\'' >> ~/.%src\n' "$(basename "${SHELL:-bash}")"
+     printf '     fish:      fish_add_path ~/.local/bin\n' ;;
+esac
+# iný „flux“ skôr v PATH (napr. starý Flux z balíčka) by sa spúšťal namiesto tohto
+other=$(command -v flux 2>/dev/null || true)
+if [ -n "$other" ] && [ "$other" != "$BIN/flux" ]; then
+  say "Warning: 'flux' in your terminal runs $other, not the new Flux. Run $BIN/flux or remove the other one."
+fi
+say "Check: $DIR/flux-native --version"
+"########;

@@ -1,0 +1,6 @@
+[package]
+name = "flux-site"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Web Fluxu: zostaví statickú stránku pre GitHub Pages (bez závislostí)."

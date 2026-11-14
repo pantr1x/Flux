@@ -1,11 +1,11 @@
 name: Website
 
-# Stránka Fluxu (priečinok site/) → vetva gh-pages → GitHub Pages.
+# Web Fluxu je Rust program (crates/flux-site): zostaví stránku → vetva gh-pages → GitHub Pages.
 # Raz treba zapnúť: Settings → Pages → Build and deployment → Source: Deploy from a branch → gh-pages / (root).
 on:
   push:
     paths:
-      - 'site/**'
+      - 'crates/flux-site/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -17,10 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Publish site/ to gh-pages
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the website
+        run: cargo run -q --release -p flux-site -- out
+      - name: Publish to gh-pages
         run: |
-          cd site
-          touch .nojekyll
+          cd out
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -1,7 +1,7 @@
 # Flux v Ruste: jadro (crates/flux-core), pomocník náhľadu na Linuxe (crates/flux-preview), nástroje (crates/flux-tools) a samotný Flux (native/).
 [workspace]
 resolver = "2"
-members = ["crates/flux-core", "crates/flux-preview", "crates/flux-tools", "native"]
+members = ["crates/flux-core", "crates/flux-preview", "crates/flux-site", "crates/flux-tools", "native"]
 
 [profile.release]
 # čo najmenší a najrýchlejší program
