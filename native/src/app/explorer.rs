@@ -459,10 +459,11 @@ impl App {
                     }
                 }
                 // prázdne miesto pod stromom: klik zruší výber (nové súbory pôjdu do koreňa), pravý klik = ponuka koreňa
-                let rest = 10.0;
+                // (zaberá celé zvyšné miesto v sekcii, nie len prúžok – inak sa naň pri málo súboroch nedá kliknúť)
+                let rest = (h - (ui.cursor().top() - origin)).max(10.0);
                 let (_, eresp) = ui.allocate_exact_size(vec2(ui.available_width(), rest), Sense::click());
                 if eresp.clicked() {
-                    self.tree_focus = None;
+                    self.tree_focus = Some(w.clone()); // koreň projektu: nový súbor pôjde mimo priečinkov (ako vo VS Code)
                 }
                 self.tree_menu(&eresp, &w, true);
                 if let Some(r) = self.tree_sel {
