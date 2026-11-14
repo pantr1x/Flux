@@ -8,6 +8,7 @@ mod single;
 mod plugins;
 mod glass;
 mod lint;
+mod slice;
 mod complete;
 mod colors;
 mod perf;

@@ -1616,7 +1616,27 @@ impl App {
         }
         self.status.clear();
         let tab = &self.tabs[self.active];
-        let path = tab.path.clone();
+        let mut path = tab.path.clone();
+        // označený kód (Python): spustí sa len výber + to, čo potrebuje (importy, funkcie, premenné)
+        let mut sel_note: Option<String> = None;
+        if matches!(tab.ext().as_str(), "py" | "pyw") {
+            if let Some((a, b)) = self.sel_chars.filter(|(a, b)| a != b) {
+                let s = crate::slice::python(&tab.text, a, b);
+                if !s.code.trim().is_empty() {
+                    let tmp = Path::new(&path).with_file_name(".flux-selection.py");
+                    if std::fs::write(&tmp, &s.code).is_ok() {
+                        let t2 = tmp.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_secs(5));
+                            let _ = std::fs::remove_file(t2);
+                        });
+                        path = tmp.to_string_lossy().to_string();
+                        sel_note = Some(crate::i18n::tf("Running only the selection (+ {n} parts it needs)", &[("n", &s.deps.to_string())]));
+                    }
+                }
+            }
+        }
+        let tab = &self.tabs[self.active];
         if matches!(tab.ext().as_str(), "py" | "pyw") && self.python.as_ref().and_then(|v| v["path"].as_str()).is_none() {
             let ws = self.workspace();
             let v = python::find(ws.as_deref(), None);
@@ -1638,6 +1658,9 @@ impl App {
             s.out.clear();
         } else {
             s.out.feed("\r\n");
+        }
+        if let Some(n) = &sel_note {
+            s.out.feed(&format!("\x1b[2m› {n}\x1b[0m\r\n"));
         }
         let r = runner::run_file(&s.out.pty, &s.emit(&base), &path, &py, "");
         if r["ok"] == Value::Bool(false) {
