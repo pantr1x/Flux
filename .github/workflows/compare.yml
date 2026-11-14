@@ -55,15 +55,18 @@ jobs:
             $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
             $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
             $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-            $bmp.Save("out\$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
+            $file = ($name -replace '[^A-Za-z0-9]+', '-').Trim('-')
+            $bmp.Save("out\$file.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
           }
           function Measure-App($label, $start, $after) {
             $p = & $start
-            Start-Sleep 25
-            if ($after) { & $after $p; Start-Sleep 20 }
+            # nech sa program úplne rozbehne (VS Code po štarte ešte načítava rozšírenia)
+            Start-Sleep 40
+            if ($after) { & $after $p; Start-Sleep 30 }
             Shot $label
-            $vals = @(); for ($i = 0; $i -lt 3; $i++) { $vals += Mem (Tree $p.Id); Start-Sleep 2 }
-            $mid = ($vals | Sort-Object)[1]
+            # 5 meraní po 3 s, berie sa stredné (medián)
+            $vals = @(); for ($i = 0; $i -lt 5; $i++) { $vals += Mem (Tree $p.Id); Start-Sleep 3 }
+            $mid = ($vals | Sort-Object)[2]
             $n = (Tree $p.Id).Count
             Stop-Process -Id (Tree $p.Id) -Force -ErrorAction SilentlyContinue
             Get-Process Code, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -94,7 +97,8 @@ jobs:
             [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
           }
           $fluxSize = [math]::Round((Get-Item apps\Flux-Native.exe).Length / 1MB, 1)
-          $codeSize = [math]::Round((Get-ChildItem apps\vscode -Recurse | Measure-Object Length -Sum).Sum / 1MB, 0)
+          # program bez priečinka data (rozšírenia, cache) – férovo ako Flux.exe
+          $codeSize = [math]::Round((Get-ChildItem apps\vscode -Recurse -File | Where-Object { $_.FullName -notlike "*\vscode\data\*" } | Measure-Object Length -Sum).Sum / 1MB, 0)
           $md = @("| Test (Windows, GitHub runner) | Memory (Task Manager) | Processes |", "|---|---|---|") + ($r | ForEach-Object { "| $($_.test) | $($_.mb) MB | $($_.processes) |" }) + @("| Flux program size | $fluxSize MB | |", "| VS Code program size | $codeSize MB | |", "", "Measured $(Get-Date -Format 'yyyy-MM-dd') by .github/workflows/compare.yml – run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID")
           $md -join "`n" | Set-Content out\compare.md
           # pre web: výsledky + odkaz na tento beh v GitHub Actions (dôkaz, že je to skutočné meranie)
