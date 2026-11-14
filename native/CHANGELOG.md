@@ -14,7 +14,9 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 - Words like `\nKernel` no longer turn into fake suggestions (`nKernel`).
 
 **Output and Terminal**
-- **Search in the output**: press Ctrl+F in the Output or Terminal panel (or the magnifier in its header). Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
+- **Search in the output**: press Ctrl+F in the Output or Terminal panel (or the magnifier in its header). It is a long search field like the one at the top. Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
+
+- After *Clear*, the panel says so (*Output cleared…*), and a running Terminal redraws its prompt, so you can see it still works.
 
 **Editor**
 - `\n`, `\t` and other escapes inside strings now have their own color, so they no longer blend into the text.

@@ -3529,10 +3529,16 @@ impl App {
         }
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 60.0, cy), vec2(26.0, 26.0)), "trash", 15.0, &p, true).on_hover_text(t("Clear")).clicked() {
             if let Some(s) = self.sess_mut() {
+                // po vyčistení krátky šedý text, nech je vidno, že panel funguje
                 if s.bottom == Bottom::Output {
                     s.out.clear();
+                    s.out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Output cleared. Press F5 or ▶ Run.").replace('▶', "›")));
+                } else if s.shell_started {
+                    s.sh.clear();
+                    s.sh.pty.write("\x0c"); // Ctrl+L: shell nakreslí výzvu (prompt) znova
                 } else {
                     s.sh.clear();
+                    s.sh.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Terminal cleared.")));
                 }
             }
         }
