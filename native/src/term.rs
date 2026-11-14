@@ -52,6 +52,16 @@ pub struct TermView {
     pub zoom: i32,           // Ctrl + koliesko nad panelom: kroky zmeny písma (spotrebuje app)
     zoom_acc: f32,           // egui rozloží jedno cvaknutie na viac snímok – kroky počítame zo súčtu
     sel: Option<((i32, usize), (i32, usize))>, // výber myšou: (riadok mriežky, stĺpec) začiatok a koniec
+    pub find: Option<Find>,                    // hľadanie vo výstupe (Ctrl+F nad panelom)
+}
+
+// hľadanie v Output/Terminal: zvýraznené všetky výskyty, aktuálny výraznejšie
+pub struct Find {
+    pub q: String,
+    pub cur: usize,
+    pub focus: bool, // dať pole do fokusu v ďalšom snímku
+    jump: bool,      // posunúť históriu k aktuálnemu výskytu
+    last_q: String,
 }
 
 impl TermView {
@@ -59,7 +69,7 @@ impl TermView {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
         let replies = Replies::default();
-        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None }
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None, find: None }
     }
 
     pub fn feed(&mut self, text: &str) {
@@ -78,6 +88,53 @@ impl TermView {
     pub fn clear(&mut self) {
         // \x1b[3J zmaže históriu, \x1b[H\x1b[2J obrazovku
         self.feed("\x1b[3J\x1b[H\x1b[2J");
+    }
+
+    fn find_id(&self) -> egui::Id {
+        self.id.with("find")
+    }
+
+    // terminál alebo jeho pole hľadania má klávesnicu (Ctrl+F potom nepatrí editoru)
+    pub fn has_focus(&self, ctx: &egui::Context) -> bool {
+        ctx.memory(|m| m.has_focus(self.id) || m.has_focus(self.find_id()))
+    }
+
+    pub fn open_find(&mut self) {
+        let q = self.selected_text().filter(|t| !t.contains('\n')).or_else(|| self.find.as_ref().map(|f| f.q.clone())).unwrap_or_default();
+        self.find = Some(Find { q, cur: usize::MAX, focus: true, jump: true, last_q: String::new() });
+    }
+
+    // výskyty (riadok mriežky, stĺpec, dĺžka) – bez ohľadu na veľké/malé písmená
+    pub fn matches(&self, q: &str) -> Vec<(i32, usize, usize)> {
+        let q: Vec<char> = q.chars().flat_map(|c| c.to_lowercase()).collect();
+        if q.is_empty() {
+            return vec![];
+        }
+        let (top, bot) = (self.term.topmost_line().0, self.term.bottommost_line().0);
+        let cols = self.term.columns();
+        let mut out = vec![];
+        let mut row: Vec<char> = Vec::with_capacity(cols);
+        for l in top..=bot {
+            let g = &self.term.grid()[Line(l)];
+            row.clear();
+            row.extend((0..cols).map(|c| {
+                let ch = g[Column(c)].c;
+                if ch == '\0' { ' ' } else { ch.to_lowercase().next().unwrap_or(ch) }
+            }));
+            let mut c = 0;
+            while c + q.len() <= cols {
+                if row[c..c + q.len()] == q[..] {
+                    out.push((l, c, q.len()));
+                    c += q.len();
+                } else {
+                    c += 1;
+                }
+            }
+            if out.len() >= 5000 {
+                break;
+            }
+        }
+        out
     }
 
     pub fn focus(&self, ctx: &egui::Context) {
@@ -301,6 +358,9 @@ impl TermView {
         } else if resp.clicked() {
             self.sel = None;
         }
+        if self.has_focus(ui.ctx()) && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::F)) {
+            self.open_find();
+        }
         let mut copy = false;
         if resp.has_focus() {
             ui.memory_mut(|m| m.set_focus_lock_filter(self.id, egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true }));
@@ -325,6 +385,31 @@ impl TermView {
                 ui.ctx().copy_text(text);
             }
         }
+        // hľadanie: výskyty, aktuálny a posun histórie k nemu (pred renderable_content, ktoré si požičia term)
+        let found = self.find.as_ref().map(|f| self.matches(&f.q)).unwrap_or_default();
+        let find_cur = self.find.as_mut().map(|f| {
+            if f.q != f.last_q {
+                f.last_q = f.q.clone();
+                f.cur = usize::MAX;
+                f.jump = true;
+            }
+            if f.cur >= found.len() {
+                f.cur = found.len().saturating_sub(1); // od najnovšieho výstupu (dole), ako vo VS Code
+            }
+            if f.jump {
+                f.jump = false;
+                if let Some(&(l, _, _)) = found.get(f.cur) {
+                    let off = self.term.grid().display_offset() as i32;
+                    let r = l + off;
+                    if r < 0 || r >= rows as i32 {
+                        let want = rows as i32 / 2 - l;
+                        self.term.scroll_display(alacritty_terminal::grid::Scroll::Delta(want - off));
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
+            f.cur
+        });
         let painter = ui.painter_at(rect);
         let content = self.term.renderable_content();
         let cursor = content.cursor.point;
@@ -346,6 +431,21 @@ impl TermView {
                 let x = rect.min.x + 4.0 + from as f32 * cw;
                 let r = egui::Rect::from_min_size(egui::pos2(x, rect.min.y + 2.0 + band + r as f32 * ch), egui::vec2((to + 1 - from) as f32 * cw, ch));
                 painter.rect_filled(r, 0.0, p.accent.gamma_multiply(0.35));
+            }
+        }
+        if let Some(cur) = find_cur {
+            for (i, &(l, c, n)) in found.iter().enumerate() {
+                let r = l + offset;
+                if r < 0 || r >= rows as i32 {
+                    continue;
+                }
+                let x = rect.min.x + 4.0 + c as f32 * cw;
+                let rr = egui::Rect::from_min_size(egui::pos2(x, rect.min.y + 2.0 + band + r as f32 * ch), egui::vec2(n as f32 * cw, ch));
+                let a = if i == cur { 170 } else { 70 };
+                painter.rect_filled(rr, 3.0, Color32::from_rgba_unmultiplied(0xf5, 0xb9, 0x4a, a));
+                if i == cur {
+                    painter.rect_stroke(rr, 3.0, egui::Stroke::new(1.0, Color32::from_rgb(0xf5, 0xb9, 0x4a)), egui::StrokeKind::Outside);
+                }
             }
         }
         let mut jobs: Vec<LayoutJob> = (0..rows).map(|_| LayoutJob::default()).collect();
@@ -431,6 +531,65 @@ impl TermView {
             let y = rect.min.y + 2.0 + band + cursor.line.0 as f32 * ch;
             painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(2.0, ch)), 0.0, p.accent);
         }
+        self.find_bar(ui, rect, p, found.len());
+    }
+
+    // lišta hľadania vpravo hore: pole, „3 / 12“, predošlý / ďalší, ×
+    fn find_bar(&mut self, ui: &mut egui::Ui, rect: egui::Rect, p: &Pal, n: usize) {
+        let fid = self.find_id();
+        let id = self.id;
+        let Some(f) = self.find.as_mut() else { return };
+        let w = 330.0f32.min(rect.width() - 16.0);
+        let bar = egui::Rect::from_min_size(egui::pos2(rect.right() - w - 8.0, rect.top() + 6.0), egui::vec2(w, 34.0));
+        let painter = ui.painter_at(rect);
+        painter.add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(70) }.as_shape(bar, egui::CornerRadius::same(10)));
+        painter.rect_filled(bar, 10.0, p.solid);
+        painter.rect_stroke(bar, 10.0, egui::Stroke::new(1.0, p.line_strong), egui::StrokeKind::Inside);
+        let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(10.0, 4.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        cu.spacing_mut().item_spacing.x = 4.0;
+        let te = cu.add(egui::TextEdit::singleline(&mut f.q).id(fid).hint_text(crate::i18n::t("Find in output")).frame(egui::Frame::NONE).font(FontId::proportional(13.0)).desired_width(w - 150.0));
+        if f.focus {
+            f.focus = false;
+            te.request_focus();
+        }
+        let (enter, shift, esc) = cu.input(|i| (i.key_pressed(egui::Key::Enter), i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
+        let label = if f.q.is_empty() { String::new() } else if n == 0 { crate::i18n::t("No results") } else { format!("{} / {}", f.cur.min(n - 1) + 1, n) };
+        cu.label(egui::RichText::new(label).font(FontId::proportional(12.0)).color(if n == 0 && !f.q.is_empty() { p.red } else { p.text3 }));
+        let mut step = 0i32;
+        let mut close = false;
+        cu.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let b = |ui: &mut egui::Ui, icon: &str| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(24.0, 24.0), Sense::hover());
+                crate::widgets::icon_button_at(ui, r, icon, 13.0, p, true)
+            };
+            if b(ui, "x").on_hover_text(crate::i18n::t("Close (Esc)")).clicked() {
+                close = true;
+            }
+            if b(ui, "arrowRight").on_hover_text(crate::i18n::t("Next (Enter)")).clicked() {
+                step = 1;
+            }
+            if b(ui, "arrowLeft").on_hover_text(crate::i18n::t("Previous (Shift+Enter)")).clicked() {
+                step = -1;
+            }
+        });
+        // Enter v poli: egui pole po Enter stratí fokus – vrátiť ho
+        if te.lost_focus() && enter {
+            step = if shift { -1 } else { 1 };
+            f.focus = true;
+        }
+        if (te.has_focus() || te.lost_focus()) && esc {
+            close = true;
+        }
+        if step != 0 && n > 0 {
+            let c = f.cur.min(n - 1) as i32;
+            f.cur = (c + step).rem_euclid(n as i32) as usize;
+            f.jump = true;
+            ui.ctx().request_repaint();
+        }
+        if close {
+            self.find = None;
+            ui.ctx().memory_mut(|m| m.request_focus(id));
+        }
     }
 }
 
@@ -459,6 +618,16 @@ mod tests {
         assert_eq!(v.all_text(), "");
         v.parser.advance(&mut v.term, b"hello world   \r\nsecond line\r\n\r\n\r\n");
         assert_eq!(v.all_text(), "hello world\nsecond line");
+    }
+
+    #[test]
+    fn term_find_matches() {
+        let mut v = TermView::new("t");
+        v.parser.advance(&mut v.term, b"Kernel 6.1\r\nkernel_version x kernel\r\n");
+        let m = v.matches("KERNEL");
+        assert_eq!(m.len(), 3);
+        assert_eq!((m[1].0 - m[0].0, m[1].1, m[2].1), (1, 0, 17));
+        assert!(v.matches("").is_empty());
     }
 
     #[test]

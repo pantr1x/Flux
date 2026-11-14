@@ -118,7 +118,8 @@ impl Code {
             ("comment, punctuation.definition.comment", "comment"),
             ("keyword, storage.type, storage.modifier, keyword.control, keyword.operator.logical, keyword.operator.word, keyword.other", "keyword"),
             ("keyword.operator, punctuation, meta.brace, punctuation.separator, punctuation.accessor", "delimiter"),
-            ("string, punctuation.definition.string, constant.character.escape", "string"),
+            ("string, punctuation.definition.string", "string"),
+            ("constant.character.escape", "regexp"), // \n, \t… vo reťazci majú vlastnú farbu
             ("constant.numeric", "number"),
             ("constant.language, variable.language, storage.type.primitive", "storage"),
             ("constant.other, variable.other.constant", "constant"),

@@ -2245,7 +2245,9 @@ impl App {
         let ed_id = egui::Id::new(("editor", self.tabs[self.active].path.clone()));
         let ctx = ui.ctx().clone();
         let focused = ctx.memory(|m| m.has_focus(ed_id));
-        let (find_k, repl_k) = ctx.input_mut(|i| (i.consume_key(egui::Modifiers::COMMAND, egui::Key::F), i.consume_key(egui::Modifiers::COMMAND, egui::Key::H)));
+        // Ctrl+F v Output/Terminal hľadá vo výstupe (spracuje TermView), nie v editore
+        let term_keys = self.tabs[self.active].sess.as_ref().is_some_and(|s| s.out.has_focus(&ctx) || s.sh.has_focus(&ctx));
+        let (find_k, repl_k) = if term_keys { (false, false) } else { ctx.input_mut(|i| (i.consume_key(egui::Modifiers::COMMAND, egui::Key::F), i.consume_key(egui::Modifiers::COMMAND, egui::Key::H))) };
         if find_k || repl_k {
             let sel_text = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).map(|r| {
                 let (a, b) = (usize::from(r.primary.index).min(usize::from(r.secondary.index)), usize::from(r.primary.index).max(usize::from(r.secondary.index)));
@@ -2262,6 +2264,11 @@ impl App {
         let sug_on = self.get("suggest").as_bool() != Some(false);
         let ws_flag = self.ws_mode();
         let mut force_sug = false;
+        // JSON dáta sa práve stiahli → návrhy kľúčov sa ukážu hneď, bez ďalšieho písania
+        if crate::jsonkeys::take_ready() {
+            self.sug_again = true;
+        }
+        let json_on = self.get("jsonSuggest").as_bool() != Some(false);
         if focused && sug_on {
             force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space)) || std::mem::take(&mut self.sug_again);
             let open = self.sug.as_ref().is_some_and(|s| s.path == self.tabs[self.active].path);
@@ -2512,8 +2519,16 @@ impl App {
                             }
                             // ako VS Code: „<“, „</“, „.“, medzera v značke, „"“ atribútu… otvoria návrhy hneď;
                             // na mieste s vlastnými návrhmi (značka, atribút, člen) od prvého písmena, inak od dvoch
+                            // kľúče JSON dát (`data["releases"][0]["ker`) – zo skutočných dát z requests.get(…).json() / json.load(…)
+                            let json_items = if json_on && matches!(lang.as_str(), "py" | "pyw") {
+                                crate::jsonkeys::complete(&tab.text, &tab.path, &before)
+                            } else {
+                                None
+                            };
                             let trig = !typed_ident && crate::complete::trigger(&lang, &before);
-                            if (typed_ident && (plen >= 2 || (cx.rich() && plen >= 1))) || trig || bang || force_sug {
+                            if let Some((items, tlen)) = json_items {
+                                *sug_slot = Some(Sug { items, sel: 0, top: 0, picked: false, start: c - tlen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
+                            } else if (typed_ident && (plen >= 2 || (cx.rich() && plen >= 1))) || trig || bang || force_sug {
                                 let prefix: String = before[c - plen..].iter().collect();
                                 if sug_words.as_ref().map(|w| (w.0.as_str(), w.1)) != Some((tab.path.as_str(), hlc.gen)) {
                                     *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang), crate::complete::members(&tab.text, &lang)));
@@ -3468,6 +3483,15 @@ impl App {
         }
         if collapsed {
             return;
+        }
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 136.0, cy), vec2(26.0, 26.0)), "search", 15.0, &p, true).on_hover_text(t("Find in output (Ctrl+F)")).clicked() {
+            if let Some(s) = self.sess_mut() {
+                if s.bottom == Bottom::Output {
+                    s.out.open_find();
+                } else {
+                    s.sh.open_find();
+                }
+            }
         }
         if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 98.0, cy), vec2(26.0, 26.0)), "copy", 15.0, &p, true).on_hover_text(t("Copy all output")).clicked() {
             let text = self.sess_mut().map(|s| if s.bottom == Bottom::Output { s.out.all_text() } else { s.sh.all_text() }).unwrap_or_default();

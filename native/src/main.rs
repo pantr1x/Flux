@@ -10,6 +10,7 @@ mod glass;
 mod lint;
 mod slice;
 mod pylibs;
+mod jsonkeys;
 mod complete;
 mod colors;
 mod perf;

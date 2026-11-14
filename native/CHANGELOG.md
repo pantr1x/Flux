@@ -7,6 +7,13 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 **Run only the selected code (Python)**
 - Select some code (for example one `print(...)`) and press ▶ Run or F5: Flux runs just that, plus only the parts it needs – the `import` lines, functions, classes and variables it uses. Everything else in the file is skipped. Without a selection, Run works as before.
 
+**Output and Terminal**
+- **Search in the output**: press Ctrl+F in the Output or Terminal panel (or the magnifier in its header). Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
+
+**Editor**
+- `\n`, `\t` and other escapes inside strings now have their own color, so they no longer blend into the text.
+- **Suggestions from your JSON data (Python)**: after `data = requests.get(url).json()` (or `json.load(open("file.json"))`), typing `data["` or `data["releases"][0]["ker` suggests the real keys from that data, with a preview of each value. Flux downloads the data once in the background. Turn it off with the setting `jsonSuggest: false`.
+
 **Explorer**
 - Click the empty space under the file tree to select the project folder itself: New file / New folder then create things outside every folder (like VS Code). The whole empty area is clickable now, not just a thin strip.
 
