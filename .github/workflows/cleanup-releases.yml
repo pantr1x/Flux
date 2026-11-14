@@ -1,0 +1,46 @@
+# Odstráni staré GitHub Releases Electron Fluxu (Flux Native sa vydáva cez vetvy ci-native / ci-native-linux).
+# Spúšťa sa len ručne: Actions → Clean up old releases → Run workflow, do poľa „confirm“ napíš DELETE.
+# Predvolene ostane v1.5.0: starý Electron Flux sa naň ešte aktualizuje a ten ho sám presunie na Flux Native.
+name: Clean up old releases
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'Release tag to keep (empty = delete all). v1.5.0 moves old Electron users to Flux Native.'
+        default: 'v1.5.0'
+        required: false
+      confirm:
+        description: 'Type DELETE to really delete the releases'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          KEEP: ${{ inputs.keep }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "DELETE" ]; then echo "Type DELETE into 'confirm' to delete the releases."; exit 1; fi
+          gh release list --limit 500 --json tagName --jq '.[].tagName' > tags.txt
+          echo "Releases: $(wc -l < tags.txt)"
+          while read -r tag; do
+            [ -z "$tag" ] && continue
+            if [ -n "$KEEP" ] && [ "$tag" = "$KEEP" ]; then echo "keep $tag"; continue; fi
+            echo "delete $tag"
+            gh release delete "$tag" --yes --cleanup-tag || echo "  could not delete $tag"
+          done < tags.txt
+          if [ -n "$KEEP" ] && grep -qx "$KEEP" tags.txt; then
+            gh release edit "$KEEP" --title "Old Flux (Electron) – moves you to Flux Native" --notes "This is the last version of the old Flux (Electron). When it starts, it moves you to the new **Flux Native** by itself.
+
+          **New here? Download Flux Native instead:** https://github.com/${GH_REPO}/raw/ci-native/Flux-Native.exe – or see https://pantr1x.github.io/Flux/"
+          fi
+          echo "## Releases left" >> "$GITHUB_STEP_SUMMARY"
+          gh release list --limit 50 >> "$GITHUB_STEP_SUMMARY" || true

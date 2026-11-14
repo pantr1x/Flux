@@ -19,7 +19,7 @@
 <p align="center">
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-3f3f46?style=flat-square&labelColor=18181b">
   <img alt="Windows and Linux" src="https://img.shields.io/badge/Windows%20%7C%20Linux-3f3f46?style=flat-square&labelColor=18181b">
-  <img alt="Memory" src="https://img.shields.io/badge/memory-~14%20MB-3f3f46?style=flat-square&labelColor=18181b">
+  <img alt="Memory" src="https://img.shields.io/badge/memory-~13%20MB-3f3f46?style=flat-square&labelColor=18181b">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-3f3f46?style=flat-square&labelColor=18181b"></a>
   <a href="https://github.com/pantr1x/Flux/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/pantr1x/Flux?style=flat-square&labelColor=18181b&color=3f3f46"></a>
 </p>
@@ -30,10 +30,16 @@
 
 ## Why Flux
 
-- **Small and fast.** One native program (no browser engine inside): about 15 MB to download and about 14 MB of memory.
-- **Ready right away.** Open Flux, press **F5**, your code runs. Languages you don't have yet download from their official sources.
-- **Everything in one window.** Code, program output, a terminal, a live website preview, GitHub and AI help.
-- **Yours to change.** Themes, fonts, colors, a see-through window, shortcuts – and plugins anyone can write in a few lines of JavaScript.
+<table>
+<tr>
+<td width="50%"><img src="site/images/icons/small.svg" width="28" align="absmiddle">&nbsp; <b>Small and fast</b><br><sub>One native program, no browser engine inside: ~16 MB to download, ~13 MB of memory.</sub></td>
+<td width="50%"><img src="site/images/icons/ready.svg" width="28" align="absmiddle">&nbsp; <b>Ready right away</b><br><sub>Open Flux, press <b>F5</b>, your code runs. Missing languages download from their official sources.</sub></td>
+</tr>
+<tr>
+<td><img src="site/images/icons/window.svg" width="28" align="absmiddle">&nbsp; <b>Everything in one window</b><br><sub>Code, output, a terminal, a live website preview, GitHub and AI help.</sub></td>
+<td><img src="site/images/icons/yours.svg" width="28" align="absmiddle">&nbsp; <b>Yours to change</b><br><sub>Themes, fonts, a see-through window, every shortcut – and plugins in a few lines of JavaScript.</sub></td>
+</tr>
+</table>
 
 ## Flux vs VS Code
 
@@ -57,17 +63,44 @@ Flux then keeps itself up to date: it checks at start and every hour, downloads 
 
 ## What it does
 
-| | |
-|---|---|
-| **▶ One-click Run** | **F5** runs Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia, Dart and Swift. Select a few lines and Run runs just them – with the imports, functions and variables they need. `input()` works in the output. |
-| **🌐 Live Server** | Your website right inside Flux, changing while you type – before you even save. Full, tablet or phone size, links open in tabs, select text on the page to jump to its line in the HTML. |
-| **💡 Suggestions that know your code** | Members of the Python modules you really have installed (`platform.` → `release()`), keys of the JSON data your file loads (`data["releases"][0]["kernel_version"]`), HTML and CSS with Emmet, snippets, error hints from the real Python compiler. |
-| **📦 Python libraries** | An import you don't have gets underlined – click it and Flux installs it with pip. One window lists what is missing and what can be updated. |
-| **🖥 Output and Terminal** | Every file keeps its own output and a real terminal, with a search field that highlights every match. |
-| **✦ Claude AI** | Ask Claude about your code (Ctrl+I) with your own API key. Claude Desktop, Claude Code and Cursor can also work with your Flux projects through MCP. |
-| **🐙 GitHub** | Sign in with one code, open any of your repositories, or publish a new project. |
-| **🎨 Make it yours** | A theme store (try a theme with one click), themes as small text files, see-through or blurred window, fonts, colors and every shortcut. 9 app languages: English, Slovak, German, Spanish, French, Italian, Polish, Portuguese and Ukrainian. |
-| **🧩 Plugins** | Word Count, Snippet Pack, Theme Pack, TODO Highlight – and your own, written in JavaScript. |
+<table>
+<tr>
+<td width="36"><img src="site/images/icons/run.svg" width="28" align="absmiddle"></td>
+<td><b>One-click Run</b><br><sub><b>F5</b> runs Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia, Dart and Swift. Select a few lines and Run runs just them – with the imports, functions and variables they need.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/live.svg" width="28" align="absmiddle"></td>
+<td><b>Live Server</b><br><sub>Your website inside Flux, changing while you type – before you even save. Full, tablet or phone size; select text on the page to jump to its line in the HTML.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/suggest.svg" width="28" align="absmiddle"></td>
+<td><b>Suggestions that know your code</b><br><sub>Members of the Python modules you really have (<code>platform.</code> → <code>release()</code>), keys of the JSON your file loads, HTML and CSS with Emmet, snippets, error hints from the real Python compiler.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/libs.svg" width="28" align="absmiddle"></td>
+<td><b>Python libraries</b><br><sub>An import you don't have is underlined – click it and Flux installs it with pip. One window lists what is missing and what can be updated.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/output.svg" width="28" align="absmiddle"></td>
+<td><b>Output and Terminal</b><br><sub>Every file keeps its own output and a real terminal, with search that highlights every match and a scrollbar to jump around.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/ai.svg" width="28" align="absmiddle"></td>
+<td><b>Claude AI</b><br><sub>Ask Claude about your code (<b>Ctrl+I</b>) with your own API key. Claude Desktop, Claude Code and Cursor can also work with your projects through MCP.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/github.svg" width="28" align="absmiddle"></td>
+<td><b>GitHub</b><br><sub>Sign in with one code, open any of your repositories, or publish a new project.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/theme.svg" width="28" align="absmiddle"></td>
+<td><b>Make it yours</b><br><sub>A theme store (try a theme with one click), themes as small text files, a see-through or blurred window, fonts, colors and every shortcut. 9 app languages.</sub></td>
+</tr>
+<tr>
+<td width="36"><img src="site/images/icons/plugin.svg" width="28" align="absmiddle"></td>
+<td><b>Plugins</b><br><sub>Word Count, Snippet Pack, Theme Pack, TODO Highlight – and your own, written in JavaScript.</sub></td>
+</tr>
+</table>
 
 <p align="center">
   <img src="site/images/live.png" width="860" alt="Live Server inside Flux">
