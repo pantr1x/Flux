@@ -3513,12 +3513,18 @@ impl App {
         if collapsed {
             return;
         }
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rect.right() - 136.0, cy), vec2(26.0, 26.0)), "search", 15.0, &p, true).on_hover_text(t("Find in output (Ctrl+F)")).clicked() {
+        // pole hľadania priamo v hlavičke (ako hľadanie v hornej lište), medzi Output/Terminal a ikonami
+        let fx0 = group.right() + 14.0;
+        let fx1 = rect.right() - 116.0;
+        if fx1 - fx0 > 120.0 {
+            let fw = (fx1 - fx0).min(520.0);
+            let fr = Rect::from_min_size(pos2(fx1 - fw, cy - 14.0), vec2(fw, 28.0));
+            let pal = self.pal;
             if let Some(s) = self.sess_mut() {
                 if s.bottom == Bottom::Output {
-                    s.out.open_find();
+                    s.out.find_field(ui, fr, &pal);
                 } else {
-                    s.sh.open_find();
+                    s.sh.find_field(ui, fr, &pal);
                 }
             }
         }

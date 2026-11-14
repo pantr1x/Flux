@@ -62,6 +62,7 @@ pub struct Find {
     pub focus: bool, // dať pole do fokusu v ďalšom snímku
     jump: bool,      // posunúť históriu k aktuálnemu výskytu
     last_q: String,
+    n: usize,        // počet výskytov z posledného snímku (pre pole v hlavičke)
 }
 
 impl TermView {
@@ -101,7 +102,7 @@ impl TermView {
 
     pub fn open_find(&mut self) {
         let q = self.selected_text().filter(|t| !t.contains('\n')).or_else(|| self.find.as_ref().map(|f| f.q.clone())).unwrap_or_default();
-        self.find = Some(Find { q, cur: usize::MAX, focus: true, jump: true, last_q: String::new() });
+        self.find = Some(Find { q, cur: usize::MAX, focus: true, jump: true, last_q: String::new(), n: 0 });
     }
 
     // výskyty (riadok mriežky, stĺpec, dĺžka) – bez ohľadu na veľké/malé písmená
@@ -393,6 +394,7 @@ impl TermView {
                 f.cur = usize::MAX;
                 f.jump = true;
             }
+            f.n = found.len();
             if f.cur >= found.len() {
                 f.cur = found.len().saturating_sub(1); // od najnovšieho výstupu (dole), ako vo VS Code
             }
@@ -531,69 +533,60 @@ impl TermView {
             let y = rect.min.y + 2.0 + band + cursor.line.0 as f32 * ch;
             painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(2.0, ch)), 0.0, p.accent);
         }
-        self.find_bar(ui, rect, p, found.len());
     }
 
-    // lišta hľadania hore (dlhé pole ako hľadanie v hornej lište): lupa, text, „3 / 12“ / Ctrl+F, ← → ×
-    fn find_bar(&mut self, ui: &mut egui::Ui, rect: egui::Rect, p: &Pal, n: usize) {
+    // pole hľadania v hlavičke panela (dlhé, ako hľadanie v hornej lište): lupa, text, „3 / 12“ alebo Ctrl+F, ← →
+    pub fn find_field(&mut self, ui: &mut egui::Ui, bar: egui::Rect, p: &Pal) {
         let fid = self.find_id();
         let id = self.id;
-        let Some(f) = self.find.as_mut() else { return };
-        let w = (rect.width() - 24.0).min(520.0).max(200.0);
-        let bar = egui::Rect::from_min_size(egui::pos2(rect.right() - w - 12.0, rect.top() + 6.0), egui::vec2(w, 30.0));
+        let f = self.find.get_or_insert_with(|| Find { q: String::new(), cur: usize::MAX, focus: false, jump: false, last_q: String::new(), n: 0 });
+        let n = f.n;
         let focused = ui.ctx().memory(|m| m.has_focus(fid));
-        let painter = ui.painter_at(rect);
-        // pod lištou je text výstupu → plná výplň (p.solid) + jemný biely/čierny nádych ako pole hľadania hore
-        painter.add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(60) }.as_shape(bar, egui::CornerRadius::same(9)));
-        painter.rect_filled(bar, 9.0, p.solid);
-        painter.rect_filled(bar, 9.0, if p.dark { Color32::from_white_alpha(10) } else { Color32::from_black_alpha(8) });
-        painter.rect_stroke(bar, 9.0, egui::Stroke::new(1.0, if focused { p.accent.gamma_multiply(0.8) } else { p.line_strong }), egui::StrokeKind::Inside);
+        let hover = ui.rect_contains_pointer(bar);
+        let painter = ui.painter().clone();
+        let fill = if p.dark { Color32::from_white_alpha(if hover || focused { 16 } else { 10 }) } else { Color32::from_black_alpha(if hover || focused { 12 } else { 8 }) };
+        painter.rect_filled(bar, 9.0, fill);
+        painter.rect_stroke(bar, 9.0, egui::Stroke::new(1.0, if focused { p.accent.gamma_multiply(0.8) } else if hover { p.line_strong } else { p.line }), egui::StrokeKind::Inside);
         let cy = bar.center().y;
-        crate::widgets::icon_at(ui, egui::pos2(bar.left() + 18.0, cy), 14.0, "search", if focused { p.text2 } else { p.text3 });
-        let right_w = if f.q.is_empty() { 60.0 } else { 150.0 };
-        let field = egui::Rect::from_min_max(egui::pos2(bar.left() + 32.0, bar.top()), egui::pos2(bar.right() - right_w, bar.bottom()));
+        crate::widgets::icon_at(ui, egui::pos2(bar.left() + 16.0, cy), 13.0, "search", if focused { p.text2 } else { p.text3 });
+        let right_w = if f.q.is_empty() { 58.0 } else { 120.0 };
+        let field = egui::Rect::from_min_max(egui::pos2(bar.left() + 30.0, bar.top()), egui::pos2(bar.right() - right_w, bar.bottom()));
         let mut cu = ui.new_child(egui::UiBuilder::new().max_rect(field).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        let te = cu.add(egui::TextEdit::singleline(&mut f.q).id(fid).hint_text(crate::i18n::t("Search")).frame(egui::Frame::NONE).font(FontId::proportional(13.0)).desired_width(field.width()));
+        let te = cu.add(egui::TextEdit::singleline(&mut f.q).id(fid).hint_text(crate::i18n::t("Search output")).frame(egui::Frame::NONE).font(FontId::proportional(13.0)).desired_width(field.width()));
         if f.focus {
             f.focus = false;
             te.request_focus();
         }
         let (enter, shift, esc) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.modifiers.shift, i.key_pressed(egui::Key::Escape)));
         let mut step = 0i32;
-        let mut close = false;
         if f.q.is_empty() {
-            painter.text(egui::pos2(bar.right() - 30.0, cy), egui::Align2::RIGHT_CENTER, "Ctrl+F", FontId::proportional(10.5), p.text3);
+            painter.text(egui::pos2(bar.right() - 10.0, cy), egui::Align2::RIGHT_CENTER, "Ctrl+F", FontId::proportional(10.5), p.text3);
         } else {
             let label = if n == 0 { crate::i18n::t("No results") } else { format!("{} / {}", f.cur.min(n - 1) + 1, n) };
-            painter.text(egui::pos2(bar.right() - 86.0, cy), egui::Align2::RIGHT_CENTER, &label, FontId::proportional(12.0), if n == 0 { p.red } else { p.text3 });
-            let btn = |ui: &mut egui::Ui, x: f32, icon: &str| crate::widgets::icon_button_at(ui, egui::Rect::from_center_size(egui::pos2(x, cy), egui::vec2(24.0, 24.0)), icon, 13.0, p, n > 0);
-            if btn(ui, bar.right() - 68.0, "arrowLeft").on_hover_text(crate::i18n::t("Previous (Shift+Enter)")).clicked() {
+            painter.text(egui::pos2(bar.right() - 62.0, cy), egui::Align2::RIGHT_CENTER, &label, FontId::proportional(12.0), if n == 0 { p.red } else { p.text3 });
+            let btn = |ui: &mut egui::Ui, x: f32, icon: &str| crate::widgets::icon_button_at(ui, egui::Rect::from_center_size(egui::pos2(x, cy), egui::vec2(22.0, 22.0)), icon, 12.0, p, n > 0);
+            if btn(ui, bar.right() - 42.0, "arrowLeft").on_hover_text(crate::i18n::t("Previous (Shift+Enter)")).clicked() {
                 step = -1;
             }
-            if btn(ui, bar.right() - 44.0, "arrowRight").on_hover_text(crate::i18n::t("Next (Enter)")).clicked() {
+            if btn(ui, bar.right() - 18.0, "arrowRight").on_hover_text(crate::i18n::t("Next (Enter)")).clicked() {
                 step = 1;
             }
-        }
-        if crate::widgets::icon_button_at(ui, egui::Rect::from_center_size(egui::pos2(bar.right() - 16.0, cy), egui::vec2(24.0, 24.0)), "x", 12.0, p, true).on_hover_text(crate::i18n::t("Close (Esc)")).clicked() {
-            close = true;
         }
         // Enter v poli: egui pole po Enter stratí fokus – vrátiť ho
         if te.lost_focus() && enter {
             step = if shift { -1 } else { 1 };
             f.focus = true;
         }
+        // Esc: vymazať hľadanie a vrátiť sa do výstupu
         if (te.has_focus() || te.lost_focus()) && esc {
-            close = true;
+            f.q.clear();
+            ui.ctx().memory_mut(|m| m.request_focus(id));
         }
         if step != 0 && n > 0 {
             let c = f.cur.min(n - 1) as i32;
             f.cur = (c + step).rem_euclid(n as i32) as usize;
             f.jump = true;
             ui.ctx().request_repaint();
-        }
-        if close {
-            self.find = None;
-            ui.ctx().memory_mut(|m| m.request_focus(id));
         }
     }
 }
