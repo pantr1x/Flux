@@ -533,6 +533,51 @@ impl TermView {
             let y = rect.min.y + 2.0 + band + cursor.line.0 as f32 * ch;
             painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(2.0, ch)), 0.0, p.accent);
         }
+        self.scrollbar(ui, rect, p, rows);
+    }
+
+    // posuvník histórie vpravo (ťahať / kliknúť) a tlačidlo „na koniec“, keď nie si dole
+    fn scrollbar(&mut self, ui: &mut egui::Ui, rect: egui::Rect, p: &Pal, rows: usize) {
+        let hist = self.term.grid().history_size();
+        if hist == 0 {
+            return;
+        }
+        let off = self.term.grid().display_offset() as f32;
+        let total = (hist + rows) as f32;
+        let track = egui::Rect::from_min_max(egui::pos2(rect.right() - 10.0, rect.top() + 2.0), egui::pos2(rect.right() - 2.0, rect.bottom() - 2.0));
+        let th = (track.height() * rows as f32 / total).max(24.0);
+        let room = track.height() - th;
+        // display_offset 0 = dole, hist = úplne hore
+        let top = track.top() + room * (1.0 - off / hist as f32);
+        let thumb = egui::Rect::from_min_size(egui::pos2(track.left(), top), egui::vec2(track.width(), th));
+        let resp = ui.interact(track, self.id.with("sb"), Sense::click_and_drag());
+        let hot = resp.hovered() || resp.dragged();
+        let painter = ui.painter_at(rect);
+        if hot {
+            painter.rect_filled(track, 4.0, p.hover);
+        }
+        painter.rect_filled(thumb.shrink2(egui::vec2(if hot { 0.0 } else { 1.5 }, 0.0)), 4.0, if hot { p.text3 } else { p.line_strong });
+        let want = |y: f32| -> i32 { (((track.bottom() - th / 2.0 - y) / room.max(1.0)) * hist as f32).round().clamp(0.0, hist as f32) as i32 };
+        if let Some(pos) = resp.interact_pointer_pos().filter(|_| resp.dragged() || resp.clicked()) {
+            let w = want(pos.y);
+            self.term.scroll_display(alacritty_terminal::grid::Scroll::Delta(w - off as i32));
+            ui.ctx().request_repaint();
+        }
+        // „na koniec“: okrúhle tlačidlo vpravo dole
+        if off > 0.0 {
+            let c = egui::pos2(rect.right() - 30.0, rect.bottom() - 22.0);
+            let r = egui::Rect::from_center_size(c, egui::vec2(28.0, 28.0));
+            let b = ui.interact(r, self.id.with("bottom"), Sense::click());
+            painter.circle_filled(c, 14.0, if b.hovered() { p.active } else { p.solid });
+            painter.circle_stroke(c, 14.0, egui::Stroke::new(1.0, p.line_strong));
+            let st = egui::Stroke::new(1.8, p.text);
+            painter.line_segment([c + egui::vec2(-4.5, -1.5), c + egui::vec2(0.0, 3.0)], st);
+            painter.line_segment([c + egui::vec2(0.0, 3.0), c + egui::vec2(4.5, -1.5)], st);
+            if b.on_hover_text(crate::i18n::t("Jump to the end")).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                self.term.scroll_display(alacritty_terminal::grid::Scroll::Bottom);
+                ui.ctx().request_repaint();
+            }
+        }
     }
 
     // pole hľadania v hlavičke panela (dlhé, ako hľadanie v hornej lište): lupa, text, „3 / 12“ alebo Ctrl+F, ← →
@@ -564,11 +609,24 @@ impl TermView {
         } else {
             let label = if n == 0 { crate::i18n::t("No results") } else { format!("{} / {}", f.cur.min(n - 1) + 1, n) };
             painter.text(egui::pos2(bar.right() - 62.0, cy), egui::Align2::RIGHT_CENTER, &label, FontId::proportional(12.0), if n == 0 { p.red } else { p.text3 });
-            let btn = |ui: &mut egui::Ui, x: f32, icon: &str| crate::widgets::icon_button_at(ui, egui::Rect::from_center_size(egui::pos2(x, cy), egui::vec2(22.0, 22.0)), icon, 12.0, p, n > 0);
-            if btn(ui, bar.right() - 42.0, "arrowLeft").on_hover_text(crate::i18n::t("Previous (Shift+Enter)")).clicked() {
+            // ↑ predošlý / ↓ ďalší výskyt (šípky kreslené, aby sedeli so smerom vo výstupe)
+            let btn = |ui: &mut egui::Ui, x: f32, up: bool, id: &str| {
+                let r = egui::Rect::from_center_size(egui::pos2(x, cy), egui::vec2(22.0, 22.0));
+                let resp = ui.interact(r, ui.id().with(("tf", id)), Sense::click());
+                if resp.hovered() && n > 0 {
+                    ui.painter().rect_filled(r, 6.0, p.hover);
+                }
+                let c = r.center();
+                let d = if up { -1.0 } else { 1.0 };
+                let st = egui::Stroke::new(1.6, if n > 0 { if resp.hovered() { p.text } else { p.text2 } } else { p.text3 });
+                ui.painter().line_segment([c + egui::vec2(-4.0, -2.0 * d), c + egui::vec2(0.0, 2.0 * d)], st);
+                ui.painter().line_segment([c + egui::vec2(0.0, 2.0 * d), c + egui::vec2(4.0, -2.0 * d)], st);
+                resp
+            };
+            if btn(ui, bar.right() - 42.0, true, "prev").on_hover_text(crate::i18n::t("Previous (Shift+Enter)")).clicked() {
                 step = -1;
             }
-            if btn(ui, bar.right() - 18.0, "arrowRight").on_hover_text(crate::i18n::t("Next (Enter)")).clicked() {
+            if btn(ui, bar.right() - 18.0, false, "next").on_hover_text(crate::i18n::t("Next (Enter)")).clicked() {
                 step = 1;
             }
         }

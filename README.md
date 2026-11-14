@@ -1,11 +1,9 @@
 <p align="center">
-  <img src="site/icon.png" width="96" alt="Flux">
+  <img src="site/images/banner.png" width="860" alt="Flux – a small, fast code editor written in Rust">
 </p>
 
-<h1 align="center">Flux</h1>
-
 <p align="center">
-  A small, fast code editor written in Rust. Run your code with one click, see your website change as you type, get help from Claude AI – with nothing to set up.
+  Run your code with one click, see your website change as you type, get help from Claude AI – with nothing to set up.
   <br><br>
   <a href="https://pantr1x.github.io/Flux/"><b>Website</b></a>
   &nbsp;·&nbsp;
@@ -19,11 +17,11 @@
 </p>
 
 <p align="center">
-  <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-dea584">
-  <img alt="Windows and Linux" src="https://img.shields.io/badge/Windows%20%7C%20Linux-6366f1">
-  <img alt="Memory" src="https://img.shields.io/badge/memory-~14%20MB-3ecf8e">
-  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-8b7bff"></a>
-  <a href="https://github.com/pantr1x/Flux/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/pantr1x/Flux?style=flat&color=f5b94a"></a>
+  <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-3f3f46?style=flat-square&labelColor=18181b">
+  <img alt="Windows and Linux" src="https://img.shields.io/badge/Windows%20%7C%20Linux-3f3f46?style=flat-square&labelColor=18181b">
+  <img alt="Memory" src="https://img.shields.io/badge/memory-~14%20MB-3f3f46?style=flat-square&labelColor=18181b">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-3f3f46?style=flat-square&labelColor=18181b"></a>
+  <a href="https://github.com/pantr1x/Flux/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/pantr1x/Flux?style=flat-square&labelColor=18181b&color=3f3f46"></a>
 </p>
 
 <p align="center">
@@ -36,6 +34,14 @@
 - **Ready right away.** Open Flux, press **F5**, your code runs. Languages you don't have yet download from their official sources.
 - **Everything in one window.** Code, program output, a terminal, a live website preview, GitHub and AI help.
 - **Yours to change.** Themes, fonts, colors, a see-through window, shortcuts – and plugins anyone can write in a few lines of JavaScript.
+
+## Flux vs VS Code
+
+<p align="center">
+  <a href="https://github.com/pantr1x/Flux/actions/workflows/compare.yml"><img src="https://raw.githubusercontent.com/pantr1x/Flux/ci-compare/compare.svg" width="860" alt="Memory of Flux and VS Code on the same project"></a>
+</p>
+
+Measured automatically on a fresh Windows VM by [GitHub Actions](https://github.com/pantr1x/Flux/actions/workflows/compare.yml) ([how](.github/workflows/compare.yml)): the same small project, once with a file open and once with a website and its live preview (Flux Live Server / VS Code Live Preview). Every run and its numbers are public.
 
 ## Install
 
@@ -68,8 +74,7 @@ Flux then keeps itself up to date: it checks at start and every hour, downloads 
 </p>
 
 <p align="center">
-  <img src="site/images/themes.png" width="420" alt="Theme store">
-  <img src="site/images/plugins.png" width="420" alt="Plugin store">
+  <img src="site/images/themes.png" width="860" alt="Theme store">
 </p>
 
 ## Shortcuts
@@ -90,6 +95,10 @@ Flux then keeps itself up to date: it checks at start and every hour, downloads 
 Every shortcut can be changed in **Settings → Keyboard**.
 
 ## Plugins
+
+<p align="center">
+  <img src="site/images/plugins.png" width="860" alt="Plugin store">
+</p>
 
 Plugins are JavaScript files that run in a small, safe engine inside Flux (QuickJS). They live in [`plugins/`](plugins) and are installed from **Settings → Plugins**.
 

@@ -706,12 +706,24 @@ impl App {
         // ponuka sa môže posúvať, keď je okno nízke
         let nav_clip = Rect::from_min_max(pos2(nav.left(), y - 4.0), pos2(nav.right(), nav.bottom() - 34.0));
         let nav_off_id = egui::Id::new("s-nav-off");
+        let nav_max_id = egui::Id::new("s-nav-max");
         let mut nav_off: f32 = ctx.data(|d| d.get_temp(nav_off_id)).unwrap_or(0.0);
+        let nav_max: f32 = ctx.data(|d| d.get_temp(nav_max_id)).unwrap_or(0.0);
         if ui.rect_contains_pointer(nav_clip) {
-            nav_off -= ui.input(|i| i.smooth_scroll_delta().y);
+            let dy = ui.input(|i| i.smooth_scroll_delta().y);
+            if dy != 0.0 {
+                nav_off -= dy;
+                // koliesko patrí len ponuke – obsah nastavení vedľa sa nesmie posúvať s ňou
+                ctx.input_mut(|i| i.smooth_scroll_delta.y = 0.0);
+            }
         }
+        // obmedziť hneď (predtým až pri uložení → ponuka „prestrelila“ a ďalší snímok skočila späť)
+        nav_off = nav_off.clamp(0.0, nav_max);
+        ctx.data_mut(|d| d.insert_temp(nav_off_id, nav_off));
+        // kreslí sa plynulo k cieľu, nie po skokoch kolieska
+        let shown_off = if anim { ctx.animate_value_with_time(egui::Id::new("s-nav-off-anim"), nav_off, 0.12) } else { nav_off };
         let y0 = y;
-        y -= nav_off;
+        y -= shown_off;
         let painter_save = ui.painter().clip_rect();
         ui.set_clip_rect(nav_clip);
         for (id, ic, label, group) in TABS {
@@ -787,9 +799,12 @@ impl App {
                 y += 6.0;
             }
         }
-        let total = y + nav_off - y0;
+        let total = y + shown_off - y0;
         let max_off = (total - nav_clip.height() + 8.0).max(0.0);
-        ctx.data_mut(|d| d.insert_temp(nav_off_id, nav_off.clamp(0.0, max_off)));
+        ctx.data_mut(|d| {
+            d.insert_temp(nav_max_id, max_off);
+            d.insert_temp(nav_off_id, nav_off.clamp(0.0, max_off));
+        });
         ui.set_clip_rect(painter_save);
         ui.painter().text(pos2(nav.left() + 20.0, nav.bottom() - 20.0), Align2::LEFT_CENTER, format!("Flux Native {}", env!("CARGO_PKG_VERSION")), theme::ui(11.0), p.text3);
         if let Some(tb) = go_tab {

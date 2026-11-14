@@ -1,0 +1,132 @@
+# Porovnanie pamäte Flux Native a VS Code na Windows VM (GitHub runner): rovnaký malý projekt,
+# 1) otvorený súbor, 2) web s náhľadom (Flux Live Server / VS Code Live Preview).
+# Výsledok: súhrn behu + vetva ci-compare (compare.md, compare.json, screenshoty) – číta ho README a web.
+name: Compare with VS Code
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/compare.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download Flux Native and VS Code
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory apps, out -Force | Out-Null
+          Invoke-WebRequest -UseBasicParsing "https://github.com/${{ github.repository }}/raw/ci-native/Flux-Native.exe" -OutFile apps\Flux-Native.exe
+          Invoke-WebRequest -UseBasicParsing "https://update.code.visualstudio.com/latest/win32-x64-archive/stable" -OutFile apps\vscode.zip
+          Expand-Archive apps\vscode.zip apps\vscode
+          New-Item -ItemType Directory apps\vscode\data -Force | Out-Null   # prenosný režim: nastavenia vedľa programu
+          # rovnaký zážitok ako vo Fluxe: bez uvítacej stránky, bez dôvery v priečinok, bez telemetrie
+          New-Item -ItemType Directory apps\vscode\data\user-data\User -Force | Out-Null
+          '{"workbench.startupEditor":"none","security.workspace.trust.enabled":false,"telemetry.telemetryLevel":"off","update.mode":"none","extensions.autoUpdate":false,"extensions.ignoreRecommendations":true,"workbench.tips.enabled":false}' | Set-Content apps\vscode\data\user-data\User\settings.json
+          & apps\vscode\bin\code.cmd --install-extension ms-vscode.live-server --force 2>&1 | Out-Host
+          (Get-Item apps\Flux-Native.exe).Length / 1MB
+          (Get-ChildItem apps\vscode -Recurse | Measure-Object Length -Sum).Sum / 1MB
+      - name: Measure
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $proj = "$env:RUNNER_TEMP\demo"
+          New-Item -ItemType Directory $proj -Force | Out-Null
+          Set-Content "$proj\main.py" ("import os`n" + ((1..200) | ForEach-Object { "print('line $_')" }) -join "`n")
+          '<!DOCTYPE html><html><head><title>Demo</title><link rel="stylesheet" href="style.css"></head><body><h1>Hello</h1><p>Memory test</p></body></html>' | Set-Content "$proj\index.html"
+          'body { font-family: sans-serif; background: #111; color: #eee; }' | Set-Content "$proj\style.css"
+          function Tree($rootPid) {
+            $all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId
+            $ids = @($rootPid); $added = $true
+            while ($added) { $added = $false; foreach ($p in $all) { if ($ids -contains $p.ParentProcessId -and -not ($ids -contains $p.ProcessId)) { $ids += $p.ProcessId; $added = $true } } }
+            $ids
+          }
+          function Mem($ids) {
+            # „Pamäť“ v Správcovi úloh = súkromná pracovná množina
+            $perf = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $ids -contains [int]$_.IDProcess }
+            [math]::Round((($perf | Measure-Object WorkingSetPrivate -Sum).Sum) / 1MB, 1)
+          }
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("out\$name.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
+          }
+          function Measure-App($label, $start, $after) {
+            $p = & $start
+            Start-Sleep 25
+            if ($after) { & $after $p; Start-Sleep 20 }
+            Shot $label
+            $vals = @(); for ($i = 0; $i -lt 3; $i++) { $vals += Mem (Tree $p.Id); Start-Sleep 2 }
+            $mid = ($vals | Sort-Object)[1]
+            $n = (Tree $p.Id).Count
+            Stop-Process -Id (Tree $p.Id) -Force -ErrorAction SilentlyContinue
+            Get-Process Code, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep 3
+            Write-Host "$label : $mid MB ($n processes)"
+            [pscustomobject]@{ test = $label; mb = $mid; processes = $n }
+          }
+          $flux = (Get-Item apps\Flux-Native.exe).FullName
+          $code = (Get-Item apps\vscode\Code.exe).FullName
+          function FluxStart($test) {
+            $ud = "$env:RUNNER_TEMP\ud-$([guid]::NewGuid())"; New-Item -ItemType Directory $ud -Force | Out-Null
+            @{ onboarded = $true; lastFolder = $proj; projects = @($proj); autoUpdate = $false; nativeSeenVersion = '99.0.0' } | ConvertTo-Json | Set-Content "$ud\settings.json"
+            $env:FLUX_USER_DATA = $ud; $env:FLUX_TEST = $test
+            Start-Process $flux -PassThru
+          }
+          $r = @()
+          $r += Measure-App 'Flux: project + file' { FluxStart '2:open=main.py' } $null
+          $r += Measure-App 'Flux: website + Live Server' { FluxStart '2:open=index.html;4:run' } $null
+          Remove-Item Env:FLUX_TEST, Env:FLUX_USER_DATA -ErrorAction SilentlyContinue
+          $r += Measure-App 'VS Code: project + file' { Start-Process $code -ArgumentList @($proj, "$proj\main.py") -PassThru } $null
+          # VS Code Live Preview (náhľad vo vnútri editora): príkaz cez paletu príkazov
+          $r += Measure-App 'VS Code: website + Live Preview' { Start-Process $code -ArgumentList @($proj, "$proj\index.html") -PassThru } {
+            param($p)
+            $ws = New-Object -ComObject WScript.Shell
+            $null = $ws.AppActivate($p.Id); Start-Sleep 2
+            [System.Windows.Forms.SendKeys]::SendWait('^+p'); Start-Sleep 2
+            [System.Windows.Forms.SendKeys]::SendWait('Live Preview: Show Preview'); Start-Sleep 2
+            [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+          }
+          $fluxSize = [math]::Round((Get-Item apps\Flux-Native.exe).Length / 1MB, 1)
+          $codeSize = [math]::Round((Get-ChildItem apps\vscode -Recurse | Measure-Object Length -Sum).Sum / 1MB, 0)
+          $md = @("| Test (Windows, GitHub runner) | Memory (Task Manager) | Processes |", "|---|---|---|") + ($r | ForEach-Object { "| $($_.test) | $($_.mb) MB | $($_.processes) |" }) + @("| Flux program size | $fluxSize MB | |", "| VS Code program size | $codeSize MB | |", "", "Measured $(Get-Date -Format 'yyyy-MM-dd') by .github/workflows/compare.yml – run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID")
+          $md -join "`n" | Set-Content out\compare.md
+          # pre web: výsledky + odkaz na tento beh v GitHub Actions (dôkaz, že je to skutočné meranie)
+          $run = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          # graf pre README (SVG, čierne pozadie): dvojice Flux / VS Code
+          $get = { param($t) ($r | Where-Object { $_.test -eq $t }).mb }
+          $groups = @(@('A project with a file open', (& $get 'Flux: project + file'), (& $get 'VS Code: project + file'), 'MB'), @('A website with a live preview', (& $get 'Flux: website + Live Server'), (& $get 'VS Code: website + Live Preview'), 'MB'), @('Program size on disk', $fluxSize, $codeSize, 'MB'))
+          $svg = @('<svg xmlns="http://www.w3.org/2000/svg" width="860" height="330" viewBox="0 0 860 330" font-family="Inter, Segoe UI, Arial, sans-serif">', '<rect width="860" height="330" rx="18" fill="#0b0b0d"/>', '<text x="32" y="44" fill="#f4f4f5" font-size="22" font-weight="700">Flux vs VS Code</text>', ('<text x="32" y="68" fill="#85858e" font-size="13">Memory in the Task Manager on a fresh Windows VM (GitHub Actions, ' + (Get-Date -Format 'yyyy-MM-dd') + ')</text>'))
+          $y = 104
+          foreach ($g in $groups) {
+            $max = [math]::Max([double]$g[1], [double]$g[2]); if ($max -le 0) { $max = 1 }
+            $svg += "<text x=`"32`" y=`"$y`" fill=`"#d4d4d8`" font-size=`"14`" font-weight=`"600`">$($g[0])</text>"
+            foreach ($row in @(@('Flux', $g[1], '#a5a6ff', 18), @('VS Code', $g[2], '#71717a', 40))) {
+              $w = [math]::Max(4, [math]::Round(560 * [double]$row[1] / $max))
+              $yy = $y + $row[3]
+              $svg += "<text x=`"32`" y=`"$($yy + 10)`" fill=`"#b4b4bb`" font-size=`"13`">$($row[0])</text><rect x=`"110`" y=`"$yy`" width=`"560`" height=`"12`" rx=`"6`" fill=`"#1c1c20`"/><rect x=`"110`" y=`"$yy`" width=`"$w`" height=`"12`" rx=`"6`" fill=`"$($row[2])`"/><text x=`"828`" y=`"$($yy + 10)`" fill=`"#f4f4f5`" font-size=`"13`" font-weight=`"600`" text-anchor=`"end`">$($row[1]) $($g[3])</text>"
+            }
+            $y += 74
+          }
+          $svg += '</svg>'
+          $svg -join "`n" | Set-Content out\compare.svg
+          @{ date = (Get-Date -Format 'yyyy-MM-dd'); run = $run; os = 'Windows Server (GitHub Actions VM)'; fluxSize = $fluxSize; codeSize = $codeSize; results = @($r) } | ConvertTo-Json -Depth 4 | Set-Content out\compare.json
+          $md -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Publish (branch ci-compare)
+        if: always()
+        shell: bash
+        run: |
+          [ -f out/compare.md ] || exit 0
+          cd out
+          git init -q -b ci-compare
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Flux vs VS Code from ${GITHUB_SHA::7}"
+          for i in 1 2 3 4; do git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-compare && exit 0; sleep $((i * 5)); done

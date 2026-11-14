@@ -3517,7 +3517,7 @@ impl App {
         let fx0 = group.right() + 14.0;
         let fx1 = rect.right() - 116.0;
         if fx1 - fx0 > 120.0 {
-            let fw = (fx1 - fx0).min(520.0);
+            let fw = (fx1 - fx0).min(300.0);
             let fr = Rect::from_min_size(pos2(fx1 - fw, cy - 14.0), vec2(fw, 28.0));
             let pal = self.pal;
             if let Some(s) = self.sess_mut() {

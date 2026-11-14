@@ -16,6 +16,8 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 **Output and Terminal**
 - **Search in the output**: the Output and Terminal panel has a search field right in its header (like the one at the top); click it or press Ctrl+F. Esc clears it. Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
 
+- The output has a scrollbar (drag it or click the track) and a ⌄ button that jumps back to the end when you scrolled up. Search uses ↑ / ↓ for the previous and next match, and the search field is smaller.
+- Settings: the menu on the left scrolls smoothly and no longer jumps back at the end or scrolls the page next to it.
 - After *Clear*, the panel says so (*Output cleared…*), and a running Terminal redraws its prompt, so you can see it still works.
 
 **Editor**

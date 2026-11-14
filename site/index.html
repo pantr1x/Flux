@@ -8,7 +8,7 @@
   <meta name="keywords" content="code editor, free code editor, Windows code editor, Python editor, live server, AI code editor, Claude, Rust, lightweight, beginner code editor, Flux">
   <meta name="author" content="pantr1x">
   <meta name="robots" content="index, follow, max-image-preview:large">
-  <meta name="theme-color" content="#1d2238">
+  <meta name="theme-color" content="#0b0b0d">
   <meta name="color-scheme" content="dark">
   <link rel="canonical" href="https://pantr1x.github.io/Flux/">
   <meta property="og:type" content="website">
@@ -33,18 +33,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --base: #1d2238;
-      --card: rgba(44, 50, 80, .74);
-      --card-solid: #22263a;
+      --base: #0b0b0d;
+      --card: rgba(30, 30, 34, .78);
+      --card-solid: #161618;
       --card-2: rgba(255, 255, 255, .045);
       --hover: rgba(255, 255, 255, .06);
       --active: rgba(255, 255, 255, .1);
       --line: rgba(255, 255, 255, .09);
       --line-strong: rgba(255, 255, 255, .16);
-      --text: #f0f1f8;
-      --text-2: #b9bcd0;
-      --text-3: #8e92aa;
-      --accent: #5b8cff;
+      --text: #f4f4f5;
+      --text-2: #b4b4bb;
+      --text-3: #85858e;
+      --accent: #a5a6ff;
       --ok: #3ecf8e;
       --warn: #f0a44b;
       --mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
@@ -53,7 +53,7 @@
     }
     * { box-sizing: border-box; }
     html { scroll-padding-top: 76px; }
-    body { margin: 0; background: linear-gradient(160deg, #26306a 0%, #1f2548 38%, var(--base) 62%, #2a2050 100%); color: var(--text); font: 15.5px/1.6 var(--ui); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow-x: hidden; }
+    body { margin: 0; background: linear-gradient(170deg, #121214 0%, var(--base) 45%, #0e0e10 100%); color: var(--text); font: 15.5px/1.6 var(--ui); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow-x: hidden; }
     h1, h2, h3 { font-feature-settings: 'ss01', 'cv11'; }
     a { color: inherit; text-decoration: none; }
     button { font: inherit; color: inherit; }
@@ -63,17 +63,17 @@
     /* pozadie: mäkké farebné škvrny ako gradienty (bez filter: blur – ten sa pri skrolovaní prepočítaval a sekal) */
     .wall { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; will-change: transform; transform: translateZ(0);
       background:
-        radial-gradient(38vw 38vw at 13vw 7vw, rgba(53, 88, 230, .6), transparent 70%),
-        radial-gradient(34vw 34vw at 88vw 8vw, rgba(90, 70, 214, .45), transparent 70%),
-        radial-gradient(32vw 32vw at 86vw 48vh, rgba(122, 58, 208, .42), transparent 70%),
-        radial-gradient(28vw 28vw at 51vw 52vh, rgba(61, 99, 224, .3), transparent 70%),
-        radial-gradient(30vw 30vw at 41vw 100vh, rgba(19, 143, 115, .38), transparent 70%); }
+        radial-gradient(38vw 38vw at 13vw 7vw, rgba(255, 255, 255, .07), transparent 70%),
+        radial-gradient(34vw 34vw at 88vw 8vw, rgba(165, 166, 255, .08), transparent 70%),
+        radial-gradient(32vw 32vw at 86vw 48vh, rgba(255, 255, 255, .05), transparent 70%),
+        radial-gradient(28vw 28vw at 51vw 52vh, rgba(255, 255, 255, .03), transparent 70%),
+        radial-gradient(30vw 30vw at 41vw 100vh, rgba(165, 166, 255, .05), transparent 70%); }
     .wall::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size: 22px 22px; mask-image: linear-gradient(#000 0, transparent 70%); }
 
     .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
 
     /* horná lišta ako titulok okna Fluxu */
-    .bar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); background: rgba(24, 28, 48, .62); border-bottom: 1px solid var(--line); }
+    .bar { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4); background: rgba(12, 12, 14, .7); border-bottom: 1px solid var(--line); }
     .bar .wrap { display: flex; align-items: center; gap: 6px; height: 58px; }
     .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-right: 14px; }
     .logo .mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: #111; box-shadow: inset 0 0 0 1px var(--line-strong); }
@@ -95,7 +95,7 @@
     .home { padding: 64px 0 20px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: end; }
     .date { color: var(--text-2); font-weight: 600; font-size: 14px; }
     h1 { font-size: clamp(40px, 6.4vw, 70px); line-height: 1.02; letter-spacing: -2.4px; font-weight: 800; margin: 10px 0 14px; }
-    h1 .grad { background: linear-gradient(90deg, #9fb8ff, #5b8cff 45%, #3ecfb2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    h1 .grad { background: linear-gradient(90deg, #ffffff, #c7c7d1 40%, #8b8b96); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .lead { color: var(--text-2); font-size: 18.5px; line-height: 1.6; max-width: 590px; margin: 0; }
     .stats { display: grid; grid-template-columns: repeat(4, 136px); gap: 8px; }
     .stat { position: relative; padding: 12px 14px; border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
@@ -104,7 +104,7 @@
     .stat .si { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--active); color: var(--text-2); }
     .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 26px 0 0; }
     .act { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--r); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); transition: transform .15s, background .15s; }
-    .act:hover { transform: translateY(-2px); background: rgba(40, 43, 60, .8); }
+    .act:hover { transform: translateY(-2px); background: rgba(44, 44, 50, .85); }
     .act .ai { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--active); }
     .act b { display: block; font-size: 15px; }
     .act small { color: var(--text-2); font-size: 13px; }
@@ -132,7 +132,7 @@
     kbd { font: 600 11.5px var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--active); box-shadow: inset 0 -1px 0 rgba(0,0,0,.4), inset 0 0 0 1px var(--line-strong); color: var(--text); white-space: nowrap; }
 
     /* EDITOR – živá ukážka okna */
-    .window { margin: 44px 0 0; display: grid; grid-template-columns: 236px 1fr; height: 560px; border-radius: 18px; overflow: hidden; background: rgba(30, 34, 56, .86); box-shadow: 0 0 0 1px var(--line-strong), 0 40px 120px rgba(0, 0, 0, .55), 0 0 90px rgba(91, 140, 255, .14); }
+    .window { margin: 44px 0 0; display: grid; grid-template-columns: 236px 1fr; height: 560px; border-radius: 18px; overflow: hidden; background: rgba(22, 22, 25, .88); box-shadow: 0 0 0 1px var(--line-strong), 0 40px 120px rgba(0, 0, 0, .55), 0 0 90px rgba(165, 166, 255, .12); }
     .side { display: flex; flex-direction: column; padding: 12px 8px; min-width: 0; }
     .side .head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 12px; font-weight: 700; }
     .side .cap { color: var(--text-3); font-size: 11.5px; font-weight: 700; letter-spacing: 1px; padding: 6px 8px; }
@@ -152,15 +152,15 @@
     .ebtn.run { background: #e8e9f0; color: #111; box-shadow: none; }
     .ebtn.run:hover { background: #fff; }
     .ebtn:disabled { opacity: .6; cursor: default; }
-    .pane { flex: 1; display: flex; flex-direction: column; border-radius: 12px; background: rgba(34, 37, 56, .88); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; min-height: 0; }
+    .pane { flex: 1; display: flex; flex-direction: column; border-radius: 12px; background: rgba(24, 24, 27, .9); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; min-height: 0; }
     .code { flex: 1; overflow: auto; padding: 12px 0; font: 14px/1.52 var(--mono); tab-size: 4; min-height: 0; }
     .ln { display: flex; white-space: pre; }
-    .ln .n { flex: none; width: 52px; padding-right: 18px; text-align: right; color: #4f5370; user-select: none; }
+    .ln .n { flex: none; width: 52px; padding-right: 18px; text-align: right; color: #52525b; user-select: none; }
     .ln.cur { background: rgba(255,255,255,.035); }
-    .ln.cur .n { color: #c9cbe0; }
+    .ln.cur .n { color: #d4d4d8; }
     .caret { display: inline-block; width: 2px; height: 1.15em; margin-bottom: -3px; background: var(--accent); animation: blink 1s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
-    .k { color: #ff7b93; } .s { color: #e6b673; } .c { color: #6a7090; font-style: italic; } .f { color: #7ec3ff; } .nm { color: #c4a5ff; } .t { color: #7ee0c3; } .todo { color: #f0a44b; font-weight: 700; font-style: normal; } .a { color: #9fd18b; }
+    .k { color: #ff7b93; } .s { color: #e6b673; } .c { color: #71717a; font-style: italic; } .f { color: #7ec3ff; } .nm { color: #c4a5ff; } .t { color: #7ee0c3; } .todo { color: #f0a44b; font-weight: 700; font-style: normal; } .a { color: #9fd18b; }
     .out { height: 150px; flex: none; border-top: 1px solid var(--line); padding: 10px 14px; font: 13.5px/1.55 var(--mono); overflow: auto; }
     .out .oh { display: flex; gap: 10px; font: 600 13px var(--ui); margin-bottom: 6px; }
     .out .oh em { font-style: normal; color: var(--ok); font-weight: 500; }
@@ -171,7 +171,7 @@
 
     /* sekcie */
     section { padding: 110px 0 0; }
-    .cap2 { display: inline-block; padding: 3px 10px; border-radius: 99px; background: rgba(91, 140, 255, .14); color: #a9c1ff; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+    .cap2 { display: inline-block; padding: 3px 10px; border-radius: 99px; background: rgba(255, 255, 255, .07); color: #d4d4d8; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
     h2 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -1.2px; line-height: 1.12; font-weight: 800; margin: 8px 0 12px; }
     .sub { color: var(--text-2); font-size: 17px; max-width: 640px; margin: 0 0 34px; }
     .panel { padding: 18px; border-radius: 18px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
@@ -198,7 +198,7 @@
     .key .kb { display: flex; gap: 4px; }
 
     /* RELEASES */
-    .rel-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 20px; border-radius: 18px; background: linear-gradient(135deg, rgba(91, 140, 255, .22), var(--card-2)); box-shadow: inset 0 0 0 1px var(--line-strong); margin-bottom: 14px; }
+    .rel-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 20px; border-radius: 18px; background: linear-gradient(135deg, rgba(255, 255, 255, .08), var(--card-2)); box-shadow: inset 0 0 0 1px var(--line-strong); margin-bottom: 14px; }
     .rel-top .mark { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: #111; box-shadow: inset 0 0 0 1px var(--line-strong); }
     .rel-top b { display: block; font-size: 20px; }
     .rel-top small { color: var(--text-2); }
@@ -209,6 +209,15 @@
     .rel summary .chev { transition: transform .15s; color: var(--text-3); }
     .rel[open] summary .chev { transform: rotate(90deg); }
     .rel summary small { color: var(--text-3); margin-left: auto; font-size: 13px; }
+    .cmp { padding: 18px 20px; display: grid; gap: 18px; }
+    .cmp h3 { margin: 0 0 8px; font-size: 15px; }
+    .cmp .row { display: grid; grid-template-columns: 90px 1fr 92px; align-items: center; gap: 12px; margin: 6px 0; font-size: 14px; color: var(--text-2); }
+    .cmp .bar { height: 12px; border-radius: 99px; background: var(--hover); overflow: hidden; }
+    .cmp .bar i { display: block; height: 100%; border-radius: 99px; background: #71717a; }
+    .cmp .row.flux .bar i { background: linear-gradient(90deg, #a5a6ff, #e4e4e7); }
+    .cmp .row.flux { color: var(--text); font-weight: 600; }
+    .cmp .row b { text-align: right; font-variant-numeric: tabular-nums; }
+    #cmp-src a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
     .badge { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--active); color: var(--text-2); }
     .badge.new { background: rgba(62, 207, 142, .16); color: var(--ok); }
     .rel .body { padding: 0 18px 16px 42px; color: var(--text-2); font-size: 14.5px; }
@@ -407,6 +416,15 @@
       <h2>Your languages, your way</h2>
       <p class="sub">Flux stays small – programming languages download from their official sources only when you need them.</p>
       <div class="langs" id="langs"></div>
+    </section>
+
+    <!-- POROVNANIE s VS Code (ci-compare/compare.json z GitHub Actions) -->
+    <section id="compare" class="reveal" hidden>
+      <div class="cap2">Measured</div>
+      <h2>Flux vs VS Code</h2>
+      <p class="sub">Memory in the Task Manager, on the same small project, on a fresh Windows VM. Measured automatically by GitHub Actions – the run with every number is public.</p>
+      <div class="panel cmp" id="cmp"></div>
+      <p class="note" id="cmp-src"></p>
     </section>
 
     <!-- SHORTCUTS -->
@@ -689,7 +707,14 @@
     // Linux: namiesto odkazu na stránku s vydaniami príkaz do terminálu (stiahne a nainštaluje Flux Native, ďalej sa aktualizuje sám)
     const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
     if (isLinux) {
+      // logo Windows na tlačidlách sťahovania → terminál (Linux sa inštaluje príkazom)
+      document.querySelectorAll('svg').forEach((el) => {
+        if (el.querySelector('path[d^="M3 5.5"]') && el.closest('[data-dl], .act.primary')) {
+          el.outerHTML = `<svg width="${el.getAttribute('width') || 16}" height="${el.getAttribute('height') || 16}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg>`;
+        }
+      });
       $('#linux-cmd').hidden = false;
+      document.querySelector('.note').hidden = true; // rada pre Windows SmartScreen na Linuxe netreba
       document.querySelectorAll('[data-dl-label]').forEach((x) => (x.textContent = 'Install Flux for Linux'));
       $('#dl-text').textContent = 'Install Flux for Linux';
       $('#dl-meta').textContent = 'one command in the terminal';
@@ -729,15 +754,27 @@
         if (info.size) $('#st-size').textContent = mb(info.size);
         $('#rel-name').textContent = `Flux ${v}`;
         $('#rel-meta').textContent = `Newest version · ${isLinux ? 'Linux' : 'Windows'} · ${mb(info.size || 0)}`;
-        // sekcie „## 0.9.53“ z CHANGELOG.md, najnovšie prvé
-        const parts = String(log).split(/^## /m).slice(1).slice(0, 30);
+        // sekcie „## 0.9.53“ z CHANGELOG.md, najnovšie prvé; malé vydania sa zlúčia po desiatkach (0.9.80 – 0.9.82)
+        const parts = String(log).split(/^## /m).slice(1);
         if (!parts.length) throw new Error('no notes');
-        $('#rel-list').innerHTML = parts.map((sec, i) => {
+        const groups = [];
+        for (const sec of parts) {
           const nl = sec.indexOf('\n');
           const rv = (nl < 0 ? sec : sec.slice(0, nl)).trim();
           const body = nl < 0 ? '' : sec.slice(nl + 1);
+          const m = rv.match(/^(\d+)\.(\d+)\.(\d+)/);
+          const key = m ? `${m[1]}.${m[2]}.${Math.floor(+m[3] / 10)}` : rv;
+          const ver = m ? m[0] : rv;
+          const g = groups[groups.length - 1];
+          if (g && g.key === key) g.items.push([ver, body]);
+          else groups.push({ key, items: [[ver, body]] });
+        }
+        $('#rel-list').innerHTML = groups.slice(0, 8).map((g, i) => {
+          const first = g.items[0][0], last = g.items[g.items.length - 1][0];
+          const title = g.items.length > 1 ? `${last} – ${first}` : first;
+          const body = g.items.length > 1 ? g.items.map(([ver, b]) => `#### ${ver}\n${b}`).join('\n') : g.items[0][1];
           return `<details class="rel"${i === 0 ? ' open' : ''}>
-            <summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg><b>Flux ${esc(rv)}</b>${i === 0 ? '<span class="badge new">newest</span>' : ''}</summary>
+            <summary><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg><b>Flux ${esc(title)}</b>${i === 0 ? '<span class="badge new">newest</span>' : ''}${g.items.length > 1 ? `<span class="badge">${g.items.length} updates</span>` : ''}</summary>
             <div class="body">${md(body) || '<p>No notes for this version.</p>'}
               ${i === 0 && !isLinux ? `<div class="dl"><a class="pill-btn run-btn" href="${EXE}">${svg('<path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14"/>')}Download Flux-Native.exe · ${mb(info.size || 0)}</a></div>` : ''}
             </div></details>`;
@@ -745,8 +782,37 @@
       })
       .catch(() => {
         $('#rel-meta').textContent = 'Download the newest Flux below.';
-        $('#rel-list').innerHTML = `<div class="loading">Could not load the release notes right now. <a style="color:#9fb8ff" href="${EXE}">Download Flux-Native.exe →</a></div>`;
+        $('#rel-list').innerHTML = `<div class="loading">Could not load the release notes right now. <a style="color:var(--accent)" href="${EXE}">Download Flux-Native.exe →</a></div>`;
       });
+
+    // ---------- porovnanie s VS Code (meria .github/workflows/compare.yml, výsledok vo vetve ci-compare) ----------
+    fetch(`${RAW}/ci-compare/compare.json`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => {
+        if (!c || !Array.isArray(c.results)) return;
+        const get = (t) => c.results.find((x) => x.test === t);
+        const pairs = [['A project with a file open', 'project + file', 'project + file'], ['A website with a live preview', 'website + Live Server', 'website + Live Preview']];
+        const rows = [];
+        for (const [title, f, v] of pairs) {
+          const a = get(`Flux: ${f}`), b = get(`VS Code: ${v}`);
+          if (!a || !b) continue;
+          const max = Math.max(a.mb, b.mb) || 1;
+          rows.push(`<div><h3>${esc(title)}</h3>
+            <div class="row flux"><span>Flux</span><span class="bar"><i style="width:${Math.max(2, (a.mb / max) * 100)}%"></i></span><b>${a.mb} MB</b></div>
+            <div class="row"><span>VS Code</span><span class="bar"><i style="width:${Math.max(2, (b.mb / max) * 100)}%"></i></span><b>${b.mb} MB</b></div></div>`);
+        }
+        if (c.fluxSize && c.codeSize) {
+          const max = Math.max(c.fluxSize, c.codeSize);
+          rows.push(`<div><h3>Program size on disk</h3>
+            <div class="row flux"><span>Flux</span><span class="bar"><i style="width:${Math.max(2, (c.fluxSize / max) * 100)}%"></i></span><b>${c.fluxSize} MB</b></div>
+            <div class="row"><span>VS Code</span><span class="bar"><i style="width:${Math.max(2, (c.codeSize / max) * 100)}%"></i></span><b>${c.codeSize} MB</b></div></div>`);
+        }
+        if (!rows.length) return;
+        $('#cmp').innerHTML = rows.join('');
+        $('#cmp-src').innerHTML = `Measured on ${esc(c.date || '')} · ${esc(c.os || 'Windows')} · <a href="${esc(c.run)}" rel="noopener">see the GitHub Actions run</a> · <a href="https://github.com/${REPO}/blob/HEAD/.github/workflows/compare.yml" rel="noopener">how it is measured</a>`;
+        $('#compare').hidden = false;
+      })
+      .catch(() => {});
 
     // ---------- hviezdičky na GitHube ----------
     fetch(`https://api.github.com/repos/${REPO}`)
