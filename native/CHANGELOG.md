@@ -7,6 +7,12 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 **Run only the selected code (Python)**
 - Select some code (for example one `print(...)`) and press ▶ Run or F5: Flux runs just that, plus only the parts it needs – the `import` lines, functions, classes and variables it uses. Everything else in the file is skipped. Without a selection, Run works as before.
 
+**Suggestions**
+- **Every installed Python module, automatically**: after `import platform` (or `import numpy as np`, `from os import path`), typing `platform.` lists what that module really has – functions with their parameters (`release()`), classes, constants and submodules – read from your own Python. Libraries you install with pip show up right away, nothing to set up. Submodules have their own `{ }` icon.
+- JSON keys also come up when you just type a word: `ker` offers `data["releases"][0]["kernel_version"]` (teal `{ }` icon, the whole path is inserted).
+- The suggestion list scrolls with the mouse wheel again.
+- Words like `\nKernel` no longer turn into fake suggestions (`nKernel`).
+
 **Output and Terminal**
 - **Search in the output**: press Ctrl+F in the Output or Terminal panel (or the magnifier in its header). Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
 

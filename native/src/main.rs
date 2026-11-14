@@ -11,6 +11,7 @@ mod lint;
 mod slice;
 mod pylibs;
 mod jsonkeys;
+mod pymembers;
 mod complete;
 mod colors;
 mod perf;

@@ -13,6 +13,8 @@ pub enum Kind {
     Snippet,
     Tag,
     Property,
+    Json,   // kľúč zo skutočných JSON dát (jsonkeys.rs)
+    Module, // modul / podmodul (pymembers.rs)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -123,7 +125,14 @@ fn builtins(lang: &str) -> &'static [&'static str] {
 pub fn words(text: &str, lang: &str) -> HashMap<String, usize> {
     let mut m: HashMap<String, usize> = HashMap::new();
     let mut cur = String::new();
+    let mut prev = ' ';
     for c in text.chars().chain(std::iter::once(' ')) {
+        // „\nKernel“: písmeno za spätnou lomkou je escape, nie začiatok slova
+        let esc = prev == '\\' && cur.is_empty();
+        prev = if prev == '\\' && c == '\\' { ' ' } else { c };
+        if esc && c.is_alphabetic() {
+            continue;
+        }
         if ident_char(c, lang) {
             cur.push(c);
         } else if !cur.is_empty() {

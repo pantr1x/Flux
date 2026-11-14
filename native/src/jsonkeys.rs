@@ -280,8 +280,11 @@ pub fn items(text: &str, dir: &str, at: &At) -> (Vec<Item>, bool) {
             for (k, val) in m {
                 let kl = k.to_lowercase();
                 let rank = if kl.starts_with(&typed) { 0 } else if kl.contains(&typed) { 1 } else { continue };
-                let insert = if at.quote.is_none() { Some(format!("\"{}\"", k.replace('$', "\\$"))) } else if k.contains('$') { Some(k.replace('$', "\\$")) } else { None };
-                out.push((rank, Item { label: k.clone(), kind: Kind::Property, insert, detail: Some(preview(val)), doc: None }));
+                if k.contains('$') {
+                    continue; // $ by úryvok (expand) bral ako miesto kurzora
+                }
+                let insert = if at.quote.is_none() { Some(format!("\"{k}\"")) } else { None };
+                out.push((rank, Item { label: k.clone(), kind: Kind::Json, insert, detail: Some(preview(val)), doc: None }));
             }
         }
         Value::Array(a) if at.quote.is_none() => {
@@ -290,7 +293,7 @@ pub fn items(text: &str, dir: &str, at: &At) -> (Vec<Item>, bool) {
                 if !l.starts_with(&typed) {
                     continue;
                 }
-                out.push((0, Item { label: l, kind: Kind::Property, insert: None, detail: Some(preview(val)), doc: None }));
+                out.push((0, Item { label: l, kind: Kind::Json, insert: None, detail: Some(preview(val)), doc: None }));
             }
         }
         _ => {}
@@ -330,6 +333,9 @@ mod tests {
         let (it, pending) = items(text, ".", &at);
         assert!(!pending);
         assert_eq!(it.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(), ["kernel_version"]);
+        let w = word_items(text, "./x.py", "ker");
+        assert_eq!(w[0].insert.as_deref(), Some("rel[\"kernel_version\"]")); // kratšia cesta prvá
+        assert!(w.iter().any(|i| i.insert.as_deref() == Some("data[\"releases\"][0][\"kernel_version\"]")));
         let at = at_cursor(&chars("rel[")).unwrap();
         let (it, _) = items(text, ".", &at);
         assert_eq!(it.len(), 2);
@@ -345,4 +351,71 @@ pub fn complete(text: &str, path: &str, before: &[char]) -> Option<(Vec<Item>, u
     let dir = std::path::Path::new(path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
     let (it, _pending) = items(text, &dir, &at);
     (!it.is_empty()).then(|| (it, at.typed.chars().count()))
+}
+
+fn key_expr(k: &str) -> String {
+    format!("[\"{}\"]", k.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+// premenné v súbore, ktoré nesú JSON dáta (data, rel = data["releases"]…)
+fn json_vars(text: &str, dir: &str) -> Vec<(String, Src, Vec<Seg>)> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = vec![];
+    for l in text.lines() {
+        let t = l.trim_start();
+        let name: String = t.chars().take_while(|c| is_id(*c)).collect();
+        if name.is_empty() || !t[name.len()..].trim_start().starts_with('=') || t[name.len()..].trim_start().starts_with("==") || !seen.insert(name.clone()) {
+            continue;
+        }
+        if let Some((src, segs)) = resolve(text, dir, &name, 0) {
+            out.push((name, src, segs));
+        }
+        if seen.len() > 80 {
+            break;
+        }
+    }
+    out
+}
+
+// písané slovo (`ker`) → kľúče z JSON dát s celou cestou: data["releases"][0]["kernel_version"]
+pub fn word_items(text: &str, path: &str, prefix: &str) -> Vec<Item> {
+    let dir = std::path::Path::new(path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    let pl = prefix.to_lowercase();
+    let mut out: Vec<(u8, usize, Item)> = vec![];
+    let mut labels = std::collections::HashSet::new();
+    for (var, src, segs) in json_vars(text, &dir) {
+        let Some(root) = get(&src) else { continue };
+        let Some(v) = walk(&root, &segs) else { continue };
+        // prechod do šírky: prvý prvok poľa ako vzor, hĺbka ≤ 5, ≤ 4000 uzlov
+        let mut q: std::collections::VecDeque<(&Value, String, usize)> = std::collections::VecDeque::from([(v, var.clone(), 0)]);
+        let mut n = 0;
+        while let Some((node, expr, depth)) = q.pop_front() {
+            n += 1;
+            if n > 4000 || depth > 5 {
+                break;
+            }
+            match node {
+                Value::Object(m) => {
+                    for (k, val) in m {
+                        let e = format!("{expr}{}", key_expr(k));
+                        let kl = k.to_lowercase();
+                        let rank = if kl.starts_with(&pl) { 0 } else if kl.contains(&pl) { 1 } else { u8::MAX };
+                        if rank != u8::MAX && !e.contains('$') && labels.insert((k.clone(), var.clone())) {
+                            let insert = e.clone();
+                            out.push((rank, depth, Item { label: k.clone(), kind: Kind::Json, insert: Some(insert), detail: Some(format!("{e}  {}", preview(val))), doc: None }));
+                        }
+                        q.push_back((val, e, depth + 1));
+                    }
+                }
+                Value::Array(a) => {
+                    if let Some(first) = a.first() {
+                        q.push_back((first, format!("{expr}[0]"), depth + 1));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out.sort_by_key(|x| (x.0, x.1));
+    out.into_iter().map(|x| x.2).take(12).collect()
 }

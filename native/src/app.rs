@@ -253,6 +253,14 @@ fn kind_icon(pt: &egui::Painter, c: egui::Pos2, kind: crate::complete::Kind, fun
             pt.line_segment([c + vec2(6.0, 0.0), c + vec2(2.5, 4.0)], st(blue));
             pt.line_segment([c + vec2(1.2, -5.0), c + vec2(-1.2, 5.0)], st(blue));
         }
+        Kind::Module => {
+            // modul: { } v oranžovej (ako symbol-module vo VS Code)
+            pt.text(c, Align2::CENTER_CENTER, "{ }", theme::bold(10.0), orange);
+        }
+        Kind::Json => {
+            // JSON kľúč: { } ako vo VS Code pri JSON
+            pt.text(c, Align2::CENTER_CENTER, "{ }", theme::bold(10.0), Color32::from_rgb(0x4e, 0xc9, 0xb0));
+        }
         Kind::Property => {
             // kľúč (vlastnosť)
             pt.circle_stroke(c + vec2(-2.5, -2.5), 3.0, st(blue));
@@ -903,7 +911,9 @@ impl App {
             ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
             ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
             ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-            if resp_all.hovered() {
+            // nie resp_all.hovered(): riadky nad ním si hover vezmú, koliesko by sa nikdy nechytilo
+            let _ = &resp_all;
+            if ui.rect_contains_pointer(r) {
                 let dy: f32 = ui.input(|i| {
                     i.raw
                         .events
@@ -2265,9 +2275,10 @@ impl App {
         let ws_flag = self.ws_mode();
         let mut force_sug = false;
         // JSON dáta sa práve stiahli → návrhy kľúčov sa ukážu hneď, bez ďalšieho písania
-        if crate::jsonkeys::take_ready() {
+        if crate::jsonkeys::take_ready() | crate::pymembers::take_ready() {
             self.sug_again = true;
         }
+        let py_path = self.python.as_ref().and_then(|v| v["path"].as_str()).unwrap_or("").to_string();
         let json_on = self.get("jsonSuggest").as_bool() != Some(false);
         if focused && sug_on {
             force_sug = ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Space)) || std::mem::take(&mut self.sug_again);
@@ -2304,8 +2315,9 @@ impl App {
                     if down {
                         sg.sel = (sg.sel + 1) % n;
                     }
-                    // vybraný riadok vždy viditeľný
-                    if sg.sel < sg.top {
+                    // vybraný riadok viditeľný – len po šípkach (inak by každý snímok zrušil posun kolieskom)
+                    if !(up || down) {
+                    } else if sg.sel < sg.top {
                         sg.top = sg.sel;
                     } else if sg.sel >= sg.top + SUG_ROWS {
                         sg.top = sg.sel + 1 - SUG_ROWS;
@@ -2526,7 +2538,15 @@ impl App {
                                 None
                             };
                             let trig = !typed_ident && crate::complete::trigger(&lang, &before);
-                            if let Some((items, tlen)) = json_items {
+                            // za bodkou pri importovanom module: skutočné členy z nainštalovaného Pythonu (dir(modul))
+                            let mod_items = if json_items.is_none() && matches!(lang.as_str(), "py" | "pyw") && (typed_ident || trig || force_sug) {
+                                cx.member.as_deref().and_then(|ch| crate::pymembers::complete(&tab.text, &py_path, ch, &before[c - plen..].iter().collect::<String>()))
+                            } else {
+                                None
+                            };
+                            if let Some(items) = mod_items.filter(|v| !v.is_empty()) {
+                                *sug_slot = Some(Sug { items, sel: 0, top: 0, picked: false, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
+                            } else if let Some((items, tlen)) = json_items {
                                 *sug_slot = Some(Sug { items, sel: 0, top: 0, picked: false, start: c - tlen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
                             } else if (typed_ident && (plen >= 2 || (cx.rich() && plen >= 1))) || trig || bang || force_sug {
                                 let prefix: String = before[c - plen..].iter().collect();
@@ -2534,7 +2554,16 @@ impl App {
                                     *sug_words = Some((tab.path.clone(), hlc.gen, crate::complete::words(&tab.text, &lang), crate::complete::calls(&tab.text, &lang), crate::complete::members(&tab.text, &lang)));
                                 }
                                 let w = sug_words.as_ref().unwrap();
-                                let items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &w.4, &plug_snips, 60);
+                                let mut items = crate::complete::suggest_at(&lang, &prefix, &cx, &w.2, &w.3, &w.4, &plug_snips, 60);
+                                // obyčajné slovo v Pythone: aj kľúče z JSON dát celou cestou (`ker` → data["releases"][0]["kernel_version"])
+                                if json_on && cx.member.is_none() && typed_ident && plen >= 2 && matches!(lang.as_str(), "py" | "pyw") {
+                                    let j = crate::jsonkeys::word_items(&tab.text, &tab.path, &prefix);
+                                    if !j.is_empty() {
+                                        items.retain(|i| !j.iter().any(|x| x.label == i.label));
+                                        items.splice(0..0, j);
+                                        items.truncate(60);
+                                    }
+                                }
                                 *sug_slot = (!items.is_empty()).then(|| Sug { items, sel: 0, top: 0, picked: false, start: c - plen, end: c, path: tab.path.clone(), pos: egui::Pos2::ZERO });
                             } else {
                                 *sug_slot = None;

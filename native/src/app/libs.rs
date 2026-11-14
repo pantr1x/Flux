@@ -85,6 +85,7 @@ impl App {
     pub(super) fn pip_done(&mut self) {
         self.pip_wait = false;
         pylibs::forget();
+        crate::pymembers::forget(); // nový balíček → jeho členy v návrhoch
         self.lint_asked.clear();
         if self.libs.is_some() {
             self.libs_check();
