@@ -18,7 +18,7 @@ pub fn default_of(key: &str) -> Value {
         "lineHeight" => json!(1.45),
         "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" | "searchWide" | "breadcrumbs"
         | "cursorBlink" | "lineHighlight" | "indentGuides" | "autoClose" | "autoCloseTags" | "selHighlight" | "matchBrackets" | "wheelZoom" | "showTabs" | "statusBar" | "activityBar"
-        | "confirmDelete" | "glassChip" => json!(true),
+        | "confirmDelete" | "glassChip" | "editorFx" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "trimWhitespace" | "finalNewline" | "tabBold" => json!(false),
         "tabSize" => json!(4),
         "cursorWidth" => json!(2),
@@ -299,7 +299,7 @@ fn sections(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
         "keys" => raw_sec("general", &["Shortcuts"]),
         "import" => raw_sec("general", &["Import and export"]),
         "editor" => page(vec![
-            ("Display", pick(&["wordWrap", "minimap", "breadcrumbs", "whitespace", "lineHighlight", "indentGuides", "rulers"])),
+            ("Display", pick(&["wordWrap", "minimap", "breadcrumbs", "whitespace", "lineHighlight", "indentGuides", "rulers", "editorFx"])),
             ("Highlighting", pick(&["selHighlight", "matchBrackets"])),
             ("Cursor", pick(&["cursorBlink", "cursorWidth", "wheelZoom"])),
         ]),
@@ -532,6 +532,7 @@ fn sections_raw(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
                 vec![
                     Row::Toggle("cursorBlink", "Blinking cursor", "the text cursor blinks; off = it stays visible all the time"),
                     Row::Range("cursorWidth", "Cursor width", "how thick the text cursor is, in pixels", 1.0, 4.0, 1.0),
+                    Row::Toggle("editorFx", "Typing animations", "Soft effects while you type, accept suggestions and run code"),
                     Row::Toggle("lineHighlight", "Highlight the current line", "a soft band behind the line with the cursor"),
                     Row::Toggle("indentGuides", "Indent guides", "thin vertical lines that show how deep the code is indented"),
                     Row::Select("rulers", "Ruler", "a vertical line at this column, so long lines are easy to see", vec![(json!(0), t("off")), (json!(80), "80".into()), (json!(100), "100".into()), (json!(120), "120".into())]),
@@ -1694,6 +1695,11 @@ impl App {
 
     pub(super) fn anim_on(&self) -> bool {
         self.get("transitions").as_bool() != Some(false) && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true))
+    }
+
+    // efekty editora a ikon (fx.rs): animácie + vlastný prepínač editorFx
+    pub(super) fn fx_on(&self) -> bool {
+        self.anim_on() && self.get("editorFx").as_bool() != Some(false)
     }
 }
 

@@ -78,6 +78,7 @@ pub fn icon_at(ui: &egui::Ui, center: egui::Pos2, size: f32, name: &str, color: 
 
 // ikona s animovanou veľkosťou: textúra sa načíta raz v pevnej veľkosti (base) a len sa zväčší/zmenší –
 // inak by každá nová veľkosť znamenala nové vykreslenie SVG a novú textúru
+#[allow(dead_code)] // pluginy a ďalšie miesta s animovanou veľkosťou
 pub fn icon_scaled(ui: &egui::Ui, center: egui::Pos2, base: f32, scale: f32, name: &str, color: Color32) {
     let Some(svg) = gen::line(name) else { return };
     let img = egui::Image::from_bytes(format!("bytes://li/{name}.svg"), svg.as_bytes());
@@ -88,6 +89,49 @@ pub fn icon_scaled(ui: &egui::Ui, center: egui::Pos2, base: f32, scale: f32, nam
         }
         None => ui.ctx().request_repaint(),
     }
+}
+
+static ICON_FX: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+// pohyb ikon pri prejdení myšou (editorFx + animácie) – nastavuje App::apply_look
+pub fn set_icon_fx(on: bool) {
+    ICON_FX.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+// otočenie (stupne) a posun ikony pri prejdení: k = 0…1 (už plynulé, z animate_bool)
+pub fn hover_motion(name: &str, k: f32) -> (f32, egui::Vec2) {
+    let e = k * k * (3.0 - 2.0 * k); // smoothstep
+    let wig = (k * std::f32::consts::PI).sin(); // tam a späť
+    match name {
+        "settings" => (60.0 * e, vec2(0.0, 0.0)),            // ozubené koleso sa pootočí
+        "x" => (90.0 * e, vec2(0.0, 0.0)),                   // × sa otočí (na konci vyzerá rovnako)
+        "refresh" => (360.0 * e, vec2(0.0, 0.0)),            // šípka sa raz otočí dokola
+        "plus" => (90.0 * e, vec2(0.0, 0.0)),
+        "search" => (-12.0 * e, vec2(1.2, -1.2) * e),        // lupa poskočí
+        "sparkle" => (22.0 * wig, vec2(0.0, -0.8) * e),      // iskra zablikne (otočí sa a vráti)
+        "trash" => (-14.0 * wig, vec2(0.0, -0.8) * e),       // kôš sa nakloní
+        "copy" => (0.0, vec2(-1.2, -1.2) * e),               // list sa posunie
+        "puzzle" => (12.0 * wig, vec2(0.0, 0.0)),
+        "play" => (0.0, vec2(1.5, 0.0) * e),
+        "panel" | "sidebar" => (0.0, vec2(0.0, -1.0) * e),
+        "menu" => (0.0, vec2(0.0, 0.0)),
+        _ => (0.0, vec2(0.0, -1.0) * e),                     // ostatné sa jemne nadvihnú
+    }
+}
+
+// čiarová ikona s pohybom pri prejdení myšou; veľkosť textúry sa nemení (len otočenie / posun)
+pub fn icon_hover(ui: &egui::Ui, center: egui::Pos2, size: f32, name: &str, color: Color32, k: f32) {
+    if k <= 0.001 || !ICON_FX.load(std::sync::atomic::Ordering::Relaxed) {
+        return icon_at(ui, center, size, name, color);
+    }
+    let (deg, off) = hover_motion(name, k.clamp(0.0, 1.0));
+    let Some(svg) = gen::line(name) else { return };
+    let rect = Rect::from_center_size(center + off, vec2(size, size));
+    let mut img = egui::Image::from_bytes(format!("bytes://li/{name}.svg"), svg.as_bytes()).tint(color);
+    if deg.abs() > 0.05 {
+        img = img.rotate(deg.to_radians(), vec2(0.5, 0.5));
+    }
+    img.paint_at(ui, rect);
 }
 
 // Text v jednom riadku, pri nedostatku miesta skrátený na „…“.
@@ -119,7 +163,9 @@ pub fn icon_button_at(ui: &mut egui::Ui, r: Rect, name: &str, size: f32, p: &Pal
         ui.painter().rect_filled(r, CornerRadius::same(8), p.hover.gamma_multiply(hk));
     }
     let c = if !enabled { p.text3.gamma_multiply(0.55) } else { p.text2.lerp_to_gamma(p.text, hk) };
-    icon_at(ui, r.center(), size, name, c);
+    // pohyb ikony trvá dlhšie ako zvýraznenie (otočenie by za 0,12 s bolo len trhnutie)
+    let mk = if enabled && ICON_FX.load(std::sync::atomic::Ordering::Relaxed) { ui.ctx().animate_bool_with_time(resp.id.with("m"), resp.hovered(), 0.26) } else { 0.0 };
+    icon_hover(ui, r.center(), size, name, c, mk);
     if enabled {
         resp.on_hover_cursor(egui::CursorIcon::PointingHand)
     } else {

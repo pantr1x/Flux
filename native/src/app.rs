@@ -21,6 +21,7 @@ mod workbench;
 mod themestore;
 mod keymap;
 mod libs;
+mod fx;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -73,6 +74,8 @@ struct Sess {
     shell_started: bool,
     running: bool,
     bottom: Bottom,
+    started: Instant, // začiatok behu (pásik „beží“ v hlavičke panela)
+    fx: bool,         // efekty zapnuté (koniec behu sa objaví postupne)
 }
 
 impl Sess {
@@ -84,7 +87,7 @@ impl Sess {
         out.ws = ws;
         sh.ws = ws;
         out.feed(&format!("\x1b[90m{}\x1b[0m\r\n", t("Program output appears here. Press F5 or ▶ Run.").replace('▶', "›")));
-        Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output }
+        Sess { id, out, sh, shell_started: false, running: false, bottom: Bottom::Output, started: Instant::now(), fx: false }
     }
 
     // udalosti z pty tejto karty idú do aplikácie s jej značkou
@@ -103,6 +106,7 @@ impl Sess {
         match ch {
             "run:start" => {
                 self.running = true;
+                self.started = Instant::now();
                 self.out.feed(&format!("\x1b[90m\u{203A} {}\x1b[0m\r\n", v["label"].as_str().unwrap_or("")));
             }
             "run:data" => self.out.feed(v.as_str().unwrap_or("")),
@@ -113,7 +117,13 @@ impl Sess {
                     self.out.feed(&format!("\r\n\x1b[31m{e}\x1b[0m\r\n"));
                 }
                 let (color, word) = if code == 0 { ("32", t("Finished")) } else { ("31", crate::i18n::tf("Exited with code {code}", &[("code", &code.to_string())])) };
-                self.out.feed(&format!("\r\n\x1b[{color}m{word}\x1b[0m \x1b[90min {:.2} s\x1b[0m\r\n", v["ms"].as_u64().unwrap_or(0) as f64 / 1000.0));
+                let end = format!("\r\n\x1b[{color}m{word}\x1b[0m \x1b[90min {:.2} s\x1b[0m\r\n", v["ms"].as_u64().unwrap_or(0) as f64 / 1000.0);
+                // „Finished“ sa objaví jemne (fx.rs), inak hneď
+                if self.fx {
+                    self.out.feed_fade(&end);
+                } else {
+                    self.out.feed(&end);
+                }
             }
             "shell:data" => self.sh.feed(v.as_str().unwrap_or("")),
             "shell:exit" => self.shell_started = false,
@@ -376,6 +386,7 @@ pub struct App {
     panel_w: f32,
     trim: crate::mem::Trim,
     smooth: crate::smooth::Smooth,
+    fx: fx::Fx, // efekty editora (fx.rs)
     wall: crate::wall::Wall,
     live: Arc<std::sync::Mutex<Option<crate::live::Found>>>, // Lively / Wallpaper Engine (zisťuje sa na pozadí)
     live_at: f64,
@@ -547,6 +558,7 @@ impl App {
             panel_w: 420.0,
             trim: Default::default(),
             smooth: Default::default(),
+            fx: Default::default(),
             wall: Default::default(),
             live: Arc::new(std::sync::Mutex::new(live_cache.clone())),
             live_done: Default::default(),
@@ -841,7 +853,11 @@ impl App {
             tab.text.replace_range(a..e, &item.label);
             self.last_edit = Some(Instant::now());
             self.snip = None;
-            return Some(sg.start + item.label.chars().count());
+            let n = item.label.chars().count();
+            // vložené slovo sa „dopíše“ svetelným pásom (fx.rs)
+            let now = self.fx.now;
+            self.fx.sweep(&sg.path, sg.start, sg.start + n, now);
+            return Some(sg.start + n);
         };
         // značka, ktorej koniec už za kurzorom je (napr. „<|</div>“) – druhý koniec nepridávať
         if let Some(cl) = body.rfind("</").map(|i| body[i..].to_string()).filter(|c| c.ends_with('>') && !c.contains('\n')) {
@@ -858,6 +874,12 @@ impl App {
         self.last_edit = Some(Instant::now());
         let abs: Vec<(usize, usize)> = stops.iter().map(|(x, y)| (sg.start + x, sg.start + y)).collect();
         let first = abs[0];
+        // úryvok sa „dopíše“ a jeho miesta ($1, $2…) raz pulznú
+        let now = self.fx.now;
+        self.fx.sweep(&sg.path, sg.start, sg.start + text.chars().count(), now);
+        for &(x, y) in &abs {
+            self.fx.pulse(&sg.path, x, y, now);
+        }
         self.snip = (abs.len() > 1).then(|| Snip { path: sg.path.clone(), stops: abs, at: 0, len: tab.text.chars().count() });
         self.snip_sel = Some(first);
         Some(first.1)
@@ -879,6 +901,8 @@ impl App {
         sn.at += 1;
         sn.len = now;
         let r = sn.stops[sn.at];
+        let t = self.fx.now;
+        self.fx.pulse(&sn.path, r.0, r.1, t);
         if sn.at + 1 >= sn.stops.len() {
             self.snip = None;
         }
@@ -895,6 +919,12 @@ impl App {
         let mut list_rect = None;
         let p = self.pal;
         let (pos, items, sel, top) = (sg.pos, sg.items.clone(), sg.sel, sg.top);
+        // práve otvorené okno sa jemne vysunie zhora (priehľadnosť rieši Area::fade_in)
+        let k = self.fx.sug_k(ctx.cumulative_frame_nr(), self.fx.now);
+        if k < 1.0 {
+            ctx.request_repaint();
+        }
+        let pos = pos - vec2(0.0, 6.0 * (1.0 - k));
         let mut clicked = None;
         let mut scroll = 0i32;
         let shown = items.len().min(SUG_ROWS);
@@ -1196,6 +1226,8 @@ impl App {
         let inertia = self.get("inertia").as_bool() != Some(false) && self.core.setting("optAnim").as_bool().unwrap_or(self.get("lite").as_bool() != Some(true));
         self.smooth.on = inertia;
         self.smooth.glide = (self.get("scrollGlide").as_f64().unwrap_or(100.0) / 100.0).clamp(0.4, 2.5) as f32;
+        self.fx.on = self.fx_on();
+        widgets::set_icon_fx(self.fx.on);
         let (blink, cw) = (self.get("cursorBlink").as_bool() != Some(false), self.get("cursorWidth").as_f64().unwrap_or(2.0).clamp(1.0, 4.0) as f32);
         ctx.all_styles_mut(|s| {
             s.visuals.text_cursor.blink = blink;
@@ -1696,6 +1728,12 @@ impl App {
         }
         self.focus_out = r["ok"] != Value::Bool(false);
         if r["ok"] != Value::Bool(false) {
+            // záblesk: spustený výber, alebo pás cez celý súbor; vlnka na ▶ Run (fx.rs)
+            let sel = if sel_note.is_some() { self.sel_chars } else { None };
+            let fpath = self.tabs[self.active].path.clone();
+            self.fx.on = self.fx_on();
+            let t = self.fx.now;
+            self.fx.run_flash(&fpath, sel, t);
             if let Some(ws) = self.workspace() {
                 // počítadlo spustení – to isté ako activity.js v Electron Fluxe
                 self.update_settings(|o| {
@@ -1716,7 +1754,9 @@ impl App {
             }
             if matches!(ch.as_str(), "run:start" | "run:data" | "run:exit" | "shell:data" | "shell:exit") {
                 let sid = v["sid"].as_u64().unwrap_or(0);
+                let fx_on = self.fx.on;
                 if let Some(s) = self.tabs.iter_mut().filter_map(|t| t.sess.as_deref_mut()).find(|s| s.id == sid) {
+                    s.fx = fx_on;
                     s.event(&ch, &v["v"]);
                 }
                 continue;
@@ -2130,7 +2170,34 @@ impl App {
                 ui.painter().rect_stroke(run, CornerRadius::same(10), Stroke::new(1.0, p.red.gamma_multiply(0.45)), StrokeKind::Inside);
             }
             let clip = ui.painter().with_clip_rect(run);
-            widgets::icon_at(ui, pos2(run.left() + 18.0, cy), if stopping { 12.0 } else { 14.0 }, icon, fg);
+            // ▶ Run: vlnka po spustení (fx.rs) – kruh sa rozšíri z ikony a zhasne
+            let fx_on = self.fx.on;
+            if let Some(t0) = self.fx.run_at.filter(|_| fx_on) {
+                let k = fx::prog(self.fx.now, t0, fx::PILL_S);
+                if k < 1.0 {
+                    let e = fx::ease(k);
+                    let ring = if stopping { p.red } else { p.accent_fg };
+                    clip.circle_filled(pos2(run.left() + 18.0, cy), 4.0 + (aw + 10.0) * e, ring.gamma_multiply(0.28 * (1.0 - k)));
+                    ui.ctx().request_repaint();
+                } else {
+                    self.fx.run_at = None;
+                }
+            }
+            // ▶ ↔ ■: trojuholník sa pri zmene Run/Stop pretvorí na štvorec (kreslené tvarom, len kým sa mení)
+            let morph = ui.ctx().animate_bool_with_time(egui::Id::new("run-morph"), stopping, if fx_on { 0.22 } else { 0.0 });
+            let ic = pos2(run.left() + 18.0, cy);
+            if !web && morph > 0.0 && morph < 1.0 {
+                let e = morph * morph * (3.0 - 2.0 * morph);
+                let play = [vec2(-4.0, -6.0), vec2(6.0, 0.0), vec2(6.0, 0.0), vec2(-4.0, 6.0)];
+                let stop = [vec2(-4.5, -4.5), vec2(4.5, -4.5), vec2(4.5, 4.5), vec2(-4.5, 4.5)];
+                let pts: Vec<egui::Pos2> = play.iter().zip(stop.iter()).map(|(a, b)| ic + *a + (*b - *a) * e).collect();
+                ui.painter().add(egui::Shape::convex_polygon(pts, fg, Stroke::NONE));
+                ui.ctx().request_repaint();
+            } else {
+                // pri prejdení sa ▶ posunie dopredu (ostatné ikony sa nehýbu)
+                let rmk = ui.ctx().animate_bool_with_time(rr.id.with("m"), rr.hovered() && !stopping && blocked.is_none(), if fx_on { 0.2 } else { 0.0 });
+                widgets::icon_hover(ui, ic, if stopping { 12.0 } else { 14.0 }, icon, fg, if icon == "play" { rmk } else { 0.0 });
+            }
             clip.text(pos2(run.left() + 32.0, cy), Align2::LEFT_CENTER, &label, theme::bold(13.5), fg);
             if rr.on_hover_text(tip).on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 if running {
@@ -2163,7 +2230,9 @@ impl App {
         let ai = Rect::from_min_size(pos2(rx - 56.0, cy - 15.0), vec2(56.0, 30.0));
         let ar = ui.interact(ai, ui.id().with("ai"), Sense::click());
         ui.painter().rect_filled(ai, CornerRadius::same(10), if ar.hovered() { p.active } else { p.hover });
-        widgets::icon_at(ui, pos2(ai.left() + 17.0, cy), 14.0, "sparkle", p.text2);
+        // iskra AI zablikne pri prejdení myšou
+        let amk = ui.ctx().animate_bool_with_time(ar.id.with("m"), ar.hovered(), if self.fx.on { 0.3 } else { 0.0 });
+        widgets::icon_hover(ui, pos2(ai.left() + 17.0, cy), 14.0, "sparkle", p.text2, amk);
         ui.painter().text(pos2(ai.left() + 29.0, cy), Align2::LEFT_CENTER, "AI", theme::bold(13.0), p.text2);
         if self.ai.open {
             ui.painter().rect_stroke(ai, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
@@ -2193,7 +2262,8 @@ impl App {
             ui.painter().rect_filled(sr, CornerRadius::same(9), fill);
             ui.painter().rect_stroke(sr, CornerRadius::same(9), Stroke::new(1.0, p.line.lerp_to_gamma(p.line_strong, hk)), StrokeKind::Inside);
             let col = p.text3.lerp_to_gamma(p.text2, hk);
-            widgets::icon_at(ui, pos2(sr.left() + 18.0, cy), 14.0, "search", col);
+            let smk = ui.ctx().animate_bool_with_time(resp.id.with("m"), resp.hovered(), if self.fx.on { 0.24 } else { 0.0 });
+            widgets::icon_hover(ui, pos2(sr.left() + 18.0, cy), 14.0, "search", col, smk);
             let skey = self.key_label("search");
             let key_w = if w > 200.0 && !skey.is_empty() { widgets::text_w(ui, &skey, theme::ui(10.5)) + 10.0 } else { 0.0 };
             widgets::text(ui, pos2(sr.left() + 32.0, cy), Align2::LEFT_CENTER, &t("Search"), theme::ui(13.0), col, w - 40.0 - key_w);
@@ -2219,6 +2289,10 @@ impl App {
     // ---------- karta: editor ----------
     fn editor(&mut self, ui: &mut egui::Ui, rect: Rect) {
         let p = self.pal;
+        // efekty (fx.rs): len pri zapnutých animáciách a nie pri obrovskom súbore
+        let now = ui.input(|i| i.time);
+        self.fx.on = self.fx_on() && self.tabs[self.active].text.len() < 1_000_000;
+        self.fx.now = now;
         // veľkosť písma a výška riadku z nastavení (Monaco: 14 px × 1.45 ≈ 20 px)
         let fsz = self.get("fontSize").as_f64().unwrap_or(14.0).clamp(9.0, 32.0) as f32;
         let lh: f32 = (fsz * self.get("lineHeight").as_f64().unwrap_or(1.45) as f32).round();
@@ -2379,7 +2453,9 @@ impl App {
             if self.sug.is_none() && self.get("autoIndent").as_bool() != Some(false) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
                 let (a, b) = egui::TextEdit::load_state(&ctx, ed_id).and_then(|s| s.cursor.char_range()).map(|r| (usize::from(r.secondary.index), usize::from(r.primary.index))).unwrap_or((0, 0));
                 let ext = self.tabs[self.active].ext();
-                new_sel = Some(editing::enter(&mut self.tabs[self.active].text, a, b, &ext));
+                let at = editing::enter(&mut self.tabs[self.active].text, a, b, &ext);
+                new_sel = Some(at);
+                self.fx.line_open(&self.tabs[self.active].path, at.0, now);
                 self.last_edit = Some(Instant::now());
             }
             if tab_k || back_k || comment_k {
@@ -2426,6 +2502,9 @@ impl App {
         let mut color_req: Option<(usize, usize, Color32, crate::colors::Fmt, Rect)> = None; // znak, dĺžka, farba, zápis, štvorček
         let sug_slot = &mut self.sug;
         let sug_words = &mut self.sug_words;
+        let find_q = self.find.as_ref().map(|f| f.q.clone());
+        let fx = &mut self.fx;
+        let fx_on = fx.on;
         let tab = &mut self.tabs[self.active];
         let hlc = self.hls.entry(tab.path.clone()).or_default();
         let ext = tab.ext();
@@ -2458,6 +2537,7 @@ impl App {
                 ui.add_space(gutter);
                 let hl = ui.painter().add(egui::Shape::Noop);
                 let hov = ui.painter().add(egui::Shape::Noop);
+                let fx_back = ui.painter().add(egui::Shape::Noop); // efekty pod textom (fx.rs)
                 let found_shapes = ui.painter().add(egui::Shape::Noop);
                 let occ_shapes = ui.painter().add(egui::Shape::Noop); // ďalšie výskyty výberu a pár zátvoriek
                 let text_shapes = ui.painter().add(egui::Shape::Noop); // farebný text: pod kurzorom a výberom
@@ -2494,6 +2574,28 @@ impl App {
                     gal
                 };
                 let lines = hlc.lines().max(1) + usize::from(tab.text.ends_with('\n'));
+                // pred písaním: dĺžka a výber – po zmene sa z nich zistí, čo presne pribudlo (efekt nových znakov)
+                let len0 = tab.text.len();
+                let sel0 = if fx_on {
+                    egui::TextEdit::load_state(ui.ctx(), ed_id).and_then(|s| s.cursor.char_range()).map(|r| {
+                        let (x, y) = (usize::from(r.primary.index), usize::from(r.secondary.index));
+                        (x.min(y), x.max(y))
+                    })
+                } else {
+                    None
+                };
+                let removed0 = match sel0 {
+                    Some((a, b)) if b > a && ui.input(|i| !i.events.is_empty()) => {
+                        let (ba, bb) = editing::byte_pair(&tab.text, a, b);
+                        bb - ba
+                    }
+                    _ => 0,
+                };
+                // vlastný kĺzavý kurzor: egui kurzor sa nekreslí (priesvitný)
+                let caret_stroke = ui.visuals().text_cursor.stroke;
+                if fx_on {
+                    ui.visuals_mut().text_cursor.stroke.color = Color32::TRANSPARENT;
+                }
                 let te = egui::TextEdit::multiline(&mut tab.text)
                     .id(ed_id)
                     .code_editor()
@@ -2507,6 +2609,28 @@ impl App {
                     .event_filter(egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true })
                     .layouter(&mut layouter)
                     .show(ui);
+                // čo sa napísalo: [s0, c) namiesto výberu [s0, s1) → efekt; iná zmena (mazanie, späť) staré efekty zruší
+                if fx_on && te.response.changed() {
+                    match (sel0, te.cursor_range) {
+                        (Some((s0, s1)), Some(r)) if r.primary.index == r.secondary.index && usize::from(r.primary.index) > s0 => {
+                            let c = usize::from(r.primary.index);
+                            let (b0, b1) = editing::byte_pair(&tab.text, s0, c);
+                            if tab.text.len() + removed0 == len0 + (b1 - b0) {
+                                let ins = &tab.text[b0..b1];
+                                if ins.contains('\n') && ins.trim().is_empty() {
+                                    fx.line_open(&tab.path, c, now);
+                                } else {
+                                    let kind = if c - s0 <= 2 && !ins.contains('\n') { fx::Kind::Type } else { fx::Kind::Sweep };
+                                    fx.insert(&tab.path, s0, s1, c, kind, now);
+                                }
+                            } else {
+                                fx.clear(&tab.path);
+                            }
+                        }
+                        _ => fx.clear(&tab.path),
+                    }
+                }
+                let fx_busy = fx_on && fx.busy(&tab.path, now);
                 // ---- farby len pre riadky na obrazovke (+ 300 pod nimi sa dofarbí vopred) ----
                 code.sync(hlc, &tab.text, &lang);
                 // ---- návrhy pri písaní: po napísaní 2+ písmen slova (alebo Ctrl+Medzerník) ----
@@ -2613,6 +2737,8 @@ impl App {
                     let fg = p.text;
                     let mut shapes = vec![];
                     let vis_pos = vis.clone();
+                    // napísané / vkladané znaky po riadkoch (stĺpce) – farba z akcentu do farby syntaxe
+                    let fades = if fx_busy { fx.line_fades(&tab.path, &te.galley, clip.translate(-origin.to_vec2()), now) } else { HashMap::new() };
                     for (i, at) in vis {
                         if i >= hlc.lines() {
                             continue;
@@ -2624,18 +2750,26 @@ impl App {
                         let mut job = egui::text::LayoutJob::default();
                         job.wrap.max_width = wrap_at.get();
                         let toks = if swatches_on { crate::colors::starts(text, &lang) } else { vec![] };
+                        let fb: Vec<(usize, usize, f32)> = fades
+                            .get(&i)
+                            .map(|v| {
+                                let idx: Vec<usize> = text.char_indices().map(|x| x.0).chain([text.len()]).collect();
+                                let n = idx.len() - 1;
+                                v.iter().map(|&(a, b, k)| (idx[a.min(n)], idx[b.min(n)], k)).collect()
+                            })
+                            .unwrap_or_default();
                         match hlc.spans(i) {
                             Some(sp) => {
                                 let mut at_b = 0usize;
                                 for (len, c) in sp {
                                     let end = (at_b + *len as usize).min(text.len());
                                     if end > at_b {
-                                        crate::colors::append(&mut job, text, at_b, end, &toks, &egui::TextFormat { color: *c, ..fmt.clone() });
+                                        fx::append_faded(&mut job, text, at_b, end, &toks, &egui::TextFormat { color: *c, ..fmt.clone() }, &fb, p.accent);
                                     }
                                     at_b = end;
                                 }
                             }
-                            None => crate::colors::append(&mut job, text, 0, text.len(), &toks, &egui::TextFormat { color: fg, ..fmt.clone() }),
+                            None => fx::append_faded(&mut job, text, 0, text.len(), &toks, &egui::TextFormat { color: fg, ..fmt.clone() }, &fb, p.accent),
                         }
                         let g = ui.fonts_mut(|f| f.layout_job(job));
                         // medzery ako bodky (whitespace): len kreslené, rozloženie textu sa nemení
@@ -2834,6 +2968,11 @@ impl App {
                 if !found.is_empty() {
                     let mut shapes = vec![];
                     let clip = ui.clip_rect();
+                    // nový hľadaný text: nálezy sa rozsvietia postupne
+                    let fk = find_q.as_deref().map(|q| fx.find_k(q, now)).unwrap_or(1.0);
+                    if fk < 1.0 {
+                        ui.ctx().request_repaint();
+                    }
                     for (i, &(a, b)) in found.iter().enumerate() {
                         let ra = te.galley.pos_from_cursor(egui::text::CCursor::new(a)).translate(te.galley_pos.to_vec2());
                         if ra.bottom() < clip.top() - 200.0 || ra.top() > clip.bottom() + 200.0 {
@@ -2844,7 +2983,7 @@ impl App {
                         let rb = te.galley.pos_from_cursor(egui::text::CCursor::new(b)).translate(te.galley_pos.to_vec2());
                         let r = Rect::from_min_max(pos2(ra.left(), ra.top() + 1.0), pos2(rb.right().max(ra.left() + 2.0), ra.bottom() - 1.0));
                         let on = i == cur_found;
-                        shapes.push(egui::Shape::rect_filled(r, 3.0, if on { Color32::from_rgba_unmultiplied(245, 185, 74, 110) } else { Color32::from_rgba_unmultiplied(245, 185, 74, 45) }));
+                        shapes.push(egui::Shape::rect_filled(r.expand(2.0 * (1.0 - fk)), 3.0, if on { Color32::from_rgba_unmultiplied(245, 185, 74, 110) } else { Color32::from_rgba_unmultiplied(245, 185, 74, 45) }.gamma_multiply(fk)));
                         if on && find_goto {
                             ui.scroll_to_rect(r.expand(60.0), None);
                         }
@@ -2953,6 +3092,38 @@ impl App {
                         }
                     }
                     ui.painter().set(occ_shapes, egui::Shape::Vec(occ));
+                }
+                // efekty (fx.rs): pod textom žiara/pás/nový riadok/Run, navrch pulz miest úryvku
+                if fx_busy {
+                    let clip = ui.clip_rect();
+                    ui.painter().set(fx_back, egui::Shape::Vec(fx.back(&tab.path, &te.galley, te.galley_pos, clip, lh, p.accent, now)));
+                    ui.painter().add(egui::Shape::Vec(fx.front(&tab.path, &te.galley, te.galley_pos, clip, p.accent, now)));
+                    ui.ctx().request_repaint();
+                }
+                // kĺzavý kurzor (namiesto egui kurzora), bliká ako ten pôvodný
+                if fx_on && ui.memory(|m| m.has_focus(ed_id)) && ui.input(|i| i.focused) {
+                    if let Some(r) = te.cursor_range {
+                        let mut target = te.galley.pos_from_cursor(r.primary);
+                        target.max.y = target.max.y.max(target.min.y + lh);
+                        let (cr, moving, moved) = fx.caret(&tab.path, target, now);
+                        let cr = cr.expand(1.5).translate(te.galley_pos.to_vec2());
+                        let tc = ui.visuals().text_cursor.clone();
+                        let show = if !tc.blink || moving {
+                            true
+                        } else {
+                            let cyc = (tc.on_duration + tc.off_duration) as f64;
+                            let t = (now - moved) % cyc;
+                            let on = tc.on_duration as f64;
+                            ui.ctx().request_repaint_after_secs((if t < on { on - t } else { cyc - t }) as f32);
+                            t < on
+                        };
+                        if show {
+                            ui.painter().with_clip_rect(ui.clip_rect()).line_segment([cr.center_top(), cr.center_bottom()], caret_stroke);
+                        }
+                        if moving {
+                            ui.ctx().request_repaint();
+                        }
+                    }
                 }
                 let _ = lines;
             });
@@ -3549,6 +3720,24 @@ impl App {
             }
         }
         let body = Rect::from_min_max(pos2(rect.left() + 10.0, rect.top() + 36.0), pos2(rect.right() - 10.0, rect.bottom() - 4.0));
+        // program beží: tenký pásik pod hlavičkou s putujúcim leskom (prvých pár sekúnd, potom stojí – bez prekresľovania)
+        let run_t = self.sess_mut().filter(|s| s.running).map(|s| s.started.elapsed().as_secs_f64());
+        if let Some(el) = run_t.filter(|_| self.fx.on) {
+            let line = Rect::from_min_max(pos2(rect.left() + 15.0, rect.top() + 35.0), pos2(rect.right() - 15.0, rect.top() + 37.0));
+            let appear = fx::ease((el / 0.25).min(1.0) as f32);
+            ui.painter().rect_filled(line, CornerRadius::same(1), p.accent.gamma_multiply(0.22 * appear));
+            if el < fx::SHIMMER_S {
+                let w = line.width() * 0.28;
+                let ph = ((el / 1.1) % 1.0) as f32;
+                let x = line.left() - w + (line.width() + w) * ph;
+                let fade = if el > fx::SHIMMER_S - 0.6 { ((fx::SHIMMER_S - el) / 0.6) as f32 } else { 1.0 };
+                let c = p.accent.gamma_multiply(0.9 * appear * fade);
+                let clip = ui.painter().with_clip_rect(line);
+                clip.add(fx::grad_h(Rect::from_min_max(pos2(x, line.top()), pos2(x + w / 2.0, line.bottom())), Color32::TRANSPARENT, c));
+                clip.add(fx::grad_h(Rect::from_min_max(pos2(x + w / 2.0, line.top()), pos2(x + w, line.bottom())), c, Color32::TRANSPARENT));
+                ui.ctx().request_repaint_after(Duration::from_millis(33));
+            }
+        }
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
         child.set_clip_rect(body);
         let mut zoom = 0;
@@ -3964,6 +4153,7 @@ impl eframe::App for App {
         let _perf = crate::perf::frame();
         let ctx = root.ctx().clone();
         let ctx = &ctx;
+        self.fx.now = ctx.input(|i| i.time);
         self.lint_tick(ctx);
         self.dropped(ctx);
         if std::mem::take(&mut self.focus_out) {
