@@ -379,6 +379,8 @@ jobs:
             }
           } catch { Write-Host "no patch: $_" }
           $info | ConvertTo-Json | Set-Content out\native.json -Encoding utf8NoBOM
+          # poznámky k verziám pre web – vždy k tej istej zostave ako native.json
+          Copy-Item native\CHANGELOG.md out\CHANGELOG.md
           $report | ForEach-Object { Write-Host $_ }
           "## Memory`n``````n$($report -join "`n")`n``````" | Add-Content $env:GITHUB_STEP_SUMMARY
       # native.json v ci-native = kanál aktualizácií: len zostava, ktorá prešla smoke testom
@@ -477,6 +479,7 @@ jobs:
         if: success()
         run: |
           mkdir -p outl && cp target/release/flux-native outl/Flux-Native && cp target/release/flux-preview outl/Flux-Preview
+          cp native/CHANGELOG.md outl/CHANGELOG.md
           ver=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' native/Cargo.toml | head -n1)
           h=$(sha256sum outl/Flux-Native | cut -d' ' -f1); sz=$(stat -c %s outl/Flux-Native)
           ph=$(sha256sum outl/Flux-Preview | cut -d' ' -f1); ps=$(stat -c %s outl/Flux-Preview)

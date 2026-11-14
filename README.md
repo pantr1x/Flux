@@ -1,70 +1,75 @@
 <p align="center">
-  <img src="build/icon.png" width="96" alt="Flux">
+  <img src="site/icon.png" width="96" alt="Flux">
 </p>
 
 <h1 align="center">Flux</h1>
 
 <p align="center">
-  A small, modern code editor for Windows 11 – run your code with one click, see websites live, get help from AI.
+  A small, fast code editor written in Rust. Run your code with one click, see your website change as you type, get help from Claude AI – with nothing to set up.
   <br><br>
   <a href="https://pantr1x.github.io/Flux/"><b>Website</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/pantr1x/Flux/releases/latest"><b>Download for Windows</b></a>
+  <a href="https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe"><b>Download for Windows</b></a>
   &nbsp;·&nbsp;
-  <a href="CHANGELOG.md">What's new</a>
+  <a href="#install">Install on Linux</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/pantr1x/Flux/wiki">Wiki</a>
+  <a href="native/CHANGELOG.md">What's new</a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/pantr1x/Flux/wiki/Making-plugins">Make a plugin</a>
+  <a href="docs/PLUGINS.md">Make a plugin</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/pantr1x/Flux/releases/latest"><img alt="Latest version" src="https://img.shields.io/github/v/release/pantr1x/Flux?label=version&color=8b7bff"></a>
-  <a href="https://github.com/pantr1x/Flux/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/pantr1x/Flux/total?color=3ecf8e"></a>
-  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4">
+  <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-dea584">
+  <img alt="Windows and Linux" src="https://img.shields.io/badge/Windows%20%7C%20Linux-6366f1">
+  <img alt="Memory" src="https://img.shields.io/badge/memory-~14%20MB-3ecf8e">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-8b7bff"></a>
   <a href="https://github.com/pantr1x/Flux/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/pantr1x/Flux?style=flat&color=f5b94a"></a>
 </p>
 
 <p align="center">
-  <img src="docs/images/home.png" width="860" alt="Flux home screen">
+  <img src="site/images/editor.png" width="860" alt="Flux: a Python file with its output">
 </p>
 
 ## Why Flux
 
-- **Made for learning and small projects.** Open Flux, press **F5**, and your code runs. You do not have to set anything up first.
-- **Light.** The installer is small, languages are downloaded only when you need them, and a *Save memory* mode helps on older PCs.
-- **Everything in one window.** Code, program output, a terminal, a live website preview, Git and AI help.
-- **Yours to change.** Themes, fonts, colors and shortcuts, plus plugins that anyone can write in a few lines of JavaScript.
+- **Small and fast.** One native program (no browser engine inside): about 15 MB to download and about 14 MB of memory.
+- **Ready right away.** Open Flux, press **F5**, your code runs. Languages you don't have yet download from their official sources.
+- **Everything in one window.** Code, program output, a terminal, a live website preview, GitHub and AI help.
+- **Yours to change.** Themes, fonts, colors, a see-through window, shortcuts – and plugins anyone can write in a few lines of JavaScript.
 
 ## Install
 
-1. Open the [latest release](https://github.com/pantr1x/Flux/releases/latest) and download `Flux-Setup-x.y.z.exe` under **Assets**.
-2. Run it. Windows may show *"Windows protected your PC"* because Flux is not signed yet – click **More info → Run anyway**.
-3. Flux keeps itself up to date: new versions download in the background and install when you close it (Settings → General → About & updates). Every version is also on the [website](https://pantr1x.github.io/Flux/#releases).
+**Windows 10 / 11** – download [`Flux-Native.exe`](https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe) and run it. There is nothing to install. If Windows shows *"Windows protected your PC"*, click **More info → Run anyway**.
 
-Programming languages are not bundled, so the installer stays small. Flux downloads only the ones you pick, from their official sources.
+**Linux (x86_64)** – one command in the terminal:
+
+```bash
+curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash
+```
+
+Flux then keeps itself up to date: it checks at start and every hour, downloads in the background (usually only the changed part) and installs when you close it.
 
 ## What it does
 
 | | |
 |---|---|
-| <img src="docs/icons/play.svg" width="20"> **One-click Run** | Press **F5** to run Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia or shell scripts. `input()`, colors and windows (tkinter, turtle, pygame) work. Missing languages are installed for you. |
-| <img src="docs/icons/globe.svg" width="20"> **Live Server** | A preview of your website right next to the code that reloads on save. **Alt+click** any element to jump to its line in the HTML, JavaScript errors show up on the page with a *Show in Flux* button, preview as laptop, tablet or phone (and rotate it), take a screenshot, or scan a QR code to open the page on your real phone. |
-| <img src="docs/icons/code.svg" width="20"> **Smart editor** | Autocomplete and error checking for Python (Pyright), HTML, CSS and JavaScript, Emmet, snippets, rename everywhere, auto-closing HTML tags, image previews on hover, Markdown preview. |
-| <img src="docs/icons/sparkle.svg" width="20"> **Claude AI** | Ask Claude about your code (Ctrl+I) with your own API key. It can read your project and plan your to-do list. Flux also works the other way round: Claude Desktop, Claude Code and Cursor can use your Flux projects through MCP. |
-| <img src="docs/icons/git.svg" width="20"> **GitHub** | Sign in with GitHub, open any of your repositories as a project, commit and push, or publish a new project with one click. |
-| <img src="docs/icons/file.svg" width="20"> **Projects and files** | Projects with a description, to-do list and statistics (coding time, runs, lines). Open single files like `.md` or `.txt` without a project, or drop them onto the window. |
-| <img src="docs/icons/palette.svg" width="20"> **Make it yours** | Code themes and a theme studio with live preview, accent colors, text and mouse cursor (also your own picture), fonts, app size, corners, background image, density (compact shows more) and focus mode (F11). 9 app languages: English, Slovak, German, Spanish, French, Italian, Polish, Portuguese and Ukrainian. |
-| <img src="docs/icons/command.svg" width="20"> **Keyboard first** | Every shortcut can be changed. Search everything with Ctrl+Shift+A, go back and forward with the mouse side buttons or Alt+←/→, run your own scripts from `shortcuts.json`. There is a real terminal next to the program output. |
-| <img src="docs/icons/download.svg" width="20"> **Plugins** | A plugin store with ratings and screenshots: Error Lens, Auto Rename Tag, Python Docstring, Indent Rainbow, Better Comments, CSS Class Completion, Bookmarks, Color Highlight, Snippet Pack, Word Count, **Theme Pack** (8 more color themes) and **Glass UI**. Plugins can add commands, snippets, styles and color themes – writing your own takes a few lines of JavaScript. GitHub is a built-in plugin you install when you need it. |
+| **▶ One-click Run** | **F5** runs Python, JavaScript, TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia, Dart and Swift. Select a few lines and Run runs just them – with the imports, functions and variables they need. `input()` works in the output. |
+| **🌐 Live Server** | Your website right inside Flux, changing while you type – before you even save. Full, tablet or phone size, links open in tabs, select text on the page to jump to its line in the HTML. |
+| **💡 Suggestions that know your code** | Members of the Python modules you really have installed (`platform.` → `release()`), keys of the JSON data your file loads (`data["releases"][0]["kernel_version"]`), HTML and CSS with Emmet, snippets, error hints from the real Python compiler. |
+| **📦 Python libraries** | An import you don't have gets underlined – click it and Flux installs it with pip. One window lists what is missing and what can be updated. |
+| **🖥 Output and Terminal** | Every file keeps its own output and a real terminal, with a search field that highlights every match. |
+| **✦ Claude AI** | Ask Claude about your code (Ctrl+I) with your own API key. Claude Desktop, Claude Code and Cursor can also work with your Flux projects through MCP. |
+| **🐙 GitHub** | Sign in with one code, open any of your repositories, or publish a new project. |
+| **🎨 Make it yours** | A theme store (try a theme with one click), themes as small text files, see-through or blurred window, fonts, colors and every shortcut. 9 app languages: English, Slovak, German, Spanish, French, Italian, Polish, Portuguese and Ukrainian. |
+| **🧩 Plugins** | Word Count, Snippet Pack, Theme Pack, TODO Highlight – and your own, written in JavaScript. |
 
 <p align="center">
-  <img src="docs/images/live.png" width="860" alt="Live Server with Alt+click to code and an error on the page">
+  <img src="site/images/live.png" width="860" alt="Live Server inside Flux">
 </p>
 
 <p align="center">
-  <img src="docs/images/editor.png" width="420" alt="Editor with program output">
-  <img src="docs/images/project.png" width="420" alt="Project page">
+  <img src="site/images/themes.png" width="420" alt="Theme store">
+  <img src="site/images/plugins.png" width="420" alt="Plugin store">
 </p>
 
 ## Shortcuts
@@ -72,60 +77,56 @@ Programming languages are not bundled, so the installer stays small. Flux downlo
 | Keys | Action |
 |---|---|
 | `F5` / `Shift+F5` | Run / stop |
-| `Alt+L` | Live Server on / off |
-| `Ctrl+Shift+A` | Search everything |
+| `Ctrl+Shift+F` | Search everything |
 | `Ctrl+Shift+P` | Commands |
 | `Ctrl+P` | Open a file of the project |
-| `Ctrl+Alt+O` | Open any file |
 | `Ctrl+I` | Claude AI |
-| `Ctrl+Shift+V` | Markdown preview |
-| `F11` | Focus mode – only the code |
-| ``Ctrl+Shift+` `` | Terminal |
+| ``Ctrl+` `` | Terminal |
+| `Ctrl+F` | Find in the file or in the output |
+| `Ctrl+Shift+E` | Explorer |
 | `Alt+←` / `Alt+→` | Back / forward |
-| `Alt+click` in the preview | Jump to that element in the HTML |
 | `Ctrl+,` | Settings |
 
-All of them can be changed in Settings → General → Shortcuts.
+Every shortcut can be changed in **Settings → Keyboard**.
 
 ## Plugins
 
-<p align="center">
-  <img src="docs/images/plugins.png" width="700" alt="Plugin store">
-</p>
+Plugins are JavaScript files that run in a small, safe engine inside Flux (QuickJS). They live in [`plugins/`](plugins) and are installed from **Settings → Plugins**.
 
-Plugins live in [`plugins/`](plugins) and are installed from **Settings → Plugins**.
+- **Make one:** press **Create a plugin** in Settings → Plugins, then follow the [plugin guide](docs/PLUGINS.md).
+- **Publish it:** fork this repository, add your plugin folder and open a pull request.
+- **Safety:** every plugin pull request gets an automatic review – fixed rules block dangerous code and an AI review looks for malware. The code is only read, never run. A maintainer gives the final OK.
 
-- **Make one:** press **Create a plugin** in Settings → Plugins, then follow [Making plugins](https://github.com/pantr1x/Flux/wiki/Making-plugins) in the wiki. The full reference is the [plugin guide](docs/PLUGINS.md).
-- **Publish it:** fork this repository, add your plugin folder and open a pull request ([how](https://github.com/pantr1x/Flux/wiki/Publishing-plugins)).
-- **Safety:** every plugin pull request gets an **automatic review**. Fixed rules block dangerous code, and an AI review looks for malware and data theft. The plugin code is only read during the review, never run. A maintainer gives the final OK.
+Themes work the same way – see [docs/THEMES.md](docs/THEMES.md).
 
 ## Privacy
 
-Flux has no accounts, ads or tracking.
-
-- **Internet:** it only goes online to check for updates, to show the plugin store, to download the languages and plugins you choose, and for the features you turn on: GitHub, and Claude AI with your own API key.
-- **Settings and projects** stay on your PC.
-
-## Contributing
-
-Bug reports and ideas are welcome in [Issues](https://github.com/pantr1x/Flux/issues). Plugins are the easiest way to add a feature, see [Plugins](#plugins).
+Flux has no accounts, ads or tracking. It only goes online to check for updates, to show the plugin and theme stores, to download languages and plugins you choose, and for features you turn on (GitHub, Claude AI with your own key).
 
 ## Build it yourself
 
+You need [Rust](https://rustup.rs) 1.95 or newer.
+
 ```bash
-npm install
-npm start          # run Flux from the source
-npm run dist       # build the Windows installer into release/
+cargo run -p flux-native            # start Flux from the source
+cargo build -p flux-native --release
+cargo test -p flux-native
 ```
 
-Flux is built with Electron, Monaco (the editor of VS Code), xterm.js and basedpyright.
+On Linux, install `libxkbcommon-dev libgl1-mesa-dev` first (and `libwebkit2gtk-4.1-dev` for the Live Server preview helper, `crates/flux-preview`).
 
-The website in [`site/`](site) is published to GitHub Pages by the *Website* workflow (branch `gh-pages`). How the website, releases and the rest of the repository work is described in [`CLAUDE.md`](CLAUDE.md).
+| Folder | What it is |
+|---|---|
+| [`native/`](native) | Flux itself (egui) |
+| [`crates/flux-core`](crates/flux-core) | settings, files, running code, terminal |
+| [`crates/flux-preview`](crates/flux-preview) | Live Server preview window on Linux |
+| [`crates/flux-tools`](crates/flux-tools) | translations: `cargo run -p flux-tools -- strings` / `check` / `add` |
+| [`locales/`](locales) | app translations |
+| [`themes/`](themes), [`plugins/`](plugins) | built-in themes, the theme and plugin stores |
+| [`site/`](site) | the website (GitHub Pages) |
 
-A new version is released by raising `version` in `package.json` and adding its notes to `CHANGELOG.md` – GitHub Actions builds the installer and publishes the release, and installed copies update themselves.
+Every push builds Flux on GitHub Actions, tests it on Windows and Linux (start, update, memory, Windows Defender scan) and publishes it as the next update.
 
 ## License and code signing
 
-Flux is open source under the [MIT License](LICENSE). Flux Native builds for Windows are built from this repository on GitHub Actions and code-signed
-as described in the [code signing policy](docs/CODE-SIGNING.md) (free signing for open-source projects by the [SignPath Foundation](https://signpath.org/foundation)).
-
+Flux is open source under the [MIT License](LICENSE). Windows builds are made from this repository on GitHub Actions; code signing is being set up as described in the [code signing policy](docs/CODE-SIGNING.md) (free signing for open-source projects by the [SignPath Foundation](https://signpath.org/foundation)).

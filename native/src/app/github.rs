@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-// Client ID OAuth aplikácie Flux (package.json → flux.githubClientId); nie je tajný
+// Client ID OAuth aplikácie Flux; nie je tajný
 const CLIENT_ID: &str = "Ov23lizS4t9eZvEEScJ8";
 
 fn api_base() -> String {
