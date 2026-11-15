@@ -426,7 +426,7 @@ pub const INDEX: &str = r########"<!doctype html>
     <section id="compare" class="reveal" hidden>
       <div class="cap2">Measured</div>
       <h2>Flux vs VS Code</h2>
-      <p class="sub">Memory in the Task Manager, on the same small project, on a fresh Windows VM. Measured automatically by GitHub Actions – the run with every number is public.</p>
+      <p class="sub">Memory in the Task Manager, on the same small project, on a fresh Windows VM. VS Code runs without its AI features, and its Live Preview opened in Microsoft Edge, which is counted too. Measured automatically by GitHub Actions – the run with every number is public.</p>
       <div class="panel cmp" id="cmp"></div>
       <p class="note" id="cmp-src"></p>
     </section>

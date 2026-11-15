@@ -47,7 +47,7 @@
   <a href="https://github.com/pantr1x/Flux/actions/workflows/compare.yml"><img src="https://raw.githubusercontent.com/pantr1x/Flux/ci-compare/compare.svg" width="860" alt="Memory of Flux and VS Code on the same project"></a>
 </p>
 
-Measured automatically on a fresh Windows VM by [GitHub Actions](https://github.com/pantr1x/Flux/actions/workflows/compare.yml) ([how](.github/workflows/compare.yml)): the same small project, once with a file open and once with a website and its live preview (Flux Live Server / VS Code Live Preview). Every run and its numbers are public.
+Measured automatically on a fresh Windows VM by [GitHub Actions](https://github.com/pantr1x/Flux/actions/workflows/compare.yml) ([how](.github/workflows/compare.yml)): the same small project, once with a file open and once with a website and its live preview (Flux Live Server / VS Code Live Preview – it opened in Microsoft Edge, which is counted too). VS Code runs with its AI features off, like Flux. Every run, its numbers and screenshots are public.
 
 ## Install
 
