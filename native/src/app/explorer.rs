@@ -31,7 +31,9 @@ fn bar_button(ui: &egui::Ui, b: Rect, id: egui::Id, active: bool, anim: bool, p:
         ui.painter().rect_filled(pill, CornerRadius::same(10), p.hover.gamma_multiply(hk));
     }
     let c = p.text3.lerp_to_gamma(p.text, hk.max(ak));
-    (resp, b.center(), 1.0, c)
+    // pohyb ikony pri prejdení (widgets::hover_motion) – štvrtá hodnota je jeho postup 0…1
+    let mk = ctx.animate_bool_with_time(id.with("m"), resp.hovered(), if anim { 0.26 } else { 0.0 });
+    (resp, b.center(), if anim { mk } else { 0.0 }, c)
 }
 
 // bublina s názvom a skratkou (klávesy ako malé čiapočky)
@@ -151,7 +153,7 @@ impl App {
                         let bar = Rect::from_min_size(pos2(bx, b.center().y - h / 2.0), vec2(2.0, h));
                         ui.painter().rect_filled(bar, CornerRadius::same(1), p.accent);
                     }
-                    widgets::icon_scaled(ui, center, 21.0, scale, icon, c);
+                    widgets::icon_hover(ui, center, 21.0, icon, c, scale);
                     if id == "explorer" {
                         self.tour_rects.insert("files", b);
                     }
@@ -179,10 +181,10 @@ impl App {
                         let uri = format!("bytes://plugact-{}-{}.svg", a.plugin, a.k);
                         let img = egui::Image::from_bytes(uri, a.icon.as_bytes().to_vec());
                         if let Some(tid) = img.load_for_size(ui.ctx(), vec2(19.0, 19.0)).ok().and_then(|t| t.texture_id()) {
-                            ui.painter().image(tid, Rect::from_center_size(center, vec2(19.0, 19.0) * scale), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), c);
+                            ui.painter().image(tid, Rect::from_center_size(center - vec2(0.0, scale), vec2(19.0, 19.0)), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), c);
                         }
                     } else {
-                        widgets::icon_scaled(ui, center, 19.0, scale, &a.icon, c);
+                        widgets::icon_hover(ui, center, 19.0, &a.icon, c, scale);
                     }
                     if resp.clicked() {
                         plug_click = Some((a.plugin.clone(), a.k.clone()));
@@ -972,8 +974,16 @@ impl App {
         let mut x = left0 - off;
         let (mut close, mut act) = (None, None);
         let mut active_x: Option<(f32, f32)> = None;
+        // nová karta sa roztvorí (šírka a viditeľnosť 0 → 1, fx.rs)
+        let paths: Vec<&str> = self.tabs.iter().map(|t| t.path.as_str()).collect();
+        let now = self.fx.now;
+        self.fx.on = self.fx_on();
         for (i, t) in self.tabs.iter().enumerate() {
-            let w = widths[i];
+            let tk = self.fx.tab_k(&paths, &t.path, now);
+            if tk < 1.0 {
+                ui.ctx().request_repaint();
+            }
+            let w = widths[i] * tk;
             // zaoblené karty: aktívna má zaoblený vrch a splýva s editorom, ostatné sú pri prejdení pilulky
             let tr = Rect::from_min_max(pos2(x + 2.0, r.top() + 5.0), pos2(x + w - 2.0, r.bottom()));
             x += w;
@@ -1005,6 +1015,7 @@ impl App {
             }
             let cy = tr.center().y - 1.0;
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(clip));
+            child.multiply_opacity(tk);
             child.set_clip_rect(clip.intersect(tr));
             widgets::file_icon(&child, Rect::from_min_size(pos2(tr.left() + 12.0, cy - 8.0), vec2(16.0, 16.0)), &name);
             let f = if sel && bold { theme::bold(13.0) } else { font.clone() };

@@ -53,7 +53,10 @@ pub struct TermView {
     zoom_acc: f32,           // egui rozloží jedno cvaknutie na viac snímok – kroky počítame zo súčtu
     sel: Option<((i32, usize), (i32, usize))>, // výber myšou: (riadok mriežky, stĺpec) začiatok a koniec
     pub find: Option<Find>,                    // hľadanie vo výstupe (Ctrl+F nad panelom)
+    fade: Option<(i64, std::time::Instant)>,   // riadky od tohto (riadok + história) sa objavia postupne (Finished…)
 }
+
+const FADE_S: f32 = 0.35;
 
 // hľadanie v Output/Terminal: zvýraznené všetky výskyty, aktuálny výraznejšie
 pub struct Find {
@@ -70,7 +73,7 @@ impl TermView {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
         let replies = Replies::default();
-        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None, find: None }
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None, find: None, fade: None }
     }
 
     pub fn feed(&mut self, text: &str) {
@@ -80,6 +83,14 @@ impl TermView {
         for r in self.take_replies() {
             self.pty.write(&r);
         }
+    }
+
+    // text, ktorý sa objaví postupne (posun sprava + priehľadnosť), napr. „Finished in 0.2 s“
+    pub fn feed_fade(&mut self, text: &str) {
+        let g = self.term.grid();
+        let line = g.cursor.point.line.0 as i64 + g.history_size() as i64;
+        self.fade = Some((line, std::time::Instant::now()));
+        self.feed(text);
     }
 
     fn take_replies(&mut self) -> Vec<String> {
@@ -510,12 +521,30 @@ impl TermView {
             run.push(c);
         }
         flush(&mut jobs, cur, &mut run, run_f);
+        // postupne sa objavujúce riadky (feed_fade): od ktorého radu obrazovky a ako ďaleko
+        let hist = self.term.grid().history_size() as i64;
+        let fade = self.fade.and_then(|(l, t0)| {
+            let k = (t0.elapsed().as_secs_f32() / FADE_S).min(1.0);
+            (k < 1.0).then(|| (l - hist + offset as i64, 1.0 - (1.0 - k).powi(3)))
+        });
+        if fade.is_some() {
+            ui.ctx().request_repaint();
+        } else {
+            self.fade = None;
+        }
         for (i, job) in jobs.into_iter().enumerate() {
             if job.sections.is_empty() {
                 continue;
             }
             let galley = ui.fonts_mut(|f| f.layout_job(job));
-            painter.galley(rect.min + egui::vec2(4.0, 2.0 + i as f32 * ch), galley, p.text);
+            match fade {
+                Some((from, k)) if i as i64 >= from => {
+                    let mut pf = painter.clone();
+                    pf.multiply_opacity(k);
+                    pf.galley(rect.min + egui::vec2(4.0 + 10.0 * (1.0 - k), 2.0 + i as f32 * ch), galley, p.text);
+                }
+                _ => painter.galley(rect.min + egui::vec2(4.0, 2.0 + i as f32 * ch), galley, p.text),
+            }
         }
         // medzery medzi znakmi ako bodky (ako v PyCharme); prázdna mriežka za koncom riadka sa nekreslí
         if self.ws != crate::ws::Mode::Off {

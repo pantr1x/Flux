@@ -62,8 +62,12 @@ impl App {
                         ui.painter().rect_stroke(Rect::from_center_size(c, vec2(10.0, 10.0)), 1.5, s, egui::StrokeKind::Inside);
                     }
                     _ => {
-                        ui.painter().line_segment([pos2(c.x - 5.0, c.y - 5.0), pos2(c.x + 5.0, c.y + 5.0)], s);
-                        ui.painter().line_segment([pos2(c.x + 5.0, c.y - 5.0), pos2(c.x - 5.0, c.y + 5.0)], s);
+                        // × sa pri prejdení pootočí o štvrť otáčky (fx – len kým sa animuje)
+                        let mk = ui.ctx().animate_bool_with_time(resp.id.with("m"), resp.hovered(), if self.fx.on { 0.26 } else { 0.0 });
+                        let rot = egui::emath::Rot2::from_angle(crate::widgets::hover_motion("x", mk).0.to_radians());
+                        let pt = |dx: f32, dy: f32| c + rot * vec2(dx, dy);
+                        ui.painter().line_segment([pt(-5.0, -5.0), pt(5.0, 5.0)], s);
+                        ui.painter().line_segment([pt(5.0, -5.0), pt(-5.0, 5.0)], s);
                     }
                 }
                 let resp = resp.on_hover_text(match *what {

@@ -61,6 +61,21 @@ fn line_starts(text: &str, a: usize, b: usize) -> Vec<usize> {
 }
 
 // Tab / Shift+Tab: bez výberu vloží 4 medzery, s výberom odsadí/vráti celé riadky. Vráti nový výber.
+// znaky a ≤ b → bajty, jedným prechodom
+pub fn byte_pair(text: &str, a: usize, b: usize) -> (usize, usize) {
+    let (mut ba, mut bb) = (text.len(), text.len());
+    for (k, (i, _)) in text.char_indices().enumerate() {
+        if k == a {
+            ba = i;
+        }
+        if k == b {
+            bb = i;
+            break;
+        }
+    }
+    (ba, bb.max(ba))
+}
+
 pub fn indent(text: &mut String, a: usize, b: usize, back: bool) -> (usize, usize) {
     if !back && a == b {
         let bi = byte_at(text, a);

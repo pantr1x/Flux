@@ -4,6 +4,16 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 
 ## 0.9.82
 
+**Animations while you type**
+- New letters appear softly: they glow for a moment and fade from the accent color into their normal color.
+- The text cursor glides to its new place instead of jumping.
+- An accepted suggestion or snippet "writes itself in" with a quick light sweep, and the places you can jump to with Tab pulse once.
+- A new line opens with a short soft band; search matches fade in.
+- ▶ Run: the button sends out a small ripple, a light band runs over the code (or the selected lines blink), a thin shimmer under the Output header shows the program is running, and *Finished* / *Exited with code* slides in.
+- The suggestion list slides in, and new file tabs open smoothly.
+- Icons come alive under the mouse: the Settings gear turns, × rotates, the search magnifier hops, the AI sparkle twinkles, the trash can tilts, refresh spins once, and ▶ turns into ■ when Run becomes Stop.
+- Turn it off in Settings → Text editor → Display → *Typing animations* (it also follows *Transition animations* and *Save memory*).
+
 **Run only the selected code (Python)**
 - Select some code (for example one `print(...)`) and press ▶ Run or F5: Flux runs just that, plus only the parts it needs – the `import` lines, functions, classes and variables it uses. Everything else in the file is skipped. Without a selection, Run works as before.
 
