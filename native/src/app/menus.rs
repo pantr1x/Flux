@@ -903,14 +903,15 @@ impl App {
                 if i == sel && (up || down) {
                     ui.scroll_to_rect(r, None);
                 }
-                // ikona v štvorčeku ako na webe (súbory majú svoju farebnú ikonu)
-                let ic = pos2(r.left() + 22.0, r.center().y);
+                let ic = pos2(r.left() + 20.0, r.center().y);
                 if let Some(f) = icon.strip_prefix("file:") {
                     widgets::file_icon(ui, Rect::from_center_size(ic, vec2(16.0, 16.0)), f);
                 } else if let Some(n) = icon.strip_prefix("icon:") {
-                    widgets::icon_tile(ui, ic, 26.0, n, &p, i == sel);
+                    // vybraný riadok: ikona sa pohne ako pri prejdení myšou
+                    let ik = ui.ctx().animate_bool_with_time(resp.id.with("ih"), i == sel || resp.hovered(), 0.25);
+                    widgets::icon_hover(ui, ic, 16.0, n, if i == sel { p.text } else { p.text2 }, ik);
                 }
-                let lr = widgets::text(ui, pos2(r.left() + 44.0, r.center().y), Align2::LEFT_CENTER, label, theme::ui(13.5), p.text, r.width() * 0.55);
+                let lr = widgets::text(ui, pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, label, theme::ui(13.5), p.text, r.width() * 0.55);
                 widgets::text(ui, pos2(lr.right() + 10.0, r.center().y), Align2::LEFT_CENTER, detail, theme::ui(12.0), p.text3, r.right() - lr.right() - 20.0);
                 if resp.clicked() {
                     pick = Some(action.clone());

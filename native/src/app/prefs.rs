@@ -18,7 +18,7 @@ pub fn default_of(key: &str) -> Value {
         "lineHeight" => json!(1.45),
         "minimap" | "lintHints" | "suggest" | "liveWallpaper" | "autosave" | "clearOnRun" | "showSearch" | "transitions" | "inertia" | "trimMemory" | "bracketColors" | "autoUpdate" | "autoIndent" | "searchWide" | "breadcrumbs"
         | "cursorBlink" | "lineHighlight" | "indentGuides" | "autoClose" | "autoCloseTags" | "selHighlight" | "matchBrackets" | "wheelZoom" | "showTabs" | "statusBar" | "activityBar"
-        | "confirmDelete" | "glassChip" | "editorFx" => json!(true),
+        | "confirmDelete" | "editorFx" => json!(true),
         "wordWrap" | "autoReload" | "lite" | "trimWhitespace" | "finalNewline" | "tabBold" => json!(false),
         "tabSize" => json!(4),
         "cursorWidth" => json!(2),
@@ -35,8 +35,11 @@ pub fn default_of(key: &str) -> Value {
         "cornerRadius" => json!(14),
         "darkLift" => json!(0),
         "glassDim" => json!(45),
-        "alphaSide" | "alphaTop" => json!(78),
-        "alphaEditor" | "alphaPanel" => json!(96),
+        "alphaSide" | "alphaTop" => json!(55),
+        "alphaEditor" => json!(62),
+        "alphaPanel" => json!(78),
+        // priehľadnosť sa nastavuje v Nastaveniach; tlačidlo % v stavovom riadku je len na želanie
+        "glassChip" => json!(false),
         "density" => json!("comfortable"),
         "terminalFontSize" => json!(13),
         "panelPos" => json!("bottom"),
@@ -96,6 +99,7 @@ pub struct SettingsUi {
     find: String,
     jump: Option<String>,
     pub opened: f64,
+    switched: f64, // kedy sa prepla karta (prelínanie obsahu – okno sa už znova neotvára)
     notes_open: std::collections::HashSet<String>, // rozbalené verzie v poznámkach k vydaniam
     notes_all: bool,                               // ukázať aj staršie verzie
     spy: Option<String>,                           // časť, ktorá je práve navrchu (zvýraznená v ponuke)
@@ -106,7 +110,7 @@ pub struct SettingsUi {
 
 impl SettingsUi {
     pub fn new(tab: &str, now: f64) -> Self {
-        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, notes_open: Default::default(), notes_all: false, spy: None, spy_hold: 0.0, hist: vec![tab.to_string()], hist_i: 0 }
+        SettingsUi { tab: tab.to_string(), find: String::new(), jump: None, opened: now, switched: 0.0, notes_open: Default::default(), notes_all: false, spy: None, spy_hold: 0.0, hist: vec![tab.to_string()], hist_i: 0 }
     }
 
     // nová karta → do histórie (karty sa menia z viacerých miest, preto raz za snímku)
@@ -727,6 +731,9 @@ impl App {
         y -= shown_off;
         let painter_save = ui.painter().clip_rect();
         ui.set_clip_rect(nav_clip);
+        // zvýraznenie aktívnej karty: jeden pás, ktorý pri prepnutí plynulo prejde na novú kartu
+        let pill_slot = ui.painter().add(egui::Shape::Noop);
+        let mut pill_at: Option<Rect> = None;
         for (id, ic, label, group) in TABS {
             if id.is_empty() || (id == "developer" && !dev) || (id == "github" && !gh) {
                 continue;
@@ -749,13 +756,16 @@ impl App {
             let resp = ui.interact(r, ui.id().with(("stab", id)), Sense::click());
             let on = id == cur_tab && finding.is_empty();
             let hov = ctx.animate_bool_with_time(ui.id().with(("stab-h", id)), resp.hovered() || on, if anim { 0.12 } else { 0.0 });
-            if hov > 0.0 {
-                ui.painter().rect_filled(r, CornerRadius::same(10), if on { p.active } else { p.hover.gamma_multiply(hov) });
+            if on {
+                pill_at = Some(r);
+            } else if hov > 0.0 {
+                ui.painter().rect_filled(r, CornerRadius::same(10), p.hover.gamma_multiply(hov));
             }
             // aktívna karta: ikona vo farbe zvýraznenia (.s-tab.on svg)
-            // ikona v štvorčeku (rovnaký štýl ako na webe), aktívna karta vo farbe zvýraznenia
-            widgets::icon_tile(ui, pos2(r.left() + 20.0, r.center().y), 24.0, ic, &p, on);
-            widgets::text(ui, pos2(r.left() + 42.0, r.center().y), Align2::LEFT_CENTER, &t(label), theme::bold(12.5), if on || resp.hovered() { p.text } else { p.text2 }, r.width() - 44.0);
+            // aktívna karta: ikona vo farbe zvýraznenia; pri prejdení myšou sa ikona pohne (koliesko sa pootočí…)
+            let ik = if anim { ctx.animate_bool_with_time(ui.id().with(("stab-ih", id)), resp.hovered(), 0.25) } else { 0.0 };
+            widgets::icon_hover(ui, pos2(r.left() + 20.0, r.center().y), 16.0, ic, if on { p.accent } else if resp.hovered() { p.text } else { p.text2 }, ik);
+            widgets::text(ui, pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &t(label), theme::bold(12.5), if on || resp.hovered() { p.text } else { p.text2 }, r.width() - 44.0);
             if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                 go_tab = Some(id.to_string());
             }
@@ -789,6 +799,13 @@ impl App {
                 y += 6.0;
             }
         }
+        if let Some(r) = pill_at {
+            // poloha v ponuke bez posunu – posúvanie kolieskom nemá pás „ťahať“ za sebou
+            let target = r.top() + shown_off;
+            let ty = if anim { ctx.animate_value_with_time(egui::Id::new("s-nav-pill"), target, 0.18) } else { target };
+            let pr = Rect::from_min_size(pos2(r.left(), ty - shown_off), r.size());
+            ui.painter().set(pill_slot, egui::epaint::RectShape::filled(pr, CornerRadius::same(10), p.active));
+        }
         let total = y + shown_off - y0;
         let max_off = (total - nav_clip.height() + 8.0).max(0.0);
         ctx.data_mut(|d| {
@@ -802,7 +819,7 @@ impl App {
             st.tab = tb;
             st.spy = None;
             st.find.clear();
-            st.opened = ctx.input(|i| i.time) - 0.1;
+            st.switched = ctx.input(|i| i.time);
         }
         if let Some(s) = go_sub {
             let st = self.settings.as_mut().unwrap();
@@ -828,7 +845,14 @@ impl App {
         // obsah – pri hľadaní všetky karty, inak len aktívna; prechod: jemný posun + fade
         let tabs: Vec<&str> = if finding.is_empty() { vec![TABS.iter().find(|x| x.0 == st.tab).map(|x| x.0).unwrap_or("general")] } else { TABS.iter().map(|x| x.0).collect() };
         let jump = self.settings.as_mut().unwrap().jump.take();
-        let slide = (1.0 - k) * 14.0;
+        // prepnutie karty: obsah sa jemne vysunie a prelinie (0,18 s); okno, stmavenie a ponuka ostanú pokojné
+        let ks = if anim { (((ctx.input(|i| i.time) - self.settings.as_ref().unwrap().switched) / 0.18).clamp(0.0, 1.0)) as f32 } else { 1.0 };
+        let ks = 1.0 - (1.0 - ks).powi(3);
+        if ks < 1.0 {
+            ctx.request_repaint();
+        }
+        bui.multiply_opacity(0.15 + 0.85 * ks);
+        let slide = (1.0 - k) * 14.0 + (1.0 - ks) * 10.0;
         let sk = egui::Id::new(("sa-settings", tabs.join(",")));
         let off = self.smooth.begin(&ctx, sk, bui.layer_id(), None);
         let mut sa = egui::ScrollArea::vertical().id_salt(("s-body", tabs.join(","))).auto_shrink(false);

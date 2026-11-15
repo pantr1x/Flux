@@ -788,11 +788,12 @@ impl App {
             // nepriehľadnosť každej časti (Vzhľad → Okno); bez nastavenia predvolené – menej priesvitné ako predtým
             let pct = |k: &str| self.core.setting(k).as_f64().map(|v| (v / 100.0).clamp(0.0, 1.0) as f32);
             // pri tapete, ktorá sa s témou bije (svetlá v tmavej), o trochu plnšie – text ostane čitateľný
-            let base_def = (0.78 + if self.see_through() { 0.0 } else { (clash * 0.5).min(0.15) }).min(0.95);
-            let card_def = 0.96;
+            // predvolené (Vzhľad → Okno): okno 55 %, editor 62 %, Výstup a Terminál 78 % – viac skla, text stále čitateľný
+            let base_def = (0.55 + if self.see_through() { 0.0 } else { (clash * 0.5).min(0.15) }).min(0.95);
+            let (ed_def, panel_def) = (0.62, 0.78);
             // bočný panel, pás ikon a horná lišta majú jednu spoločnú hodnotu (alphaSide) – inak pôsobili ako dve rôzne sklá
             let side = pct("alphaSide").unwrap_or(base_def);
-            let a = [side, side, pct("alphaEditor").unwrap_or(card_def), pct("alphaPanel").unwrap_or(card_def)];
+            let a = [side, side, pct("alphaEditor").unwrap_or(ed_def), pct("alphaPanel").unwrap_or(panel_def)];
             // pozadie okna / karta = priesvitnejšia z dvoch častí, tá druhá sa dofarbí (p.layer) na svoju hodnotu
             let base_a = a[0].min(a[1]);
             let card_a = a[2].min(a[3]);

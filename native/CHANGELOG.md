@@ -27,7 +27,8 @@ Flux Native is the new Flux written in Rust. It uses much less memory than Flux 
 - **Search in the output**: the Output and Terminal panel has a search field right in its header (like the one at the top); click it or press Ctrl+F. Esc clears it. Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
 
 - The output has a scrollbar (drag it or click the track) and a ⌄ button that jumps back to the end when you scrolled up. Search uses ↑ / ↓ for the previous and next match, and the search field is smaller.
-- Icons in Settings and in the command palette sit in small rounded squares, the same style as on the website.
+- Switching pages in Settings is smooth: the page slides in softly and the highlight glides to the new item (before, the whole Settings window replayed its opening animation). Icons in Settings and the command palette move when you point at them.
+- New default transparency: window 55 %, editor 62 %, Output and Terminal 78 %. You set it in Settings → Theme and window; the % button in the status bar is now off by default (turn it on there if you liked it).
 - Settings: the menu on the left scrolls smoothly and no longer jumps back at the end or scrolls the page next to it.
 - After *Clear*, the panel says so (*Output cleared…*), and a running Terminal redraws its prompt, so you can see it still works.
 

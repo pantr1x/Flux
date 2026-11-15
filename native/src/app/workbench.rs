@@ -243,24 +243,24 @@ impl App {
     pub(super) fn glass_step(&mut self, more_clear: bool, ctx: &egui::Context) {
         let d = if more_clear { -5.0 } else { 5.0 };
         let cur = |k: &str, def: f64| self.get(k).as_f64().unwrap_or(def);
-        let vals = [("alphaSide", cur("alphaSide", 78.0), 10.0), ("alphaEditor", cur("alphaEditor", 96.0), 20.0), ("alphaPanel", cur("alphaPanel", 96.0), 20.0)];
+        let vals = [("alphaSide", cur("alphaSide", 55.0), 10.0), ("alphaEditor", cur("alphaEditor", 62.0), 20.0), ("alphaPanel", cur("alphaPanel", 78.0), 20.0)];
         self.update_settings(|o| {
             for (k, v, min) in vals {
                 o.insert(k.into(), json!(((v + d).clamp(min, 100.0)).round()));
             }
         });
         self.apply_look(ctx);
-        let side = self.get("alphaSide").as_f64().unwrap_or(78.0);
+        let side = self.get("alphaSide").as_f64().unwrap_or(55.0);
         self.note(tf("Opacity {n} %", &[("n", &format!("{side:.0}"))]));
     }
 
     // čip v stavovom riadku: aktuálna nepriehľadnosť, klik = posuvníky
     pub(super) fn glass_chip(&mut self, ui: &mut egui::Ui, rx: f32, cy: f32) -> f32 {
-        if self.get("material").as_str() == Some("none") || self.get("glassChip").as_bool() == Some(false) {
+        if self.get("material").as_str() == Some("none") || self.get("glassChip").as_bool() != Some(true) {
             return 0.0;
         }
         let p = self.pal;
-        let v = self.get("alphaSide").as_f64().unwrap_or(78.0);
+        let v = self.get("alphaSide").as_f64().unwrap_or(55.0);
         let label = format!("{v:.0} %");
         let w = widgets::text_w(ui, &label, theme::ui(12.0)) + 26.0;
         let r = Rect::from_min_size(pos2(rx - w, cy - 10.0), vec2(w, 20.0));
@@ -275,7 +275,7 @@ impl App {
             ui.set_min_width(260.0);
             ui.label(egui::RichText::new(t("Transparency")).strong());
             ui.add_space(4.0);
-            for (k, label, def, min) in [("alphaSide", "Window", 78.0, 10.0), ("alphaEditor", "Editor", 96.0, 20.0), ("alphaPanel", "Output and Terminal", 96.0, 20.0)] {
+            for (k, label, def, min) in [("alphaSide", "Window", 55.0, 10.0), ("alphaEditor", "Editor", 62.0, 20.0), ("alphaPanel", "Output and Terminal", 78.0, 20.0)] {
                 let mut x = self.get(k).as_f64().unwrap_or(def);
                 ui.label(egui::RichText::new(t(label)).color(p.text2).size(12.0));
                 if ui.add(egui::Slider::new(&mut x, min..=100.0).suffix(" %").integer()).changed() {
