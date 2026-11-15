@@ -27,7 +27,8 @@ jobs:
           New-Item -ItemType Directory apps\vscode\data -Force | Out-Null   # prenosný režim: nastavenia vedľa programu
           # rovnaký zážitok ako vo Fluxe: bez uvítacej stránky, bez dôvery v priečinok, bez telemetrie
           New-Item -ItemType Directory apps\vscode\data\user-data\User -Force | Out-Null
-          '{"workbench.startupEditor":"none","security.workspace.trust.enabled":false,"telemetry.telemetryLevel":"off","update.mode":"none","extensions.autoUpdate":false,"extensions.ignoreRecommendations":true,"workbench.tips.enabled":false}' | Set-Content apps\vscode\data\user-data\User\settings.json
+          # bez uvítania a AI (Copilot) – Flux má AI tiež vypnutú; náhľad webu vo vnútri editora ako vo Fluxe
+          '{"workbench.startupEditor":"none","security.workspace.trust.enabled":false,"telemetry.telemetryLevel":"off","update.mode":"none","extensions.autoUpdate":false,"extensions.ignoreRecommendations":true,"workbench.tips.enabled":false,"chat.disableAIFeatures":true,"workbench.welcomePage.walkthroughs.openOnInstall":false,"livePreview.openPreviewTarget":"Embedded Preview"}' | Set-Content apps\vscode\data\user-data\User\settings.json
           & apps\vscode\bin\code.cmd --install-extension ms-vscode.live-server --force 2>&1 | Out-Host
           (Get-Item apps\Flux-Native.exe).Length / 1MB
           (Get-ChildItem apps\vscode -Recurse | Measure-Object Length -Sum).Sum / 1MB
@@ -59,15 +60,19 @@ jobs:
             $bmp.Save("out\$file.png", [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose()
           }
           function Measure-App($label, $start, $after) {
+            # prehliadač z predošlých testov preč – keby VS Code otvoril náhľad v Edge, ráta sa iba nový
+            Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             $p = & $start
             # nech sa program úplne rozbehne (VS Code po štarte ešte načítava rozšírenia)
             Start-Sleep 40
             if ($after) { & $after $p; Start-Sleep 30 }
             Shot $label
             # 5 meraní po 3 s, berie sa stredné (medián)
-            $vals = @(); for ($i = 0; $i -lt 5; $i++) { $vals += Mem (Tree $p.Id); Start-Sleep 3 }
+            # strom procesov programu + Edge, ak ho program otvoril (externý náhľad sa tiež ráta)
+            $ids = { @(Tree $p.Id) + @(Get-Process msedge -ErrorAction SilentlyContinue | ForEach-Object Id) }
+            $vals = @(); for ($i = 0; $i -lt 5; $i++) { $vals += Mem (& $ids); Start-Sleep 3 }
             $mid = ($vals | Sort-Object)[2]
-            $n = (Tree $p.Id).Count
+            $n = (& $ids).Count
             Stop-Process -Id (Tree $p.Id) -Force -ErrorAction SilentlyContinue
             Get-Process Code, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep 3
@@ -93,7 +98,7 @@ jobs:
             $ws = New-Object -ComObject WScript.Shell
             $null = $ws.AppActivate($p.Id); Start-Sleep 2
             [System.Windows.Forms.SendKeys]::SendWait('^+p'); Start-Sleep 2
-            [System.Windows.Forms.SendKeys]::SendWait('Live Preview: Show Preview'); Start-Sleep 2
+            [System.Windows.Forms.SendKeys]::SendWait('Live Preview: Show Preview'); Start-Sleep 3
             [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
           }
           $fluxSize = [math]::Round((Get-Item apps\Flux-Native.exe).Length / 1MB, 1)
