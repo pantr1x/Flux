@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.83
+
+- The editor and the Output panel are see-through again – their opacity is now the real result, not added on top of the window.
+- Live Server panel lines up with the editor tabs and breadcrumbs; its tabs look like the editor tabs and the address no longer hides under Full / Tablet / Phone.
+- No white bar above the active tab.
+
 ## 0.9.82
 
 **Animations while you type**

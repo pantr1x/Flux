@@ -169,28 +169,38 @@ impl App {
         let Some(pv) = self.preview.as_mut() else { return };
         ui.painter().vline(rect.left(), rect.y_range(), Stroke::new(1.0, p.line));
         // ---- karty stránok (odkaz s target=_blank sa otvorí v novej karte) ----
-        const TABS_H: f32 = 32.0;
+        // rovnaká výška a vzhľad ako riadok kariet editora vedľa (spodné čiary a lišta sú v jednej rovine)
+        const TABS_H: f32 = super::explorer::TABS_H;
         let tabs_r = Rect::from_min_size(rect.min, vec2(rect.width(), TABS_H));
-        ui.painter().hline(tabs_r.x_range(), tabs_r.bottom(), Stroke::new(1.0, p.line));
         let (mut switch, mut close_tab, mut add_tab) = (None, None, false);
+        let mut active_x: Option<(f32, f32)> = None;
+        let tw;
         {
             let n = pv.tabs.len().max(1);
             let aw = (tabs_r.width() - 40.0).max(60.0);
-            let tw = (aw / n as f32).clamp(70.0, 170.0);
+            tw = (aw / n as f32).clamp(70.0, 200.0);
             for (i, u) in pv.tabs.iter().enumerate() {
-                let r = Rect::from_min_size(pos2(tabs_r.left() + 6.0 + i as f32 * (tw + 2.0), tabs_r.top() + 4.0), vec2(tw, TABS_H - 7.0));
+                // ako karty editora: aktívna má zaoblený vrch a vteká do lišty pod ňou, ostatné sú pri prejdení pilulka
+                let r = Rect::from_min_max(pos2(tabs_r.left() + 6.0 + i as f32 * (tw + 2.0), tabs_r.top() + 5.0), pos2(tabs_r.left() + 6.0 + i as f32 * (tw + 2.0) + tw, tabs_r.bottom()));
                 if r.right() > tabs_r.right() - 30.0 {
                     break;
                 }
                 let on = i == pv.active;
                 let resp = ui.interact(r, ui.id().with(("pv-tab", i)), Sense::click()).on_hover_text(u);
-                if on || resp.hovered() {
-                    ui.painter().rect_filled(r, CornerRadius::same(8), if on { p.active } else { p.hover });
+                if on {
+                    let top = CornerRadius { nw: 10, ne: 10, ..Default::default() };
+                    ui.painter().with_clip_rect(tabs_r).rect_stroke(r.with_max_y(r.bottom() + 4.0), top, Stroke::new(1.0, p.line), egui::StrokeKind::Inside);
+                    active_x = Some((r.left(), r.right()));
+                } else if resp.hovered() {
+                    let pill = Rect::from_min_max(pos2(r.left(), r.top() + 1.0), pos2(r.right(), r.bottom() - 4.0));
+                    ui.painter().rect_filled(pill, CornerRadius::same(8), p.hover);
                 }
+                let cy = r.center().y - 1.0;
                 let can_close = pv.tabs.len() > 1;
-                let xr = Rect::from_center_size(pos2(r.right() - 13.0, r.center().y), vec2(18.0, 18.0));
-                let tw_text = r.width() - 14.0 - if can_close { 22.0 } else { 0.0 };
-                widgets::text(ui, pos2(r.left() + 10.0, r.center().y), Align2::LEFT_CENTER, &tab_title(u), theme::ui(12.0), if on { p.text } else { p.text2 }, tw_text.max(10.0));
+                let xr = Rect::from_center_size(pos2(r.right() - 15.0, cy), vec2(18.0, 18.0));
+                let tw_text = r.width() - 20.0 - if can_close { 22.0 } else { 0.0 };
+                widgets::icon_at(ui, pos2(r.left() + 18.0, cy), 13.0, "globe", if on { p.text2 } else { p.text3 });
+                widgets::text(ui, pos2(r.left() + 30.0, cy), Align2::LEFT_CENTER, &tab_title(u), theme::ui(13.0), if on { p.text } else { p.text3 }, (tw_text - 20.0).max(10.0));
                 let mut x_clicked = false;
                 if can_close && (on || resp.hovered()) {
                     x_clicked = widgets::icon_button_at(ui, xr, "x", 11.0, &p, true).clicked();
@@ -202,8 +212,19 @@ impl App {
                 }
             }
             let plus_x = (tabs_r.left() + 6.0 + pv.tabs.len() as f32 * (tw + 2.0) + 12.0).min(tabs_r.right() - 16.0);
-            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(plus_x, tabs_r.center().y), vec2(24.0, 24.0)), "plus", 13.0, &p, true).on_hover_text(t("New tab")).clicked() {
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(plus_x, tabs_r.center().y + 2.0), vec2(24.0, 24.0)), "plus", 13.0, &p, true).on_hover_text(t("New tab")).clicked() {
                 add_tab = true;
+            }
+        }
+        // spodná čiara pod kartami – pod aktívnou sa preruší
+        let ly = tabs_r.bottom() - 0.5;
+        match active_x {
+            Some((a, b)) => {
+                ui.painter().hline(tabs_r.left()..=a, ly, Stroke::new(1.0, p.line));
+                ui.painter().hline(b..=tabs_r.right(), ly, Stroke::new(1.0, p.line));
+            }
+            None => {
+                ui.painter().hline(tabs_r.x_range(), ly, Stroke::new(1.0, p.line));
             }
         }
         if let Some(i) = close_tab {
@@ -219,28 +240,31 @@ impl App {
             pv.tabs.push(pv.url.clone());
             pv.active = pv.tabs.len() - 1;
         }
-        let bar = Rect::from_min_size(pos2(rect.left(), rect.top() + TABS_H), vec2(rect.width(), 40.0));
+        let bar = Rect::from_min_size(pos2(rect.left(), rect.top() + TABS_H), vec2(rect.width(), super::explorer::CRUMB_H + 4.0));
         let cy = bar.center().y;
-        ui.painter().hline(bar.x_range(), bar.bottom(), Stroke::new(1.0, p.line));
+        ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, Stroke::new(1.0, p.line));
         // vpravo: ×, prehliadač, obnoviť
         let mut rx = bar.right() - 10.0;
         let mut close = false;
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 13.0, cy), vec2(26.0, 26.0)), "x", 14.0, &p, true).on_hover_text(t("Stop Live Server")).clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 13.0, cy), vec2(24.0, 24.0)), "x", 13.0, &p, true).on_hover_text(t("Stop Live Server")).clicked() {
             close = true;
         }
         rx -= 30.0;
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 13.0, cy), vec2(26.0, 26.0)), "external", 14.0, &p, true).on_hover_text(t("Open in browser")).clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 13.0, cy), vec2(24.0, 24.0)), "external", 13.0, &p, true).on_hover_text(t("Open in browser")).clicked() {
             flux_core::settings::open_external(&pv.url);
         }
         rx -= 30.0;
-        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 13.0, cy), vec2(26.0, 26.0)), "refresh", 14.0, &p, true).on_hover_text(t("Reload")).clicked() {
+        if widgets::icon_button_at(ui, Rect::from_center_size(pos2(rx - 13.0, cy), vec2(24.0, 24.0)), "refresh", 13.0, &p, true).on_hover_text(t("Reload")).clicked() {
             pv.reload = true;
         }
         rx -= 34.0;
         // zariadenia (celá šírka / tablet / mobil)
-        for (i, (name, _)) in DEVICES.iter().enumerate().rev() {
+        // zariadenia len keď ostane miesto aj na adresu (v úzkom paneli sa prekrývali)
+        let dev_w: f32 = DEVICES.iter().map(|(n, _)| widgets::text_w(ui, &t(n), theme::ui(11.5)) + 18.0).sum();
+        let show_dev = rx - dev_w - bar.left() > 130.0;
+        for (i, (name, _)) in DEVICES.iter().enumerate().rev().filter(|_| show_dev) {
             let w = widgets::text_w(ui, &t(name), theme::ui(11.5)) + 16.0;
-            let r = Rect::from_min_size(pos2(rx - w, cy - 11.0), vec2(w, 22.0));
+            let r = Rect::from_min_size(pos2(rx - w, cy - 10.5), vec2(w, 21.0));
             let resp = ui.interact(r, ui.id().with(("pv-dev", i)), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
             let on = pv.device == i;
             if on || resp.hovered() {

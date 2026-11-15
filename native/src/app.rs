@@ -796,6 +796,10 @@ impl App {
             let a = [side, side, pct("alphaEditor").unwrap_or(ed_def), pct("alphaPanel").unwrap_or(panel_def)];
             // pozadie okna / karta = priesvitnejšia z dvoch častí, tá druhá sa dofarbí (p.layer) na svoju hodnotu
             let base_a = a[0].min(a[1]);
+            // karta leží NAD pozadím okna – jej vlastná alfa sa ráta tak, aby spolu dali nastavenú hodnotu
+            // (inak 55 % okno + 62 % editor = 83 % a editor pôsobil nepriehľadne); priesvitnejší ako okno byť nemôže
+            let rel = |want: f32| if want <= base_a { 0.0 } else { 1.0 - (1.0 - want) / (1.0 - base_a).max(0.001) };
+            let a = [a[0], a[1], rel(a[2]), rel(a[3])];
             let card_a = a[2].min(a[3]);
             let (base_o, card_o) = (p.base, p.card);
             let extra = |c: Color32, under: f32, want: f32| if want > under + 0.002 && under < 0.999 { c.gamma_multiply((want - under) / (1.0 - under)) } else { Color32::TRANSPARENT };
