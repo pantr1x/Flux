@@ -122,15 +122,28 @@ jobs:
           $svg -join "`n" | Set-Content out\compare.svg
           @{ date = (Get-Date -Format 'yyyy-MM-dd'); run = $run; os = 'Windows Server (GitHub Actions VM)'; fluxSize = $fluxSize; codeSize = $codeSize; results = @($r) } | ConvertTo-Json -Depth 4 | Set-Content out\compare.json
           $md -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
+      # výsledky a screenshoty aj ako artefakt behu (dajú sa pozrieť, aj keby zverejnenie zlyhalo)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compare
+          path: out
+      # PowerShell (nie bash): po desiatkach procesov VS Code Git Bash na Windows niekedy ani nenaštartoval (0xC0000142)
       - name: Publish (branch ci-compare)
         if: always()
-        shell: bash
+        shell: pwsh
         run: |
-          [ -f out/compare.md ] || exit 0
-          cd out
+          Get-Process Code, msedgewebview2, flux-native, Flux-Native -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          if (-not (Test-Path out\compare.md)) { exit 0 }
+          Set-Location out
           git init -q -b ci-compare
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Flux vs VS Code from ${GITHUB_SHA::7}"
-          for i in 1 2 3 4; do git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ci-compare && exit 0; sleep $((i * 5)); done
+          git commit -q -m "Flux vs VS Code from $($env:GITHUB_SHA.Substring(0,7))"
+          foreach ($i in 1..4) {
+            git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$($env:GITHUB_REPOSITORY).git" ci-compare
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Start-Sleep ($i * 5)
+          }
+          exit 1
