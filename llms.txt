@@ -1,0 +1,26 @@
+# Flux
+
+> Flux is a free, small and modern code editor written in Rust. It runs code with one click, shows websites live while you type and has Claude AI built in – with nothing to set up. It runs on Windows 10 and 11 and on Linux (x86_64); a macOS version is being prepared.
+
+- Website: https://pantr1x.github.io/Flux/
+- Download for Windows (newest, no installation): https://github.com/pantr1x/Flux/raw/ci-native/Flux-Native.exe
+- Linux install (one command, updates itself): `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash`
+- Source code: https://github.com/pantr1x/Flux
+- Price: free, no account, no ads
+
+## Features
+
+- One-click Run (F5) for Python, JavaScript, TypeScript, Java, C / C++, C#, Go, Rust, Ruby, PHP, Lua, Perl, Zig, R, Julia, Dart and Swift. Select some lines and Run runs only them, with the imports and variables they need. Missing languages download from their official sources.
+- Live Server: the website inside Flux, changing while you type (before saving), full / tablet / phone size; selecting text on the page jumps to its line in the HTML.
+- Suggestions from the real code: members of installed Python modules, keys of JSON data loaded in the file, HTML/CSS with Emmet, snippets; error hints from the real Python compiler.
+- Python libraries: a missing import is underlined and installs with one click (pip); outdated libraries can be updated in one window.
+- Output and Terminal for every file, with search (Ctrl+F) that highlights every match.
+- Claude AI assistant: explains and fixes code; Claude Desktop, Claude Code and Cursor can work with Flux projects (MCP).
+- GitHub: sign in, open a repository or publish a new project.
+- Plugins (JavaScript), a theme store, themes as small text files, a see-through or blurred window, customizable shortcuts, 9 interface languages.
+- Automatic updates (often only the changed part).
+
+## Docs
+
+- [Changelog](https://github.com/pantr1x/Flux/blob/HEAD/native/CHANGELOG.md): what changed in every version
+- [Plugin guide](https://github.com/pantr1x/Flux/blob/HEAD/docs/PLUGINS.md): how to make a Flux plugin
