@@ -168,7 +168,8 @@ pub fn suggest(lang: &str, prefix: &str, words: &HashMap<String, usize>, limit: 
     let mut v: Vec<(u8, usize, String, Kind)> = all
         .into_iter()
         // úplne napísaný kľúčový výraz/vstavaná funkcia (str, print) sa ukáže ďalej; vlastné slovo, ktoré práve píšem, nie
-        .filter(|(w, (k, _))| w != prefix || !matches!(k, Kind::Word))
+        // (premenná z iného miesta súboru – `country = …` a potom `print(country` – sa ukáže aj celá napísaná)
+        .filter(|(w, (k, n))| w != prefix || !matches!(k, Kind::Word) || *n > 1)
         .filter_map(|(w, (k, n))| {
             let lw = w.to_lowercase();
             let rank = if w.starts_with(prefix) {

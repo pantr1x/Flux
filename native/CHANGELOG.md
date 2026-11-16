@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.84
+
+- **Focus mode** (**Ctrl+Alt+F**, the new icon next to ← →, or View → Focus mode): only the code, Output/Terminal and Live Server stay; **Esc** brings everything back the way it was.
+- Error hints wait until you finish: nothing is underlined on the line you are typing (a half-written `if` is not an error), and the empty lines right below it stay quiet too – the hint shows once you leave the line.
+- HTML and CSS files have no Output/Terminal panel any more (they run in Live Server); **Ctrl+`** still opens a terminal there.
+- Python: your own variable (`country`) is suggested first, before a JSON key with the same name; `requests.get()` / `response.json()` are coloured as functions, imported modules as types, and the Flux theme colours variables.
+
 ## 0.9.83
 
 - The editor and the Output panel are see-through again – their opacity is now the real result, not added on top of the window.

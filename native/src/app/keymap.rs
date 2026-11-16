@@ -24,6 +24,7 @@ pub(super) const KEYMAP: &[(&str, &str, &str, &str)] = &[
     ("search", "View", "Search everything", "Ctrl+Shift+F, Ctrl+Shift+A"),
     ("commands", "View", "Commands", "Ctrl+Shift+P"),
     ("sidebar", "View", "Toggle sidebar", "Ctrl+B"),
+    ("focus", "View", "Focus mode", "Ctrl+Alt+F"),
     ("view-explorer", "View", "Explorer", "Ctrl+Shift+E"),
     ("view-plugins", "View", "Plugins", "Ctrl+Shift+X"),
     ("settings", "View", "Settings", "Ctrl+Comma"),

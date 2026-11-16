@@ -126,6 +126,10 @@ impl Code {
             ("entity.name.type, entity.name.class, support.class, support.type, entity.other.inherited-class, storage.type.class.jsdoc", "type"),
             ("entity.name.function, support.function, variable.function, meta.function-call.generic, entity.name.function.decorator", "function"),
             ("meta.generic-name, variable, variable.other, variable.other.readwrite", "variable"),
+            // Python: `requests.get(…)` / `response.json()` – názov volanej funkcie má aj meta.generic-name, ktoré by ju prefarbilo na premennú
+            ("variable.function meta.generic-name, meta.function-call variable.function", "function"),
+            // importovaný modul (import requests) ako typ, ako vo VS Code
+            ("meta.statement.import meta.generic-name", "type"),
             ("variable.parameter", "parameter"),
             ("variable.other.member, variable.other.property, meta.property-name, support.type.property-name, meta.object-literal.key", "property"),
             ("entity.name.tag, punctuation.definition.tag", "tag"),
@@ -312,3 +316,4 @@ mod lang_tests {
         assert!(missing.is_empty(), "no syntax for: {missing:?}");
     }
 }
+

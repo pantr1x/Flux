@@ -40,7 +40,7 @@ pub struct Ask {
 }
 
 // (id, text, skratka, ikona)
-const COMMANDS: [(&str, &str, &str, &str); 18] = [
+const COMMANDS: [(&str, &str, &str, &str); 19] = [
     ("new-file", "New file…", "Ctrl+N", "filePlus"),
     ("new-project", "New project…", "Ctrl+Shift+N", "plus"),
     ("open-folder", "Open folder…", "Ctrl+O", "folderOpen"),
@@ -54,6 +54,7 @@ const COMMANDS: [(&str, &str, &str, &str); 18] = [
     ("stop", "Stop program", "Shift+F5", "stop"),
     ("terminal", "Terminal", "", "terminal"),
     ("sidebar", "Sidebar", "Ctrl+B", "sidebar"),
+    ("focus", "Focus mode", "Ctrl+Alt+F", "focus"),
     ("panel", "Panel", "Ctrl+J", "panel"),
     ("theme", "Toggle light / dark theme", "Ctrl+Shift+L", "sun"),
     ("home", "Home", "", "template"),
@@ -206,6 +207,7 @@ impl App {
                 self.start_shell();
             }
             "sidebar" => self.side_open = !self.side_open,
+            "focus" => self.toggle_focus(),
             "panel" => self.panel_open = !self.panel_open,
             "theme" => self.set_theme(!self.pal.dark, ctx),
             "home" => self.open_start(ctx.input(|i| i.time)),
@@ -343,6 +345,9 @@ impl App {
                     picked = Some("commands".into());
                 }
                 sep(ui, &p);
+                if item(ui, Some("focus"), &t("Focus mode"), &self.key_label("focus"), self.focus.is_some(), true, &p).clicked() {
+                    picked = Some("focus".into());
+                }
                 if item(ui, None, &t("Sidebar"), &self.key_label("sidebar"), self.side_open, true, &p).clicked() {
                     picked = Some("sidebar".into());
                 }

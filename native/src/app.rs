@@ -335,6 +335,7 @@ pub struct App {
     ed_off: egui::Vec2,                 // posledný posun editora
     new_todo: String,
     side_open: bool,
+    focus: Option<bool>, // režim sústredenia: Some(bočný panel pred ním) – po odchode sa vráti, ako bol
     next_sid: u64,
     zoom_acc: f32,
     term_fs: f32,
@@ -506,6 +507,7 @@ impl App {
             new_file: None,
             new_todo: String::new(),
             side_open: true,
+            focus: None,
             next_sid: 1,
             zoom_acc: 0.0,
             term_fs: 13.0,
@@ -1882,6 +1884,7 @@ impl App {
                 }
                 "run" => self.run(),
                 "panel" => self.panel_open = !self.panel_open,
+                "focus" => self.toggle_focus(),
                 "theme-store" => self.theme_store.browse = true,
                 "type" => {
                     if let Some(s) = self.sess_mut() {
@@ -2112,7 +2115,16 @@ impl App {
             self.app_menu(&m);
             x += 34.0;
         }
-        if !self.side_open {
+        if self.focus.is_some() {
+            // v režime sústredenia: návrat (Esc / Ctrl+Alt+F) – priečinky a ikony sa vrátia, ako boli
+            x += 4.0;
+            let r = Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0));
+            ui.painter().rect_filled(r, CornerRadius::same(8), p.active);
+            if widgets::icon_button_at(ui, r, "focus", 16.0, &p, true).on_hover_text(format!("{} ({}, Esc)", t("Leave focus mode"), self.key_label("focus"))).clicked() {
+                self.toggle_focus();
+            }
+            x += 30.0;
+        } else if !self.side_open {
             // logo a ☰ sú v páse ikon vľavo; tu len vrátenie bočného panela
             x += 4.0;
             if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "sidebar", 16.0, &p, true).on_hover_text(t("Show sidebar")).clicked() {
@@ -2129,6 +2141,16 @@ impl App {
             self.go(false);
         }
         x += 70.0;
+        // režim sústredenia (pri otvorenom súbore)
+        if self.focus.is_none() && !self.tabs.is_empty() && !self.home {
+            if widgets::icon_button_at(ui, Rect::from_center_size(pos2(x + 14.0, cy), vec2(28.0, 28.0)), "focus", 15.0, &p, true)
+                .on_hover_text(format!("{} ({})", t("Focus mode – only the code, output and Live Server"), self.key_label("focus")))
+                .clicked()
+            {
+                self.toggle_focus();
+            }
+            x += 34.0;
+        }
         // vpravo: − □ × okna, Stop, ▶ Run, AI, hľadanie
         let full_r = ui.ctx().content_rect().right();
         let side_right = self.side_open && self.get("sidePos").as_str() == Some("right");
@@ -2688,8 +2710,9 @@ impl App {
                                 if json_on && cx.member.is_none() && typed_ident && plen >= 2 && matches!(lang.as_str(), "py" | "pyw") {
                                     let j = crate::jsonkeys::word_items(&tab.text, &tab.path, &prefix);
                                     if !j.is_empty() {
-                                        items.retain(|i| !j.iter().any(|x| x.label == i.label));
-                                        items.splice(0..0, j);
+                                        // vlastné premenné súboru (country) ostanú prvé, kľúč s rovnakým menom je hneď za nimi
+                                        let own = items.iter().take_while(|i| matches!(i.kind, crate::complete::Kind::Word) && i.label.starts_with(prefix.as_str())).count();
+                                        items.splice(own..own, j);
                                         items.truncate(60);
                                     }
                                 }
@@ -2798,7 +2821,21 @@ impl App {
                     }
                     // vysvetlivky chýb: vlnovka pod miestom, bodka pri čísle riadku, text za koncom riadku
                     // na riadku, kde sa práve píše s návrhmi, chyby nie (napr. „<fo> is never closed“ pri písaní značky)
-                    let lint_ds: Vec<crate::lint::Diag> = lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.iter().filter(|d| Some(d.line) != sug_line).cloned().collect()).unwrap_or_default();
+                    // ani na riadku s kurzorom (rozpísané `if` ešte nie je chyba) a ani pod ním, keď sú medzi tým len prázdne
+                    // riadky (Python hlási „expected an indented block“ o riadok nižšie / na konci súboru); po odchode z riadku sa ukáže
+                    let caret_line: Option<usize> = (te.response.has_focus() && lint.as_ref().is_some_and(|(_, d)| !d.is_empty()))
+                        .then(|| te.cursor_range.map(|r| usize::from(r.primary.index)))
+                        .flatten()
+                        .map(|c| tab.text.chars().take(c).filter(|ch| *ch == '\n').count());
+                    // `if a:` + Enter: chyba je na riadku nad kurzorom, `if a:` + prázdny riadok + kód: pod ním
+                    let blank = |i: usize| i >= hlc.lines() || hlc.line_text(i).trim().is_empty();
+                    let typing_here = |line: usize| match caret_line {
+                        Some(cl) if line == cl => true,
+                        Some(cl) => blank(cl) && (line.min(cl) + 1..line.max(cl)).all(blank),
+                        None => false,
+                    };
+                    let lint_ds: Vec<crate::lint::Diag> =
+                        lint.as_ref().filter(|(g, _)| *g == hlc.gen).map(|(_, d)| d.iter().filter(|d| Some(d.line) != sug_line && !typing_here(d.line)).cloned().collect()).unwrap_or_default();
                     let all_ds: Vec<crate::lint::Diag> = lint_ds.into_iter().chain(plug_marks.iter().cloned()).collect();
                     if !all_ds.is_empty() {
                         let ds = &all_ds;
@@ -3899,6 +3936,17 @@ impl App {
     fn shortcuts(&mut self, ctx: &egui::Context) {
         self.tree_keys(ctx);
         // skratky z tabuľky (keymap.rs, vlastné v settings.keybindings)
+        // Esc opustí režim sústredenia, keď ho nič iné nepotrebuje (návrhy, okná, ponuky)
+        if self.focus.is_some()
+            && self.sug.is_none()
+            && self.settings.is_none()
+            && self.palette.is_none()
+            && self.ask.is_none()
+            && !egui::Popup::is_any_open(ctx)
+            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.toggle_focus();
+        }
         for id in self.keymap_hits(ctx) {
             match id {
                 // Ctrl+, nastavenia aj zavrie
@@ -4378,7 +4426,7 @@ impl eframe::App for App {
             self.frames.pop_front();
         }
         // pás ikon a bočný panel ostávajú aj na domove (ako uvítacia stránka VS Code)
-        if self.get("activityBar").as_bool() != Some(false) {
+        if self.get("activityBar").as_bool() != Some(false) && self.focus.is_none() {
             self.activity_bar(root);
         }
         if self.side_open {
@@ -4441,7 +4489,7 @@ impl eframe::App for App {
                 let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(card_r));
                 card_ui.set_clip_rect(card_r.shrink(1.0));
                 // stavový riadok sa dá skryť (workbench.statusBar.visible)
-                let sb_on = self.get("statusBar").as_bool() != Some(false);
+                let sb_on = self.get("statusBar").as_bool() != Some(false) && self.focus.is_none();
                 let status = Rect::from_min_max(pos2(card_r.left(), card_r.bottom() - if sb_on { 28.0 } else { 0.0 }), card_r.max);
                 if sb_on {
                     self.tour_rects.insert("status", status);
@@ -4488,7 +4536,10 @@ impl eframe::App for App {
                 let show_editor = !self.home && !self.tabs.is_empty();
                 let pos = self.get("panelPos").as_str().unwrap_or("bottom").to_string();
                 // obrázky Výstup ani Terminál nepotrebujú
-                let show_panel = show_editor && !self.tabs[self.active].image;
+                // ani webové stránky (HTML/CSS) – tie bežia v Live Serveri; Terminál (Ctrl+`) panel ukáže aj tu
+                let show_panel = show_editor
+                    && !self.tabs[self.active].image
+                    && (!self.is_web_file() || self.tabs[self.active].sess.as_ref().is_some_and(|s| s.shell_started || s.running));
                 if self.panel_open && show_panel {
                     // Výstup/Terminál dole, vpravo alebo vľavo (panelPos) s ťahadlom
                     let panel = if pos == "bottom" {
@@ -4566,7 +4617,7 @@ impl eframe::App for App {
                     }
                 }
                 // drobky nad editorom (ako VS Code): projekt › priečinky › súbor
-                if show_editor && self.get("breadcrumbs").as_bool() != Some(false) {
+                if show_editor && self.get("breadcrumbs").as_bool() != Some(false) && self.focus.is_none() {
                     let bc = Rect::from_min_size(area.min, vec2(area.width(), explorer::CRUMB_H));
                     self.breadcrumbs(&mut card_ui, bc);
                     area.min.y += explorer::CRUMB_H;
@@ -4763,5 +4814,18 @@ mod sess_tests {
         assert!(a.running);
         a.event("run:exit", &json!({"code": 0, "ms": 5}));
         assert!(!a.running);
+    }
+}
+
+impl App {
+    // režim sústredenia: len kód, Výstup/Terminál a Live Server (bez pásu ikon, priečinkov, drobkov a stavového riadku)
+    pub(crate) fn toggle_focus(&mut self) {
+        match self.focus.take() {
+            Some(side) => self.side_open = side,
+            None => {
+                self.focus = Some(self.side_open);
+                self.side_open = false;
+            }
+        }
     }
 }
