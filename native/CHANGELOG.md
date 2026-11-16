@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.85
+
+- **Data in the Output:** when your program prints a dictionary or a list (`print(data)`, JSON), the new **Data** button shows it next to the output as a readable tree – every key on its own line, values coloured by type, nested parts fold and unfold. Click a value to copy its path, like `["current"]["temperature_2m"]`.
+- **Paths in the Terminal:** a pasted file path with spaces gets quotes by itself (`'…/Weather app/weather.py'`), and a file dragged from the Explorer into the Terminal is typed in as its path.
+- **Explorer right-click:** *Copy path*, *Copy path for the terminal* (with quotes when needed) and *Copy relative path*, with shortcuts: **F2** rename, **Delete**, **Shift+Alt+C** / **Shift+Alt+T** / **Shift+Alt+E** copy the path, **Shift+Alt+R** show in folder. Right-clicking a file selects it, so the shortcuts work for it right away.
+
 ## 0.9.84
 
 - **Focus mode** (**Ctrl+Alt+F**, the new icon next to ← →, or View → Focus mode): only the code, Output/Terminal and Live Server stay; **Esc** brings everything back the way it was.

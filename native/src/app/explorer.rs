@@ -872,6 +872,18 @@ impl App {
         }
         let Some(cur) = self.tree_focus.clone() else { return };
         let none = egui::Modifiers::NONE;
+        // kopírovanie cesty a otvorenie priečinka (ako VS Code: Shift+Alt+C, Shift+Alt+R)
+        let sa = egui::Modifiers { shift: true, alt: true, ..Default::default() };
+        // (Ctrl+…+C egui mení na „kopírovať“ – preto T = pre terminál, E = relatívna)
+        let (cp_term, cp, cp_rel, reveal) = ctx.input_mut(|i| (i.consume_key(sa, egui::Key::T), i.consume_key(sa, egui::Key::C), i.consume_key(sa, egui::Key::E), i.consume_key(sa, egui::Key::R)));
+        if cp_term || cp || cp_rel {
+            self.copy_path(if cp_term { "copy-term" } else if cp_rel { "copy-rel" } else { "copy" }, &cur, ctx);
+            return;
+        }
+        if reveal {
+            flux_core::fsops::reveal(&cur);
+            return;
+        }
         let (up, down, right, left, enter, f2, del, esc) = ctx.input_mut(|i| {
             (
                 i.consume_key(none, egui::Key::ArrowUp),

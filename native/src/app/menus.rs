@@ -88,7 +88,8 @@ fn fuzzy(hay: &str, q: &str) -> Option<i32> {
 // položka ponuky: ikona, text, skratka vpravo, fajka
 pub fn item(ui: &mut egui::Ui, icon: Option<&str>, label: &str, key: &str, checked: bool, enabled: bool, p: &crate::theme::Pal) -> Response {
     // šírka podľa ponuky (nie celého okna)
-    let w = ui.min_rect().width().max(ui.spacing().menu_width.min(260.0)).max(230.0);
+    // šírka ponuky (set_min/max_width), nie okna – rovnaká pre všetky položky, skratky sú zarovnané pod sebou
+    let w = ui.available_width().clamp(230.0, 340.0);
     let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), if enabled { Sense::click() } else { Sense::hover() });
     let hk = ui.ctx().animate_bool_with_time(resp.id.with("h"), enabled && resp.hovered(), 0.1);
     if hk > 0.0 {
@@ -461,10 +462,16 @@ impl App {
     // ---------- pravý klik v strome ----------
     pub(super) fn tree_menu(&mut self, resp: &Response, path: &str, is_dir: bool) {
         let p = self.pal;
+        if resp.secondary_clicked() {
+            // pravý klik vyberie riadok – skratky (F2, Delete, Shift+Alt+C…) potom platia preň
+            self.tree_focus = Some(path.to_string());
+            self.tree_kbd = true;
+        }
         let mut picked: Option<&str> = None;
         let ws = self.workspace();
         resp.context_menu(|ui| {
-            ui.set_min_width(230.0);
+            ui.set_min_width(300.0);
+            ui.set_max_width(300.0);
             if !is_dir {
                 if item(ui, Some("play"), &t("Run"), "F5", false, true, &p).clicked() {
                     picked = Some("run");
@@ -482,18 +489,24 @@ impl App {
             }
             sep(ui, &p);
             if ws.as_deref() != Some(path) {
-                if item(ui, Some("edit"), &t("Rename…"), "", false, true, &p).clicked() {
+                if item(ui, Some("edit"), &t("Rename…"), "F2", false, true, &p).clicked() {
                     picked = Some("rename");
                 }
-                if item(ui, Some("trash"), &t("Delete"), "", false, true, &p).clicked() {
+                if item(ui, Some("trash"), &t("Delete"), "Delete", false, true, &p).clicked() {
                     picked = Some("delete");
                 }
                 sep(ui, &p);
             }
-            if item(ui, None, &t("Copy path"), "", false, true, &p).clicked() {
+            if item(ui, Some("copy"), &t("Copy path"), "Shift+Alt+C", false, true, &p).clicked() {
                 picked = Some("copy");
             }
-            if item(ui, Some("folderOpen"), &t(if cfg!(windows) { "Show in File Explorer" } else { "Show in folder" }), "", false, true, &p).clicked() {
+            if item(ui, Some("terminal"), &t("Copy path for the terminal"), "Shift+Alt+T", false, true, &p).clicked() {
+                picked = Some("copy-term");
+            }
+            if ws.is_some() && ws.as_deref() != Some(path) && item(ui, None, &t("Copy relative path"), "Shift+Alt+E", false, true, &p).clicked() {
+                picked = Some("copy-rel");
+            }
+            if item(ui, Some("folderOpen"), &t(if cfg!(windows) { "Show in File Explorer" } else { "Show in folder" }), "Shift+Alt+R", false, true, &p).clicked() {
                 picked = Some("reveal");
             }
         });
@@ -516,7 +529,7 @@ impl App {
                     action: format!("trash:{path}"),
                 })
             }
-            Some("copy") => ctx.copy_text(path.to_string()),
+            Some(w @ ("copy" | "copy-term" | "copy-rel")) => self.copy_path(w, path, &ctx),
             Some("reveal") => fsops::reveal(path),
             _ => {}
         }
@@ -987,5 +1000,18 @@ fn rename_error(e: &str) -> String {
         t("Windows won't let go of it – another program is using it. Close that program and try again.")
     } else {
         t(e)
+    }
+}
+
+impl App {
+    // Kopírovať cestu: celú, pre terminál (v úvodzovkách, ak má medzery – jeden argument) alebo relatívnu k projektu
+    pub(super) fn copy_path(&mut self, how: &str, path: &str, ctx: &egui::Context) {
+        let text = match how {
+            "copy-term" => crate::term::shell_quote(path),
+            "copy-rel" => self.workspace().and_then(|w| Path::new(path).strip_prefix(&w).ok().map(|r| r.to_string_lossy().replace('\\', "/"))).filter(|r| !r.is_empty()).unwrap_or_else(|| path.to_string()),
+            _ => path.to_string(),
+        };
+        ctx.copy_text(text);
+        self.note(if how == "copy-term" { t("Path copied – paste it into the terminal") } else { t("Path copied") });
     }
 }

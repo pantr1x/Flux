@@ -60,6 +60,7 @@ mod server;
 mod smooth;
 mod term;
 mod ws;
+mod pydata;
 mod theme;
 mod themes;
 mod update;

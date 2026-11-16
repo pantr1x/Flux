@@ -54,6 +54,8 @@ pub struct TermView {
     sel: Option<((i32, usize), (i32, usize))>, // výber myšou: (riadok mriežky, stĺpec) začiatok a koniec
     pub find: Option<Find>,                    // hľadanie vo výstupe (Ctrl+F nad panelom)
     fade: Option<(i64, std::time::Instant)>,   // riadky od tohto (riadok + história) sa objavia postupne (Finished…)
+    pub shell: bool, // Terminál (nie Výstup programu): vložená cesta k súboru dostane úvodzovky
+    pub fed: u64,                              // počet zápisov – iní vedia, že pribudol výstup (dáta vo Výstupe)
 }
 
 const FADE_S: f32 = 0.35;
@@ -73,12 +75,13 @@ impl TermView {
         let size = Size { cols: 100, rows: 24 };
         let config = Config { scrolling_history: 5000, ..Config::default() };
         let replies = Replies::default();
-        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None, find: None, fade: None }
+        TermView { term: Term::new(config, &size, replies.clone()), replies, parser: Processor::new(), cols: 100, rows: 24, pty: Pty::default(), id: egui::Id::new(id), font_size: 13.0, ws: crate::ws::Mode::default(), zoom: 0, zoom_acc: 0.0, sel: None, find: None, fade: None, shell: false, fed: 0 }
     }
 
     pub fn feed(&mut self, text: &str) {
         // nový výstup posúva riadky mriežky, výber by ukazoval inam
         self.sel = None;
+        self.fed += 1;
         self.parser.advance(&mut self.term, text.as_bytes());
         for r in self.take_replies() {
             self.pty.write(&r);
@@ -272,7 +275,10 @@ impl TermView {
             for ev in &i.events {
                 match ev {
                     egui::Event::Text(t) => out.push(t.clone()),
-                    egui::Event::Paste(t) => out.push(t.replace("\r\n", "\r").replace('\n', "\r")),
+                    egui::Event::Paste(t) => {
+                        let t = if self.shell { quote_path(t).unwrap_or_else(|| t.clone()) } else { t.clone() };
+                        out.push(t.replace("\r\n", "\r").replace('\n', "\r"))
+                    }
                     egui::Event::Key { key, pressed: true, modifiers, .. } => {
                         let s = match key {
                             egui::Key::Enter => "\r",
@@ -312,6 +318,13 @@ impl TermView {
         let avail = ui.available_size();
         let (rect, _) = ui.allocate_exact_size(avail, Sense::hover());
         let resp = ui.interact(rect, self.id, Sense::click_and_drag());
+        // súbor/priečinok pretiahnutý zo stromu do Terminálu = jeho cesta (v úvodzovkách, ak treba)
+        if self.shell {
+            if let Some(p) = resp.dnd_release_payload::<String>() {
+                let q = quote_path(&p).unwrap_or_else(|| (*p).clone());
+                self.pty.write(&format!("{q} "));
+            }
+        }
         if resp.clicked() || resp.drag_started() {
             resp.request_focus();
         }
@@ -698,6 +711,18 @@ mod tests {
 
     // celý výstup bez prázdnych riadkov na konci, medzery na koncoch riadkov sa orežú
     #[test]
+    fn term_quote_path() {
+        let d = std::env::temp_dir().join("flux q test");
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.to_string_lossy().to_string();
+        let q = quote_path(&format!("{p}\n")).unwrap();
+        if cfg!(windows) { assert_eq!(q, format!("\"{p}\"")) } else { assert_eq!(q, format!("'{p}'")) }
+        assert!(quote_path("hello world").is_none()); // nie je cesta
+        assert!(quote_path(&std::env::temp_dir().to_string_lossy()).is_none() || std::env::temp_dir().to_string_lossy().contains(' '));
+        assert!(quote_path(&format!("'{p}'")).is_none()); // už v úvodzovkách
+    }
+
+    #[test]
     fn term_all_text() {
         let mut v = TermView::new("t");
         assert_eq!(v.all_text(), "");
@@ -720,5 +745,32 @@ mod tests {
         let mut v = TermView::new("t");
         v.parser.advance(&mut v.term, b"ab\x1b[6n");
         assert_eq!(v.take_replies(), vec!["\x1b[1;3R".to_string()]);
+    }
+}
+
+// Vložená cesta k existujúcemu súboru/priečinku s medzerami a pod. → v úvodzovkách pre shell
+// (/home/x/Flux Projects/a.py → '/home/x/Flux Projects/a.py'); obyčajný text a už ozvláštnené cesty ostanú.
+pub fn quote_path(s: &str) -> Option<String> {
+    let p = s.trim_matches(|c: char| c == '\n' || c == '\r' || c == ' ');
+    let p = p.strip_prefix("file://").unwrap_or(p);
+    if p.is_empty() || p.contains('\n') || p.starts_with(['\'', '"']) {
+        return None;
+    }
+    let special = |c: char| c.is_whitespace() || "()&;|<>$`'\"!*?[]{}#~".contains(c) && !(cfg!(windows) && c == '~');
+    if !p.chars().any(special) || !std::path::Path::new(p).exists() {
+        return None;
+    }
+    Some(shell_quote(p))
+}
+
+// cesta pre terminál: s medzerami a znakmi shellu v úvodzovkách ('…' v Linuxe, "…" vo Windows), inak bez nich
+pub fn shell_quote(p: &str) -> String {
+    let special = |c: char| c.is_whitespace() || "()&;|<>$`'\"!*?[]{}#".contains(c);
+    if !p.chars().any(special) {
+        p.to_string()
+    } else if cfg!(windows) {
+        format!("\"{p}\"")
+    } else {
+        format!("'{}'", p.replace('\'', "'\\''"))
     }
 }

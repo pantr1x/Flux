@@ -49,6 +49,10 @@ pub(super) const FIXED: &[(&str, &str)] = &[
     ("Go to tab 1–9", "Ctrl+1…9"),
     ("Back / forward", "Alt+← / Alt+→"),
     ("Rename in the Explorer", "F2"),
+    ("Copy path", "Shift+Alt+C"),
+    ("Copy path for the terminal", "Shift+Alt+T"),
+    ("Copy relative path", "Shift+Alt+E"),
+    ("Show in folder", "Shift+Alt+R"),
     ("Zoom the editor", "Ctrl+Wheel"),
 ];
 

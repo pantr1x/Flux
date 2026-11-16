@@ -22,6 +22,7 @@ mod themestore;
 mod keymap;
 mod libs;
 mod fx;
+mod dataview;
 
 use crate::code::Code;
 use crate::i18n::t;
@@ -82,6 +83,7 @@ impl Sess {
     fn new(id: u64, font: f32, ws: crate::ws::Mode) -> Self {
         let mut out = TermView::new(&format!("flux-output-{id}"));
         let mut sh = TermView::new(&format!("flux-shell-{id}"));
+        sh.shell = true;
         out.font_size = font;
         sh.font_size = font;
         out.ws = ws;
@@ -335,6 +337,7 @@ pub struct App {
     ed_off: egui::Vec2,                 // posledný posun editora
     new_todo: String,
     side_open: bool,
+    data: dataview::DataView, // dáta (slovníky, JSON) vo Výstupe ako strom
     focus: Option<bool>, // režim sústredenia: Some(bočný panel pred ním) – po odchode sa vráti, ako bol
     next_sid: u64,
     zoom_acc: f32,
@@ -508,6 +511,7 @@ impl App {
             new_todo: String::new(),
             side_open: true,
             focus: None,
+            data: Default::default(),
             next_sid: 1,
             zoom_acc: 0.0,
             term_fs: 13.0,
@@ -3726,9 +3730,32 @@ impl App {
         if collapsed {
             return;
         }
+        // dáta vo Výstupe (print slovníka/zoznamu, JSON) → tlačidlo { } Data, strom vedľa výstupu
+        let now_t = ui.ctx().input(|i| i.time);
+        let out_tab = self.sess_mut().map(|s| s.bottom == Bottom::Output).unwrap_or(false);
+        if out_tab {
+            self.data_refresh(now_t);
+        }
+        let has_data = out_tab && !self.data.items.is_empty();
+        let mut fx1 = rect.right() - 116.0;
+        if has_data {
+            let lbl = t("Data");
+            let w = widgets::text_w(ui, &lbl, theme::bold(12.0)) + 34.0;
+            let r = Rect::from_min_size(pos2(rect.right() - 116.0 - w, cy - 12.0), vec2(w, 24.0));
+            let on = self.data_on();
+            let resp = ui.interact(r, ui.id().with("data-btn"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(t("Data printed by your program, as a readable tree"));
+            if on || resp.hovered() {
+                ui.painter().rect_filled(r, CornerRadius::same(7), if on { p.active } else { p.hover });
+            }
+            widgets::icon_at(ui, pos2(r.left() + 13.0, cy), 13.0, "code", if on { p.accent } else { p.text2 });
+            ui.painter().text(pos2(r.left() + 24.0, cy), Align2::LEFT_CENTER, &lbl, theme::bold(12.0), if on || resp.hovered() { p.text } else { p.text2 });
+            if resp.clicked() {
+                self.set("dataView", json!(!on), ui.ctx());
+            }
+            fx1 = r.left() - 10.0;
+        }
         // pole hľadania priamo v hlavičke (ako hľadanie v hornej lište), medzi Output/Terminal a ikonami
         let fx0 = group.right() + 14.0;
-        let fx1 = rect.right() - 116.0;
         if fx1 - fx0 > 120.0 {
             let fw = (fx1 - fx0).min(300.0);
             let fr = Rect::from_min_size(pos2(fx1 - fw, cy - 14.0), vec2(fw, 28.0));
@@ -3779,6 +3806,25 @@ impl App {
                 clip.add(fx::grad_h(Rect::from_min_max(pos2(x + w / 2.0, line.top()), pos2(x + w, line.bottom())), c, Color32::TRANSPARENT));
                 ui.ctx().request_repaint_after(Duration::from_millis(33));
             }
+        }
+        // strom dát vpravo (v úzkom paneli namiesto výstupu)
+        let mut body = body;
+        if has_data && self.data_on() {
+            let full = Rect::from_min_max(pos2(rect.left(), rect.top() + 37.0), rect.max);
+            let dr = if body.width() >= 560.0 {
+                let w = (body.width() * 0.45).clamp(280.0, 560.0);
+                body.max.x -= w + 8.0;
+                Rect::from_min_max(pos2(full.right() - w - 4.0, full.top()), full.max)
+            } else {
+                body.max.x = body.min.x;
+                full
+            };
+            if body.width() > 0.0 {
+                ui.painter().vline(dr.left(), dr.y_range(), Stroke::new(1.0, p.line));
+            }
+            let mut dui = ui.new_child(egui::UiBuilder::new().max_rect(dr));
+            dui.set_clip_rect(dr);
+            self.data_ui(&mut dui, dr);
         }
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(body));
         child.set_clip_rect(body);
