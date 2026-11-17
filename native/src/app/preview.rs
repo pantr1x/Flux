@@ -33,6 +33,8 @@ pub struct Preview {
     #[cfg(target_os = "linux")]
     pub lfail: Option<String>, // prečo náhľad vo Fluxe nejde (chýba webkit2gtk, Wayland…) – zobrazí sa karta
     pub body: Option<Rect>, // kde má byť stránka (v bodoch egui) – nastaví preview_ui
+    pub native_on: bool,    // stránku kreslí Flux sám (htmlview, bez prehliadača) – livePreview „native“
+    native: Option<Box<crate::htmlview::HtmlView>>,
     #[allow(dead_code)]
     covered: bool, // minulý snímok bola stránka zakrytá
     away_since: Option<f64>, // od kedy je stránka zakrytá (nastavenia, hľadanie…)
@@ -92,6 +94,8 @@ impl Preview {
             #[cfg(target_os = "linux")]
             lfail: None,
             body: None,
+            native_on: true,
+            native: None,
             covered: false,
             away_since: None,
             active_at: -1.0,
@@ -103,6 +107,9 @@ impl Preview {
 
     // vložená stránka funguje (Windows + WebView2)
     pub fn embedded(&self) -> bool {
+        if self.native_on {
+            return true;
+        }
         #[cfg(windows)]
         {
             !self.failed
@@ -166,7 +173,9 @@ impl App {
     // lišta panela + miesto pre stránku; rect = celý panel na karte
     pub(super) fn preview_ui(&mut self, ui: &mut egui::Ui, rect: Rect) {
         let p = self.pal;
+        let native = self.native_preview();
         let Some(pv) = self.preview.as_mut() else { return };
+        pv.native_on = native;
         ui.painter().vline(rect.left(), rect.y_range(), Stroke::new(1.0, p.line));
         // ---- karty stránok (odkaz s target=_blank sa otvorí v novej karte) ----
         // rovnaká výška a vzhľad ako riadok kariet editora vedľa (spodné čiary a lišta sú v jednej rovine)
@@ -294,6 +303,62 @@ impl App {
             ui.painter().rect_filled(area, 0.0, p.card2);
         }
         pv.body = Some(body);
+        // stránku kreslí Flux sám: HTML + CSS do obrázka (bez prehliadača, pár MB)
+        let mut action: Option<crate::htmlview::Click> = None;
+        if native && !pv.asleep {
+            if pv.reload {
+                pv.reload = false;
+                pv.native = None;
+            }
+            if let Some(srv) = self.server.as_ref() {
+                let ppp = ui.ctx().pixels_per_point();
+                // 16:9: stránka sa rozloží na 1920 px a zmenší sa do panela
+                let scale = if dw < 0.0 { ppp * body.width() / DESKTOP_W } else { ppp };
+                let (pw, ph) = ((body.width() * ppp).round() as u32, (body.height() * ppp).round() as u32);
+                let reader = srv.reader();
+                let hv = pv.native.get_or_insert_with(Default::default);
+                hv.sync(&reader, &pv.url, srv.version(), pw, ph, scale);
+                ui.painter().rect_filled(body, 0.0, egui::Color32::WHITE);
+                if let Some(tex) = hv.texture(ui.ctx()) {
+                    ui.painter().image(tex, body, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), egui::Color32::WHITE);
+                }
+                let resp = ui.interact(body, ui.id().with("pv-native"), Sense::click());
+                let css = |q: egui::Pos2| ((q.x - body.left()) * ppp / scale, (q.y - body.top()) * ppp / scale);
+                if let Some(q) = resp.hover_pos() {
+                    let (x, y) = css(q);
+                    hv.hover(x, y);
+                    let d = ui.input(|i| i.smooth_scroll_delta);
+                    if d != egui::Vec2::ZERO {
+                        hv.scroll(d.x * ppp / scale, d.y * ppp / scale);
+                    }
+                    if hv.link_hover {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                }
+                if let Some(q) = resp.interact_pointer_pos().filter(|_| resp.clicked()) {
+                    let (x, y) = css(q);
+                    action = Some(hv.click(x, y));
+                }
+                if hv.loading() || hv.waiting {
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(150));
+                }
+                // JavaScript tu nebeží – nenápadná poznámka s odkazom do prehliadača
+                if hv.scripts {
+                    let txt = t("JavaScript does not run in this preview");
+                    let w = widgets::text_w(ui, &txt, theme::ui(11.5)) + 128.0;
+                    let r = Rect::from_min_size(pos2(body.right() - w - 10.0, body.bottom() - 36.0), vec2(w, 26.0));
+                    ui.painter().rect_filled(r, CornerRadius::same(13), egui::Color32::from_black_alpha(190));
+                    ui.painter().text(pos2(r.left() + 12.0, r.center().y), Align2::LEFT_CENTER, &txt, theme::ui(11.5), egui::Color32::from_gray(225));
+                    let br = Rect::from_min_max(pos2(r.right() - 110.0, r.top() + 3.0), pos2(r.right() - 3.0, r.bottom() - 3.0));
+                    let b = ui.interact(br, ui.id().with("pv-js"), Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+                    ui.painter().rect_filled(br, CornerRadius::same(10), egui::Color32::from_white_alpha(if b.hovered() { 60 } else { 30 }));
+                    ui.painter().text(br.center(), Align2::CENTER_CENTER, t("Open in browser"), theme::bold(11.0), egui::Color32::WHITE);
+                    if b.clicked() {
+                        action = Some(crate::htmlview::Click::External(pv.url.clone()));
+                    }
+                }
+            }
+        }
         if !pv.embedded() {
             // bez vloženého zobrazenia: karta s odkazom
             let c = body.center();
@@ -315,9 +380,33 @@ impl App {
                 flux_core::settings::open_external(&pv.url);
             }
         }
+        match action {
+            Some(crate::htmlview::Click::Line(l)) => {
+                if let (Some(srv), Some(pv)) = (self.server.as_ref(), self.preview.as_ref()) {
+                    let path = url::Url::parse(&pv.url).map(|u| u.path().to_string()).unwrap_or_default();
+                    srv.reader().report(&path, l);
+                }
+            }
+            Some(crate::htmlview::Click::Go(u)) => {
+                if let Some(pv) = self.preview.as_mut() {
+                    pv.url = u.clone();
+                    let a = pv.active.min(pv.tabs.len().saturating_sub(1));
+                    if let Some(tb) = pv.tabs.get_mut(a) {
+                        *tb = u;
+                    }
+                }
+            }
+            Some(crate::htmlview::Click::External(u)) => flux_core::settings::open_external(&u),
+            _ => {}
+        }
         if close {
             self.close_preview();
         }
+    }
+
+    // náhľad bez prehliadača (predvolený) – „panel“ = WebView2 / WebKitGTK s JavaScriptom, „browser“ = vlastný prehliadač
+    pub(super) fn native_preview(&self) -> bool {
+        !matches!(self.get("livePreview").as_str(), Some("panel" | "browser"))
     }
 
     // vložený WebView2: vytvorí ho, drží ho na mieste panela a skryje, keď je nad ním niečo z egui
@@ -351,6 +440,23 @@ impl App {
                 // bez fokusu sa nekreslí – zobudiť sa, aby sa stránka po limite naozaj zavrela
                 ctx.request_repaint_after(std::time::Duration::from_secs(5));
             }
+        }
+        // natívny náhľad: žiadny WebView ani pomocný proces; zaspatý = dokument preč (po návrate sa načíta znova)
+        if self.native_preview() {
+            if let Some(pv) = self.preview.as_mut() {
+                if pv.asleep {
+                    pv.native = None;
+                }
+                #[cfg(windows)]
+                {
+                    pv.view = None;
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    pv.helper = None;
+                }
+            }
+            return;
         }
         #[cfg(windows)]
         {

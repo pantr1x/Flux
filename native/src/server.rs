@@ -251,6 +251,16 @@ impl Server {
         self.hover.lock().unwrap().clone()
     }
 
+    // číslo verzie stránok – mení sa pri uložení aj pri písaní (natívny náhľad sa podľa neho prekreslí)
+    pub fn version(&self) -> u64 {
+        self.ver.load(Ordering::Relaxed)
+    }
+
+    // čítanie súborov servera priamo (bez HTTP) pre natívny náhľad: neuložený text má prednosť pred diskom
+    pub fn reader(&self) -> Reader {
+        Reader { root: self.root.clone(), port: self.port, live: self.live.clone(), hover: self.hover.clone() }
+    }
+
     // uložené – znova z disku
     pub fn clear_live(&self, file: &str) {
         self.live.lock().unwrap().remove(&key(Path::new(file)));
@@ -287,5 +297,46 @@ mod tests {
         assert!(!o.contains("<html data-flux"));
         assert!(!o.contains("<script data-flux"));
         assert!(!o.contains("<p> -->\n<h1 data-flux-l=\"5\" class=\"a\">Hi</h1>\n<script data"));
+    }
+}
+
+#[derive(Clone)]
+pub struct Reader {
+    pub root: PathBuf,
+    pub port: u16,
+    live: Live,
+    hover: Hover,
+}
+
+impl Reader {
+    // cesta z adresy servera (/a/b.html) → súbor v projekte (priečinok → index.html; žiadne „..“)
+    pub fn file(&self, url_path: &str) -> PathBuf {
+        let p = decode(url_path.split(['?', '#']).next().unwrap_or("/"));
+        let rel: PathBuf = p.split('/').filter(|c| !c.is_empty() && *c != "." && *c != "..").collect();
+        let f = self.root.join(rel);
+        if f.is_dir() {
+            f.join("index.html")
+        } else {
+            f
+        }
+    }
+
+    // obsah súboru; HTML s data-flux-l (riadok v zdroji) – klik v náhľade skočí na riadok
+    pub fn read(&self, url_path: &str) -> Option<Vec<u8>> {
+        let f = self.file(url_path);
+        let unsaved = self.live.lock().unwrap().get(&key(&f)).cloned();
+        let body = match unsaved {
+            Some(t) => t.into_bytes(),
+            None => std::fs::read(&f).ok()?,
+        };
+        if mime(&f).starts_with("text/html") {
+            return Some(annotate(&String::from_utf8_lossy(&body)).into_bytes());
+        }
+        Some(body)
+    }
+
+    // klik na prvok v náhľade → riadok v zdroji (to isté, čo hlási skript v prehliadači)
+    pub fn report(&self, url_path: &str, line: usize) {
+        *self.hover.lock().unwrap() = (line > 0).then(|| (self.file(url_path).to_string_lossy().to_string(), line));
     }
 }

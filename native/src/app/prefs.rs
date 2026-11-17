@@ -43,7 +43,7 @@ pub fn default_of(key: &str) -> Value {
         "density" => json!("comfortable"),
         "terminalFontSize" => json!(13),
         "panelPos" => json!("bottom"),
-        "livePreview" => json!("panel"),
+        "livePreview" => json!("native"),
         "sidePos" => json!("left"),
         "userName" | "uiText" | "uiText2" | "uiBase" | "uiCard" | "uiLine" | "fontCustom" => json!(""),
         _ => Value::Null,
@@ -569,7 +569,7 @@ fn sections_raw(tab: &str, app: &App) -> Vec<(&'static str, Vec<Row>)> {
             vec![
                 ("Python", vec![Row::Info("Interpreter", py), Row::Button("python", "Choose another Python", "pick python.exe yourself if Flux found the wrong one", "Change…")]),
                 ("Output", vec![Row::Toggle("clearOnRun", "Clear output before running", "each run starts with an empty Output panel"), Row::Number("terminalFontSize", "Output font size", "size of the text in Output and Terminal", 9.0, 28.0)]),
-                ("Live Server", vec![Row::Select("livePreview", "Show the page", "inside Flux next to the code, or in your own browser – the browser uses no memory of Flux; both reload when you save", o(&[("panel", "Inside Flux"), ("browser", "In your browser")]))]),
+                ("Live Server", vec![Row::Select("livePreview", "Show the page", "inside Flux next to the code, or in your own browser – the browser uses no memory of Flux; both reload when you save", o(&[("native", "Inside Flux"), ("panel", "Inside Flux – full browser (JavaScript, more memory)"), ("browser", "In your browser")]))]),
                 ("External tools", vec![Row::Lead("Your own commands in the menu ☰ → Tools, run in the Terminal of the open file. $(FilePath), $(FileDir), $(FileName) and $(ProjectDir) are replaced."), Row::Custom("ext-tools")]),
             ]
         }

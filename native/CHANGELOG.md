@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.86
+
+- **Live Server without a browser:** Flux now draws your page itself – HTML and CSS (flexbox, grid, tables, shadows, web fonts, images) right next to the code, still changing while you type. It needs about **2–5 MB** instead of ~50–90 MB for a built-in browser, and runs in Flux's own process.
+- Click anything in the page to jump to its line in the HTML; links to other pages of your project open in the panel, other websites in your browser.
+- JavaScript does not run in this preview – pages with scripts show a small *Open in browser* button. The full browser panel is still there: **Settings → Running → Live Server → Inside Flux – full browser**.
+
 ## 0.9.85
 
 - **Data in the Output:** when your program prints a dictionary or a list (`print(data)`, JSON), the new **Data** button shows it next to the output as a readable tree – every key on its own line, values coloured by type, nested parts fold and unfold. Click a value to copy its path, like `["current"]["temperature_2m"]`.

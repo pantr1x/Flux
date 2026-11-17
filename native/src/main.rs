@@ -61,6 +61,7 @@ mod smooth;
 mod term;
 mod ws;
 mod pydata;
+mod htmlview;
 mod theme;
 mod themes;
 mod update;
