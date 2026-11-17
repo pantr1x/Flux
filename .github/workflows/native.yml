@@ -433,11 +433,23 @@ jobs:
           echo '{"onboarded":true,"autoUpdate":false}' > "$ud/settings.json"
           FLUX_USER_DATA="$ud" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>&1 & p=$!; sleep 15; if ! kill -0 $p 2>/dev/null; then echo "::error::Flux Native exited"; exit 1; fi; kill $p'
           if [ -e "$ud/flux-native-crash.log" ]; then cat "$ud/flux-native-crash.log"; echo "::error::crash log written"; exit 1; fi
+      # predvolený náhľad bez prehliadača (htmlview): Flux beží ďalej, nespadol, žiadny flux-preview
+      - name: Live Server native preview test (page drawn by Flux, no browser)
+        run: |
+          w="$RUNNER_TEMP/web"; ud="$RUNNER_TEMP/ud-native-preview"; mkdir -p "$w" "$ud"
+          echo '<!DOCTYPE html><html><head><title>t</title><style>body{display:grid;grid-template-columns:1fr 1fr}</style></head><body><h1>Flux preview</h1><p>grid</p></body></html>' > "$w/index.html"
+          echo "{\"onboarded\":true,\"autoUpdate\":false,\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
+          FLUX_USER_DATA="$ud" FLUX_TEST="2:open=index.html;4:run" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>"$RUNNER_TEMP/native-preview.err" & p=$!; sleep 15; kill -0 $p && echo alive > "$RUNNER_TEMP/native-preview.ok"; pgrep -x flux-preview > "$RUNNER_TEMP/native-helper.pid" || true; kill $p'
+          tail -20 "$RUNNER_TEMP/native-preview.err"
+          [ -s "$RUNNER_TEMP/native-preview.ok" ] || { echo "::error::Flux exited with the native Live Server preview"; exit 1; }
+          ! grep -q "panicked" "$RUNNER_TEMP/native-preview.err" || { echo "::error::panic in the native preview"; exit 1; }
+          [ ! -s "$RUNNER_TEMP/native-helper.pid" ] || { echo "::error::the native preview started flux-preview"; exit 1; }
+      # plný prehliadač (livePreview: panel) cez pomocníka flux-preview
       - name: Live Server preview test (page inside Flux via flux-preview)
         run: |
           w="$RUNNER_TEMP/web"; ud="$RUNNER_TEMP/ud-preview"; mkdir -p "$w" "$ud"
           echo '<!DOCTYPE html><html><head><title>t</title></head><body><h1>Flux preview</h1></body></html>' > "$w/index.html"
-          echo "{\"onboarded\":true,\"autoUpdate\":false,\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
+          echo "{\"onboarded\":true,\"autoUpdate\":false,\"livePreview\":\"panel\",\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
           FLUX_PREVIEW_HELPER="$PWD/target/release/flux-preview" FLUX_USER_DATA="$ud" FLUX_TEST="2:open=index.html;4:run" LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a bash -c 'target/release/flux-native >/dev/null 2>"$RUNNER_TEMP/preview.err" & p=$!; sleep 15; pgrep -x flux-preview > "$RUNNER_TEMP/preview.pid" || true; kill $p'
           cat "$RUNNER_TEMP/preview.err" | tail -20
           [ -s "$RUNNER_TEMP/preview.pid" ] || { echo "::error::flux-preview did not start"; exit 1; }
@@ -450,7 +462,7 @@ jobs:
           d=$(grep -o "xserver listening on display :[0-9]*" "$RUNNER_TEMP/weston.log" | grep -o ":[0-9]*" | head -n1)
           [ -n "$d" ] || { cat "$RUNNER_TEMP/weston.log"; echo "::error::weston did not start XWayland"; exit 1; }
           w="$RUNNER_TEMP/web"; ud="$RUNNER_TEMP/ud-preview-wl"; mkdir -p "$ud"
-          echo "{\"onboarded\":true,\"autoUpdate\":false,\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
+          echo "{\"onboarded\":true,\"autoUpdate\":false,\"livePreview\":\"panel\",\"projects\":[{\"dir\":\"$w\"}],\"lastFolder\":\"$w\"}" > "$ud/settings.json"
           WAYLAND_DISPLAY=wl-ci DISPLAY="$d" LIBGL_ALWAYS_SOFTWARE=1 FLUX_PREVIEW_HELPER="$PWD/target/release/flux-preview" FLUX_USER_DATA="$ud" FLUX_TEST="2:open=index.html;4:run" target/release/flux-native >/dev/null 2>"$RUNNER_TEMP/preview-wl.err" &
           p=$!
           sleep 20
