@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-17",
+  "os": "Windows Server (GitHub Actions VM)",
+  "fluxSize": 23.2,
+  "codeSize": 1080.0,
+  "run": "https://github.com/pantr1x/Flux/actions/runs/44090982365",
+  "results": [
+    {
+      "test": "Flux: project + file",
+      "mb": 13.3,
+      "processes": 1
+    },
+    {
+      "test": "Flux: website + Live Server",
+      "mb": 10.3,
+      "processes": 1
+    },
+    {
+      "test": "VS Code: project + file",
+      "mb": 479.0,
+      "processes": 8
+    },
+    {
+      "test": "VS Code: website + Live Preview",
+      "mb": 576.1,
+      "processes": 24
+    }
+  ]
+}

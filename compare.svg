@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="330" viewBox="0 0 860 330" font-family="Inter, Segoe UI, Arial, sans-serif">
+<rect width="860" height="330" rx="18" fill="#0b0b0d"/>
+<text x="32" y="44" fill="#f4f4f5" font-size="22" font-weight="700">Flux vs VS Code</text>
+<text x="32" y="68" fill="#85858e" font-size="13">Memory in the Task Manager on a fresh Windows VM (GitHub Actions, 2026-11-17)</text>
+<text x="32" y="104" fill="#d4d4d8" font-size="14" font-weight="600">A project with a file open</text>
+<text x="32" y="132" fill="#b4b4bb" font-size="13">Flux</text><rect x="110" y="122" width="560" height="12" rx="6" fill="#1c1c20"/><rect x="110" y="122" width="16" height="12" rx="6" fill="#a5a6ff"/><text x="828" y="132" fill="#f4f4f5" font-size="13" font-weight="600" text-anchor="end">13.3 MB</text>
+<text x="32" y="154" fill="#b4b4bb" font-size="13">VS Code</text><rect x="110" y="144" width="560" height="12" rx="6" fill="#1c1c20"/><rect x="110" y="144" width="560" height="12" rx="6" fill="#71717a"/><text x="828" y="154" fill="#f4f4f5" font-size="13" font-weight="600" text-anchor="end">479 MB</text>
+<text x="32" y="178" fill="#d4d4d8" font-size="14" font-weight="600">A website with a live preview</text>
+<text x="32" y="206" fill="#b4b4bb" font-size="13">Flux</text><rect x="110" y="196" width="560" height="12" rx="6" fill="#1c1c20"/><rect x="110" y="196" width="10" height="12" rx="6" fill="#a5a6ff"/><text x="828" y="206" fill="#f4f4f5" font-size="13" font-weight="600" text-anchor="end">10.3 MB</text>
+<text x="32" y="228" fill="#b4b4bb" font-size="13">VS Code</text><rect x="110" y="218" width="560" height="12" rx="6" fill="#1c1c20"/><rect x="110" y="218" width="560" height="12" rx="6" fill="#71717a"/><text x="828" y="228" fill="#f4f4f5" font-size="13" font-weight="600" text-anchor="end">576.1 MB</text>
+<text x="32" y="252" fill="#d4d4d8" font-size="14" font-weight="600">Program size on disk</text>
+<text x="32" y="280" fill="#b4b4bb" font-size="13">Flux</text><rect x="110" y="270" width="560" height="12" rx="6" fill="#1c1c20"/><rect x="110" y="270" width="12" height="12" rx="6" fill="#a5a6ff"/><text x="828" y="280" fill="#f4f4f5" font-size="13" font-weight="600" text-anchor="end">23.2 MB</text>
+<text x="32" y="302" fill="#b4b4bb" font-size="13">VS Code</text><rect x="110" y="292" width="560" height="12" rx="6" fill="#1c1c20"/><rect x="110" y="292" width="560" height="12" rx="6" fill="#71717a"/><text x="828" y="302" fill="#f4f4f5" font-size="13" font-weight="600" text-anchor="end">1080 MB</text>
+</svg>
