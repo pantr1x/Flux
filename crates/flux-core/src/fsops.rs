@@ -234,6 +234,7 @@ pub fn summary(dir: &str) -> Value {
             "js" | "mjs" | "cjs" | "ts" | "jsx" | "tsx" => "node",
             "java" => "java",
             "c" | "h" | "cpp" | "cc" | "hpp" => "cpp",
+            "ino" | "pde" => "arduino",
             "go" => "go",
             "cs" => "csharp",
             "rs" => "rust",

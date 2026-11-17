@@ -85,6 +85,7 @@ pub fn syntax_for<'a>(ps: &'a syntect::parsing::SyntaxSet, lang: &str) -> &'a sy
         "pyw" => &["py"],
         "hh" | "hxx" => &["hpp"],
         "cc" | "cxx" => &["cpp"],
+        "ino" | "pde" => &["cpp"], // Arduino = C++
         "htm" => &["html"],
         "svelte" | "vue" => &["svelte", "vue", "html"],
         "dockerfile" => &["Dockerfile"],

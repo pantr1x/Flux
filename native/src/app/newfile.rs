@@ -7,7 +7,7 @@ use flux_core::fsops;
 use std::path::Path;
 
 // (id, názov, prípona, predvolené meno, začiatok súboru; {name} = meno bez prípony)
-const LANGS: [(&str, &str, &str, &str, &str); 21] = [
+const LANGS: [(&str, &str, &str, &str, &str); 22] = [
     ("python", "Python", "py", "main", "print(\"Hello!\")\n"),
     ("html", "HTML", "html", "index", "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>{name}</title>\n</head>\n<body>\n    <h1>{name}</h1>\n</body>\n</html>\n"),
     ("css", "CSS", "css", "style", "body {\n    font-family: system-ui, sans-serif;\n}\n"),
@@ -16,6 +16,7 @@ const LANGS: [(&str, &str, &str, &str, &str); 21] = [
     ("java", "Java", "java", "Main", "public class {name} {\n    public static void main(String[] args) {\n        System.out.println(\"Hello from Java!\");\n    }\n}\n"),
     ("c", "C", "c", "main", "#include <stdio.h>\n\nint main(void) {\n    printf(\"Hello from C!\\n\");\n    return 0;\n}\n"),
     ("cpp", "C++", "cpp", "main", "#include <iostream>\n\nint main() {\n    std::cout << \"Hello from C++!\" << std::endl;\n    return 0;\n}\n"),
+    ("arduino", "Arduino", "ino", "sketch", "void setup() {\n    pinMode(LED_BUILTIN, OUTPUT);\n    Serial.begin(9600);\n}\n\nvoid loop() {\n    digitalWrite(LED_BUILTIN, HIGH);\n    delay(500);\n    digitalWrite(LED_BUILTIN, LOW);\n    delay(500);\n    Serial.println(\"Hello from Arduino!\");\n}\n"),
     ("csharp", "C#", "cs", "Program", "Console.WriteLine(\"Hello from C#!\");\n"),
     ("go", "Go", "go", "main", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello from Go!\")\n}\n"),
     ("rust", "Rust", "rs", "main", "fn main() {\n    println!(\"Hello from Rust!\");\n}\n"),

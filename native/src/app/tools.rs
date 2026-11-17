@@ -32,6 +32,7 @@ fn file_of(id: &str) -> &'static str {
         "node" => "a.js",
         "java" => "a.java",
         "cpp" => "a.cpp",
+        "arduino" => "a.ino",
         "go" => "a.go",
         "csharp" => "a.cs",
         "rust" => "a.rs",

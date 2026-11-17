@@ -36,7 +36,7 @@ pub fn check(lang: &str, text: &str, python: Option<&str>) -> Vec<Diag> {
             v.extend(css_semicolons(text));
             v
         }
-        "c" | "h" | "cpp" | "cc" | "cxx" | "hpp" | "hh" | "java" | "cs" => {
+        "c" | "h" | "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" | "pde" | "java" | "cs" => {
             let mut v = brackets(text, &Syntax::of(lang));
             if v.iter().all(|d| !d.err) {
                 v.extend(semicolons(text, &Syntax::of(lang)));

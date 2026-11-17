@@ -48,6 +48,12 @@ pub fn keywords(lang: &str) -> &'static [&'static str] {
             "BY", "ORDER", "HAVING", "LIMIT", "OFFSET", "AS", "AND", "OR", "NOT", "NULL", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "DEFAULT", "UNIQUE", "DISTINCT", "UNION", "ASC", "DESC", "LIKE",
             "IN", "BETWEEN", "EXISTS", "COUNT", "SUM", "AVG", "MIN", "MAX", "INTEGER", "TEXT", "VARCHAR", "BOOLEAN", "DATE", "TIMESTAMP",
         ],
+        // Arduino (.ino): C++ s funkciami dosky
+        "ino" | "pde" => &[
+            "auto", "bool", "boolean", "break", "byte", "case", "char", "class", "const", "constexpr", "continue", "default", "do", "double", "else", "enum", "false", "float", "for", "if",
+            "include", "define", "inline", "int", "long", "new", "nullptr", "private", "public", "return", "short", "signed", "sizeof", "static", "struct", "switch", "this", "true", "typedef",
+            "unsigned", "void", "volatile", "while", "word", "HIGH", "LOW", "INPUT", "OUTPUT", "INPUT_PULLUP", "LED_BUILTIN", "PROGMEM",
+        ],
         _ => &[],
     }
 }
@@ -73,6 +79,12 @@ pub fn builtins(lang: &str) -> &'static [&'static str] {
         "kt" | "kts" => &["println", "print", "readLine", "listOf", "mutableListOf", "mapOf", "mutableMapOf", "setOf", "String", "Int", "Double", "Boolean", "List", "Map", "size", "forEach", "map", "filter", "toInt", "toString", "main"],
         "swift" => &["print", "readLine", "String", "Int", "Double", "Bool", "Array", "Dictionary", "count", "append", "remove", "map", "filter", "reduce", "forEach", "sorted", "isEmpty", "contains", "Foundation"],
         "dart" => &["print", "String", "int", "double", "bool", "List", "Map", "Set", "Future", "length", "add", "remove", "map", "where", "forEach", "toString", "parse", "stdin", "readLineSync", "main"],
+        "ino" | "pde" => &[
+            "setup", "loop", "pinMode", "digitalWrite", "digitalRead", "analogRead", "analogWrite", "analogReference", "delay", "delayMicroseconds", "millis", "micros", "tone", "noTone",
+            "pulseIn", "shiftOut", "shiftIn", "attachInterrupt", "detachInterrupt", "digitalPinToInterrupt", "interrupts", "noInterrupts", "map", "constrain", "min", "max", "abs", "sq", "sqrt",
+            "pow", "random", "randomSeed", "bitRead", "bitWrite", "bitSet", "bitClear", "lowByte", "highByte", "Serial", "Serial1", "String", "Wire", "SPI", "EEPROM", "Servo", "uint8_t",
+            "uint16_t", "uint32_t", "int8_t", "int16_t", "int32_t", "size_t", "A0", "A1", "A2", "A3", "A4", "A5", "F", "RISING", "FALLING", "CHANGE", "DEC", "HEX", "BIN",
+        ],
         _ => &[],
     }
 }
@@ -179,6 +191,21 @@ pub fn snippets(lang: &str) -> &'static [(&'static str, &'static str, &'static s
             ("create", "CREATE TABLE ${1:name} (\n\tid INTEGER PRIMARY KEY,\n\t$0\n);", "CREATE TABLE"),
             ("join", "JOIN ${1:table} ON ${2:a.id} = ${3:b.id}$0", "JOIN … ON"),
         ],
+        "ino" | "pde" => &[
+            ("sketch", "void setup() {\n\t$1\n}\n\nvoid loop() {\n\t$0\n}", "setup() + loop()"),
+            ("setup", "void setup() {\n\t$0\n}", "void setup()"),
+            ("loop", "void loop() {\n\t$0\n}", "void loop()"),
+            ("pinMode", "pinMode(${1:LED_BUILTIN}, ${2:OUTPUT});$0", "pinMode(pin, OUTPUT);"),
+            ("digitalWrite", "digitalWrite(${1:LED_BUILTIN}, ${2:HIGH});$0", "digitalWrite(pin, HIGH);"),
+            ("serial", "Serial.begin(${1:9600});$0", "Serial.begin(9600);"),
+            ("println", "Serial.println($1);$0", "Serial.println(…);"),
+            ("blink", "digitalWrite(${1:LED_BUILTIN}, HIGH);\ndelay(${2:500});\ndigitalWrite(${1:LED_BUILTIN}, LOW);\ndelay(${2:500});$0", "blink an LED"),
+            ("every", "static unsigned long ${1:last} = 0;\nif (millis() - ${1:last} >= ${2:1000}) {\n\t${1:last} = millis();\n\t$0\n}", "every N ms (no delay)"),
+            ("for", "for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}", "for (int i = 0; …)"),
+            ("if", "if (${1:condition}) {\n\t$0\n}", "if (condition) { }"),
+            ("while", "while (${1:condition}) {\n\t$0\n}", "while (condition) { }"),
+            ("inc", "#include <${1:Servo.h}>$0", "#include <…>"),
+        ],
         _ => &[],
     }
 }
@@ -194,6 +221,11 @@ pub fn callable(lang: &str, w: &str) -> bool {
         "swift" => matches!(w, "print" | "readLine" | "append" | "remove" | "sorted" | "contains"),
         "dart" => matches!(w, "print" | "add" | "remove" | "toString" | "parse" | "readLineSync"),
         "zig" => w.starts_with('@') || w == "print",
+        "ino" | "pde" => matches!(
+            w,
+            "pinMode" | "digitalWrite" | "digitalRead" | "analogRead" | "analogWrite" | "analogReference" | "delay" | "delayMicroseconds" | "millis" | "micros" | "tone" | "noTone" | "pulseIn"
+                | "shiftOut" | "shiftIn" | "attachInterrupt" | "detachInterrupt" | "digitalPinToInterrupt" | "map" | "constrain" | "random" | "randomSeed" | "bitRead" | "bitWrite" | "sqrt" | "pow" | "F"
+        ),
         _ => false,
     }
 }

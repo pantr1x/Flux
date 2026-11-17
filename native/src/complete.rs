@@ -222,7 +222,7 @@ fn family(lang: &str) -> &'static str {
         "css" | "scss" | "less" => "css",
         "js" | "mjs" | "cjs" | "jsx" | "ts" | "tsx" => "js",
         "py" | "pyw" => "py",
-        "cpp" | "cc" | "cxx" | "hpp" | "hh" => "cpp",
+        "cpp" | "cc" | "cxx" | "hpp" | "hh" | "ino" | "pde" => "cpp",
         "c" | "h" => "c",
         "java" => "java",
         "cs" => "cs",

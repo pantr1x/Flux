@@ -2,6 +2,12 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.87
+
+- **Arduino:** a new language in *New file* (with `setup()` and `loop()`), its own icon, colours and suggestions (`pinMode`, `digitalWrite`, `analogRead`, `Serial.` …, snippets like `blink` and `every`).
+- **▶ Run on an `.ino` file** finds the connected board, installs its support once, compiles and uploads – then the Serial Monitor runs in the Output (speed taken from `Serial.begin(…)`). Without a board it only checks that the code compiles.
+- **Arduino CLI** can be installed in **Settings → Languages**.
+
 ## 0.9.86
 
 - **Live Server without a browser:** Flux now draws your page itself – HTML and CSS (flexbox, grid, tables, shadows, web fonts, images) right next to the code, still changing while you type. It needs about **2–5 MB** instead of ~50–90 MB for a built-in browser, and runs in Flux's own process.

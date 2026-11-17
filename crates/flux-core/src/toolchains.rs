@@ -32,11 +32,12 @@ const PY: &[(&str, &[&str])] = &[("py", &["-3", "--version"]), ("python", &["--v
 #[cfg(not(windows))]
 const PY: &[(&str, &[&str])] = &[("python3", &["--version"])];
 
-pub const TOOLCHAINS: [Toolchain; 15] = [
+pub const TOOLCHAINS: [Toolchain; 16] = [
     tc("python", "Python", "", PY, "Python.Python.3.13", 30, 110, "https://www.python.org/downloads/"),
     tc("node", "Node.js", "JavaScript", &[("node", &["--version"])], "OpenJS.NodeJS.LTS", 30, 100, "https://nodejs.org/"),
     tc("java", "Java", "OpenJDK 21", &[("java", &["-version"])], "Microsoft.OpenJDK.21", 180, 320, "https://learn.microsoft.com/java/openjdk/download"),
     tc("cpp", "C / C++", "GCC (WinLibs)", &[("g++", &["--version"])], "BrechtSanders.WinLibs.POSIX.UCRT", 250, 1000, "https://winlibs.com/"),
+    tc("arduino", "Arduino", "Arduino CLI", &[("arduino-cli", &["version"])], "ArduinoSA.CLI", 15, 60, "https://arduino.github.io/arduino-cli/latest/installation/"),
     tc("go", "Go", "", &[("go", &["version"])], "GoLang.Go", 75, 250, "https://go.dev/dl/"),
     tc("csharp", "C#", ".NET 10 SDK", &[("dotnet", &["--list-sdks"])], "Microsoft.DotNet.SDK.10", 220, 750, "https://dotnet.microsoft.com/download"),
     tc("git", "Git", "GitHub & version control", &[("git", &["--version"])], "Git.Git", 65, 350, "https://git-scm.com/downloads"),
