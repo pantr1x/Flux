@@ -1,6 +1,6 @@
 [package]
 name = "flux-native"
-version = "0.9.87"
+version = "0.9.88"
 edition = "2021"
 license = "MIT"
 description = "Flux – natívna verzia v Ruste (egui), bez Chromia"
@@ -21,6 +21,7 @@ blitz-paint = { version = "=0.3.0-beta.4", default-features = false, features = 
 blitz-traits = { version = "=0.3.0-beta.4", default-features = false }
 anyrender = "0.14"
 url = "2"
+style = { package = "stylo", version = "0.22", default-features = false } # (len typ position: fixed/sticky)
 anyrender_vello_cpu = { version = "0.18", default-features = false }
 serde_json = "1"
 log = "0.4"

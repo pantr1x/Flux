@@ -320,7 +320,7 @@ impl App {
                 hv.sync(&reader, &pv.url, srv.version(), pw, ph, scale);
                 ui.painter().rect_filled(body, 0.0, egui::Color32::WHITE);
                 if let Some(tex) = hv.texture(ui.ctx()) {
-                    ui.painter().image(tex, body, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), egui::Color32::WHITE);
+                    ui.painter().image(tex, body, hv.uv(), egui::Color32::WHITE);
                 }
                 let resp = ui.interact(body, ui.id().with("pv-native"), Sense::click());
                 let css = |q: egui::Pos2| ((q.x - body.left()) * ppp / scale, (q.y - body.top()) * ppp / scale);

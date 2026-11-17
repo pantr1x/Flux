@@ -2,6 +2,11 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.88
+
+- **Live Server uses almost no CPU:** scrolling the page no longer redraws it – Flux draws a taller strip once and only moves it (continuous scrolling: ~55 % of one core → ~2 %). Typing redraws only what is visible. Pages with a sticky / fixed header still redraw while scrolling.
+- With nothing changing, the preview uses no CPU at all.
+
 ## 0.9.87
 
 - **Arduino:** a new language in *New file* (with `setup()` and `loop()`), its own icon, colours and suggestions (`pinMode`, `digitalWrite`, `analogRead`, `Serial.` …, snippets like `blink` and `every`).

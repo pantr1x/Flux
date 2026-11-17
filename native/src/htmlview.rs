@@ -69,7 +69,11 @@ pub struct HtmlView {
     pending: Arc<AtomicUsize>,
     done: Arc<AtomicUsize>,
     seen_done: usize,
-    built: Instant,    // kedy sa dokument naposledy zostavil – pri písaní najviac ~8× za sekundu
+    built: Instant,    // kedy sa dokument naposledy zostavil – pri písaní najviac ~5× za sekundu
+    // rolovanie bez prekresľovania: nakreslí sa pás ~2 obrazoviek a pri rolovaní sa len posúva obrázok
+    band: (f64, f64), // (vrch, výška) nakresleného pásu v CSS px
+    fixed: bool,      // stránka má position: fixed/sticky – tá sa musí kresliť pri každom posune
+    want_band: bool,  // pás len pri rolovaní; pri písaní a hover stačí to, čo je na obrazovke (menej práce)
     pub waiting: bool, // nová verzia čaká na zostavenie (treba prekresliť o chvíľu)
     pub scripts: bool, // stránka má JavaScript (tu nebeží)
     pub link_hover: bool,
@@ -89,6 +93,9 @@ impl Default for HtmlView {
             done: Default::default(),
             seen_done: 0,
             built: Instant::now(),
+            band: (0.0, 0.0),
+            fixed: true,
+            want_band: false,
             waiting: false,
             scripts: false,
             link_hover: false,
@@ -117,9 +124,9 @@ impl HtmlView {
     pub fn sync(&mut self, reader: &Reader, url: &str, ver: u64, w: u32, h: u32, scale: f32) {
         let (w, h) = (w.max(16), h.max(16));
         let vp = (w, h, (scale * 1000.0) as u32);
-        // písanie (rovnaká stránka, nová verzia): zostaviť najviac raz za 120 ms
+        // písanie (rovnaká stránka, nová verzia): zostaviť najviac raz za 180 ms
         let same_page = self.key.0 == url && self.doc.is_some();
-        self.waiting = same_page && self.key.1 != ver && self.built.elapsed().as_millis() < 120;
+        self.waiting = same_page && self.key.1 != ver && self.built.elapsed().as_millis() < 180;
         if !self.waiting && (self.key.0 != url || self.key.1 != ver || self.doc.is_none()) {
             self.built = Instant::now();
             let path = url::Url::parse(url).map(|u| u.path().to_string()).unwrap_or_else(|_| "/".into());
@@ -155,6 +162,9 @@ impl HtmlView {
             self.vp = vp;
             self.dirty = true;
         }
+        if self.dirty {
+            self.fixed = self.doc.as_ref().is_none_or(has_fixed);
+        }
         // dorazili súbory z webu (štýly, obrázky) → znova rozložiť
         let done = self.done.load(Ordering::Relaxed);
         if done != self.seen_done {
@@ -162,9 +172,23 @@ impl HtmlView {
             if let Some(d) = self.doc.as_mut() {
                 d.handle_messages();
                 d.resolve(0.0);
+                self.fixed = has_fixed(d);
                 self.dirty = true;
             }
         }
+    }
+
+    // výrez textúry, ktorý je práve na obrazovke (pás je vyšší ako panel)
+    pub fn uv(&self) -> egui::Rect {
+        let Some(d) = self.doc.as_ref() else { return egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)) };
+        let (top, bh) = self.band;
+        if bh <= 0.0 {
+            return egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        }
+        let vh = self.vp.1 as f64 / d.viewport().hidpi_scale as f64;
+        let y0 = ((d.viewport_scroll().y - top) / bh).clamp(0.0, 1.0) as f32;
+        let y1 = (y0 + (vh / bh) as f32).min(1.0);
+        egui::Rect::from_min_max(egui::pos2(0.0, y0), egui::pos2(1.0, y1))
     }
 
     pub fn loading(&self) -> bool {
@@ -176,13 +200,22 @@ impl HtmlView {
         if self.dirty {
             self.dirty = false;
             let (w, h, _) = self.vp;
+            let fixed = self.fixed;
             let doc = self.doc.as_mut()?;
-            let r = self.renderer.get_or_insert_with(|| VelloCpuImageRenderer::new(w, h));
-            r.resize(w, h);
-            let mut buf = Vec::with_capacity((w * h * 4) as usize);
             let sc = doc.viewport().hidpi_scale as f64;
-            r.render_to_vec(|s| blitz_paint::paint_scene(s, doc, sc, w, h, 0, 0), &mut buf);
-            let img = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], &buf);
+            // pás nad aj pod obrazovkou (najviac 2048 px – strop textúry v egui); s fixed prvkami len obrazovka
+            let bh = if fixed || !self.want_band { h } else { (h * 2).min(2048).max(h) };
+            self.want_band = false;
+            let scroll = doc.viewport_scroll();
+            let top = if bh > h { (scroll.y - (bh - h) as f64 / sc / 2.0).max(0.0) } else { scroll.y };
+            doc.set_viewport_scroll(blitz_dom::Point { x: scroll.x, y: top });
+            let r = self.renderer.get_or_insert_with(|| VelloCpuImageRenderer::new(w, bh));
+            r.resize(w, bh);
+            let mut buf = Vec::with_capacity((w * bh * 4) as usize);
+            r.render_to_vec(|s| blitz_paint::paint_scene(s, doc, sc, w, bh, 0, 0), &mut buf);
+            doc.set_viewport_scroll(scroll);
+            self.band = (top, bh as f64 / sc);
+            let img = egui::ColorImage::from_rgba_premultiplied([w as usize, bh as usize], &buf);
             drop(buf);
             match self.tex.as_mut() {
                 Some(t) => t.set(img, egui::TextureOptions::LINEAR),
@@ -200,8 +233,16 @@ impl HtmlView {
     pub fn scroll(&mut self, dx: f32, dy: f32) {
         if let Some(d) = self.doc.as_mut() {
             // blitz otáča znamienko sám: kladné = obsah ide dole (rolovanie hore), ako delta kolieska v egui
+            let x0 = d.viewport_scroll().x;
             if d.scroll_viewport_by_has_changed(dx as f64, dy as f64) {
-                self.dirty = true;
+                // v nakreslenom páse sa len posunie obrázok (uv) – bez prekreslenia
+                let s = d.viewport_scroll();
+                let vh = self.vp.1 as f64 / d.viewport().hidpi_scale as f64;
+                let (top, bh) = self.band;
+                if self.fixed || s.x != x0 || s.y < top || s.y + vh > top + bh {
+                    self.dirty = true;
+                    self.want_band = true;
+                }
             }
         }
     }
@@ -232,6 +273,25 @@ impl HtmlView {
         let line = ancestors(d, hit.node_id).find_map(|n| n.attr(blitz_dom::LocalName::from("data-flux-l")).and_then(|v| v.parse::<usize>().ok()));
         line.map(Click::Line).unwrap_or(Click::None)
     }
+}
+
+// position: fixed / sticky niekde na stránke (lepiaca hlavička…) – taká stránka sa pri rolovaní kreslí celá
+fn has_fixed(d: &HtmlDocument) -> bool {
+    use style::computed_values::position::T as P;
+    let mut stack = vec![d.root_node().id];
+    let mut n = 0;
+    while let Some(id) = stack.pop() {
+        n += 1;
+        if n > 20_000 {
+            return true;
+        }
+        let Some(node) = d.get_node(id) else { continue };
+        if node.primary_styles().is_some_and(|s| matches!(s.clone_position(), P::Fixed | P::Sticky)) {
+            return true;
+        }
+        stack.extend(node.children.iter().copied());
+    }
+    false
 }
 
 fn is_a(n: &blitz_dom::Node) -> bool {

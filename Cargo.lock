@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "flux-native"
-version = "0.9.87"
+version = "0.9.88"
 dependencies = [
  "alacritty_terminal",
  "anyrender",
@@ -1716,6 +1716,7 @@ dependencies = [
  "rquickjs",
  "serde_json",
  "sha2",
+ "stylo",
  "syntect",
  "two-face",
  "url",
