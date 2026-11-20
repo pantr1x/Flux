@@ -1,0 +1,915 @@
+# Flux Native – what's new
+
+Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
+
+## 0.9.89
+
+- **New files in the Explorer get a starting point:** typing `index.html` (or any known file name – `main.py`, `Main.java`, `style.css`…) into the tree now creates the same starter content as the *New file* window, e.g. a ready HTML page with `<title>` taken from the name. Unknown file types still start empty.
+
+## 0.9.88
+
+- **Live Server uses almost no CPU:** scrolling the page no longer redraws it – Flux draws a taller strip once and only moves it (continuous scrolling: ~55 % of one core → ~2 %). Typing redraws only what is visible. Pages with a sticky / fixed header still redraw while scrolling.
+- With nothing changing, the preview uses no CPU at all.
+
+## 0.9.87
+
+- **Arduino:** a new language in *New file* (with `setup()` and `loop()`), its own icon, colours and suggestions (`pinMode`, `digitalWrite`, `analogRead`, `Serial.` …, snippets like `blink` and `every`).
+- **▶ Run on an `.ino` file** finds the connected board, installs its support once, compiles and uploads – then the Serial Monitor runs in the Output (speed taken from `Serial.begin(…)`). Without a board it only checks that the code compiles.
+- **Arduino CLI** can be installed in **Settings → Languages**.
+
+## 0.9.86
+
+- **Live Server without a browser:** Flux now draws your page itself – HTML and CSS (flexbox, grid, tables, shadows, web fonts, images) right next to the code, still changing while you type. It needs about **2–5 MB** instead of ~50–90 MB for a built-in browser, and runs in Flux's own process.
+- Click anything in the page to jump to its line in the HTML; links to other pages of your project open in the panel, other websites in your browser.
+- JavaScript does not run in this preview – pages with scripts show a small *Open in browser* button. The full browser panel is still there: **Settings → Running → Live Server → Inside Flux – full browser**.
+
+## 0.9.85
+
+- **Data in the Output:** when your program prints a dictionary or a list (`print(data)`, JSON), the new **Data** button shows it next to the output as a readable tree – every key on its own line, values coloured by type, nested parts fold and unfold. Click a value to copy its path, like `["current"]["temperature_2m"]`.
+- **Paths in the Terminal:** a pasted file path with spaces gets quotes by itself (`'…/Weather app/weather.py'`), and a file dragged from the Explorer into the Terminal is typed in as its path.
+- **Explorer right-click:** *Copy path*, *Copy path for the terminal* (with quotes when needed) and *Copy relative path*, with shortcuts: **F2** rename, **Delete**, **Shift+Alt+C** / **Shift+Alt+T** / **Shift+Alt+E** copy the path, **Shift+Alt+R** show in folder. Right-clicking a file selects it, so the shortcuts work for it right away.
+
+## 0.9.84
+
+- **Focus mode** (**Ctrl+Alt+F**, the new icon next to ← →, or View → Focus mode): only the code, Output/Terminal and Live Server stay; **Esc** brings everything back the way it was.
+- Error hints wait until you finish: nothing is underlined on the line you are typing (a half-written `if` is not an error), and the empty lines right below it stay quiet too – the hint shows once you leave the line.
+- HTML and CSS files have no Output/Terminal panel any more (they run in Live Server); **Ctrl+`** still opens a terminal there.
+- Python: your own variable (`country`) is suggested first, before a JSON key with the same name; `requests.get()` / `response.json()` are coloured as functions, imported modules as types, and the Flux theme colours variables.
+
+## 0.9.83
+
+- The editor and the Output panel are see-through again – their opacity is now the real result, not added on top of the window.
+- Live Server panel lines up with the editor tabs and breadcrumbs; its tabs look like the editor tabs and the address no longer hides under Full / Tablet / Phone.
+- No white bar above the active tab.
+
+## 0.9.82
+
+**Animations while you type**
+- New letters appear softly: they glow for a moment and fade from the accent color into their normal color.
+- The text cursor glides to its new place instead of jumping.
+- An accepted suggestion or snippet "writes itself in" with a quick light sweep, and the places you can jump to with Tab pulse once.
+- A new line opens with a short soft band; search matches fade in.
+- ▶ Run: the button sends out a small ripple, a light band runs over the code (or the selected lines blink), a thin shimmer under the Output header shows the program is running, and *Finished* / *Exited with code* slides in.
+- The suggestion list slides in, and new file tabs open smoothly.
+- Icons come alive under the mouse: the Settings gear turns, × rotates, the search magnifier hops, the AI sparkle twinkles, the trash can tilts, refresh spins once, and ▶ turns into ■ when Run becomes Stop.
+- Turn it off in Settings → Text editor → Display → *Typing animations* (it also follows *Transition animations* and *Save memory*).
+
+**Run only the selected code (Python)**
+- Select some code (for example one `print(...)`) and press ▶ Run or F5: Flux runs just that, plus only the parts it needs – the `import` lines, functions, classes and variables it uses. Everything else in the file is skipped. Without a selection, Run works as before.
+
+**Suggestions**
+- **Every installed Python module, automatically**: after `import platform` (or `import numpy as np`, `from os import path`), typing `platform.` lists what that module really has – functions with their parameters (`release()`), classes, constants and submodules – read from your own Python. Libraries you install with pip show up right away, nothing to set up. Submodules have their own `{ }` icon.
+- JSON keys also come up when you just type a word: `ker` offers `data["releases"][0]["kernel_version"]` (teal `{ }` icon, the whole path is inserted).
+- The suggestion list scrolls with the mouse wheel again.
+- Words like `\nKernel` no longer turn into fake suggestions (`nKernel`).
+
+**Output and Terminal**
+- **Search in the output**: the Output and Terminal panel has a search field right in its header (like the one at the top); click it or press Ctrl+F. Esc clears it. Every match is highlighted, the current one stronger; Enter / Shift+Enter or the arrows jump between them and scroll the history there.
+
+- The output has a scrollbar (drag it or click the track) and a ⌄ button that jumps back to the end when you scrolled up. Search uses ↑ / ↓ for the previous and next match, and the search field is smaller.
+- Switching pages in Settings is smooth: the page slides in softly and the highlight glides to the new item (before, the whole Settings window replayed its opening animation). Icons in Settings and the command palette move when you point at them.
+- New default transparency: window 55 %, editor 62 %, Output and Terminal 78 %. You set it in Settings → Theme and window; the % button in the status bar is now off by default (turn it on there if you liked it).
+- Settings: the menu on the left scrolls smoothly and no longer jumps back at the end or scrolls the page next to it.
+- After *Clear*, the panel says so (*Output cleared…*), and a running Terminal redraws its prompt, so you can see it still works.
+
+**Editor**
+- `\n`, `\t` and other escapes inside strings now have their own color, so they no longer blend into the text.
+- **Suggestions from your JSON data (Python)**: after `data = requests.get(url).json()` (or `json.load(open("file.json"))`), typing `data["` or `data["releases"][0]["ker` suggests the real keys from that data, with a preview of each value. Flux downloads the data once in the background. Turn it off with the setting `jsonSuggest: false`.
+
+**Explorer**
+- Click the empty space under the file tree to select the project folder itself: New file / New folder then create things outside every folder (like VS Code). The whole empty area is clickable now, not just a thin strip.
+
+**Python libraries**
+- If a Python file imports a library you don't have, the name is underlined with a note. Click it and Flux asks *Install?*, then runs `pip install` and shows the progress in the Output panel.
+- Click *Python 3.x* in the status bar (or use the command palette → *Python libraries…*) to see everything the file is missing and which installed libraries have updates, with *Install* / *Update* buttons and *Update all*.
+
+## 0.9.80
+
+**Look**
+- **Clean window corners on KDE**: the blur now stays inside the rounded window, so the corners no longer show light, half see-through bits.
+- **The same color all around the editor** in a see-through window – the shadow under the editor made the edge on the right and at the bottom darker than at the top and left.
+- The small accent line of the active file tab now sits inside the tab instead of on its edge.
+
+## 0.9.79
+
+**Fixes**
+- **Your open files come back** after an update or a restart – the same tabs, with the one you were on still active.
+- **The blurred window works right after an update or start** – before, you had to switch the window background to something else and back.
+- **Stopping Live Server tells you** it is off and takes you back to your file, also when the page was open in your browser.
+
+## 0.9.78
+
+**Less memory**
+- **Blurred background uses less memory**: when Flux draws the blur itself, it keeps only a small blurred copy of the wallpaper, not the full picture (about 5–8 MB less).
+- **On Linux Flux gives freed memory back to the system** (after loading the wallpaper and while it is in the background) and uses fewer memory pools.
+
+**Fixes**
+- **Live Server preview stays visible while you pick a color** in the code – it hides only when the color window is over it, so you see the new color on the page right away.
+
+## 0.9.77
+
+**Shortcuts**
+- **Change any shortcut.** Settings → Keyboard lists all shortcuts by group (File, Run, View, Look). Click one and press the new keys – Esc cancels, Backspace removes it, the ↺ button brings back the default. A shortcut used twice is marked.
+- **Plugin shortcuts have their own group**, and the editor's fixed keys (find, comment, suggestions…) are listed too. Menus and the search field show your own shortcuts.
+
+**Settings**
+- **Scroll glide**: next to *Scroll distance* you can now set how long scrolling keeps gliding (Theme and window → Motion).
+- **Type the number** next to every slider (opacity, zoom, scrolling…) – Enter saves it.
+- **Search field opacity** (Tabs and layout). *Wide search field* shows only while the search button is on.
+- More room below *Window layouts*.
+
+**Plugins**
+- **Installing is much faster and shows progress**: files download at the same time from the right branch, with a progress bar on the card – Flux no longer freezes while installing.
+
+## 0.9.76
+
+**Fixes**
+- **The see-through / blurred background now shows behind the row of open files and behind the search field too.** Both were drawn solid, so the blur stopped at them while the editor below was see-through.
+
+## 0.9.75
+
+**Languages**
+- **Code colors for many more languages.** TypeScript, Zig, Julia, TOML, Kotlin, Swift, Dart, Vue, Svelte, Dockerfile, CMake, GraphQL, Elixir, Nim, INI, `.env` and about a hundred more were shown as plain text before – now they are colored like the rest.
+- **Suggestions while typing for 13 more languages**: Ruby, PHP, Lua, Zig, R, Julia, Perl, shell scripts, PowerShell, Kotlin, Swift, Dart and SQL – keywords, built-in functions and ready-made snippets (`for`, `if`, `function`, `class`, `main`…, Tab jumps between the blanks).
+- **▶ Run for Dart, Swift and Kotlin scripts** (`.dart`, `.swift`, `.kts`) when the language is installed.
+
+**Memory**
+- TypeScript files use the light JavaScript coloring – the full TypeScript grammar took about 56 MB of memory on its own, this one about 9 MB.
+- The Live Server page inside Flux goes to sleep sooner when you are not looking at it (after 25 s without Flux in front, 10 s when covered by Settings) and wakes up when you come back.
+
+## 0.9.74
+
+**Faster**
+- **Settings → Theme and window no longer reads `settings.json` from the disk on every frame** (it did that to decide whether to show *Restart Flux*).
+- **The ▶ Run button no longer checks the disk on every frame** (for `.rs` files it looked for `Cargo.toml` in every parent folder, for `.js` for an `index.html`); the answer is now remembered for 3 s.
+
+## 0.9.73
+
+**Fixes**
+- **Opening Plugins no longer stutters.** The Plugins page used to read the plugins folder and every `plugin.json` from the disk on every frame (twice); on Windows with an antivirus that made it lag. The list is now kept in memory and refreshed every 2 s or after you install or remove a plugin.
+- **Calmer animations in the bar on the left**: just a soft rounded highlight on hover, like everywhere else in Flux – no bouncing icons.
+
+## 0.9.72
+
+**Changes**
+- **The bar on the left is tidy again**: only Explorer and Plugins (plus icons that your plugins add). The quick buttons from 0.9.71 are gone – their shortcuts still work (Ctrl+Shift+A search, Ctrl+` terminal, Ctrl+I AI, Ctrl+Shift+K theme store…).
+- **Hover and click animations** there: a rounded highlight fades in, the icon lifts and gives a small springy bounce, shrinks a little while pressed, and the active view has a glowing accent mark.
+
+## 0.9.71
+
+**New**
+- **More in the bar on the left**: under Explorer and Plugins there are now quick buttons for Search everything, Run, Terminal, AI assistant, the Theme store and GitHub. Every tooltip shows the shortcut.
+- **New shortcuts:** Ctrl+Shift+X Plugins, Ctrl+Shift+K Theme store, Ctrl+Shift+G GitHub, Ctrl+` Terminal, Ctrl+Shift+F Search.
+- **Plugins can add their own icon to that bar**, with their own shortcut (`flux.activityBar.add`, guide in `docs/PLUGINS.md`). Plugin commands already had shortcuts.
+- **Try themes before installing.** In the Theme store, click a card and the whole Flux switches to that theme right away. A bar above lets you **Install** it or **Cancel**; closing Settings also goes back to your theme.
+
+**Fixes**
+- **See-through – blurred is always blurred now.** When the system can't blur what is behind the window (Linux without the KWin Blur effect, other desktops), Flux draws a blurred copy of your wallpaper instead of staying clear. Switching between clear, blurred and wallpaper also works right away.
+
+## 0.9.70
+
+**Fixes**
+- **Wallpaper picture works on Linux.** Flux now finds your desktop wallpaper on KDE Plasma, GNOME, Cinnamon, MATE, XFCE, Hyprland (swww, hyprpaper), feh and nitrogen. Before, it only knew where Windows keeps it, so on Linux nothing was drawn.
+- **See-through – blurred works on KDE Plasma.** Flux asks KWin to blur what is behind the window. Other Linux desktops (GNOME…) can't blur behind a window, so there it stays clear.
+- **Switching to Wallpaper picture works right away**, without restarting Flux. Only switching *to* see-through from a non-see-through window still needs *Restart Flux*.
+
+## 0.9.69
+
+**New**
+- **Theme store.** Settings → *Theme and window* → *Code theme* now has two tabs: *Installed* and **Theme store**. The store shows themes made by other people, each with a small piece of code in its own colors. **Install** downloads it and switches to it right away; the trash button removes it again. Search by name, author or style.
+- **Share your own theme**: put your `.conf` file into `themes/store/` on GitHub with a pull request (button *Share your theme*, guide in `docs/THEMES.md`). After it is merged, everyone sees it in the store – no new Flux version needed.
+- Six themes to start with: Kanagawa, Ayu Mirage, Night Owl, SynthWave '84, GitHub Dimmed and Ayu Light.
+
+## 0.9.68
+
+**Changes**
+- **A nicer first start.** Every step shows *Step N of 5*, a bigger title, rounded cards that light up in the accent color when chosen, and an indigo *Continue* button.
+- *Set up extras*: GitHub and Updates are two clear cards with a simple two-way switch, and the shortcuts are shown as real keys.
+- *Make it yours*: themes show a small piece of code in their own colors, the preview looks like a real editor window, and *My computer is slower* is a switch that also shows how much memory Flux uses.
+- **HTML suggestions don't write long forms you don't need.** Ordinary words in a sentence no longer offer tags (Tab after "title" in text made `<title></title>`), and tags are inserted short: `<button>`, `<form>`, `<script>`, `<option>`, `<iframe src="">` without extra attributes. A tag whose end is already right after the cursor doesn't get a second end.
+
+## 0.9.67
+
+**Changes**
+- **The Output/Terminal button is in the panel's own header** (top right of Output and Terminal). When you hide the panel, its header stays at the bottom as a slim bar with Output, Terminal and the same button in the same place – click any of them to open it again (Ctrl+J works too).
+- **Live Server can open the page in your browser** instead of next to the code: Settings → Run → Running → *Live Server* → *Show the page: In your browser*. Flux then runs no web view of its own, so it uses much less memory; the page still reloads when you save.
+- **Neater External tools settings**: the name and command fields have the same rounded frame and height as the Add button, and every tool sits on its own tidy row.
+
+## 0.9.66
+
+**Fixes**
+- **The button that shows or hides Output and Terminal now always sits in the same place** – at the right end of the tab row above the code (Ctrl+J does the same). Before, it jumped to a small spot at the bottom when the panel was hidden.
+- **Switching to a file of another project switches the Explorer too**: clicking a tab of a file from another project shows that project and its file tree.
+
+## 0.9.65
+
+**Themes as simple files**
+- A theme is now **one small file** with one value per line (`keyword #c792ea`). Settings → *Theme and window* → **New theme from this one** makes such a file with all colors of the current theme and opens it – change a value, save, and Flux updates right away. *Themes folder* opens the folder with your themes.
+- Themes can also color the app itself (background, panels, text, borders, accent).
+- New built-in themes: **Gruvbox Dark**, **Solarized Dark**, **Solarized Light**, **Rosé Pine** and **Everforest Dark**.
+- Anyone can add a theme for everybody: one `.conf` file in the `themes` folder of the Flux repository (see `docs/THEMES.md`).
+
+**Right-click in the code**
+- Right-click in the editor opens a menu: Cut, Copy, Paste, Select all, Toggle comment, Find, Replace, Run file and Explain with AI. **Your selection stays selected** when you right-click.
+
+**Sizes you can change**
+- Drag the **edge of the sidebar** to make it wider or narrower (double-click the edge for the default width).
+- Drag the line under **PROJECTS** and **FILES** to show more or fewer rows.
+
+## 0.9.64
+
+**Settings sorted into groups**
+- Settings now have groups on the left: **Environment** (General, Theme and window, Fonts and colors, Tabs and layout, Keyboard, Import and export), **Text editor** (Display, Typing, Files and saving), **Run** and **Extensions**. Each page is short, so things are easier to find, and search still finds every setting.
+
+**Transparency at hand**
+- A **% button** at the bottom right of the status bar opens sliders for the window, the editor and Output/Terminal.
+- **Ctrl+Alt+Z** makes everything clearer, **Ctrl+Alt+C** more solid (5 % per press). The window can now go down to 10 %.
+
+**Import, export and layouts**
+- *Environment → Import and export*: **export** your settings to a file, **import** them on another PC, **edit them as JSON**, or **reset all settings** (projects, accounts and keys stay).
+- *Tabs and layout → Window layouts*: save how the window looks (sidebar, panel, tabs, status bar, size) under a name and switch with one click; also in the menu ☰ → Window.
+- The bar with icons, the file tabs and the status bar can be hidden.
+
+**Tabs**
+- **Ctrl+1 … Ctrl+9** jump to a tab (9 = last), **Ctrl+Shift+PgUp / PgDn** move the tab, **Ctrl+Shift+T** brings back the last closed tab.
+- Optional coloured line per file type, a bold active tab and a larger mark for unsaved changes.
+
+**Editor**
+- New: tab size (2 / 4 / 8), blinking cursor and cursor width, current line highlight, indent guides, a ruler at column 80/100/120, **highlight of other occurrences** of the selected text, **matching brackets**, Ctrl + wheel zoom on/off, closing brackets and HTML tags on/off.
+- Files: auto save delay, remove spaces at line ends and end files with an empty line when saving, ask before deleting, and **hidden files and folders** in the Explorer (e.g. `dist, *.log`).
+
+**External tools**
+- *Run → Running → External tools*: your own commands (e.g. `git status`) in the menu ☰ → Tools. They run in the Terminal of the open file; `$(FilePath)`, `$(FileDir)`, `$(FileName)` and `$(ProjectDir)` are filled in.
+
+## 0.9.63
+
+**Opening projects**
+- **After opening a project (also one imported from GitHub) you see it right away**: the *PROJECTS* list scrolls to it and its files open in the Explorer, even if you had folded that section. Before, a fifth project could hide below the list and the folded section looked empty.
+
+## 0.9.62
+
+**Fixes**
+- **The project page shows your files again** when the project has only folders at the top (e.g. one folder per website): pages, styles, scripts… now come from the subfolders too, with the folder name next to each file (8 per group, then *+ N …*).
+- **One see-through look**: the bar with icons, the Explorer and the top bar now share one opacity – before, the top bar could be more see-through than the sidebar. Set it with Settings → Appearance → Window → *Window opacity*.
+- The *PROJECTS* and *FILES* lists show whole rows (no half-cut project at the bottom).
+
+## 0.9.61
+
+**Rounded tabs**
+- The file tabs above the code are rounded like the rest of Flux: the open file is a tab with round top corners that flows into the editor, with a small accent line on top, and it glides to the tab you click. The other tabs light up as a rounded pill when you point at them.
+
+## 0.9.60
+
+**Tabs and search like in VS Code**
+- **The tabs of open files are now in their own row right above the code**, like in VS Code: the open file has the editor's colour and a thin line on top, the others are quieter. Scroll the wheel over the tabs when there are many, middle-click closes a tab and a double-click on the empty space makes a new file.
+- The top bar now only has ← →, the **search field in the middle** and AI / Run.
+
+**Moving files**
+- **Files from FILES can be dragged into a project** (onto a project in *PROJECTS*) or into a folder in the tree – they move there and leave the FILES list.
+- **Files dropped from Windows Explorer** go into the folder or project you drop them on (before, always into the open project).
+- After moving, the file counts of both projects update.
+
+## 0.9.59
+
+**Explorer like in VS Code**
+- **Path above the code**: `my-app › src › button › button.ts` sits above the editor. Click a folder in it to show it in the Explorer, click the project name for the project page. Turn it off in Settings → Editor → *Path above the code*.
+- **The file tree is denser** (rows like in VS Code), so more files fit on the screen.
+- **Keyboard in the tree**: after clicking an item, ↑ / ↓ move through the tree, → / ← open and close folders, Enter opens the file, **F2** renames it and **Delete** moves it to the Recycle Bin. Esc or clicking into the code gives the keys back to the editor.
+- The rename field sits exactly over the name.
+
+## 0.9.58
+
+**Look**
+- **New font: Inter** for the whole app (menus, sidebar, tabs, settings) on Windows and Linux. It is built into Flux, so it looks the same everywhere. The code font stays as you set it.
+- *FILES* sits right under the project (or under *No folder is open*) instead of at the very bottom of the sidebar.
+- The light/dark button is gone from the bar on the left – switch it in the menu ☰ (or Ctrl+Shift+L) or in Settings → Appearance.
+
+**Home screen**
+- The bar on the left and the Explorer stay visible on the home screen, so you can open a project or file right away. **×** at the top right (or Esc) takes you back to where you were, and ← → work as usual.
+
+## 0.9.57
+
+**Search and projects like in VS Code**
+- **The search field is always at the top**, in the middle of the window (it moves next to *AI* when the tabs need the room). Click it or press Ctrl+Shift+A to find files, commands, settings and projects. If you only want the magnifier: Settings → Appearance → *Wide search field*.
+- **Projects are now a section of the Explorer** instead of a separate view (VS Code has no Projects view either): *PROJECTS* at the top with pinned projects first, and *New project* / *Open folder* when you hover its title; below it the files of the open project. Click a section title to fold it.
+- The bar with icons on the left now has *Explorer* and *Plugins*.
+
+## 0.9.56
+
+**Layout like VS Code**
+- On the left there is now a narrow **bar with icons**: *Explorer* (the files of your project), *Projects*, *Search* and *Plugins*, and at the bottom the menu ☰, *Settings* and light/dark. Clicking the open view again hides the sidebar (also Ctrl+B); Ctrl+Shift+E shows the Explorer.
+- The **Explorer** shows the project as a section with its name. Hover it for **New file**, **New folder**, **Refresh** and **Collapse all**. Thin lines show what belongs to which folder, and the folder of the open file opens by itself.
+- **New files and folders are typed right into the tree**, like in VS Code: the file goes into the folder you clicked last (or the folder of the open file). Type `lib/util.py` and Flux creates the folder `lib` too. Enter creates it, Esc cancels. Right-click → *New file* works the same.
+- *Projects* has its own view with *New project* and *Open folder*; opening a project switches back to its files. Without an open folder the Explorer offers *Open folder*, *New project* and your recent projects.
+
+**Editor**
+- **Selecting with the mouse past the edge scrolls by itself**: hold the button below (or above, left, right of) the editor and it keeps scrolling – faster the further away the mouse is – even when the mouse does not move.
+- **Enter at the end of a long line** now scrolls back to the start, so you see the new line (before, the view stayed scrolled to the right).
+
+## 0.9.54
+
+**Less memory with Live Server**
+- The page in the Live Server panel (WebView2 on Windows, WebKit on Linux – together about 90 MB or more) now closes by itself when you don't use Flux for 45 seconds, when Flux is minimized, or when Settings cover it for 20 seconds. As soon as you come back it opens again, on the same page and tabs.
+- Windows: the page runs leaner (one page process, no translator, sync or background services) and frees memory as soon as Flux is in the background.
+
+**Files**
+- **Moving files by dragging works again**: when you started dragging, the *Move to the project folder* row appeared at the top and pushed the whole list down, so the file landed in the wrong place (or nowhere). The row is now at the bottom of the list.
+
+## 0.9.53
+
+**Live Server**
+- **Links in the preview work**: clicking a link opens the page (in the same tab, or a new tab for `target="_blank"`); before, the panel jumped back to the open file. Tabs of other websites show the site name.
+- The code line of the page is highlighted only when you **select text or click an element** in the page – moving the mouse no longer highlights anything.
+
+**Look**
+- **Less see-through by default**, and each part has its own slider: Settings → Appearance → Window → *Sidebar*, *Top bar*, *Editor* and *Output and Terminal opacity*. Your old background dimming and panel transparency carry over.
+
+## 0.9.52
+
+**Linux**
+- **Live Server preview fixed on Wayland desktops (Ubuntu, Fedora…)**: the preview helper crashed there, so the panel stayed empty. It now always uses X11 like the Flux window. If the preview still can't start, the panel says so and the reason is in `flux-preview.log` in the settings folder.
+
+## 0.9.51
+
+**Linux**
+- **Live Server shows the page inside Flux**, next to the code, like on Windows – with tabs, Full / Tablet / Phone / 16:9, reload and links in new tabs. It uses the system WebKitGTK; the small preview helper downloads by itself the first time (the installer adds both). Without WebKitGTK the page opens in the browser as before.
+- Flux runs through X11 (XWayland on Wayland desktops) so the page can sit inside its window. To keep native Wayland, set `"linuxWayland": true` in settings.json.
+
+## 0.9.50
+
+**Linux**
+- **Same look as on Windows**: Flux now finds the system fonts on every distribution (on Arch and others it used to fall back to its own fonts, without bold text). It prefers Segoe UI, then Inter, Noto Sans or DejaVu Sans; code uses Cascadia Mono, JetBrains Mono or DejaVu Sans Mono.
+- The installer removes the old Flux (Electron AppImage), warns when another `flux` command would start instead, and shows how to add `~/.local/bin` to PATH.
+- `flux --version` shows which Flux is installed.
+
+## 0.9.49
+
+**Linux**
+- **Flux Native for Linux**: install with one command in a terminal – `curl -fsSL https://pantr1x.github.io/Flux/install.sh | bash` (also on the website, with a Copy button). It updates itself the same way as on Windows (Settings → General → About & updates, or automatically).
+
+## 0.9.48
+
+**Editor**
+- **Enter makes a new line** even when the suggestion list is open. A suggestion is taken with **Tab**, or with **↑/↓ and then Enter**.
+
+## 0.9.47
+
+**Editor and Output**
+- **Cleaner space dots**: by default only the indentation, wider gaps and trailing spaces get a small, faint dot – a single space between words has none, like in VS Code. Settings → Editor → *Show spaces as dots* can show every space or turn it off. It works the same in Output and Terminal.
+- **Ctrl + mouse wheel zooms the text** in the editor and in Output / Terminal (like in PyCharm); the size is saved in the settings.
+- The little play arrow in Flux's own Output messages sat lower than the text; it is now a `›`.
+- The little `code` boxes in release notes use the same font as the words around them, so they stay on the line.
+
+## 0.9.46
+
+**Editor and Output**
+- **Spaces are shown as small dots** in the code and in Output and Terminal, like in PyCharm. It is on by default; turn it off in Settings → Editor → *Show spaces as dots*.
+- **Copy all output**: new button next to the trash icon in the Output / Terminal header copies everything. *Run* still clears the old output first, so you get just the latest run.
+- The selection in Output and Terminal is now centered on the text, and the little `code` boxes in these notes sit on the same line as the words around them.
+
+## 0.9.45
+
+**Editor**
+- Typing `f"`, `r'`, `b"` and other string prefixes now closes the quote too (it used to add only one `"`, which showed an *unterminated f-string* error). Inside it, `{` still adds the closing `}`.
+
+## 0.9.44
+
+**Suggestions**
+- **Space no longer replaces what you typed with a suggestion.** Only Enter, Tab or a click accept one.
+- A word you typed in full, like `str` or `print`, still shows in the suggestions instead of the list closing.
+
+## 0.9.43
+
+**Output and Terminal**
+- You can now **select and copy text** in Output and Terminal: drag with the mouse to select (it keeps scrolling when you drag past the edge), then press **Ctrl+C** (with a selection it copies; without one it still stops the program) or **Ctrl+Shift+C**. Right-click opens *Copy* and *Select all*. New output clears the selection.
+
+## 0.9.42
+
+**Output and Terminal**
+- **Every file now has its own Output and Terminal.** Switching to another file no longer shows the same terminal: each file keeps its own program output, its own shell, and remembers whether you were looking at Output or Terminal. Closing a file stops its program and terminal.
+- **Images have no Output or Terminal panel** – the picture gets the whole card.
+
+## 0.9.41
+
+**Files**
+- You can now **drag files and folders in the file tree**: drop them on a folder to move them in, on a file to move them next to it, on **Move to the project folder** (it appears at the top while you drag) to move them out of folders, or on another project in the sidebar to move them there. Open tabs follow the moved file. A name that already exists in the target is never overwritten.
+
+## 0.9.40
+
+**Fixes**
+- Creating a **new folder** (or a new file in the file tree) works again: type the name and press Enter. Esc cancels.
+
+**About Flux**
+- Flux is now open source under the MIT license. This is the first step to getting Flux Native signed by the SignPath Foundation, so Windows Defender trusts it.
+
+## 0.9.39
+
+**Live Server**
+- New **16:9** button next to Full / Tablet / Phone: the page is laid out like on a 1920 px wide desktop screen and shown zoomed out in a 16:9 frame that fits your panel, so you see the whole design as on a real monitor.
+
+## 0.9.38
+
+**Editor**
+- Pressing **Enter** now keeps the indentation of the line you are on, like in VS Code. After an opening `{`, `(`, `[`, an opening HTML tag or a Python `:` it indents one step more, and between `{}` or `<ul></ul>` it opens a middle line for you. A line with only spaces is emptied when you press Enter, so you never leave stray spaces behind. Turn it off in Settings → Editor → *Auto indent*.
+
+## 0.9.37
+
+**Live Server**
+- When you drag the edge of the panel, the page now resizes **live** with it, instead of going black until you let go.
+
+**Editor**
+- The highlighted line (current line and the line you point at in Live Server) now sits centred on the text instead of a little below it.
+
+## 0.9.36
+
+**Suggestions**
+- In HTML, attribute names such as `type`, `class`, `href`, `src`, `alt`, `value` and `placeholder` are now always completed with their quotes (`type=""`) and the cursor inside – wherever the suggestion pops up, not only inside a tag.
+
+## 0.9.35
+
+**Templates**
+- New HTML, CSS and JavaScript starter files now indent with 4 spaces – the same step as the Tab key and the code suggestions – so what you add lines up with the template.
+
+## 0.9.34
+
+**Live Server**
+- Fixed a few lines of strange code (`(async()=>{…`) that sometimes showed up in the page while you were typing. Flux's helper script now sits at the very top of the page, so a half-written tag can no longer swallow it.
+
+## 0.9.33
+
+**Live Server**
+- Windows like *New file*, *New project*, the colour picker and *What's new* now appear **on top of** the Live Server page (before, the page covered them).
+- A link to another website now opens in a **new tab inside Flux**, not in the browser.
+- The Live Server panel can be **resized** again: drag the thin edge on its left side (the page is hidden while you drag, so the mouse is not lost).
+
+## 0.9.32
+
+**Live Server**
+- The panel has **tabs** at the top. A link that opens in a new tab (`target="_blank"`) opens in a new tab here, and a click on a normal link moves the current tab to that page. Use **+** for another tab and **×** to close one.
+- Move the mouse over something in the page and Flux **highlights the line of code** that made it (and scrolls to it when it is off screen).
+- Much **faster**: the page now gets the change the moment it happens (no waiting for a timer), and typing is sent after 40 ms instead of 120 ms.
+
+## 0.9.31
+
+**Adding files**
+- You can now add pictures and other files to a project: drag them into the Flux window, press the new upload button above the file tree, or use *Add files…* in the right-click menu of a folder. Folders work too, and a name that already exists becomes `name (1).png`.
+
+**Live Server**
+- Clicking a link in the Live Server panel now takes you to that page, also links that open in a new tab. The address at the top follows the page. Links to other websites open in your browser.
+
+## 0.9.30 – 2026-10-05
+
+### Fixes
+- **Renaming works again** – for projects (right-click → *Rename…*) and for files and folders in the tree. Press Enter to confirm, Esc to cancel. For a file the name without its extension is selected. If Windows still holds the folder, Flux tries again for a moment and then tells you why.
+- **Color squares fit properly:** there is now a small space for the square before the color, so it no longer covers the colon or the text next to it.
+
+### Projects
+- **"Hide" is gone.** Instead, the **×** next to a project (and *Remove from Flux* in its menu) takes it off the list. The files stay in the folder – to get it back, open the folder again. Projects you had hidden before are removed from the list the same way.
+
+## 0.9.29 – 2026-10-05
+
+### Safer for Windows Defender
+- Flux no longer closes other Flux windows or programs at start and no longer looks through and changes your shortcuts (taskbar, Start menu, desktop). Windows Defender saw these as suspicious and could block Flux.
+- Every new version is now checked by Windows Defender before it is offered as an update.
+
+## 0.9.28 – 2026-10-04
+
+### Images, links and colors
+- **Images open like files:** click a picture in the file tree and it opens in its own tab – zoom with the mouse wheel, drag to move, double-click (or *Fit* / *100 %*) to switch, and the size is shown at the bottom.
+- **Hover a path or link in your code** (`src="logo.png"`, `href="style.css"`, `url(img/bg.png)`, `https://…`) and a preview pops up: the picture, the first lines of the file, the folder contents or the address. **Ctrl+click** opens it.
+- **Colors in code get a little square** (`#3b82f6`, `rgb(…)`, `hsl(…)`, `tomato` in CSS). Click it to pick another color – the code changes right away, in the same notation.
+
+## 0.9.27 – 2026-10-04
+
+### A new Plugins page
+- **Settings → Plugins** is redone like extensions in VS Code: *Installed* / *Store* at the top with a search box, and plugins as cards in two columns – with their **real icon**, a ✓ for plugins from the Flux team, the description, tags and a button (**Install**, **Update**, or an on/off switch).
+- **Click a plugin** to open its page: a big icon, all buttons (*Turn on/off*, *Reload*, *Uninstall*) and its whole description with headings, lists and tables.
+- GitHub is now one of the cards under *Installed* (marked *Built in*).
+
+## 0.9.26 – 2026-10-04
+
+### Suggestions
+- A suggestion is picked as soon as you **press** the mouse button on it.
+- **Ctrl+Tab** moves down the list (**Ctrl+Shift+Tab** up), **Tab** or **Enter** picks the selected one.
+
+### Plugins
+- Settings → Plugins has a new look: an *Installed / Store* switch, cards like the GitHub one with a colored letter for each plugin and the full description, a clear empty state with *Open the Store*, and *Create a plugin*, *Load from folder* and *Plugin guide* together under **Make your own**.
+
+## 0.9.25 – 2026-10-04
+
+### Suggestions
+- **Clicking** a suggestion with the mouse now inserts it (before, the click was lost).
+- **Emmet** like in VS Code: in an HTML page type `div.box`, `ul>li*3`, `#top`, `p{Hello}` or `a+img` and press Enter – the whole HTML is written for you, with the cursor in the first empty tag.
+- In HTML text, the first letters of a tag (`fo`) already offer every matching tag (*font*, *footer*, *form*) as a full `<font></font>`.
+- Your own tags from the page (`<my-card>`) are offered after `<` too.
+- No red "never closed" hint on the line while you're still typing the tag.
+
+## 0.9.24 – 2026-10-04
+
+### Suggestions like in VS Code
+- In HTML, typing **<** shows every tag right away, each with a short description – *font*, *center*, *details*, *dialog*, *figure* and all the others are there now. **</** offers the tags that are still open, the innermost first.
+- Inside a tag, a space shows its attributes (`<font ` → *color*, *face*, *size*), and inside the quotes their values (`type="` → *checkbox*, *email*, *password*…). Choosing an attribute opens its values at once.
+- CSS suggests all common properties and their values, colors, `:hover` and the other pseudo-classes, and `@media` / `@keyframes`. The same works inside `<style>` and `<script>` in an HTML file.
+- After a dot you get the object's methods with their parameters: `console.`, `document.`, `Math.`, `os.path.`, `random.`, `System.out.`, `fmt.`, `std::`… plus your own names from the file (`self.score`). `import ` lists modules.
+- The list scrolls (mouse wheel or arrows) and shows the description of the selected item next to it.
+- Esc closes the suggestions and keeps typing in the editor.
+
+### Window
+- The thin line along the top edge of the window is gone.
+
+## 0.9.23 – 2026-10-04
+
+### Plugins
+- Flux now runs **plugins written in JavaScript**. Open **Settings → Plugins → Store** to install them – for a start: *Word Count*, *TODO Highlight*, *Theme Pack* (8 more code themes) and *Snippet Pack*.
+- Plugins can add commands to Ctrl+Shift+A (with shortcuts), buttons in the status bar, snippets in the suggestions, code themes and colored notes right in the code, and react when you open, change or save a file.
+- **Make your own:** Settings → Plugins → **Create a plugin** makes a working example and opens it. Change it and press Ctrl+Shift+A → *Reload plugins*. The full guide is linked under **Plugin guide**.
+- Plugins are safe by design: they only see what Flux gives them, can't use the internet or your files outside the project, and a stuck plugin is stopped after 0.2 s.
+
+## 0.9.22 – 2026-10-04
+
+### Suggestions like in VS Code
+- Suggestions now insert whole pieces of code, not just a word: `<ti` → `<title></title>` with the cursor inside, `for` → `for item in items:` and a new indented line, `def`, `if`, `while`, `class`, `try`… in Python, `log` → `console.log()`, `fn`, `for`, `qs` in JavaScript, `main`, `cout`, `sout`, `cw`, `println` and more in C, C++, Java, C#, Rust and Go.
+- **Tab** jumps to the next spot to fill in (for example from `item` to `items` and then into the block).
+- Functions get their brackets: `print` → `print()`, and your own functions from the file too.
+- HTML: tags right after `<`, attributes inside a tag (`class=""`), `!` for a whole HTML page, and typing `>` closes the tag for you (`<div>` → `<div></div>`).
+- CSS: properties come with `: ;` and values are suggested after the colon (`display: flex`).
+- Every suggestion has an icon like in VS Code (function, keyword, snippet, tag, property, word) and a preview of what it inserts.
+
+## 0.9.21 – 2026-10-04
+
+### Round corners
+- The see-through window now has rounded corners like other Windows 11 windows, and the thin light line along the top edge is gone.
+
+## 0.9.20 – 2026-10-04
+
+### Windows Security no longer blocks Flux
+- Windows Defender removed Flux 0.9.18 and 0.9.19 as a false "trojan" because Flux changed which program opens code files and deleted the old Flux. Flux no longer does either: it only moves your shortcuts and taskbar pin to itself. The old Flux stays and simply hands everything over to this one, so "Open with Flux" keeps working.
+
+## 0.9.19 – 2026-10-04
+
+### Flux always opens
+- In 0.9.18, clicking Flux could do nothing when a stuck Flux without a window was still running in the background: the new start handed over to it and closed. Flux now closes such stuck copies first, and a Flux that is minimized comes back to the front when you start it again.
+
+## 0.9.18 – 2026-10-04
+
+### One Flux
+- The old Flux now moves itself to this new Flux with its next update. Your projects and settings come along, and your taskbar pin, Start menu and desktop shortcuts open the new Flux.
+- Double-clicking a code file while Flux is open opens it in the window you already have instead of starting Flux a second time.
+
+## 0.9.17 – 2026-10-04
+
+### Window buttons fit in
+- − □ × no longer sit on a square dark block. They now look like the other buttons in Flux: rounded, with a soft highlight when you point at them (red for ×), and they line up with ▶ Run.
+
+## 0.9.16 – 2026-10-04
+
+### Programs end by themselves
+- When your program finishes, Flux now shows *Finished* (or the exit code) right away and the **Stop** button turns back into ▶ Run. On Windows it used to keep saying *Running* after the last line.
+- The same goes for the Terminal tab when you type `exit`.
+
+### Nicer release notes
+- *What's new* and Settings → About & updates now show code like `input()` in a code font, *italic* text, more space between lines and a clear version badge.
+
+### A bit lighter
+- The home screen's soft background glow moves only for a few seconds after it opens and only while Flux is in front – then Flux draws nothing until you do something.
+- The Output and Terminal panels are drawn with far fewer pieces, so typing in the editor with a full Output panel costs less.
+
+## 0.9.15 – 2026-10-04
+
+### Programs work again on Windows
+- ▶ Run showed only the file name and nothing else: Windows was waiting for an answer from Flux before letting the program print anything. Flux now answers, so you see the program's output, and `input()` (or `cin`, `Scanner`…) gets what you type. The Terminal tab is fixed the same way.
+- The red *Nothing to run* message no longer stays in the status bar after you switch to another file.
+
+## 0.9.14 – 2026-10-04
+
+### Mistakes are shown where they are
+- Forgot a colon, a bracket, a quote or a `;`? Flux now underlines the spot and **explains the mistake right next to the line** – for example *Missing colon (:) at the end of this line*.
+- Python uses the real Python check, JSON is checked exactly, and C, C++, Java, C#, JavaScript, Rust, Go, CSS and HTML get checks for brackets, quotes, comments and missing `;`.
+- The status bar shows *N problems*; click it to jump to the first one. Turn it off in Settings → Editor → *Error hints*.
+
+### Suggestions while typing
+- Start typing and Flux suggests keywords, built-in functions and names from your file. ↑/↓ to choose, Enter or Tab to insert, Esc to close, Ctrl+Space to show them yourself.
+- Turn it off in Settings → Editor → *Suggestions while typing*.
+- Typing a closing bracket or quote that Flux already added now just steps over it instead of adding a second one.
+
+### Programs that ask for input
+- After ▶ Run, your keyboard goes straight to the program, so `input()` (and `cin`, `Scanner`…) gets what you type without clicking the output first.
+- If the Terminal can't start, it now says so instead of staying empty.
+
+### Run only when there is something to run
+- Files without a `main` (for example Windhawk mods `*.wh.cpp` or header files) no longer offer ▶ Run – the button is greyed out and tells you why.
+- The Python version in the status bar shows only for Python files.
+
+### A calmer home screen
+- The home screen is now simple: logo, greeting, one big search box and your recent projects. Type to find a project or a recent file, ↑/↓ and Enter to open it.
+- The ☰ menu is much narrower.
+
+### What's new
+- After an update, Flux shows what changed once at start (this card).
+
+## 0.9.13 – 2026-10-04
+
+### Big files stay smooth
+- The editor now colors and draws **only the code you see** (plus a few hundred lines below it). The rest is colored when you scroll there, and typing recolors only from the changed line on.
+- Measured on a file with 30,000 lines: opening took **0.3 s instead of 5 s**, and one frame while scrolling takes **3 ms instead of 47 ms** – smooth scrolling stays smooth even in huge files.
+- The minimap and the word count in the status bar no longer go through the whole file on every frame either.
+
+### Fixes
+- The window buttons (− □ ×) no longer look doubled when Flux is see-through.
+- The question *Can you see what is behind Flux?* is gone.
+- Home screen: a long coding time (for example *4 h 26 min*) gets smaller instead of running under the clock icon.
+- **Back** (mouse button or Alt+←) inside Settings goes to the previous settings page instead of closing Settings.
+
+### GitHub only when you want it
+- Settings → Plugins now shows only real plugins – GitHub for now. Claude AI, Live Server and Languages are simply part of Flux.
+- The intro asks whether you want GitHub. Without it, Flux doesn't show GitHub anywhere – install it any time in Settings → Plugins.
+
+## 0.9.12 – 2026-10-04
+
+### See-through window
+- Flux is now **see-through**: whatever is behind it – your desktop, Lively or Wallpaper Engine, Discord or any other window – shows through its panels. Flux no longer draws its own copy of the wallpaper, so the blocky look is gone and it uses less memory and power.
+- Settings → Appearance → Window → **Window background**: *See-through – clear*, *See-through – blurred* (Windows blurs what is behind Flux) or the old *Wallpaper picture*.
+- **Background dimming** sets how dark the background behind the panels is, so text stays easy to read.
+- The first time, Flux asks *Can you see what is behind Flux?*. If you don't answer within 25 seconds (for example because the window stays invisible), it goes back to the wallpaper picture by itself.
+
+### Scrolling that glides
+- **Mouse wheel:** each turn gives the page a push, it moves smoothly while you turn and glides out and slows down after you stop – like on an iPad. (The glide announced in 0.9.9 never actually made it into the program – sorry. It is in now.)
+- **Touchpad:** the page follows your fingers exactly and keeps gliding after you lift them, slowing down smoothly. The extra jump of one line at the end of a swipe is gone.
+
+## 0.9.11 – 2026-10-04
+
+### Taskbar pin repaired
+- If the last update broke your taskbar pin (*"The item … has changed or moved"*), Flux now fixes it by itself a few seconds after it starts. Choose **No** in that message, start Flux once from its folder, and the pin works again.
+- Every new build is now tested on Windows before it is published: it updates itself, must stay the same file, keep the pin and open again with a window.
+- If Flux ever fails right after an update, it goes back to the previous version only once, never in a loop.
+
+## 0.9.10 – 2026-10-04
+
+### Updates keep your taskbar pin
+- *Restart to update* now replaces Flux **in the same file**. Flux pinned to the taskbar stays pinned, and the new version opens on the same icon instead of a separate one.
+- The swap takes a moment: Flux closes, the new version writes itself over the old one and starts again.
+- Updating from 0.9.9 still uses the old way one last time, so if the pin breaks now, pin Flux again – it stays from now on.
+
+## 0.9.9 – 2026-10-03
+
+### Scrolling like on a tablet
+- **Mouse wheel:** every notch gives the page a push and it glides and slows down smoothly, like on an iPad. Turning the wheel faster throws the page further.
+- Smooth scrolling now works even when *Transition animations* are off – it has its own switch (*Smooth scrolling with inertia*).
+- **Touchpad:** the page no longer stops and then jumps one more line at the end of a swipe.
+
+### Faster updates
+- An update now downloads **only what changed** since your version (often a few hundred kB instead of 13 MB). If that is not possible, the whole program is downloaded as before.
+
+## 0.9.8 – 2026-10-03
+
+### Moving live wallpaper with much less memory
+- Flux now makes a **small copy** of your live wallpaper video once (at most 640 px wide, saved in Flux's data folder) and plays that copy. Before, it decoded the original video – often 4K – and on laptops with built-in graphics that alone could take a few hundred MB.
+- While the copy is being made (usually a few seconds, only the first time), Flux shows a still frame of the wallpaper.
+
+### Also
+- A very big file keeps fewer undo steps (20 instead of 100), because every step is a full copy of the text.
+- Developer: the memory row also shows how much Flux's own code uses.
+
+## 0.9.7 – 2026-10-03
+
+### Less memory with a moving live wallpaper
+- When Flux has been in the background for 3 seconds, the video decoder of your live wallpaper is **freed completely** (the last frame stays). When you come back, the video continues from the same spot. Flux in the background now uses much less memory.
+- The text atlas (all letters Flux has drawn) is smaller.
+
+### Scrolling without the slow tail
+- After a turn of the mouse wheel the page glides to its place in a fixed short time and stops exactly there. Before, after scrolling a lot it slowed down almost to a stop and then still moved a little.
+
+## 0.9.6 – 2026-10-03
+
+### Updates never get stuck again
+- **Fixed:** once an update was downloaded (*Restart to update*), Flux stopped looking for newer ones. If that download was lost, Flux never found any update again. Now it keeps checking every hour: a lost download is fetched again, and a newer build replaces the one waiting.
+- *About & updates* has a check button next to *Restart to update*.
+
+## 0.9.5 – 2026-10-03
+
+### Smoother scrolling, also on a touchpad
+- **Touchpad:** the page now follows your fingers exactly. Before, Flux added its own glide on top of the one Windows already does, so the page kept moving after you stopped.
+- **Mouse wheel:** each notch is smoothed only once (before, egui smoothed it and then Flux again, which felt mushy). The glide is the same spring as in Flux.
+
+## 0.9.4 – 2026-10-03
+
+### Restart to update
+- **Fixed:** *Restart to update* showed "The system cannot find the file specified" when the downloaded update was gone (removed by an antivirus or by the bug fixed in 0.9.2). Flux now downloads it again by itself and offers the restart once it is ready.
+
+### Less memory
+- Code coloring (the definitions of all languages, about 11 MB) is loaded only when code is on screen and freed after 2 minutes without code.
+- Icons are no longer kept twice (in RAM and on the graphics card).
+
+## 0.9.3 – 2026-10-03
+
+### New file, like New project
+- **+ New file** is now always in the sidebar under FILES, the same way as *+ New project* under PROJECTS. It opens the New file window (language, name, location).
+
+### Less memory and work
+- Files you haven't looked at for **10 minutes** are freed from memory (the tab stays). Clicking the tab loads the file again – unsaved files are never freed.
+- When a file changes on disk, Flux reloads only the one you are looking at; other tabs reload when you open them.
+- The editor draws line numbers and indent guides **only for the lines you see**, and no longer copies the text on every frame.
+- Flux remembers each project's stats (files, lines, languages) and at start reads only the open project, not every file of every project.
+
+### Smooth scrolling
+- One turn of the mouse wheel scrolls a bit further and still glides smoothly. *Scroll distance* in Appearance → Window changes it further.
+
+## 0.9.2 – 2026-10-03
+
+### Updates install by themselves again
+- **Fixed:** when an update finished downloading in the first 10 seconds after start (a fast connection), Flux deleted it again, so updates never installed. Now they do.
+- With *Install updates automatically* on, a downloaded update installs **by itself** once Flux has been in the background for a minute and nothing is running or unsaved. Flux comes back without stealing focus.
+- Flux checks for updates every hour instead of every 6 hours.
+- An update no longer fails when an older Flux (or the MCP bridge for Claude) is still running.
+
+### See-through glass (try it)
+- New choice in Settings → Appearance → Window → Live wallpaper: **See-through glass**. Flux doesn't play its own copy of the live wallpaper – the real desktop (Lively, Wallpaper Engine) shows through, almost without extra memory. Windows behind Flux show through too.
+- It is a test: after the restart Flux asks whether you can see it. Without an answer in 25 seconds (for example when the window stays invisible) it goes back to the moving wallpaper by itself.
+
+## 0.9.1 – 2026-10-03
+
+### Smoother switching between files
+- The highlight in the file tree **glides** to the file you click.
+- Switching tabs or files slides the code in from the side where the tab is (left or right) while it fades in.
+
+## 0.9.0 – 2026-10-03
+
+### Projects and files
+- **Renaming a project works**, also the one that is open. Flux closes the program and terminal that held the folder, renames it and opens it again with its description, to-dos and tabs. The name is also saved when you click away.
+- **Deleting a project takes you to the home screen**, and the status bar no longer keeps saying "… is ready". Short messages like that now disappear after a few seconds.
+- **New file** has its own window, like New project: pick the **language**, type a name and Flux adds the right extension and a small starter code. It works from the file tree, the project page, the menu, Ctrl+N and the right-click menu.
+- When you create a project you can write **what it is about**; on the project page click the description to change it.
+
+### Live Server
+- **The page changes while you type**, without saving. CSS changes swap only the styles, so the page does not flash.
+- **You can type in the editor again** while the page is open next to it (the page no longer keeps the keyboard). The same fixes search in Settings and the search box.
+
+### Back and forward
+- The arrows (and the mouse side buttons) now **slide the view** in from the side you go to.
+
+### Settings
+- **Every setting has a short explanation** under its name.
+- **Search in Settings** also finds words in your language.
+- **Scroll distance** (Appearance → Window): how far one turn of the mouse wheel scrolls, 50–300 %.
+- **Release notes** show only the newest version; *Show older versions* opens the rest.
+
+### GitHub is a plugin
+- GitHub is now in **Settings → Plugins** with *Install* / *Remove*. Without it there is no GitHub tab and no GitHub choices in New project. If you were already signed in, it stays installed.
+
+### Claude and MCP
+- **Ready-made connectors** in Settings → AI: Context7, DeepWiki, GitHub and Hugging Face in one click.
+- **Use Flux from other AI apps**: turn it on and Claude Desktop, Claude Code, Cursor and others can see and change your open project (files, description, to-dos). *Add to Claude Desktop* sets it up for you; for the others copy the command or the settings. Flux starts in the background by itself when Claude needs it.
+
+## 0.8.5 – 2026-09-29
+
+### Live wallpaper moves again
+- Lively Wallpaper and Wallpaper Engine **play behind Flux's panels again**, like before 0.7. Flux shows your wallpaper right from the start. If you want to save memory, pick *Still image* in Settings → Appearance → Window → Live wallpaper.
+
+### New project window
+- No more choosing a language: pick an **icon**, a **name**, an optional description and **where** it goes.
+- **On this computer**: a new folder in Flux Projects.
+- **New on GitHub**: Flux creates the folder, a new repository on your GitHub account (private or public) and uploads the first version.
+- **Import from GitHub**: pick one of your repositories, or paste a link to any public one. Flux downloads it and opens it.
+
+## 0.8.4 – 2026-09-29
+
+### Fixed: Flux Native did not open with Lively Wallpaper or Wallpaper Engine
+- Since 0.7.0 Flux made its window see-through when you use a live wallpaper. On Windows that window stayed **invisible**: Flux ran only in the background. The see-through window is off now; Flux shows a still frame of your live wallpaper (or plays it with *Play inside Flux*).
+- Invisible Flux processes that are still running from before are closed when you start Flux, so you can rename or replace the program again.
+- If Flux has no visible window 12 seconds after start, it restarts itself in safe mode.
+
+## 0.8.3 – 2026-09-29
+
+### Flux Native starts again
+- **Safe mode.** If Flux did not start properly last time, it now tells you and starts without the see-through window and wallpaper (after two failed starts also with simpler graphics). An invisible Flux that got stuck is closed first. Once a start works, the next one is normal again.
+- More room for Flux's main thread on Windows, and crashes outside Flux's own code are written to `flux-native-crash.log` too.
+- Your GitHub token and API keys are now kept in the **Windows Credential Manager**. Please sign in to GitHub and paste your API key again once.
+- New builds are tested with real-world settings before they are offered as an update.
+
+## 0.8.2 – 2026-09-29
+
+### Safer updates
+- If a new version of Flux Native does not start, it **goes back to the previous version by itself** and tells you what happened.
+- When Flux cannot start, you now see a message instead of nothing. The details are saved in `flux-native-crash.log` in the settings folder.
+
+## 0.8.1 – 2026-09-29
+
+### New project window
+- **New project** opens a proper window, like in Flux: pick Python, Website, JavaScript, Empty or one of 14 more languages, then choose an **icon**: the language icon, a line icon (robot, rocket, globe, star…) or an emoji (🎮 🚀 🎨 🔥…). Add a name, a short description and where to save it.
+- If the language is not on your computer yet, the window offers **Install** right there.
+- **Change the icon later**: click the big icon on the project page.
+
+### Fixes
+- **Back and forward** with the mouse buttons now go exactly one step and switch to the right project. The ← → buttons at the top no longer maximize the window when you click them while they are grey.
+- The intro shows **Installed** on languages that are already on your computer.
+- The memory number ("Flux uses … MB right now") now matches Task Manager. It used to count memory the graphics driver only reserves, so it showed about 400 MB.
+
+## 0.8.0 – 2026-09-29
+
+### Settings like in Flux
+- **Settings look like Flux again.** The window has the same size and shape, sits in the middle of the screen and no longer reaches the bottom edge. The menu, the sections and the rows look the same too.
+- **New rows:** *Panel transparency* and your own **Background** picture (Appearance), and *Reset advanced* (General → Memory & speed).
+- **Plugins** shows what is built into Flux Native: GitHub, Claude AI, Live Server and Languages.
+
+### GitHub
+- Settings → **GitHub**: press **Sign in**, confirm the code in your browser, and you are connected. You can also paste a token.
+- **Open a repository**: pick one of your repositories and Flux downloads it and opens it as a project.
+- Your GitHub key is stored encrypted on this computer.
+
+### Claude AI
+- Settings → **AI**: paste your Anthropic API key, choose the model and press **Test** to check it.
+- **MCP connectors**: add remote MCP servers (name, address and an optional token), and Claude can use their tools while it answers.
+- **Ctrl+I** or the **AI** button opens Claude on the right side. Claude sees the open file, and code in answers has **Copy** and **Insert** buttons.
+
+## 0.7.0 – 2026-09-29
+
+### Much less memory with Lively Wallpaper and Wallpaper Engine
+- **See-through window.** Flux no longer plays its own copy of your video wallpaper. The window is see-through, so your live wallpaper shows behind the panels as it is, moving, and Flux does not use extra memory for it. The first time, Flux offers **Restart Flux** in Settings → Appearance to turn this on.
+- Settings → Appearance → Window → **Live wallpaper**: *See-through* (lightest, windows behind Flux show too), *Still image* or *Play inside Flux* (uses more memory).
+- **No more flash at start.** Flux remembers your live wallpaper, so the Windows wallpaper no longer shows for a moment first.
+
+### Back and forward
+- **← →** in the top bar, the back/forward buttons on your mouse and **Alt+← / Alt+→** now go back and forth between files, project pages and the home screen.
+
+### For the developer
+- Settings → Developer → Memory shows what uses memory: textures, wallpaper, preview and the program.
+
+## 0.6.0 – 2026-09-29
+
+- **Intro**:
+  - *What do you want to code?* now fits on the screen, even with all languages. It also tells you that languages are not part of Flux: they download only when you need them.
+  - The *Make it yours* step has **My computer is slower**. It turns on Save memory, so you see right away how Flux looks with it, and it shows how much memory Flux uses right now.
+- **File tabs** each sit in their own box.
+- **Developer** is now its own section in Settings, with parts for builds and updates, intro and tour, memory and folders. Only the Flux developer sees it.
+
+## 0.5.0 – 2026-09-29
+
+### Home screen like Flux
+- **Click the logo** (or ☰ → Home) to open Flux's home screen. It shows a greeting with today's date, your coding time, runs, lines of code and projects.
+- **New project, Open folder and Open file** are big buttons at the top.
+- **Projects**: pinned projects as cards, recent ones as rows, and a search box. Recent files are listed below.
+- **Start something new**: Python, Python window, Python game, HTML page, Web project, JavaScript or an empty file, each with one click. Plus a tip of the day.
+
+### Live Server beside your code
+- **Live Server** now opens the page on the right side of Flux, next to your code, and reloads it every time you save. You can switch between full width, tablet and phone, reload it, open it in your browser, or close it with ×. Drag its edge to make it wider.
+
+### Tidier sidebar
+- **Settings** at the bottom of the sidebar now sits exactly level with the line above the status bar.
+
+## 0.4.0 – 2026-09-29
+
+### Run, Stop and Live Server
+- **One button that changes.** ▶ **Run** turns into **■ Stop** while your program runs. There is no separate stop square any more.
+- **Live Server for websites.** For HTML and CSS files the button says **Live Server**. It opens the page in your browser, and the page reloads every time you save. The top bar shows the address, and the button turns into **Stop**. *Live preview* on the project page does the same.
+
+### Languages
+- **Download programming languages** in Settings → Languages, like in Flux: Python, Node.js, Java, C/C++, Go, C#, Git, Rust and more. You can see what is installed and which version, install a language with one click, and get updates.
+
+### Settings
+- **Release notes are folded.** Every version is one line with a short summary. Click it to read more, including older versions.
+- **The menu follows your scrolling.** The highlighted item in the left menu moves as you scroll, down to *Shortcuts*.
+- **Feature tour**: Settings → General → Welcome shows you the main parts of Flux, step by step.
+
+### Look and speed
+- The sidebar now lines up with the card at the bottom, and the thin light line between them is gone.
+- **Video wallpapers** (Lively Wallpaper, Wallpaper Engine) are decoded on the graphics card. They no longer run slow and use much less memory.
+
+## 0.3.0 – 2026-09-29
+
+### Updates from Settings
+- **Flux Native updates itself.** Settings → General → About & updates shows when a new version is ready. Press **Download update**, then **Restart to update**. With automatic updates on, it downloads by itself and the status bar shows **Restart to update**. Closing Flux also installs a downloaded update.
+- This version still has to be downloaded by hand once. After that, updates come from Settings.
+
+### Looks like Flux
+- **Flux's own title bar.** The Windows title bar is gone. The top bar has the logo, ☰, the sidebar button, ← →, search, AI and − □ ×. Drag it to move the window and double-click it to maximize.
+- **Wide search field**: turn on Settings → Appearance → Window → *Wide search field* to get a **Search Ctrl+Shift+A** box instead of the magnifier.
+- **PINNED** projects sit in their own box above the other projects. Hover a project to hide it or pin it.
+- **Project page buttons like in Flux**: *Open main file*, *Run it*, *New file* and 🔍. Web projects get *Open page* instead.
+- **Color fields like in Flux**: a round color swatch with its hex code, no checkered squares. Click it to pick a color or type a hex code.
+
+### Wallpaper
+- **Less see-through.** The card behind the editor now has a blurred copy of the wallpaper under it and is more solid, so text is easier to read.
+- **Lively Wallpaper and Wallpaper Engine**: when one of them is running, Flux shows the same wallpaper behind its panels. Videos play only while Flux is in front. Turn it off in Settings → Appearance → Window.
+
+## 0.2.0 – 2026-09-29
+
+### Looks and feels like Flux
+- **Smooth scrolling everywhere**: the editor, settings, the sidebar, the project page and search glide like in Flux. Turn it off in Settings → Appearance → Window.
+- **Your desktop wallpaper behind Flux**, like the see-through look of Flux. Panels are slightly transparent. Turn it off with **Save memory** or **Transparency and blur**.
+- **A livelier intro**: a moving background, the logo draws itself, and every step slides in.
+- **Hover and switch animations**: buttons, rows, tabs and cards fade in softly, and switching projects or files fades the content in.
+- **Settings controls like in Flux**: drop-down lists, sliders with their value, and number fields with − and +.
+- **Release notes** are here in Settings → General → About & updates.
+- The Output and Terminal buttons fit their text, and the code map is sharper and fits its column.
+
+## 0.1.0 – 2026-09-29
+
+### The first Flux Native
+- The same window as Flux: sidebar with projects and files, file tabs, ▶ Run, one rounded card with the editor, the code map, Output and Terminal, and the status bar.
+- The same icons, colors, code themes and translations (9 languages).
+- The same intro on the first start, and the project page with stats and to-do list.
+- **Settings** (Ctrl+,): General, Appearance, Editor and Running, with search.
+- **☰ menu**, **search** (Ctrl+P files, Ctrl+Shift+A everything, Ctrl+Shift+P commands) and **right-click menus** in the file tree and on projects.
+- Editor: find and replace (Ctrl+F / Ctrl+H), comments (Ctrl+/), Tab / Shift+Tab indent, auto-closing brackets.
+- Runs Python and all other languages of Flux, with input, and a real terminal.
+- Frees memory while it is in the background.
