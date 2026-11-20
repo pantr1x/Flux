@@ -1,0 +1,5 @@
+native : 11.5 MB private (Task Manager), 21.9 MB working set, 1 processes
+       11.5 MB  flux-native (pid 1316)
+native-liveserver : 9.7 MB private (Task Manager), 19.9 MB working set, 1 processes
+        9.7 MB  flux-native (pid 9040)
+Program size: 23.3 MB
