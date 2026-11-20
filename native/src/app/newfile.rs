@@ -68,6 +68,16 @@ fn lang_of(kind: &str) -> Option<usize> {
     LANGS.iter().position(|l| l.0 == id)
 }
 
+// začiatok súboru podľa prípony (index.html → HTML kostra, main.py → print…); prázdny text pre neznáme prípony.
+// Používa ho aj strom (Nový súbor priamo v Exploreri), aby bol súbor rovnaký ako z okna Nový súbor.
+pub(super) fn starter(file_name: &str) -> String {
+    let p = Path::new(file_name);
+    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let stem = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let ext = if ext == "htm" { "html".to_string() } else { ext };
+    LANGS.iter().find(|l| l.2.to_lowercase() == ext).map(|l| l.4.replace("{name}", &stem)).unwrap_or_default()
+}
+
 impl App {
     // dir = priečinok zo stromu (kontextová ponuka), inak projekt, inak priečinok projektov
     pub(super) fn open_new_file(&mut self, dir: Option<String>) {
@@ -245,5 +255,21 @@ impl App {
         } else if create {
             self.create_file();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::starter;
+
+    #[test]
+    fn newfile_starter_by_extension() {
+        let h = starter("index.html");
+        assert!(h.starts_with("<!DOCTYPE html>") && h.contains("<title>index</title>") && h.contains("</html>"));
+        assert_eq!(starter("PAGE.HTM"), starter("page.html").replace("page", "PAGE"));
+        assert!(starter("Main.java").contains("public class Main"));
+        assert!(starter("x.py").contains("print("));
+        assert_eq!(starter("data.xyz"), "");
+        assert_eq!(starter("Makefile"), "");
     }
 }

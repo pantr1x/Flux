@@ -665,7 +665,15 @@ impl App {
             self.status = t("A file or folder with this name already exists.");
             return;
         }
-        match fsops::create(&target_s, d) {
+        // nový súbor dostane základ podľa prípony (index.html = HTML kostra), ako z okna Nový súbor
+        let created = fsops::create(&target_s, d).and_then(|v| {
+            let start = if d { String::new() } else { super::newfile::starter(&target_s) };
+            if !start.is_empty() {
+                fsops::write(&target_s, &start)?;
+            }
+            Ok(v)
+        });
+        match created {
             Ok(_) => {
                 self.tree.clear();
                 // otvorené všetky priečinky na ceste k novej položke

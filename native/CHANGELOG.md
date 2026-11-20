@@ -2,6 +2,10 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.89
+
+- **New files in the Explorer get a starting point:** typing `index.html` (or any known file name – `main.py`, `Main.java`, `style.css`…) into the tree now creates the same starter content as the *New file* window, e.g. a ready HTML page with `<title>` taken from the name. Unknown file types still start empty.
+
 ## 0.9.88
 
 - **Live Server uses almost no CPU:** scrolling the page no longer redraws it – Flux draws a taller strip once and only moves it (continuous scrolling: ~55 % of one core → ~2 %). Typing redraws only what is visible. Pages with a sticky / fixed header still redraw while scrolling.
