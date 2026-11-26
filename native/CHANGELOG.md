@@ -2,6 +2,17 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.81
+
+**Live Server**
+- **The page no longer gets stuck on an older version.** When the file changed while the page was reloading (fast typing), the page kept showing the half-typed version – for example a table without its colors and borders – until the next change. Now it always catches up.
+- **Changes are never missed**: a save right after the page read the file could be lost before. Reading a file also no longer counts as a change, so the page does not reload for nothing.
+
+**Editor**
+- The mouse wheel scrolls the suggestions list.
+- Tables get the classic attributes in suggestions: `bgcolor`, `border`, `cellpadding`, `align`, `valign`…
+- The corners of the active file tab no longer show a lighter bit.
+
 ## 0.9.80
 
 **Look**

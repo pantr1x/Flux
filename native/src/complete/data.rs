@@ -137,7 +137,7 @@ area: alt coords shape href target download rel
 audio: src controls autoplay loop muted preload crossorigin
 base: href target
 blockquote: cite
-body: onload onunload
+body: onload onunload bgcolor background text
 button: type name value disabled form formaction formmethod autofocus popovertarget
 canvas: width height
 col: span
@@ -174,10 +174,12 @@ select: name multiple required disabled size autofocus form
 slot: name
 source: src srcset type media sizes width height
 style: media
-td: colspan rowspan headers
+td: colspan rowspan headers bgcolor width height align valign
 template: shadowrootmode
 textarea: name rows cols placeholder required disabled readonly maxlength minlength wrap autofocus
-th: colspan rowspan scope abbr headers
+th: colspan rowspan scope abbr headers bgcolor width height align valign
+tr: bgcolor align valign
+table: border cellpadding cellspacing width bgcolor align
 time: datetime
 track: src kind srclang label default
 video: src controls autoplay loop muted poster width height preload playsinline crossorigin

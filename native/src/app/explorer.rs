@@ -1048,7 +1048,23 @@ impl App {
                 parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(Rect::from_min_max(r.min, pos2(l, r.bottom())), CornerRadius { nw: radius, ..Default::default() }, shade)));
                 parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(Rect::from_min_max(pos2(rr, r.top()), r.max), CornerRadius { ne: radius, ..Default::default() }, shade)));
                 parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(Rect::from_min_max(pos2(l, r.top()), pos2(rr, r.top() + 5.0)), CornerRadius::ZERO, shade)));
-                // zaoblené horné rohy aktívnej karty: dočiernenie rohov by bolo vidno – stačí, že karta zaoblená rámikom
+                // zaoblené horné rohy aktívnej karty: kúsok medzi rohom a oblúkom tiež stmaviť (inak tam svietil svetlý roh)
+                let t = r.top() + 5.0;
+                let k = 10.0f32;
+                let mut mesh = egui::Mesh::default();
+                for (cx, cy, corner, a0) in [(l + k, t + k, pos2(l, t), std::f32::consts::PI), (rr - k, t + k, pos2(rr, t), 1.5 * std::f32::consts::PI)] {
+                    let base = mesh.vertices.len() as u32;
+                    mesh.colored_vertex(corner, shade);
+                    let n = 8;
+                    for i in 0..=n {
+                        let a = a0 + (i as f32 / n as f32) * std::f32::consts::FRAC_PI_2;
+                        mesh.colored_vertex(pos2(cx + k * a.cos(), cy + k * a.sin()), shade);
+                    }
+                    for i in 0..n {
+                        mesh.add_triangle(base, base + 1 + i, base + 2 + i);
+                    }
+                }
+                parts.push(egui::Shape::mesh(mesh));
             }
             None => parts.push(egui::Shape::Rect(egui::epaint::RectShape::filled(r, cr, shade))),
         }

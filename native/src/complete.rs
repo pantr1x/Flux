@@ -1208,6 +1208,19 @@ mod tests {
     }
 
     #[test]
+    fn complete_html_table_attrs() {
+        // staršie, ale v školách bežné atribúty tabuliek (bgcolor, border…)
+        for (src, tag) in [("<tr bg", "tr"), ("<td bg", "td"), ("<table bo", "table")] {
+            let b: Vec<char> = src.chars().collect();
+            let cx = context("html", &b);
+            assert_eq!(cx.in_tag.as_deref(), Some(tag));
+            let w = src.rsplit(' ').next().unwrap();
+            let s = suggest_at("html", w, &cx, &HashMap::new(), &Default::default(), &Default::default(), &[], 8);
+            assert!(s.iter().any(|i| i.label == "bgcolor" || i.label == "border"), "{src}: {:?}", s.iter().map(|i| &i.label).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
     fn complete_python_for() {
         let before: Vec<char> = "    fo".chars().collect();
         let cx = context("py", &before);

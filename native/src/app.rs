@@ -894,7 +894,9 @@ impl App {
             ui.painter().add(egui::Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(90) }.as_shape(r, CornerRadius::same(10)));
             ui.painter().rect_filled(r, CornerRadius::same(10), p.solid);
             ui.painter().rect_stroke(r, CornerRadius::same(10), Stroke::new(1.0, p.line_strong), StrokeKind::Inside);
-            if resp_all.hovered() {
+            // contains_pointer: hovered() je false, keď je nad plochou riadok (iný prvok) – koliesko potom nešlo
+            let _ = &resp_all;
+            if ui.rect_contains_pointer(r) {
                 let dy: f32 = ui.input(|i| {
                     i.raw
                         .events
@@ -1246,15 +1248,27 @@ impl App {
         self.proj_reveal = true;
         // zmeny v projekte (aj z iných programov) → fs:changed
         let emit = self.emit.clone();
-        let last = std::sync::Mutex::new(Instant::now() - Duration::from_secs(1));
+        // len skutočné zmeny (nie čítanie: Live Server a prehliadač súbor čítajú – to sa hlásilo ako zmena a stránka sa
+        // obnovovala sama); viac zmien do 200 ms = jedno hlásenie, ale posledná sa nikdy nezahodí (oneskorené hlásenie)
+        let last = Arc::new(std::sync::Mutex::new(Instant::now() - Duration::from_secs(1)));
+        let pending = Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if res.is_err() {
+            let Ok(ev) = res else { return };
+            if !watch_counts(&ev.kind) {
                 return;
             }
             let mut l = last.lock().unwrap();
             if l.elapsed() > Duration::from_millis(200) {
                 *l = Instant::now();
                 emit("fs:changed", Value::Null);
+            } else if !pending.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                let (emit, pending, last) = (emit.clone(), pending.clone(), last.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(220));
+                    *last.lock().unwrap() = Instant::now();
+                    pending.store(false, std::sync::atomic::Ordering::SeqCst);
+                    emit("fs:changed", Value::Null);
+                });
             }
         })
         .ok()
@@ -2252,8 +2266,9 @@ impl App {
                     if down {
                         sg.sel = (sg.sel + 1) % n;
                     }
-                    // vybraný riadok vždy viditeľný
-                    if sg.sel < sg.top {
+                    // vybraný riadok viditeľný po šípkach (nie každý snímok – to vracalo zoznam posunutý kolieskom späť)
+                    if !(up || down) {
+                    } else if sg.sel < sg.top {
                         sg.top = sg.sel;
                     } else if sg.sel >= sg.top + SUG_ROWS {
                         sg.top = sg.sel + 1 - SUG_ROWS;
@@ -3597,6 +3612,17 @@ impl App {
     }
 }
 
+// udalosť sledovania, ktorá je skutočnou zmenou: zápis, vznik, zmazanie, premenovanie – nie otvorenie či čítanie
+fn watch_counts(k: &notify::EventKind) -> bool {
+    use notify::event::{AccessKind, AccessMode, EventKind};
+    match k {
+        EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_) => true,
+        // zatvorenie po zápise (niektoré editory a systémy hlásia zápis len takto)
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        _ => false,
+    }
+}
+
 // zaoblená plocha na karte (dlaždice, zoznam súborov, TO-DO)
 fn card(ui: &egui::Ui, r: Rect, radius: u8, p: &Pal) {
     ui.painter().rect_filled(r, CornerRadius::same(radius), p.card2);
@@ -4408,6 +4434,19 @@ fn exists_cached(p: &Path) -> bool {
     }
     m.insert(p.to_path_buf(), (Instant::now(), v));
     v
+}
+
+#[cfg(test)]
+mod watch_tests {
+    #[test]
+    fn watch_ignores_reads() {
+        use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, EventKind, ModifyKind};
+        assert!(!super::watch_counts(&EventKind::Access(AccessKind::Open(AccessMode::Read))));
+        assert!(!super::watch_counts(&EventKind::Access(AccessKind::Close(AccessMode::Read))));
+        assert!(super::watch_counts(&EventKind::Access(AccessKind::Close(AccessMode::Write))));
+        assert!(super::watch_counts(&EventKind::Modify(ModifyKind::Data(DataChange::Any))));
+        assert!(super::watch_counts(&EventKind::Create(CreateKind::File)));
+    }
 }
 
 #[cfg(test)]
