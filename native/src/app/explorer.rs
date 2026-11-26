@@ -629,7 +629,8 @@ impl App {
         let hint = if *is_dir { t("Folder name") } else { t("File name") };
         let mut res = Rn::Editing;
         let indent = 6.0 + depth as f32 * 14.0 + if *is_dir { 16.0 } else { 20.0 };
-        ui.horizontal(|ui| {
+        let (left, full_w) = (ui.cursor().left(), ui.available_width());
+        let row = ui.horizontal(|ui| {
             ui.add_space(indent);
             let (ir, _) = ui.allocate_exact_size(vec2(16.0, 24.0), Sense::hover());
             let icon_r = Rect::from_center_size(ir.center(), vec2(16.0, 16.0));
@@ -642,6 +643,9 @@ impl App {
             // Enter / klik inam potvrdí, Esc zruší (fokus sa žiada len raz – inak by Enter „zjedlo“ rename_field)
             res = name_field(ui, egui::Id::new(("new-item", dir)), name, Margin::symmetric(8, 4), false, &hint);
         });
+        // zvýraznenie stromu (kĺzavý pruh) patrí počas písania mena novému riadku, nie otvorenému súboru
+        let rr = row.response.rect;
+        self.tree_sel = Some(Rect::from_min_max(pos2(left, rr.top()), pos2(left + full_w, rr.bottom())));
         if matches!(res, Rn::Editing) {
             return;
         }
@@ -715,7 +719,7 @@ impl App {
             let ind = if is_dir { indent } else { indent + 20.0 };
             // aktívny riadok bez vlastnej výplne – kreslí ju kĺzavé zvýraznenie v strome
             let r = widgets::row_sized(ui, TREE_H, active, false, ind, lead, &name, None, false, &p);
-            if active {
+            if active && self.new_item.is_none() {
                 self.tree_sel = Some(r.rect);
             }
             // vybraný (naposledy kliknutý) priečinok – sem pôjde nový súbor; pri ovládaní klávesnicou aj súbor

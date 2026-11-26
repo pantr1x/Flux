@@ -41,7 +41,7 @@ fn is_css(lang: &str) -> bool {
 // začiatky farieb v riadku (bajty); rýchly predfilter, aby bežný riadok nestál nič
 pub fn starts(line: &str, lang: &str) -> Vec<usize> {
     let css = is_css(lang);
-    if line.len() > 3000 || !(line.contains('#') || line.contains("rgb") || line.contains("hsl") || (css && line.contains(':'))) {
+    if line.len() > 3000 || !(line.contains('#') || line.contains("rgb") || line.contains("hsl") || (css && (line.contains(':') || line.contains('=')))) {
         return vec![];
     }
     find(line, lang).into_iter().map(|f| f.start).collect()
@@ -194,6 +194,15 @@ pub fn find(line: &str, lang: &str) -> Vec<Found> {
             let w = line[i..j].to_ascii_lowercase();
             let before = line[..i].trim_end();
             let in_value = before.ends_with(':') || (before.contains(':') && !before.contains(';') && !before.contains('{') && line[i..].contains([';', '"', '}']));
+            // aj farebné atribúty HTML: bgcolor="green", color='red', fill="navy"
+            let in_attr = {
+                let b2 = line[..i].strip_suffix(['"', '\'']).unwrap_or(&line[..i]);
+                b2.strip_suffix('=').map(|a| a.trim_end()).is_some_and(|a| {
+                    let name = a.rsplit(|c: char| !(c.is_ascii_alphanumeric() || c == '-')).next().unwrap_or("").to_ascii_lowercase();
+                    matches!(name.as_str(), "bgcolor" | "color" | "fill" | "stroke" | "bordercolor" | "text" | "link" | "vlink" | "alink" | "stop-color" | "flood-color" | "lighting-color")
+                })
+            };
+            let in_value = in_value || in_attr;
             if let Some((_, v)) = NAMED.iter().find(|(n, _)| *n == w).filter(|_| in_value && (j >= b.len() || !word(b[j]))) {
                 out.push(Found { start: i, len: j - i, color: Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, *v as u8), fmt: Fmt::Named });
             }
@@ -263,6 +272,18 @@ fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (i32, i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn colors_html_attributes() {
+        let f = find(r#"<td bgcolor="green">x</td>"#, "html");
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].color, Color32::from_rgb(0, 0x80, 0));
+        assert_eq!(find("<font color='red'>", "html").len(), 1);
+        assert_eq!(find(r#"<circle fill="navy" stroke="gold"/>"#, "html").len(), 2);
+        // obyčajný text a iné atribúty nie
+        assert!(find(r#"<p class="green">green tea</p>"#, "html").is_empty());
+        assert_eq!(starts(r#"<tr bgcolor="green">"#, "html").len(), 1);
+    }
 
     #[test]
     fn colors_find_hex_rgb_hsl_named() {

@@ -1796,6 +1796,7 @@ impl App {
                     self.open_file(&p);
                 }
                 "run" => self.run(),
+                "act" => self.act(arg, ctx),
                 "panel" => self.panel_open = !self.panel_open,
                 "theme-store" => self.theme_store.browse = true,
                 "type" => {
@@ -2445,13 +2446,17 @@ impl App {
                     gal
                 };
                 let lines = hlc.lines().max(1) + usize::from(tab.text.ends_with('\n'));
+                // vpravo za najdlhším riadkom voľné miesto (48 px): koniec riadku nebol pri čiare minimapy a klik naň nešiel
+                let text_w = cached.as_ref().map(|c| c.4.size().x).unwrap_or(0.0);
+                let min_w = if wrap { 0.0 } else { (text_w + 48.0).max(ui.available_width()) };
                 let te = egui::TextEdit::multiline(&mut tab.text)
+                    .min_size(vec2(min_w, 0.0))
                     .id(ed_id)
                     .code_editor()
                     .font(font.clone())
                     .frame(Frame::NONE)
                     .margin(Margin::ZERO)
-                    .desired_width(if wrap { ui.available_width() - 12.0 } else { f32::INFINITY })
+                    .desired_width(if wrap { ui.available_width() - 28.0 } else { f32::INFINITY })
                     .desired_rows(lines.max(1))
                     .lock_focus(true)
                     // Esc editor nevypne (ako VS Code) – zavrie len návrhy, úryvok, hľadanie
@@ -2727,14 +2732,16 @@ impl App {
                 // kurzor posunutý nami (Enter s odsadením, Tab, návrh…) – egui sa vtedy k nemu sám neposunie;
                 // blízko začiatku riadka ukáž celý začiatok aj s číslami riadkov (inak po Enteri na dlhom riadku
                 // ostal pohľad odsunutý doprava a nový riadok nebolo vidno)
-                if let Some(r) = te.cursor_range.filter(|_| new_sel.is_some() || te.response.changed()) {
+                // aj pohyb kurzora klávesmi (End, šípky…): pri pravom okraji ostane rezerva, text nie je nalepený na minimape
+                let key_move = te.response.has_focus() && ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, .. })));
+                if let Some(r) = te.cursor_range.filter(|_| new_sel.is_some() || te.response.changed() || key_move) {
                     let cr = te.galley.pos_from_cursor(r.primary).translate(te.galley_pos.to_vec2());
                     let view_w = ui.clip_rect().width();
                     let mut target = cr;
                     if cr.left() - te.galley_pos.x < view_w - gutter - 80.0 {
                         target.min.x = te.galley_pos.x - gutter;
                     } else {
-                        target = target.expand2(vec2(40.0, 0.0));
+                        target = target.expand2(vec2(48.0, 0.0));
                     }
                     ui.scroll_to_rect(target, None);
                 }

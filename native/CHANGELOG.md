@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.82
+
+**Editor**
+- **Room after the end of long lines**: the text no longer runs into the line of the code map, a click right of the text puts the cursor at the end of the line, and *End* leaves a gap on the right.
+- **Color circles for colors in HTML attributes** too – `bgcolor="green"`, `color="red"`, `fill="navy"` – click one to pick a color.
+- While you type the name of a new file or folder, the highlight in the Explorer sits on that row instead of the open file.
+
 ## 0.9.81
 
 **Live Server**
