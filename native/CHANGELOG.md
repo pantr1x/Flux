@@ -2,6 +2,10 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.90
+
+- **Live Server only next to web files:** the page panel shows for HTML / CSS (and JS with an `index.html`) and images. Switch to Python, C# or any other language and it hides – the server keeps running (the address chip stays in the top bar) and the panel comes back when you open the page again.
+
 ## 0.9.89
 
 - **New files in the Explorer get a starting point:** typing `index.html` (or any known file name – `main.py`, `Main.java`, `style.css`…) into the tree now creates the same starter content as the *New file* window, e.g. a ready HTML page with `<title>` taken from the name. Unknown file types still start empty.

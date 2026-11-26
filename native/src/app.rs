@@ -1635,6 +1635,11 @@ impl App {
         }
     }
 
+    // panel Live Servera patrí k webu: HTML/CSS (JS s index.html) a obrázky; pri Pythone, C# … sa skryje, server beží ďalej
+    pub(crate) fn preview_here(&self) -> bool {
+        !self.home && !self.start && self.tabs.get(self.active).is_some_and(|t| t.image) || (!self.home && !self.start && self.is_web_file())
+    }
+
     fn is_web_file(&self) -> bool {
         let Some(tab) = self.tabs.get(self.active) else { return false };
         match tab.ext().as_str() {
@@ -4545,8 +4550,8 @@ impl eframe::App for App {
                     self.status_bar(&mut card_ui, status);
                 }
                 let mut main = Rect::from_min_max(card_r.min, pos2(card_r.right(), status.top()));
-                // Live Server vpravo na karte (šírka sa dá ťahať)
-                if self.preview.is_some() {
+                // Live Server vpravo na karte (šírka sa dá ťahať) – len pri webe (HTML/CSS) a obrázkoch, inak sa skryje
+                if self.preview.is_some() && self.preview_here() {
                     let pw = {
                         let pv = self.preview.as_mut().unwrap();
                         if pv.width <= 0.0 {
