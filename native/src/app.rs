@@ -1631,6 +1631,14 @@ impl App {
         self.status.clear();
         let tab = &self.tabs[self.active];
         let path = tab.path.clone();
+        // projekt medzitým dostal .venv (napr. `pip install` v termináli ho vytvoril) → Python nájsť znova
+        let venv_new = matches!(tab.ext().as_str(), "py" | "pyw")
+            && self.workspace().and_then(|w| crate::pyshim::venv_bin(Path::new(&w))).is_some_and(|b| {
+                !self.python.as_ref().and_then(|v| v["path"].as_str()).is_some_and(|p| Path::new(p).starts_with(&b))
+            });
+        if venv_new {
+            self.python = None;
+        }
         if matches!(tab.ext().as_str(), "py" | "pyw") && self.python.as_ref().and_then(|v| v["path"].as_str()).is_none() {
             let ws = self.workspace();
             let v = python::find(ws.as_deref(), None);
@@ -1768,13 +1776,18 @@ impl App {
 
     fn start_shell(&mut self) {
         let cmd = runner::shell_command();
-        let cwd = self.workspace().or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string())).unwrap_or_default();
+        let ws = self.workspace();
+        let cwd = ws.clone().or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string())).unwrap_or_default();
         let base = self.emit.clone();
         let Some(s) = self.sess_mut() else { return };
         if s.shell_started {
             return;
         }
-        match s.sh.pty.spawn(&s.emit(&base), &cmd.cmd, &cmd.args, &cwd, &[], "shell:data", "shell:exit") {
+        // pip/python v termináli použijú .venv projektu (pyshim.rs) – `pip install` tak ide aj na Ubuntu (PEP 668)
+        let shim = crate::pyshim::ensure(&settings::user_data().join("bin").join("pyshim"));
+        let env = crate::pyshim::shell_env(ws.as_deref().map(Path::new), shim.as_deref());
+        let env_ref: Vec<(&str, &str)> = env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        match s.sh.pty.spawn(&s.emit(&base), &cmd.cmd, &cmd.args, &cwd, &env_ref, "shell:data", "shell:exit") {
             Ok(_) => s.shell_started = true,
             // terminál sa nespustil – povedať prečo, nie prázdne okno
             Err(e) => s.sh.feed(&format!("\x1b[31m{} ({}): {e}\x1b[0m\r\n", t("The terminal could not start"), cmd.cmd)),

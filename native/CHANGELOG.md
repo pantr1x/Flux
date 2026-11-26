@@ -2,6 +2,13 @@
 
 Flux Native is the new Flux written in Rust. It uses much less memory than Flux (one process instead of three) and keeps the same look, settings and projects.
 
+## 0.9.83
+
+**Python**
+- **`pip install` works in Flux's terminal on Ubuntu, Kubuntu and Debian.** Those systems don't let pip install into the system Python (*externally-managed-environment*). Now the first `pip install` in a project creates a virtual environment (`.venv`) for it and installs the package there – no `source activate` needed. `pip`, `python` and `python3` in the terminal always use the project's `.venv`.
+- **▶ Run uses the new `.venv` right away**, so the installed packages can be imported without restarting Flux.
+- On Windows, a project's existing `.venv` is active in the terminal too.
+
 ## 0.9.82
 
 **Editor**
